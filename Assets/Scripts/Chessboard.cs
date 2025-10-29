@@ -12,11 +12,14 @@ public class Chessboard : MonoBehaviour
     [SerializeField, Range(0.1f, 2f)] private float tileSize = 1.0f;
     [SerializeField] private int tileCountX = 8;
     [SerializeField] private int tileCountY = 8;
+    [SerializeField] private float tilesYOffset = 0.75f;
+    [SerializeField] private Vector3 boardCenter = Vector3.zero;
 
     private GameObject[,] _tiles;
     private Dictionary<GameObject, Vector2Int> _tileLookup;
     private Camera _mainCamera;
     private Vector2Int _currentHover = -Vector2Int.one;
+    private Vector3 bounds;
 
     // Layer cache (initialized in Awake)
     private int _tileLayer;
@@ -89,6 +92,9 @@ public class Chessboard : MonoBehaviour
             return;
         }
 
+        tilesYOffset += transform.position.y;
+        bounds = new Vector3((tileCountX / 2) * tileSize, 0, (tileCountY / 2) * tileSize) + boardCenter;
+
         _tiles = new GameObject[tileCountX, tileCountY];
         _tileLookup = new Dictionary<GameObject, Vector2Int>(tileCountX * tileCountY);
 
@@ -122,10 +128,10 @@ public class Chessboard : MonoBehaviour
         };
 
         Vector3[] vertices = new Vector3[4];
-        vertices[0] = new Vector3(x * tileSize, 0, y * tileSize);
-        vertices[1] = new Vector3(x * tileSize, 0, (y + 1) * tileSize);
-        vertices[2] = new Vector3((x + 1) * tileSize, 0, y * tileSize);
-        vertices[3] = new Vector3((x + 1) * tileSize, 0, (y + 1) * tileSize);
+        vertices[0] = new Vector3(x * tileSize, tilesYOffset, y * tileSize) - bounds;
+        vertices[1] = new Vector3(x * tileSize, tilesYOffset, (y + 1) * tileSize) - bounds;
+        vertices[2] = new Vector3((x + 1) * tileSize, tilesYOffset, y * tileSize) - bounds;
+        vertices[3] = new Vector3((x + 1) * tileSize, tilesYOffset, (y + 1) * tileSize) - bounds;
 
         int[] tris = { 0, 1, 2, 1, 3, 2 };
 
