@@ -8,72 +8,81 @@ namespace ChessTheMasterPiece.ChessPiece
     [DisallowMultipleComponent]
     public class Chessboard : MonoBehaviour
     {
-        // constants
+        #region Constants
+
         private const int ExpectedPiecePrefabCount = 6; // Pawn..King
         private const int DefaultBoardSize = 8;
         private const float RaycastMaxDistance = 200f;
 
-        [Header("Art / Board")]
+        #endregion
+
+        #region Inspector Fields
+
+        [Header("Board")]
         [SerializeField] private Material tileMaterial;
         [SerializeField, Range(0.1f, 4f)] private float tileSize = 1f;
         [SerializeField, Min(2)] private int tileCountX = DefaultBoardSize;
         [SerializeField, Min(2)] private int tileCountY = DefaultBoardSize;
-        [SerializeField] private float tilesYOffset = 0.0f; // world Y for tile placement (tile top)
+        [SerializeField] private float tilesYOffset = 0.0f;
         [SerializeField] private Vector3 boardCenter = Vector3.zero;
 
-        [Header("Piece Prefabs (order: Pawn,Rook,Knight,Bishop,Queen,King)")]
+        [Header("Prefabs (order: Pawn,Rook,Knight,Bishop,Queen,King)")]
         [SerializeField] private GameObject[] whiteTeamPrefabs;
         [SerializeField] private GameObject[] blackTeamPrefabs;
 
-        [Header("Piece visuals / placement")]
-        [SerializeField] private float pieceYOffset = 0.05f;      // -> local vertical offset above tile
+        [Header("Piece visuals")]
+        [SerializeField] private float pieceYOffset = 0.05f;
         [SerializeField] private float pieceScaleMultiplier = 1f;
-        [SerializeField] private float dragHeight = 1f;          // -> how high piece floats while dragging
-        [SerializeField] private float deathSize = 0.45f;        // -> scaled dead piece size
-        [SerializeField] private float deathSpacing = 0.35f;     // -> spacing for placed captured pieces
+        [SerializeField] private float dragHeight = 1f;
+        [SerializeField] private float deathSize = 0.45f;
+        [SerializeField] private float deathSpacing = 0.35f;
 
         [Header("Parents (auto-created if null)")]
         [SerializeField] private Transform tilesParent;
         [SerializeField] private Transform whitePiecesParent;
         [SerializeField] private Transform blackPiecesParent;
 
-        // runtime data
-        private ChessPiece[,] board;                      // -> main board occupancy [x,y]
-        private GameObject[,] tiles;                      // -> tile GameObjects
-        private Dictionary<Transform, Vector2Int> tileLookup; // -> transform -> grid index
-        private List<ChessPiece> whiteCaptured = new List<ChessPiece>();
-        private List<ChessPiece> blackCaptured = new List<ChessPiece>();
+        #endregion
 
-        // input / camera
+        #region Private Fields
+
+        private ChessPiece[,] board;                     // occupancy
+        private GameObject[,] tiles;                     // tile game objects
+        private Dictionary<Transform, Vector2Int> tileLookup;
+
+        private readonly List<ChessPiece> whiteCaptured = new();
+        private readonly List<ChessPiece> blackCaptured = new();
+
         private Camera mainCamera;
         private ChessPiece draggingPiece;
-        private Vector2Int hoverIndex = new Vector2Int(-1, -1);
+        private Vector2Int hoverIndex = new(-1, -1);
 
-        // cached
-        private Transform _transform;
-        private Vector3 origin; // world position of board origin (0,0) tile corner
+        private Transform cachedTransform;
+        private Vector3 origin;                          // bottom-left world corner of tile (0,0)
 
-        // layers (optional)
-        private int tileLayer = 0;
-        private int highlightLayer = 0;
-        private int combinedLayerMask = ~0;
+        private int tileLayer;
+        private int highlightLayer;
+        private int combinedLayerMask;
 
-        #region Unity lifecycle
+        #endregion
+
+        #region Unity Lifecycle
 
         private void Awake()
         {
-            _transform = transform;
+            cachedTransform = transform;
+
             CacheLayers();
             CreateParentContainersIfNeeded();
 
-            if (!ValidateConfig())
+            if (!ValidateConfiguration())
             {
-                Debug.LogError("[Chessboard] Validation failed. Chessboard will not initialize.");
+                Debug.LogError("[Chessboard] Validation failed. Initialization aborted.");
                 enabled = false;
                 return;
             }
 
-            InitializeBoardData();
+            InitializeBoard();
             CreateTiles();
             SpawnDefaultSetup();
         }
@@ -90,30 +99,28 @@ namespace ChessTheMasterPiece.ChessPiece
                 }
             }
 
-            // Read pointer from new Input System if available, otherwise fallback
             Vector2 pointer = Vector2.zero;
-            bool hasPointer = false;
+            bool pointerAvailable = false;
 
             if (Mouse.current != null)
             {
                 pointer = Mouse.current.position.ReadValue();
-                hasPointer = true;
+                pointerAvailable = true;
             }
             else
             {
-                // fallback to legacy Input
+                // fallback to legacy Input (rare). This deliberately avoids noisy warnings.
 #pragma warning disable 618
                 if (Input.mousePresent)
                 {
                     pointer = new Vector2(Input.mousePosition.x, Input.mousePosition.y);
-                    hasPointer = true;
+                    pointerAvailable = true;
                 }
 #pragma warning restore 618
             }
 
-            if (!hasPointer)
+            if (!pointerAvailable)
             {
-                // no mouse, nothing to do
                 return;
             }
 
@@ -122,19 +129,26 @@ namespace ChessTheMasterPiece.ChessPiece
 
         private void OnDestroy()
         {
-            // cleanup generated meshes (to avoid leaking in editor play mode)
-            if (tiles != null)
+            // cleanup generated meshes (editor play mode)
+            if (tiles == null)
             {
-                for (int x = 0; x < tiles.GetLength(0); x++)
+                return;
+            }
+
+            for (int x = 0; x < tiles.GetLength(0); x++)
+            {
+                for (int y = 0; y < tiles.GetLength(1); y++)
                 {
-                    for (int y = 0; y < tiles.GetLength(1); y++)
+                    GameObject tile = tiles[x, y];
+                    if (tile == null)
                     {
-                        if (tiles[x, y] == null) continue;
-                        MeshFilter mf = tiles[x, y].GetComponent<MeshFilter>();
-                        if (mf != null && mf.sharedMesh != null)
-                        {
-                            Destroy(mf.sharedMesh);
-                        }
+                        continue;
+                    }
+
+                    MeshFilter mf = tile.GetComponent<MeshFilter>();
+                    if (mf?.sharedMesh != null)
+                    {
+                        Destroy(mf.sharedMesh);
                     }
                 }
             }
@@ -142,18 +156,15 @@ namespace ChessTheMasterPiece.ChessPiece
 
         #endregion
 
-        #region Initialization helpers
+        #region Initialization Helpers
 
         private void CacheLayers()
         {
             int a = LayerMask.NameToLayer("Tile");
             int b = LayerMask.NameToLayer("Highlight");
 
-            if (a == -1) Debug.LogWarning("[Chessboard] Layer 'Tile' not found. Using default layer 0.");
-            if (b == -1) Debug.LogWarning("[Chessboard] Layer 'Highlight' not found. Using default layer 0.");
-
-            tileLayer = Mathf.Max(0, a);
-            highlightLayer = Mathf.Max(0, b);
+            tileLayer = (a == -1) ? 0 : a;
+            highlightLayer = (b == -1) ? 0 : b;
             combinedLayerMask = (1 << tileLayer) | (1 << highlightLayer);
         }
 
@@ -161,27 +172,27 @@ namespace ChessTheMasterPiece.ChessPiece
         {
             if (tilesParent == null)
             {
-                var go = new GameObject("Tiles");
-                go.transform.SetParent(_transform, false);
+                GameObject go = new GameObject("Tiles");
+                go.transform.SetParent(cachedTransform, false);
                 tilesParent = go.transform;
             }
 
             if (whitePiecesParent == null)
             {
-                var go = new GameObject("WhitePieces");
-                go.transform.SetParent(_transform, false);
+                GameObject go = new GameObject("WhitePieces");
+                go.transform.SetParent(cachedTransform, false);
                 whitePiecesParent = go.transform;
             }
 
             if (blackPiecesParent == null)
             {
-                var go = new GameObject("BlackPieces");
-                go.transform.SetParent(_transform, false);
+                GameObject go = new GameObject("BlackPieces");
+                go.transform.SetParent(cachedTransform, false);
                 blackPiecesParent = go.transform;
             }
         }
 
-        private bool ValidateConfig()
+        private bool ValidateConfiguration()
         {
             if (tileMaterial == null)
             {
@@ -197,44 +208,30 @@ namespace ChessTheMasterPiece.ChessPiece
 
             if (tileCountX < 2 || tileCountY < 2)
             {
-                Debug.LogError("[Chessboard] tile count must be >= 2.");
+                Debug.LogError("[Chessboard] tileCountX/Y must be >= 2.");
                 return false;
-            }
-
-            if (whiteTeamPrefabs == null || whiteTeamPrefabs.Length < ExpectedPiecePrefabCount)
-            {
-                Debug.LogWarning($"[Chessboard] whiteTeamPrefabs should have {ExpectedPiecePrefabCount} prefabs.");
-            }
-
-            if (blackTeamPrefabs == null || blackTeamPrefabs.Length < ExpectedPiecePrefabCount)
-            {
-                Debug.LogWarning($"[Chessboard] blackTeamPrefabs should have {ExpectedPiecePrefabCount} prefabs.");
             }
 
             return true;
         }
 
-        private void InitializeBoardData()
+        private void InitializeBoard()
         {
             board = new ChessPiece[tileCountX, tileCountY];
             tiles = new GameObject[tileCountX, tileCountY];
             tileLookup = new Dictionary<Transform, Vector2Int>(tileCountX * tileCountY);
 
-            // origin -> bottom-left corner of tile (0,0)
-            float halfWidth = (tileCountX * tileSize) * 0.5f;
-            float halfDepth = (tileCountY * tileSize) * 0.5f;
-            origin = boardCenter - new Vector3(halfWidth, 0f, halfDepth);
+            float halfW = tileCountX * tileSize * 0.5f;
+            float halfD = tileCountY * tileSize * 0.5f;
+            origin = boardCenter - new Vector3(halfW, 0f, halfD);
         }
 
         #endregion
 
-        #region Tile creation & utilities
+        #region Tile Creation & Utilities
 
         /// <summary>
-        /// Create tile GameObjects with simple quad mesh and collider.
-        /// Implementation:
-        /// -> tile GameObject localPosition = origin + (x*tileSize, tilesYOffset, y*tileSize)
-        /// -> mesh vertices in local space [0..tileSize] to keep colliders/simple math easy
+        /// Create tiles (mesh + renderer + collider) and populate lookup.
         /// </summary>
         private void CreateTiles()
         {
@@ -251,14 +248,12 @@ namespace ChessTheMasterPiece.ChessPiece
 
         private GameObject CreateTile(int x, int y)
         {
-            var tileGO = new GameObject($"Tile_{x}_{y}");
+            GameObject tileGO = new GameObject($"Tile_{x}_{y}");
             tileGO.transform.SetParent(tilesParent, false);
 
-            // place tile at correct world position
-            Vector3 tileWorldPos = origin + new Vector3(x * tileSize + tileSize * 0.5f, tilesYOffset, y * tileSize + tileSize * 0.5f);
-            tileGO.transform.position = tileWorldPos;
+            Vector3 worldPos = origin + new Vector3(x * tileSize + tileSize * 0.5f, tilesYOffset, y * tileSize + tileSize * 0.5f);
+            tileGO.transform.position = worldPos;
 
-            // Mesh: simple quad in local space, origin at tile center
             Mesh mesh = new Mesh { name = $"TileMesh_{x}_{y}" };
             Vector3 half = new Vector3(tileSize * 0.5f, 0f, tileSize * 0.5f);
 
@@ -277,48 +272,42 @@ namespace ChessTheMasterPiece.ChessPiece
             MeshRenderer mr = tileGO.AddComponent<MeshRenderer>();
             mr.sharedMaterial = tileMaterial;
 
-            // BoxCollider centered at tile center, thin height
             BoxCollider bc = tileGO.AddComponent<BoxCollider>();
             bc.size = new Vector3(tileSize, 0.05f, tileSize);
             bc.center = Vector3.zero;
 
-            // set layer
             tileGO.layer = tileLayer;
 
             return tileGO;
         }
 
-        /// <summary>
-        /// Convert grid index to world-space center of tile.
-        /// -> returns Vector3.zero with warning if invalid index.
-        /// </summary>
         public Vector3 GetTileCenter(Vector2Int index)
         {
             if (!IsValidIndex(index))
             {
-                Debug.LogWarning($"[Chessboard] GetTileCenter called with invalid index {index} -> returning Vector3.zero.");
+                Debug.LogWarning($"[Chessboard] GetTileCenter invalid index {index}. Returning Vector3.zero.");
                 return Vector3.zero;
             }
 
             return origin + new Vector3(index.x * tileSize + tileSize * 0.5f, tilesYOffset, index.y * tileSize + tileSize * 0.5f);
         }
 
-        public Vector3 GetTileCenter(int x, int y) => GetTileCenter(new Vector2Int(x, y));
+        public Vector3 GetTileCenter(int x, int y)
+        {
+            return GetTileCenter(new Vector2Int(x, y));
+        }
 
-        public bool IsValidIndex(Vector2Int idx) => idx.x >= 0 && idx.x < tileCountX && idx.y >= 0 && idx.y < tileCountY;
+        private bool IsValidIndex(Vector2Int idx)
+        {
+            return idx.x >= 0 && idx.x < tileCountX && idx.y >= 0 && idx.y < tileCountY;
+        }
 
         #endregion
 
-        #region Spawning / placement API
+        #region Spawning / Placement
 
-        /// <summary>
-        /// Spawn standard chess starting setup.
-        /// -> white at bottom (y=0, y=1), black at top (y=tileCountY-1, tileCountY-2)
-        /// -> uses prefab arrays; missing prefabs are logged and skipped gracefully
-        /// </summary>
         public void SpawnDefaultSetup()
         {
-            // clear any existing pieces
             ClearBoardPieces();
 
             ChessPieceType[] majors = new ChessPieceType[]
@@ -335,33 +324,40 @@ namespace ChessTheMasterPiece.ChessPiece
 
             int columns = Math.Min(tileCountX, majors.Length);
 
-            // White major row y=0
+            // White major row (y = 0)
             for (int x = 0; x < columns; x++)
+            {
                 SpawnPieceAt(majors[x], Team.White, new Vector2Int(x, 0), whiteTeamPrefabs, whitePiecesParent);
+            }
 
-            // White pawns y=1
+            // White pawns (y = 1)
             int whitePawnRank = Mathf.Clamp(1, 0, tileCountY - 1);
             for (int x = 0; x < tileCountX; x++)
+            {
                 SpawnPieceAt(ChessPieceType.Pawn, Team.White, new Vector2Int(x, whitePawnRank), whiteTeamPrefabs, whitePiecesParent);
+            }
 
-            // Black pawns
+            // Black pawns (y = tileCountY - 2)
             int blackPawnRank = Mathf.Clamp(tileCountY - 2, 0, tileCountY - 1);
             for (int x = 0; x < tileCountX; x++)
+            {
                 SpawnPieceAt(ChessPieceType.Pawn, Team.Black, new Vector2Int(x, blackPawnRank), blackTeamPrefabs, blackPiecesParent);
+            }
 
-            // Black majors top row
+            // Black major row (y = tileCountY - 1)
             int blackMajorRank = Mathf.Clamp(tileCountY - 1, 0, tileCountY - 1);
             for (int x = 0; x < columns; x++)
+            {
                 SpawnPieceAt(majors[x], Team.Black, new Vector2Int(x, blackMajorRank), blackTeamPrefabs, blackPiecesParent);
+            }
         }
 
-        /// <summary>
-        /// Remove and destroy all spawned pieces on the board.
-        /// -> used before respawn
-        /// </summary>
         public void ClearBoardPieces()
         {
-            if (board == null) InitializeBoardData();
+            if (board == null)
+            {
+                InitializeBoard();
+            }
 
             for (int x = 0; x < board.GetLength(0); x++)
             {
@@ -390,7 +386,7 @@ namespace ChessTheMasterPiece.ChessPiece
 
             if (prefabArray == null || prefabArray.Length < ExpectedPiecePrefabCount)
             {
-                Debug.LogWarning($"[Chessboard] SpawnPieceAt: prefabArray is missing or incomplete for {type}.");
+                Debug.LogWarning($"[Chessboard] SpawnPieceAt: prefab array missing or incomplete for {type}.");
                 return null;
             }
 
@@ -404,7 +400,7 @@ namespace ChessTheMasterPiece.ChessPiece
             GameObject prefab = prefabArray[prefabIndex];
             if (prefab == null)
             {
-                Debug.LogWarning($"[Chessboard] SpawnPieceAt: prefab for {type} is null. Skipping spawn.");
+                Debug.LogWarning($"[Chessboard] SpawnPieceAt: prefab for {type} is null. Skipping.");
                 return null;
             }
 
@@ -417,7 +413,7 @@ namespace ChessTheMasterPiece.ChessPiece
             ChessPiece cp = go.GetComponent<ChessPiece>();
             if (cp == null)
             {
-                Debug.LogWarning($"[Chessboard] Spawned prefab {go.name} missing ChessPiece component. Destroying instance.");
+                Debug.LogWarning($"[Chessboard] SpawnPieceAt: prefab {go.name} missing ChessPiece. Destroying.");
                 Destroy(go);
                 return null;
             }
@@ -428,7 +424,9 @@ namespace ChessTheMasterPiece.ChessPiece
             cp.currentY = index.y;
 
             if (team == Team.Black)
+            {
                 go.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
+            }
 
             go.name = $"{team}_{type}_{index.x}_{index.y}";
 
@@ -438,31 +436,27 @@ namespace ChessTheMasterPiece.ChessPiece
 
         #endregion
 
-        #region Input / dragging / hover
+        #region Input / Drag & Drop
 
-        private void HandlePointer(Vector2 screenPos)
+        private void HandlePointer(Vector2 screenPosition)
         {
-            Ray ray = mainCamera.ScreenPointToRay(screenPos);
+            Ray ray = mainCamera.ScreenPointToRay(screenPosition);
 
-            // raycast against our tile mask
             if (Physics.Raycast(ray, out RaycastHit hit, RaycastMaxDistance, combinedLayerMask))
             {
                 Vector2Int hitIndex = ResolveTileIndexFromHit(hit.transform);
                 if (hitIndex.x == -1)
                 {
-                    // mesh hit but not a registered tile
                     return;
                 }
 
                 UpdateHover(hitIndex);
 
-                // press -> start drag
                 if (WasPointerPressed())
                 {
                     TryStartDrag(hitIndex);
                 }
 
-                // release -> drop
                 if (WasPointerReleased())
                 {
                     TryDrop(hitIndex);
@@ -470,12 +464,10 @@ namespace ChessTheMasterPiece.ChessPiece
             }
             else
             {
-                // not hovering over board
                 ClearHover();
 
                 if (WasPointerReleased())
                 {
-                    // drop back if dragged off-board
                     if (draggingPiece != null)
                     {
                         ReturnPieceToTile(draggingPiece);
@@ -484,7 +476,6 @@ namespace ChessTheMasterPiece.ChessPiece
                 }
             }
 
-            // update dragging world position
             if (draggingPiece != null)
             {
                 Plane p = new Plane(Vector3.up, Vector3.up * tilesYOffset);
@@ -498,13 +489,15 @@ namespace ChessTheMasterPiece.ChessPiece
 
         private Vector2Int ResolveTileIndexFromHit(Transform t)
         {
-            // walk up the hierarchy to find a transform that is a key in tileLookup
             Transform cur = t;
             int safety = 0;
+
             while (cur != null && safety++ < 16)
             {
                 if (tileLookup.TryGetValue(cur, out Vector2Int idx))
+                {
                     return idx;
+                }
 
                 cur = cur.parent;
             }
@@ -514,10 +507,15 @@ namespace ChessTheMasterPiece.ChessPiece
 
         private void UpdateHover(Vector2Int idx)
         {
-            if (hoverIndex == idx) return;
+            if (hoverIndex == idx)
+            {
+                return;
+            }
 
             if (IsValidIndex(hoverIndex))
+            {
                 SetTileHighlight(hoverIndex, false);
+            }
 
             hoverIndex = idx;
             SetTileHighlight(hoverIndex, true);
@@ -535,7 +533,11 @@ namespace ChessTheMasterPiece.ChessPiece
 
         private bool WasPointerPressed()
         {
-            if (Mouse.current != null) return Mouse.current.leftButton.wasPressedThisFrame;
+            if (Mouse.current != null)
+            {
+                return Mouse.current.leftButton.wasPressedThisFrame;
+            }
+
 #pragma warning disable 618
             return Input.GetMouseButtonDown(0);
 #pragma warning restore 618
@@ -543,7 +545,11 @@ namespace ChessTheMasterPiece.ChessPiece
 
         private bool WasPointerReleased()
         {
-            if (Mouse.current != null) return Mouse.current.leftButton.wasReleasedThisFrame;
+            if (Mouse.current != null)
+            {
+                return Mouse.current.leftButton.wasReleasedThisFrame;
+            }
+
 #pragma warning disable 618
             return Input.GetMouseButtonUp(0);
 #pragma warning restore 618
@@ -551,23 +557,31 @@ namespace ChessTheMasterPiece.ChessPiece
 
         private void TryStartDrag(Vector2Int idx)
         {
-            if (!IsValidIndex(idx)) return;
+            if (!IsValidIndex(idx))
+            {
+                return;
+            }
+
             ChessPiece cp = board[idx.x, idx.y];
-            if (cp == null) return;
+            if (cp == null)
+            {
+                return;
+            }
 
             draggingPiece = cp;
-            // detach from array temporarily so MoveTo can overwrite target slot
             board[idx.x, idx.y] = null;
         }
 
         private void TryDrop(Vector2Int idx)
         {
-            if (draggingPiece == null) return;
+            if (draggingPiece == null)
+            {
+                return;
+            }
 
-            Vector2Int from = new Vector2Int(draggingPiece.currentX, draggingPiece.currentY);
+            Vector2Int from = new(draggingPiece.currentX, draggingPiece.currentY);
             Vector2Int to = idx;
 
-            // if invalid drop index, return to original
             if (!IsValidIndex(to))
             {
                 ReturnPieceToTile(draggingPiece);
@@ -589,17 +603,21 @@ namespace ChessTheMasterPiece.ChessPiece
 
         private void ReturnPieceToTile(ChessPiece piece)
         {
-            if (piece == null) return;
-            Vector2Int idx = new Vector2Int(piece.currentX, piece.currentY);
+            if (piece == null)
+            {
+                return;
+            }
+
+            Vector2Int idx = new(piece.currentX, piece.currentY);
 
             if (!IsValidIndex(idx))
             {
-                // piece has invalid stored coords -> place at nearest tile center (0,0)
                 Debug.LogWarning($"[Chessboard] ReturnPieceToTile: piece {piece.name} had invalid coords {idx}. Placing at (0,0).");
                 idx = new Vector2Int(0, 0);
             }
 
             board[idx.x, idx.y] = piece;
+
             Vector3 center = GetTileCenter(idx);
             center.y = tilesYOffset + pieceYOffset;
             piece.SetPosition(center, force: true);
@@ -607,11 +625,11 @@ namespace ChessTheMasterPiece.ChessPiece
 
         #endregion
 
-        #region Movement / capture
+        #region Movement & Capture
 
         /// <summary>
-        /// Move piece to x,y. Handles capture. Returns true if move applied.
-        /// -> no chess-rule validation here
+        /// Move a piece to the target tile (x,y). Handles capture and placement.
+        /// No chess-rule validation is performed here.
         /// </summary>
         public bool MoveTo(ChessPiece piece, int x, int y)
         {
@@ -628,29 +646,25 @@ namespace ChessTheMasterPiece.ChessPiece
                 return false;
             }
 
-            // capture
-            ChessPiece target = board[x, y];
-            if (target != null)
+            ChessPiece occupant = board[x, y];
+            if (occupant != null)
             {
-                if (target.team == piece.team)
+                if (occupant.team == piece.team)
                 {
                     // cannot capture own piece
-                    Debug.Log("[Chessboard] MoveTo rejected: target occupied by own piece.");
                     return false;
                 }
 
-                CapturePiece(target);
+                CapturePiece(occupant);
             }
 
-            // update board and piece coords
             board[x, y] = piece;
             piece.currentX = x;
             piece.currentY = y;
 
-            // position physically
-            Vector3 center = GetTileCenter(x, y);
-            center.y = tilesYOffset + pieceYOffset;
-            piece.SetPosition(center, force: true);
+            Vector3 worldCenter = GetTileCenter(x, y);
+            worldCenter.y = tilesYOffset + pieceYOffset;
+            piece.SetPosition(worldCenter, force: true);
 
             return true;
         }
@@ -659,80 +673,81 @@ namespace ChessTheMasterPiece.ChessPiece
         {
             if (victim == null)
             {
-                Debug.LogWarning("[Chessboard] CapturePiece called with null victim. Ignoring.");
+                Debug.LogWarning("[Chessboard] CapturePiece called with null victim.");
                 return;
             }
 
-            // remove from board array if still present
-            Vector2Int stored = new Vector2Int(victim.currentX, victim.currentY);
+            Vector2Int stored = new(victim.currentX, victim.currentY);
             if (IsValidIndex(stored) && board[stored.x, stored.y] == victim)
+            {
                 board[stored.x, stored.y] = null;
+            }
 
-            // baseline Z = center of major row for the team
             int majorRow = GetMajorRowForTeam(victim.team);
             float rowCenterZ = origin.z + majorRow * tileSize + tileSize * 0.5f;
-            float placeY = tilesYOffset + pieceYOffset;
+            float posY = tilesYOffset + pieceYOffset;
 
-            float outsideMargin = tileSize * 0.5f;               // how far outside board on X
-            float zSpacing = Mathf.Max(0.01f, deathSpacing);     // spacing between pieces along Z
+            float outsideX = tileSize * 0.5f;
+            float spacing = Mathf.Max(0.01f, deathSpacing);
 
-            // board center (for facing)
-            Vector3 realBoardCenter = origin + new Vector3(tileCountX * tileSize * 0.5f, 0f, tileCountY * tileSize * 0.5f);
+            Vector3 boardCenterPos = origin + new Vector3(tileCountX * tileSize * 0.5f, 0f, tileCountY * tileSize * 0.5f);
 
-            if (victim.team == (int)Team.White)
-            {
-                whiteCaptured.Add(victim);
-                victim.SetScale(Vector3.one * deathSize, force: true);
+            bool isWhite = victim.team == (int)Team.White;
+            List<ChessPiece> capturedList = isWhite ? whiteCaptured : blackCaptured;
+            capturedList.Add(victim);
 
-                int count = whiteCaptured.Count;
-                float startZ = rowCenterZ - ((count - 1) * 0.5f * zSpacing);
-                float xPos = origin.x + tileCountX * tileSize + outsideMargin;
-                float zPos = startZ + (count - 1) * zSpacing;
+            victim.SetScale(Vector3.one * deathSize, force: true);
 
-                Vector3 pos = new Vector3(xPos, placeY, zPos);
-                victim.SetPosition(pos, force: true);
+            int count = capturedList.Count;
+            float startZ = isWhite
+                ? rowCenterZ - ((count - 1) * 0.5f * spacing)
+                : rowCenterZ + ((count - 1) * 0.5f * spacing);
 
-                Vector3 lookDir = realBoardCenter - new Vector3(pos.x, realBoardCenter.y, pos.z);
-                lookDir.y = 0f;
-                victim.transform.rotation = Quaternion.LookRotation(lookDir.normalized);
-            }
-            else
-            {
-                blackCaptured.Add(victim);
-                victim.SetScale(Vector3.one * deathSize, force: true);
+            float zPos = isWhite
+                ? startZ + (count - 1) * spacing          // white grows +Z visually
+                : startZ - (count - 1) * spacing;         // black grows -Z visually
 
-                int count = blackCaptured.Count;
-                // Centered start point like white but move in negative Z direction
-                float startZ = rowCenterZ + ((count - 1) * 0.5f * zSpacing);
-                float xPos = origin.x - outsideMargin;
-                float zPos = startZ - (count - 1) * zSpacing;
+            float xPos = isWhite
+                ? origin.x + tileCountX * tileSize + outsideX
+                : origin.x - outsideX;
 
-                Vector3 pos = new Vector3(xPos, placeY, zPos);
-                victim.SetPosition(pos, force: true);
-
-                Vector3 lookDir = realBoardCenter - new Vector3(pos.x, realBoardCenter.y, pos.z);
-                lookDir.y = 0f;
-                victim.transform.rotation = Quaternion.LookRotation(lookDir.normalized);
-            }
+            Vector3 finalPos = new Vector3(xPos, posY, zPos);
+            PlaceCapturedPiece(victim, finalPos, boardCenterPos);
         }
 
-        /// <summary>
-        /// Returns major-row index for a given team.
-        /// White majors at y=0. Black majors at y=tileCountY-1.
-        /// </summary>
+        private void PlaceCapturedPiece(ChessPiece piece, Vector3 position, Vector3 boardCenter)
+        {
+            piece.SetPosition(position, force: true);
+
+            Vector3 lookDir = boardCenter - new Vector3(position.x, boardCenter.y, position.z);
+            lookDir.y = 0f;
+
+            if (lookDir.sqrMagnitude < 0.0001f)
+            {
+                lookDir = Vector3.forward;
+            }
+
+            // Rotate so the piece faces the board center while preserving prefab forward orientation.
+            // Using FromToRotation aligns current forward to desired forward while preserving up.
+            Quaternion rot = Quaternion.FromToRotation(piece.transform.forward, lookDir.normalized) * piece.transform.rotation;
+            piece.transform.rotation = rot;
+        }
+
         private int GetMajorRowForTeam(int teamInt)
         {
-            var team = (Team)teamInt;
-            return team == Team.White ? 0 : Mathf.Clamp(tileCountY - 1, 0, tileCountY - 1);
+            return teamInt == (int)Team.White ? 0 : tileCountY - 1;
         }
 
         #endregion
 
-        #region Utilities / highlight / queries
+        #region Utilities / Queries
 
         private void SetTileHighlight(Vector2Int idx, bool highlight)
         {
-            if (!IsValidIndex(idx)) return;
+            if (!IsValidIndex(idx))
+            {
+                return;
+            }
 
             GameObject tile = tiles[idx.x, idx.y];
             if (tile == null)
@@ -746,7 +761,12 @@ namespace ChessTheMasterPiece.ChessPiece
 
         public ChessPiece GetPieceAt(int x, int y)
         {
-            if (!IsValidIndex(new Vector2Int(x, y))) return null;
+            Vector2Int idx = new Vector2Int(x, y);
+            if (!IsValidIndex(idx))
+            {
+                return null;
+            }
+
             return board[x, y];
         }
 
