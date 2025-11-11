@@ -668,17 +668,15 @@ namespace ChessTheMasterPiece.ChessPiece
             if (IsValidIndex(stored) && board[stored.x, stored.y] == victim)
                 board[stored.x, stored.y] = null;
 
-            // compute baseline: center Z of the major row for this team
+            // baseline Z = center of major row for the team
             int majorRow = GetMajorRowForTeam(victim.team);
             float rowCenterZ = origin.z + majorRow * tileSize + tileSize * 0.5f;
             float placeY = tilesYOffset + pieceYOffset;
 
-            // how far outside the board to place captured pieces (X axis)
-            float outsideMargin = tileSize * 0.5f;
-            // spacing between captured pieces along the side (Z axis)
-            float zSpacing = Mathf.Max(0.01f, deathSpacing);
+            float outsideMargin = tileSize * 0.5f;               // how far outside board on X
+            float zSpacing = Mathf.Max(0.01f, deathSpacing);     // spacing between pieces along Z
 
-            // board center used for facing calculation
+            // board center (for facing)
             Vector3 realBoardCenter = origin + new Vector3(tileCountX * tileSize * 0.5f, 0f, tileCountY * tileSize * 0.5f);
 
             if (victim.team == (int)Team.White)
@@ -686,43 +684,35 @@ namespace ChessTheMasterPiece.ChessPiece
                 whiteCaptured.Add(victim);
                 victim.SetScale(Vector3.one * deathSize, force: true);
 
-                int index = whiteCaptured.Count - 1; // 0-based
-                float startZ = rowCenterZ - ((whiteCaptured.Count - 1) * 0.5f * zSpacing);
+                int count = whiteCaptured.Count;
+                float startZ = rowCenterZ - ((count - 1) * 0.5f * zSpacing);
                 float xPos = origin.x + tileCountX * tileSize + outsideMargin;
-                float zPos = startZ + index * zSpacing;
+                float zPos = startZ + (count - 1) * zSpacing;
 
                 Vector3 pos = new Vector3(xPos, placeY, zPos);
                 victim.SetPosition(pos, force: true);
 
-                // rotate so the piece's current forward points toward the board center (preserves prefab orientation)
                 Vector3 lookDir = realBoardCenter - new Vector3(pos.x, realBoardCenter.y, pos.z);
                 lookDir.y = 0f;
-                if (lookDir.sqrMagnitude <= 0.0001f) lookDir = Vector3.forward;
-
-                // rotate current forward -> desired forward
-                Quaternion rot = Quaternion.FromToRotation(victim.transform.forward, lookDir.normalized) * victim.transform.rotation;
-                victim.transform.rotation = rot;
+                victim.transform.rotation = Quaternion.LookRotation(lookDir.normalized);
             }
             else
             {
                 blackCaptured.Add(victim);
                 victim.SetScale(Vector3.one * deathSize, force: true);
 
-                int index = blackCaptured.Count - 1; // 0-based
-                float startZ = rowCenterZ - ((blackCaptured.Count - 1) * 0.5f * zSpacing);
+                int count = blackCaptured.Count;
+                // Centered start point like white but move in negative Z direction
+                float startZ = rowCenterZ + ((count - 1) * 0.5f * zSpacing);
                 float xPos = origin.x - outsideMargin;
-                float zPos = startZ + index * zSpacing;
+                float zPos = startZ - (count - 1) * zSpacing;
 
                 Vector3 pos = new Vector3(xPos, placeY, zPos);
                 victim.SetPosition(pos, force: true);
 
-                // rotate so the piece's current forward points toward the board center (preserves prefab orientation)
                 Vector3 lookDir = realBoardCenter - new Vector3(pos.x, realBoardCenter.y, pos.z);
                 lookDir.y = 0f;
-                if (lookDir.sqrMagnitude <= 0.0001f) lookDir = Vector3.forward;
-
-                Quaternion rot = Quaternion.FromToRotation(victim.transform.forward, lookDir.normalized) * victim.transform.rotation;
-                victim.transform.rotation = rot;
+                victim.transform.rotation = Quaternion.LookRotation(lookDir.normalized);
             }
         }
 
