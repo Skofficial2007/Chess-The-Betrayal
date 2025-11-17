@@ -53,6 +53,8 @@ namespace ChessTheMasterPiece.ChessPiece
         private readonly List<ChessPiece> whiteCaptured = new();
         private readonly List<ChessPiece> blackCaptured = new();
 
+        private List<Vector2Int> currentAvailableMoves = new List<Vector2Int>();
+
         private Camera mainCamera;
         private ChessPiece draggingPiece;
         private Vector2Int hoverIndex = new(-1, -1);
@@ -62,7 +64,11 @@ namespace ChessTheMasterPiece.ChessPiece
 
         private int tileLayer;
         private int highlightLayer;
+        private int moveHighlightLayer;
         private int combinedLayerMask;
+
+        private Team playerTeam = Team.White;    // player's chosen side (default to white)
+        private Team currentTurn = Team.White;   // whose turn it is (white always starts)
 
         #endregion
 
@@ -84,7 +90,20 @@ namespace ChessTheMasterPiece.ChessPiece
 
             InitializeBoard();
             CreateTiles();
-            SpawnDefaultSetup();
+
+            // If the team selection UI is open, wait for the player to choose and
+            // spawn pieces after the choice. Otherwise spawn immediately using the current selection.
+            if (TeamSelectionUI.IsOpen)
+            {
+                // listen for user's selection
+                TeamSelectionUI.OnTeamChosen += HandleTeamChosen;
+            }
+            else
+            {
+                // UI already closed (or absent) -> use chosen team immediately
+                playerTeam = (Team)TeamSelectionUI.ChosenTeam;
+                SpawnDefaultSetupForPlayer();
+            }
         }
 
         private void Update()
@@ -129,7 +148,10 @@ namespace ChessTheMasterPiece.ChessPiece
 
         private void OnDestroy()
         {
-            // cleanup generated meshes (editor play mode)
+            // unsubscribe from team selection event
+            TeamSelectionUI.OnTeamChosen -= HandleTeamChosen;
+
+            // cleanup generated meshes
             if (tiles == null)
             {
                 return;
@@ -162,10 +184,18 @@ namespace ChessTheMasterPiece.ChessPiece
         {
             int a = LayerMask.NameToLayer("Tile");
             int b = LayerMask.NameToLayer("Highlight");
+            int c = LayerMask.NameToLayer("MoveHighlight");
+
+            if (a == -1) Debug.LogWarning("[Chessboard] Layer 'Tile' not found. Defaulting to layer 0.");
+            if (b == -1) Debug.LogWarning("[Chessboard] Layer 'Highlight' not found. Defaulting to layer 0.");
+            if (c == -1) Debug.LogWarning("[Chessboard] Layer 'MoveHighlight' not found. Defaulting to layer 0.");
 
             tileLayer = (a == -1) ? 0 : a;
             highlightLayer = (b == -1) ? 0 : b;
-            combinedLayerMask = (1 << tileLayer) | (1 << highlightLayer);
+            moveHighlightLayer = (c == -1) ? 0 : c;
+
+            // ensure raycasts will hit tiles, hover highlights and move highlights
+            combinedLayerMask = (1 << tileLayer) | (1 << highlightLayer) | (1 << moveHighlightLayer);
         }
 
         private void CreateParentContainersIfNeeded()
@@ -364,6 +394,7 @@ namespace ChessTheMasterPiece.ChessPiece
                 for (int y = 0; y < board.GetLength(1); y++)
                 {
                     ChessPiece cp = board[x, y];
+
                     if (cp != null)
                     {
                         Destroy(cp.gameObject);
@@ -380,7 +411,7 @@ namespace ChessTheMasterPiece.ChessPiece
         {
             if (!IsValidIndex(index))
             {
-                Debug.LogWarning($"[Chessboard] SpawnPieceAt invalid index {index} for {type}.");
+                Debug.LogWarning($"[Chessboard] SpawnPieceAt: invalid index {index} for {type}.");
                 return null;
             }
 
@@ -391,6 +422,7 @@ namespace ChessTheMasterPiece.ChessPiece
             }
 
             int prefabIndex = (int)type - 1;
+
             if (prefabIndex < 0 || prefabIndex >= prefabArray.Length)
             {
                 Debug.LogWarning($"[Chessboard] SpawnPieceAt: invalid prefab index for {type}.");
@@ -398,6 +430,7 @@ namespace ChessTheMasterPiece.ChessPiece
             }
 
             GameObject prefab = prefabArray[prefabIndex];
+
             if (prefab == null)
             {
                 Debug.LogWarning($"[Chessboard] SpawnPieceAt: prefab for {type} is null. Skipping.");
@@ -408,9 +441,11 @@ namespace ChessTheMasterPiece.ChessPiece
             pos.y = tilesYOffset + pieceYOffset;
 
             GameObject go = Instantiate(prefab, pos, Quaternion.identity, parent);
+
             go.transform.localScale = Vector3.one * Mathf.Max(0.0001f, pieceScaleMultiplier);
 
             ChessPiece cp = go.GetComponent<ChessPiece>();
+
             if (cp == null)
             {
                 Debug.LogWarning($"[Chessboard] SpawnPieceAt: prefab {go.name} missing ChessPiece. Destroying.");
@@ -423,15 +458,112 @@ namespace ChessTheMasterPiece.ChessPiece
             cp.currentX = index.x;
             cp.currentY = index.y;
 
-            if (team == Team.Black)
+            try
             {
-                go.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
+                if (team == playerTeam)
+                {
+                    go.transform.rotation = Quaternion.identity;
+                }
+                else
+                {
+                    go.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[Chessboard] SpawnPieceAt: failed to set rotation for {go.name}: {ex.Message}");
             }
 
             go.name = $"{team}_{type}_{index.x}_{index.y}";
 
             board[index.x, index.y] = cp;
+
             return cp;
+        }
+
+        /// <summary>
+        /// Event handler called when the player chooses a team from the UI.
+        /// </summary>
+        private void HandleTeamChosen(int chosenTeam)
+        {
+            // cache player's choice
+            playerTeam = (Team)chosenTeam;
+
+            // unsubscribe (we only need the event once)
+            TeamSelectionUI.OnTeamChosen -= HandleTeamChosen;
+
+            // spawn pieces with the chosen side on player's side
+            SpawnDefaultSetupForPlayer();
+        }
+
+        private void SpawnDefaultSetupForPlayer()
+        {
+            ClearBoardPieces();
+
+            ChessPieceType[] majors = new ChessPieceType[]
+            {
+                ChessPieceType.Rook,
+                ChessPieceType.Knight,
+                ChessPieceType.Bishop,
+                ChessPieceType.Queen,
+                ChessPieceType.King,
+                ChessPieceType.Bishop,
+                ChessPieceType.Knight,
+                ChessPieceType.Rook
+            };
+
+            int columns = Math.Min(tileCountX, majors.Length);
+
+            Team bottomTeam = playerTeam;
+            Team topTeam = (playerTeam == Team.White) ? Team.Black : Team.White;
+
+            for (int x = 0; x < columns; x++)
+            {
+                SpawnPieceAt(
+                    majors[x],
+                    bottomTeam,
+                    new Vector2Int(x, 0),
+                    bottomTeam == Team.White ? whiteTeamPrefabs : blackTeamPrefabs,
+                    bottomTeam == Team.White ? whitePiecesParent : blackPiecesParent);
+            }
+
+            int bottomPawnRank = Mathf.Clamp(1, 0, tileCountY - 1);
+
+            for (int x = 0; x < tileCountX; x++)
+            {
+                SpawnPieceAt(
+                    ChessPieceType.Pawn,
+                    bottomTeam,
+                    new Vector2Int(x, bottomPawnRank),
+                    bottomTeam == Team.White ? whiteTeamPrefabs : blackTeamPrefabs,
+                    bottomTeam == Team.White ? whitePiecesParent : blackPiecesParent);
+            }
+
+            int topPawnRank = Mathf.Clamp(tileCountY - 2, 0, tileCountY - 1);
+
+            for (int x = 0; x < tileCountX; x++)
+            {
+                SpawnPieceAt(
+                    ChessPieceType.Pawn,
+                    topTeam,
+                    new Vector2Int(x, topPawnRank),
+                    topTeam == Team.White ? whiteTeamPrefabs : blackTeamPrefabs,
+                    topTeam == Team.White ? whitePiecesParent : blackPiecesParent);
+            }
+
+            int topMajorRank = Mathf.Clamp(tileCountY - 1, 0, tileCountY - 1);
+
+            for (int x = 0; x < columns; x++)
+            {
+                SpawnPieceAt(
+                    majors[x],
+                    topTeam,
+                    new Vector2Int(x, topMajorRank),
+                    topTeam == Team.White ? whiteTeamPrefabs : blackTeamPrefabs,
+                    topTeam == Team.White ? whitePiecesParent : blackPiecesParent);
+            }
+
+            currentTurn = Team.White;
         }
 
         #endregion
@@ -440,6 +572,13 @@ namespace ChessTheMasterPiece.ChessPiece
 
         private void HandlePointer(Vector2 screenPosition)
         {
+            // Block all pointer handling while team selection UI is open
+            if (TeamSelectionUI.IsOpen)
+            {
+                return;
+            }
+
+
             Ray ray = mainCamera.ScreenPointToRay(screenPosition);
 
             if (Physics.Raycast(ray, out RaycastHit hit, RaycastMaxDistance, combinedLayerMask))
@@ -472,6 +611,9 @@ namespace ChessTheMasterPiece.ChessPiece
                     {
                         ReturnPieceToTile(draggingPiece);
                         draggingPiece = null;
+
+                        // clear highlights
+                        ClearAvailableMoveHighlights();
                     }
                 }
             }
@@ -563,13 +705,39 @@ namespace ChessTheMasterPiece.ChessPiece
             }
 
             ChessPiece cp = board[idx.x, idx.y];
+
             if (cp == null)
             {
                 return;
             }
 
+            if (TeamSelectionUI.IsOpen)
+            {
+                // Selection UI is open — block any interaction.
+                return;
+            }
+
+            Team pieceTeam = (Team)cp.team;
+
+            // Allow dragging only when it's the piece's team's turn.
+            if (pieceTeam != currentTurn)
+            {
+                Debug.Log("[Chessboard] TryStartDrag: It is not this team's turn.");
+                return;
+            }
+
+            // Clear any previous move highlights.
+            ClearAvailableMoveHighlights();
+
+            // Compute available moves while the piece is still present on the board.
+            List<Vector2Int> avail = cp.GetAvailableMoves(ref board, tileCountX, tileCountY) ?? new List<Vector2Int>();
+
+            // Begin dragging: remove from board occupancy and store reference.
             draggingPiece = cp;
             board[idx.x, idx.y] = null;
+
+            // Highlight available moves for this piece.
+            HighlightMoves(avail);
         }
 
         private void TryDrop(Vector2Int idx)
@@ -579,26 +747,62 @@ namespace ChessTheMasterPiece.ChessPiece
                 return;
             }
 
-            Vector2Int from = new(draggingPiece.currentX, draggingPiece.currentY);
+            Vector2Int from = new Vector2Int(draggingPiece.currentX, draggingPiece.currentY);
             Vector2Int to = idx;
 
+            // invalid target -> return piece and clear highlights
             if (!IsValidIndex(to))
             {
                 ReturnPieceToTile(draggingPiece);
+
                 draggingPiece = null;
+
+                ClearAvailableMoveHighlights();
+
                 return;
             }
 
+            // Only allow dropping onto a valid move
+            if (!ContainsValidMoves(currentAvailableMoves, to))
+            {
+                // invalid move -> revert
+                if (IsValidIndex(from))
+                {
+                    board[from.x, from.y] = draggingPiece;
+                }
+
+                ReturnPieceToTile(draggingPiece);
+
+                draggingPiece = null;
+
+                ClearAvailableMoveHighlights();
+
+                return;
+            }
+
+            // Try to perform the move (MoveTo handles captures)
             bool moved = MoveTo(draggingPiece, to.x, to.y);
 
-            if (!moved)
+            if (moved)
             {
-                // revert
-                board[from.x, from.y] = draggingPiece;
+                // Successfully moved: switch turn to the other side
+                currentTurn = (currentTurn == Team.White) ? Team.Black : Team.White;
+            }
+            else
+            {
+                // Move failed (e.g., trying to capture own piece) -> revert safely
+                if (IsValidIndex(from))
+                {
+                    board[from.x, from.y] = draggingPiece;
+                }
+
                 ReturnPieceToTile(draggingPiece);
             }
 
             draggingPiece = null;
+
+            // clear available-move highlights now that drag ended
+            ClearAvailableMoveHighlights();
         }
 
         private void ReturnPieceToTile(ChessPiece piece)
@@ -740,6 +944,97 @@ namespace ChessTheMasterPiece.ChessPiece
 
         #endregion
 
+        #region Chesspiece Available Moves
+
+        /// <summary>
+        /// Highlight the given moves by setting the corresponding tiles to the MoveHighlight layer.
+        /// Existing hover/highlight state is respected: hover (Highlight layer) has priority.
+        /// </summary>
+        private void HighlightMoves(List<Vector2Int> moves)
+        {
+            if (moves == null || moves.Count == 0)
+            {
+                return;
+            }
+
+            // store available moves list (replace any previous)
+            currentAvailableMoves = new List<Vector2Int>(moves);
+
+            foreach (var idx in currentAvailableMoves)
+            {
+                if (!IsValidIndex(idx))
+                    continue;
+
+                // if this tile is currently hovered, leave it as hover highlight (do not override)
+                if (hoverIndex == idx)
+                {
+                    SetTileHighlight(idx, true); // ensures hover layer is applied
+                    continue;
+                }
+
+                GameObject tile = tiles[idx.x, idx.y];
+                if (tile == null)
+                {
+                    Debug.LogWarning($"[Chessboard] HighlightMoves: tile at {idx} is null.");
+                    continue;
+                }
+
+                tile.layer = moveHighlightLayer;
+            }
+        }
+
+        private void ClearAvailableMoveHighlights()
+        {
+            if (currentAvailableMoves == null || currentAvailableMoves.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var idx in currentAvailableMoves)
+            {
+                if (!IsValidIndex(idx))
+                    continue;
+
+                // if this index is currently hovered, keep the hover layer
+                if (hoverIndex == idx)
+                {
+                    SetTileHighlight(idx, true);
+                    continue;
+                }
+
+                GameObject tile = tiles[idx.x, idx.y];
+                if (tile == null)
+                    continue;
+
+                tile.layer = tileLayer;
+            }
+
+            currentAvailableMoves.Clear();
+        }
+
+        /// <summary>
+        /// Checks whether (x,y) exists inside the allowed moves list.
+        /// </summary>
+        private bool ContainsValidMoves(List<Vector2Int> moves, Vector2Int pos)
+        {
+            if (moves == null || moves.Count == 0)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < moves.Count; i++)
+            {
+                if (moves[i].x == pos.x && moves[i].y == pos.y)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        #endregion
+
         #region Utilities / Queries
 
         private void SetTileHighlight(Vector2Int idx, bool highlight)
@@ -756,7 +1051,17 @@ namespace ChessTheMasterPiece.ChessPiece
                 return;
             }
 
-            tile.layer = highlight ? highlightLayer : tileLayer;
+            if (highlight)
+            {
+                // hover highlight takes precedence
+                tile.layer = highlightLayer;
+                return;
+            }
+
+            // clearing hover: if this tile is part of currentAvailableMoves, restore move highlight,
+            // otherwise revert to base tile layer.
+            bool isMoveHighlighted = currentAvailableMoves != null && currentAvailableMoves.Contains(idx);
+            tile.layer = isMoveHighlighted ? moveHighlightLayer : tileLayer;
         }
 
         public ChessPiece GetPieceAt(int x, int y)
