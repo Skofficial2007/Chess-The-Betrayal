@@ -33,6 +33,12 @@ namespace ChessTheMasterPiece.ChessPiece
         [Tooltip("Piece logical type")]
         public ChessPieceType type = ChessPieceType.None;
 
+        [Tooltip("Movement direction for this piece: +1 means increasing Y (up the board), -1 means decreasing Y (down the board).")]
+        public int moveDirection = 1; // default to +1 for compatibility
+
+        [Tooltip("The Y index (row) where this piece was spawned. Used to determine a pawn's initial rank for 2-step moves.")]
+        public int initialY = -1;
+
         // internal smoothing targets
         private Vector3 targetPosition;
         private Vector3 targetScale = Vector3.one;
