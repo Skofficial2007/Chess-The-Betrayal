@@ -457,6 +457,8 @@ namespace ChessTheMasterPiece.ChessPiece
             cp.team = (int)team;
             cp.currentX = index.x;
             cp.currentY = index.y;
+            cp.initialY = index.y;
+            cp.moveDirection = (team == playerTeam) ? +1 : -1;
 
             try
             {
