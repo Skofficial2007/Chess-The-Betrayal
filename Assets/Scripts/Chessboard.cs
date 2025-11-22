@@ -23,7 +23,7 @@ namespace ChessTheMasterPiece.ChessPiece
         [SerializeField, Range(0.1f, 4f)] private float tileSize = 1f;
         [SerializeField, Min(2)] private int tileCountX = DefaultBoardSize;
         [SerializeField, Min(2)] private int tileCountY = DefaultBoardSize;
-        [SerializeField] private float tilesYOffset = 0.0f;
+        [SerializeField] private float tilesYOffset = 0.0f; // Height offset of tiles from board origin
         [SerializeField] private Vector3 boardCenter = Vector3.zero;
 
         [Header("Prefabs (order: Pawn,Rook,Knight,Bishop,Queen,King)")]
@@ -31,7 +31,7 @@ namespace ChessTheMasterPiece.ChessPiece
         [SerializeField] private GameObject[] blackTeamPrefabs;
 
         [Header("Piece visuals")]
-        [SerializeField] private float pieceYOffset = 0.05f;
+        [SerializeField] private float pieceYOffset = 0.05f; // Height offset of pieces from tiles (Not Used)
         [SerializeField] private float pieceScaleMultiplier = 1f;
         [SerializeField] private float dragHeight = 1f;
         [SerializeField] private float deathSize = 0.45f;
@@ -60,7 +60,7 @@ namespace ChessTheMasterPiece.ChessPiece
         private Vector2Int hoverIndex = new(-1, -1);
 
         private Transform cachedTransform;
-        private Vector3 origin;                          // bottom-left world corner of tile (0,0)
+        private Vector3 boardOrigin;                          // bottom-left world corner of tile (0,0)
 
         private int tileLayer;
         private int highlightLayer;
@@ -222,6 +222,10 @@ namespace ChessTheMasterPiece.ChessPiece
             }
         }
 
+        /// <summary>
+        /// Safe check of inspector configuration.
+        /// </summary>
+        /// <returns></returns>
         private bool ValidateConfiguration()
         {
             if (tileMaterial == null)
@@ -245,15 +249,19 @@ namespace ChessTheMasterPiece.ChessPiece
             return true;
         }
 
+        /// <summary>
+        /// Initialize board data structures like (occupancy) board array, tile array and lookup dictionary.
+        /// </summary>
         private void InitializeBoard()
         {
             board = new ChessPiece[tileCountX, tileCountY];
             tiles = new GameObject[tileCountX, tileCountY];
             tileLookup = new Dictionary<Transform, Vector2Int>(tileCountX * tileCountY);
 
-            float halfW = tileCountX * tileSize * 0.5f;
-            float halfD = tileCountY * tileSize * 0.5f;
-            origin = boardCenter - new Vector3(halfW, 0f, halfD);
+            float halfWidth = tileCountX * tileSize * 0.5f;
+            float halfHeight = tileCountY * tileSize * 0.5f;
+
+            boardOrigin = boardCenter - new Vector3(halfWidth, 0f, halfHeight);
         }
 
         #endregion
@@ -276,12 +284,18 @@ namespace ChessTheMasterPiece.ChessPiece
             }
         }
 
+        /// <summary>
+        /// Create a single tile at (x,y).
+        /// </summary>
+        /// <param name="x"></param>
+        /// <param name="y"></param>
+        /// <returns></returns>
         private GameObject CreateTile(int x, int y)
         {
             GameObject tileGO = new GameObject($"Tile_{x}_{y}");
             tileGO.transform.SetParent(tilesParent, false);
 
-            Vector3 worldPos = origin + new Vector3(x * tileSize + tileSize * 0.5f, tilesYOffset, y * tileSize + tileSize * 0.5f);
+            Vector3 worldPos = boardOrigin + new Vector3(x * tileSize + tileSize * 0.5f, tilesYOffset, y * tileSize + tileSize * 0.5f);
             tileGO.transform.position = worldPos;
 
             Mesh mesh = new Mesh { name = $"TileMesh_{x}_{y}" };
@@ -311,7 +325,7 @@ namespace ChessTheMasterPiece.ChessPiece
             return tileGO;
         }
 
-        public Vector3 GetTileCenter(Vector2Int index)
+        private Vector3 GetTileCenter(Vector2Int index)
         {
             if (!IsValidIndex(index))
             {
@@ -319,7 +333,7 @@ namespace ChessTheMasterPiece.ChessPiece
                 return Vector3.zero;
             }
 
-            return origin + new Vector3(index.x * tileSize + tileSize * 0.5f, tilesYOffset, index.y * tileSize + tileSize * 0.5f);
+            return boardOrigin + new Vector3(index.x * tileSize + tileSize * 0.5f, tilesYOffset, index.y * tileSize + tileSize * 0.5f);
         }
 
         public Vector3 GetTileCenter(int x, int y)
@@ -336,7 +350,11 @@ namespace ChessTheMasterPiece.ChessPiece
 
         #region Spawning / Placement
 
-        public void SpawnDefaultSetup()
+        /// <summary>
+        /// Spawn default chess setup (standard 8x8) with white at bottom.
+        /// </summary>
+        [Obsolete("Use SpawnDefaultSetupForPlayer instead to respect player's team choice.")]
+        private void SpawnDefaultSetup()
         {
             ClearBoardPieces();
 
@@ -498,6 +516,9 @@ namespace ChessTheMasterPiece.ChessPiece
             SpawnDefaultSetupForPlayer();
         }
 
+        /// <summary>
+        /// Spawn default chess setup (standard 8x8) respecting player's chosen team.
+        /// </summary>
         private void SpawnDefaultSetupForPlayer()
         {
             ClearBoardPieces();
@@ -572,6 +593,10 @@ namespace ChessTheMasterPiece.ChessPiece
 
         #region Input / Drag & Drop
 
+        /// <summary>
+        /// Handle pointer input for hover, drag start, drag end.
+        /// </summary>
+        /// <param name="screenPosition"></param>
         private void HandlePointer(Vector2 screenPosition)
         {
             // Block all pointer handling while team selection UI is open
@@ -580,12 +605,11 @@ namespace ChessTheMasterPiece.ChessPiece
                 return;
             }
 
-
             Ray ray = mainCamera.ScreenPointToRay(screenPosition);
 
             if (Physics.Raycast(ray, out RaycastHit hit, RaycastMaxDistance, combinedLayerMask))
             {
-                Vector2Int hitIndex = ResolveTileIndexFromHit(hit.transform);
+                Vector2Int hitIndex = FindTileIndexUsingHitInfo(hit.transform);
                 if (hitIndex.x == -1)
                 {
                     return;
@@ -631,7 +655,12 @@ namespace ChessTheMasterPiece.ChessPiece
             }
         }
 
-        private Vector2Int ResolveTileIndexFromHit(Transform t)
+        /// <summary>
+        /// Find tile index from a hit Transform by traversing up the hierarchy.
+        /// </summary>
+        /// <param name="t"></param>
+        /// <returns></returns>
+        private Vector2Int FindTileIndexUsingHitInfo(Transform t)
         {
             Transform cur = t;
             int safety = 0;
@@ -649,6 +678,10 @@ namespace ChessTheMasterPiece.ChessPiece
             return new Vector2Int(-1, -1);
         }
 
+        /// <summary>
+        /// Update hover highlight to the given index.
+        /// </summary>
+        /// <param name="idx"></param>
         private void UpdateHover(Vector2Int idx)
         {
             if (hoverIndex == idx)
@@ -699,6 +732,10 @@ namespace ChessTheMasterPiece.ChessPiece
 #pragma warning restore 618
         }
 
+        /// <summary>
+        /// Attempt to start dragging the piece at the given index.
+        /// </summary>
+        /// <param name="idx"></param>
         private void TryStartDrag(Vector2Int idx)
         {
             if (!IsValidIndex(idx))
@@ -742,6 +779,10 @@ namespace ChessTheMasterPiece.ChessPiece
             HighlightMoves(avail);
         }
 
+        /// <summary>
+        /// Attempt to drop the currently dragging piece at the given index.
+        /// </summary>
+        /// <param name="idx"></param>
         private void TryDrop(Vector2Int idx)
         {
             if (draggingPiece == null)
@@ -807,6 +848,10 @@ namespace ChessTheMasterPiece.ChessPiece
             ClearAvailableMoveHighlights();
         }
 
+        /// <summary>
+        /// Return a piece to its original tile on the board.
+        /// </summary>
+        /// <param name="piece"></param>
         private void ReturnPieceToTile(ChessPiece piece)
         {
             if (piece == null)
@@ -890,13 +935,13 @@ namespace ChessTheMasterPiece.ChessPiece
             }
 
             int majorRow = GetMajorRowForTeam(victim.team);
-            float rowCenterZ = origin.z + majorRow * tileSize + tileSize * 0.5f;
+            float rowCenterZ = boardOrigin.z + majorRow * tileSize + tileSize * 0.5f;
             float posY = tilesYOffset + pieceYOffset;
 
             float outsideX = tileSize * 0.5f;
             float spacing = Mathf.Max(0.01f, deathSpacing);
 
-            Vector3 boardCenterPos = origin + new Vector3(tileCountX * tileSize * 0.5f, 0f, tileCountY * tileSize * 0.5f);
+            Vector3 boardCenterPos = boardOrigin + new Vector3(tileCountX * tileSize * 0.5f, 0f, tileCountY * tileSize * 0.5f);
 
             bool isWhite = victim.team == (int)Team.White;
             List<ChessPiece> capturedList = isWhite ? whiteCaptured : blackCaptured;
@@ -914,8 +959,8 @@ namespace ChessTheMasterPiece.ChessPiece
                 : startZ - (count - 1) * spacing;         // black grows -Z visually
 
             float xPos = isWhite
-                ? origin.x + tileCountX * tileSize + outsideX
-                : origin.x - outsideX;
+                ? boardOrigin.x + tileCountX * tileSize + outsideX
+                : boardOrigin.x - outsideX;
 
             Vector3 finalPos = new Vector3(xPos, posY, zPos);
             PlaceCapturedPiece(victim, finalPos, boardCenterPos);
