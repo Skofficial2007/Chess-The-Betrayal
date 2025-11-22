@@ -14,6 +14,14 @@ namespace ChessTheMasterPiece.ChessPiece
         King = 6
     }
 
+    public enum SpecialMove
+    {
+        None = 0,
+        EnPassant = 1,
+        Castling = 2,
+        Promotion = 3,
+    }
+
     /// <summary>
     /// Lightweight piece component.
     /// -> stores board coords + type + simple lerp smoothing for position and scale
@@ -105,7 +113,7 @@ namespace ChessTheMasterPiece.ChessPiece
                      float.IsInfinity(v.x) || float.IsInfinity(v.y) || float.IsInfinity(v.z));
         }
 
-        public virtual List<Vector2Int> GetAvailableMoves(ref ChessPiece[,] board, int tileCountX, int tileCountY)
+        public virtual List<Vector2Int> GetAvailableMoves(ChessPiece[,] board, int tileCountX, int tileCountY)
         {
             List<Vector2Int> r = new List<Vector2Int>();
 
@@ -115,6 +123,11 @@ namespace ChessTheMasterPiece.ChessPiece
             r.Add(new Vector2Int(4, 4));
 
             return r;
+        }
+
+        public virtual SpecialMove GetSpecialMoves(ChessPiece[,] board, List<Vector2Int[]> moveList, List<Vector2Int> availableMoves)
+        {
+            return SpecialMove.None;
         }
     }
 }
