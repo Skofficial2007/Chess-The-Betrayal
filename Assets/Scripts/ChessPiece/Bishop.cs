@@ -5,7 +5,7 @@ namespace ChessTheMasterPiece.ChessPiece
 {
     public class Bishop : ChessPiece
     {
-        public override List<Vector2Int> GetAvailableMoves(ref ChessPiece[,] board, int tileCountX, int tileCountY)
+        public override List<Vector2Int> GetAvailableMoves(ChessPiece[,] board, int tileCountX, int tileCountY)
         {
             List<Vector2Int> moves = new List<Vector2Int>();
 

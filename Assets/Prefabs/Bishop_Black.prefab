@@ -49,6 +49,8 @@ MonoBehaviour:
   currentX: 0
   currentY: 0
   type: 4
+  moveDirection: 1
+  initialY: -1
 --- !u!1 &2474131158176331522
 GameObject:
   m_ObjectHideFlags: 0
@@ -115,7 +117,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 1829b6d899893fc43b3e043a36f98e4f, type: 2}
+  - {fileID: 2100000, guid: 7ad58b75be8e65246859781afbc31661, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
