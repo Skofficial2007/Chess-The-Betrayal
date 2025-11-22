@@ -55,6 +55,12 @@ namespace ChessTheMasterPiece.ChessPiece
 
         private List<Vector2Int> currentAvailableMoves = new List<Vector2Int>();
 
+        // Stores the special move type available for the currently dragging piece
+        private SpecialMove specialMove = SpecialMove.None;
+
+        // History of moves: [startPos, endPos]
+        private List<Vector2Int[]> moveList = new List<Vector2Int[]>();
+
         private Camera mainCamera;
         private ChessPiece draggingPiece;
         private Vector2Int hoverIndex = new(-1, -1);
@@ -423,6 +429,7 @@ namespace ChessTheMasterPiece.ChessPiece
 
             whiteCaptured.Clear();
             blackCaptured.Clear();
+            moveList.Clear();
         }
 
         private ChessPiece SpawnPieceAt(ChessPieceType type, Team team, Vector2Int index, GameObject[] prefabArray, Transform parent)
@@ -769,7 +776,10 @@ namespace ChessTheMasterPiece.ChessPiece
             ClearAvailableMoveHighlights();
 
             // Compute available moves while the piece is still present on the board.
-            List<Vector2Int> avail = cp.GetAvailableMoves(ref board, tileCountX, tileCountY) ?? new List<Vector2Int>();
+            List<Vector2Int> avail = cp.GetAvailableMoves(board, tileCountX, tileCountY) ?? new List<Vector2Int>();
+
+            // Get Special Moves
+            specialMove = cp.GetSpecialMoves(board, moveList, avail);
 
             // Begin dragging: remove from board occupancy and store reference.
             draggingPiece = cp;
@@ -879,43 +889,59 @@ namespace ChessTheMasterPiece.ChessPiece
         #region Movement & Capture
 
         /// <summary>
-        /// Move a piece to the target tile (x,y). Handles capture and placement.
-        /// No chess-rule validation is performed here.
+        /// Moves a piece to the target tile (x,y). 
+        /// Handles updating the board array, visual position, and capturing opponents.
         /// </summary>
         public bool MoveTo(ChessPiece piece, int x, int y)
         {
             if (piece == null)
             {
-                Debug.LogWarning("[Chessboard] MoveTo called with null piece.");
+                Debug.LogWarning("[Chessboard] MoveTo: Piece is null.");
                 return false;
             }
 
-            Vector2Int targetIdx = new Vector2Int(x, y);
-            if (!IsValidIndex(targetIdx))
+            Vector2Int targetIndex = new Vector2Int(x, y);
+
+            // Validate Target
+            if (!IsValidIndex(targetIndex))
             {
-                Debug.LogWarning($"[Chessboard] MoveTo called with invalid target {targetIdx}.");
+                Debug.LogError($"[Chessboard] MoveTo: Target {targetIndex} is out of bounds.");
                 return false;
             }
 
+            // Check for Occupancy / Capture
             ChessPiece occupant = board[x, y];
             if (occupant != null)
             {
+                // Prevent capturing own team
                 if (occupant.team == piece.team)
                 {
-                    // cannot capture own piece
                     return false;
                 }
 
                 CapturePiece(occupant);
             }
 
+            // Execute Move (Update Data)
+            Vector2Int previousPosition = new Vector2Int(piece.currentX, piece.currentY);
+
             board[x, y] = piece;
             piece.currentX = x;
             piece.currentY = y;
 
-            Vector3 worldCenter = GetTileCenter(x, y);
-            worldCenter.y = tilesYOffset + pieceYOffset;
-            piece.SetPosition(worldCenter, force: true);
+            // Execute Move (Update Visuals)
+            Vector3 worldPos = GetTileCenter(x, y);
+            worldPos.y = tilesYOffset + pieceYOffset;
+            piece.SetPosition(worldPos, force: true);
+
+            // Record History
+            moveList.Add(new Vector2Int[] { previousPosition, targetIndex });
+
+            // Handle Special Mechanics (En Passant, etc.)
+            if (specialMove != SpecialMove.None)
+            {
+                ProcessSpecialMove();
+            }
 
             return true;
         }
@@ -924,69 +950,124 @@ namespace ChessTheMasterPiece.ChessPiece
         {
             if (victim == null)
             {
-                Debug.LogWarning("[Chessboard] CapturePiece called with null victim.");
                 return;
             }
 
-            Vector2Int stored = new(victim.currentX, victim.currentY);
-            if (IsValidIndex(stored) && board[stored.x, stored.y] == victim)
+            // Remove from board data
+            if (board[victim.currentX, victim.currentY] == victim)
             {
-                board[stored.x, stored.y] = null;
+                board[victim.currentX, victim.currentY] = null;
             }
 
-            int majorRow = GetMajorRowForTeam(victim.team);
-            float rowCenterZ = boardOrigin.z + majorRow * tileSize + tileSize * 0.5f;
-            float posY = tilesYOffset + pieceYOffset;
-
-            float outsideX = tileSize * 0.5f;
-            float spacing = Mathf.Max(0.01f, deathSpacing);
-
-            Vector3 boardCenterPos = boardOrigin + new Vector3(tileCountX * tileSize * 0.5f, 0f, tileCountY * tileSize * 0.5f);
-
+            // Add to captured list
             bool isWhite = victim.team == (int)Team.White;
             List<ChessPiece> capturedList = isWhite ? whiteCaptured : blackCaptured;
             capturedList.Add(victim);
 
-            victim.SetScale(Vector3.one * deathSize, force: true);
+            // --- Calculate "Death Pile" Visual Position ---
 
-            int count = capturedList.Count;
-            float startZ = isWhite
-                ? rowCenterZ - ((count - 1) * 0.5f * spacing)
-                : rowCenterZ + ((count - 1) * 0.5f * spacing);
+            int majorRowIndex = (victim.team == (int)Team.White) ? 0 : tileCountY - 1;
+            float rowCenterZ = boardOrigin.z + majorRowIndex * tileSize + tileSize * 0.5f;
 
-            float zPos = isWhite
-                ? startZ + (count - 1) * spacing          // white grows +Z visually
-                : startZ - (count - 1) * spacing;         // black grows -Z visually
+            float outsideBoardMargin = tileSize * 0.5f;
+            float stackSpacing = Mathf.Max(0.01f, deathSpacing);
+            int stackIndex = capturedList.Count - 1;
 
+            // Determine X position (Right side for White, Left side for Black)
             float xPos = isWhite
-                ? boardOrigin.x + tileCountX * tileSize + outsideX
-                : boardOrigin.x - outsideX;
+                ? boardOrigin.x + tileCountX * tileSize + outsideBoardMargin
+                : boardOrigin.x - outsideBoardMargin;
 
-            Vector3 finalPos = new Vector3(xPos, posY, zPos);
+            // Determine Z position (Stacking direction)
+            // White pieces stack upwards (+Z), Black pieces stack downwards (-Z)
+            float zPos;
+            if (isWhite)
+            {
+                float startZ = rowCenterZ - (stackIndex * 0.5f * stackSpacing);
+                zPos = startZ + (stackIndex * stackSpacing);
+            }
+            else
+            {
+                float startZ = rowCenterZ + (stackIndex * 0.5f * stackSpacing);
+                zPos = startZ - (stackIndex * stackSpacing);
+            }
+
+            float yPos = tilesYOffset + pieceYOffset;
+            Vector3 finalPos = new Vector3(xPos, yPos, zPos);
+            Vector3 boardCenterPos = boardOrigin + new Vector3(tileCountX * tileSize * 0.5f, 0f, tileCountY * tileSize * 0.5f);
+
+            // Apply visual changes
+            victim.SetScale(Vector3.one * deathSize, force: true);
             PlaceCapturedPiece(victim, finalPos, boardCenterPos);
         }
 
-        private void PlaceCapturedPiece(ChessPiece piece, Vector3 position, Vector3 boardCenter)
+        private void PlaceCapturedPiece(ChessPiece piece, Vector3 targetPosition, Vector3 faceTarget)
         {
-            piece.SetPosition(position, force: true);
+            piece.SetPosition(targetPosition, force: true);
 
-            Vector3 lookDir = boardCenter - new Vector3(position.x, boardCenter.y, position.z);
-            lookDir.y = 0f;
+            // Calculate rotation to face the center of the board
+            Vector3 direction = (faceTarget - targetPosition).normalized;
+            direction.y = 0; // Keep piece upright
 
-            if (lookDir.sqrMagnitude < 0.0001f)
-            {
-                lookDir = Vector3.forward;
-            }
+            if (direction == Vector3.zero) direction = Vector3.forward;
 
-            // Rotate so the piece faces the board center while preserving prefab forward orientation.
-            // Using FromToRotation aligns current forward to desired forward while preserving up.
-            Quaternion rot = Quaternion.FromToRotation(piece.transform.forward, lookDir.normalized) * piece.transform.rotation;
-            piece.transform.rotation = rot;
+            Quaternion targetRotation = Quaternion.LookRotation(direction);
+            piece.transform.rotation = targetRotation;
         }
 
-        private int GetMajorRowForTeam(int teamInt)
+        #endregion
+
+        #region Special Moves
+
+        private void ProcessSpecialMove()
         {
-            return teamInt == (int)Team.White ? 0 : tileCountY - 1;
+            if (specialMove == SpecialMove.EnPassant)
+            {
+                ProcessEnPassant();
+            }
+        }
+
+        private void ProcessEnPassant()
+        {
+            // En Passant has already happened physically in MoveTo (the pawn moved diagonally).
+            // Now we must find and remove the enemy pawn that was "passed".
+
+            Vector2Int[] myLastMove = moveList[moveList.Count - 1];
+            Vector2Int from = myLastMove[0];
+            Vector2Int to = myLastMove[1];
+
+            // Confirm the move was diagonal (change in X) and vertical (change in Y)
+            // This distinguishes it from a simple forward move.
+            bool isDiagonalMove = Mathf.Abs(to.x - from.x) == 1 && Mathf.Abs(to.y - from.y) == 1;
+
+            if (!isDiagonalMove)
+            {
+                return;
+            }
+
+            // The enemy pawn is located at the destination X, but the starting Y.
+            // (e.g., if we moved from 3,4 to 2,5... the enemy is at 2,4)
+            Vector2Int enemyPawnPos = new Vector2Int(to.x, from.y);
+
+            if (!IsValidIndex(enemyPawnPos))
+            {
+                return;
+            }
+
+            ChessPiece enemyPawn = board[enemyPawnPos.x, enemyPawnPos.y];
+
+            // Sanity check: Ensure we are actually capturing an enemy pawn
+            if (enemyPawn != null &&
+                enemyPawn.type == ChessPieceType.Pawn &&
+                enemyPawn.team != (int)currentTurn) // Note: currentTurn has already flipped in TryDrop, so we check against "Not Current" or strictly "!= My Team"
+            {
+                // We access the piece at the destination (which is us) to check our own team
+                ChessPiece myPiece = board[to.x, to.y];
+                if (myPiece != null && enemyPawn.team != myPiece.team)
+                {
+                    CapturePiece(enemyPawn);
+                }
+            }
         }
 
         #endregion
