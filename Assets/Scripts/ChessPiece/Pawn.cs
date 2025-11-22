@@ -5,7 +5,7 @@ namespace ChessTheMasterPiece.ChessPiece
 {
     public class Pawn : ChessPiece
     {
-        public override List<Vector2Int> GetAvailableMoves(ref ChessPiece[,] board, int tileCountX, int tileCountY)
+        public override List<Vector2Int> GetAvailableMoves(ChessPiece[,] board, int tileCountX, int tileCountY)
         {
             List<Vector2Int> moves = new List<Vector2Int>();
 
@@ -72,6 +72,55 @@ namespace ChessTheMasterPiece.ChessPiece
             }
 
             return moves;
+        }
+
+        public override SpecialMove GetSpecialMoves(ChessPiece[,] board, List<Vector2Int[]> moveHistory, List<Vector2Int> availableMoves)
+        {
+            // We cannot perform En Passant if no moves have occurred
+            if (moveHistory.Count == 0)
+            {
+                return SpecialMove.None;
+            }
+
+            // Retrieve details of the opponent's last move
+            Vector2Int[] lastMove = moveHistory[moveHistory.Count - 1];
+            Vector2Int lastMoveStart = lastMove[0];
+            Vector2Int lastMoveEnd = lastMove[1];
+
+            ChessPiece enemyPiece = board[lastMoveEnd.x, lastMoveEnd.y];
+
+            // Rule 1: The piece that moved last must be an enemy Pawn
+            if (enemyPiece == null || enemyPiece.type != ChessPieceType.Pawn || enemyPiece.team == team)
+            {
+                return SpecialMove.None;
+            }
+
+            // Rule 2: The enemy pawn must be on the same Rank (Y) as us
+            if (enemyPiece.currentY != currentY)
+            {
+                return SpecialMove.None;
+            }
+
+            // Rule 3: The enemy pawn must be directly adjacent (Left or Right)
+            bool isAdjacent = Mathf.Abs(enemyPiece.currentX - currentX) == 1;
+            if (!isAdjacent)
+            {
+                return SpecialMove.None;
+            }
+
+            // Rule 4: The enemy pawn must have moved exactly 2 squares vertically (the double-step)
+            int moveDistance = Mathf.Abs(lastMoveEnd.y - lastMoveStart.y);
+            if (moveDistance != 2)
+            {
+                return SpecialMove.None;
+            }
+
+            // --- Logic Valid: En Passant Available ---
+
+            // The target move is the empty square *behind* the enemy pawn
+            availableMoves.Add(new Vector2Int(enemyPiece.currentX, currentY + moveDirection));
+
+            return SpecialMove.EnPassant;
         }
     }
 }
