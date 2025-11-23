@@ -76,6 +76,7 @@ namespace ChessTheMasterPiece.ChessPiece
 
         private Team playerTeam = Team.White;    // player's chosen side (default to white)
         private Team currentTurn = Team.White;   // whose turn it is (white always starts)
+        private bool isGameOver = false;         // Flag to stop interactions/promotions when game ends
 
         // Promotion handling
         private ChessPiece pawnPendingPromotion;
@@ -100,26 +101,30 @@ namespace ChessTheMasterPiece.ChessPiece
 
             InitializeBoard();
             CreateTiles();
+        }
 
-            PromotionUI.OnPieceChosen += HandlePromotionChoice;
+        private void Start()
+        {
+            if (UIManager.Instance == null)
+            {
+                Debug.LogError("[Chessboard] UIManager is missing! Game cannot start.");
+                return;
+            }
 
-            // If the team selection UI is open, wait for the player to choose and
-            // spawn pieces after the choice. Otherwise spawn immediately using the current selection.
-            if (TeamSelectionUI.IsOpen)
-            {
-                // listen for user's selection
-                TeamSelectionUI.OnTeamChosen += HandleTeamChosen;
-            }
-            else
-            {
-                // UI already closed (or absent) -> use chosen team immediately
-                playerTeam = (Team)TeamSelectionUI.ChosenTeam;
-                SpawnDefaultSetupForPlayer();
-            }
+            // Subscribe to the centralized manager events
+            UIManager.Instance.OnTeamSelected += HandleTeamChosen;
+            UIManager.Instance.OnPromotionSelected += HandlePromotionChoice;
+            UIManager.Instance.OnGameReset += HandleGameReset;
+
+            // Trigger the game flow: Start with Main Menu
+            UIManager.Instance.ShowMainMenu();
         }
 
         private void Update()
         {
+            // Prevent input if game is over
+            if (isGameOver) return;
+
             if (mainCamera == null)
             {
                 mainCamera = Camera.main;
@@ -130,6 +135,7 @@ namespace ChessTheMasterPiece.ChessPiece
                 }
             }
 
+            // Input Handling
             Vector2 pointer = Vector2.zero;
             bool pointerAvailable = false;
 
@@ -138,56 +144,32 @@ namespace ChessTheMasterPiece.ChessPiece
                 pointer = Mouse.current.position.ReadValue();
                 pointerAvailable = true;
             }
-            else
-            {
-                // fallback to legacy Input (rare). This deliberately avoids noisy warnings.
+            // Fallback for legacy input
 #pragma warning disable 618
-                if (Input.mousePresent)
-                {
-                    pointer = new Vector2(Input.mousePosition.x, Input.mousePosition.y);
-                    pointerAvailable = true;
-                }
-#pragma warning restore 618
-            }
-
-            if (!pointerAvailable)
+            else if (Input.mousePresent)
             {
-                return;
+                pointer = Input.mousePosition;
+                pointerAvailable = true;
             }
+#pragma warning restore 618
 
-            HandlePointer(pointer);
+            if (pointerAvailable)
+            {
+                HandlePointer(pointer);
+            }
         }
 
         private void OnDestroy()
         {
-            // unsubscribe from Ui events
-            TeamSelectionUI.OnTeamChosen -= HandleTeamChosen;
-
-            PromotionUI.OnPieceChosen -= HandlePromotionChoice;
-
-            // cleanup generated meshes
-            if (tiles == null)
+            // Unsubscribe safely
+            if (UIManager.Instance != null)
             {
-                return;
+                UIManager.Instance.OnTeamSelected -= HandleTeamChosen;
+                UIManager.Instance.OnPromotionSelected -= HandlePromotionChoice;
+                UIManager.Instance.OnGameReset -= HandleGameReset;
             }
 
-            for (int x = 0; x < tiles.GetLength(0); x++)
-            {
-                for (int y = 0; y < tiles.GetLength(1); y++)
-                {
-                    GameObject tile = tiles[x, y];
-                    if (tile == null)
-                    {
-                        continue;
-                    }
-
-                    MeshFilter mf = tile.GetComponent<MeshFilter>();
-                    if (mf?.sharedMesh != null)
-                    {
-                        Destroy(mf.sharedMesh);
-                    }
-                }
-            }
+            CleanupTiles();
         }
 
         #endregion
@@ -364,56 +346,6 @@ namespace ChessTheMasterPiece.ChessPiece
 
         #region Spawning / Placement
 
-        /// <summary>
-        /// Spawn default chess setup (standard 8x8) with white at bottom.
-        /// </summary>
-        [Obsolete("Use SpawnDefaultSetupForPlayer instead to respect player's team choice.")]
-        private void SpawnDefaultSetup()
-        {
-            ClearBoardPieces();
-
-            ChessPieceType[] majors = new ChessPieceType[]
-            {
-                ChessPieceType.Rook,
-                ChessPieceType.Knight,
-                ChessPieceType.Bishop,
-                ChessPieceType.Queen,
-                ChessPieceType.King,
-                ChessPieceType.Bishop,
-                ChessPieceType.Knight,
-                ChessPieceType.Rook
-            };
-
-            int columns = Math.Min(tileCountX, majors.Length);
-
-            // White major row (y = 0)
-            for (int x = 0; x < columns; x++)
-            {
-                SpawnPieceAt(majors[x], Team.White, new Vector2Int(x, 0), whiteTeamPrefabs, whitePiecesParent);
-            }
-
-            // White pawns (y = 1)
-            int whitePawnRank = Mathf.Clamp(1, 0, tileCountY - 1);
-            for (int x = 0; x < tileCountX; x++)
-            {
-                SpawnPieceAt(ChessPieceType.Pawn, Team.White, new Vector2Int(x, whitePawnRank), whiteTeamPrefabs, whitePiecesParent);
-            }
-
-            // Black pawns (y = tileCountY - 2)
-            int blackPawnRank = Mathf.Clamp(tileCountY - 2, 0, tileCountY - 1);
-            for (int x = 0; x < tileCountX; x++)
-            {
-                SpawnPieceAt(ChessPieceType.Pawn, Team.Black, new Vector2Int(x, blackPawnRank), blackTeamPrefabs, blackPiecesParent);
-            }
-
-            // Black major row (y = tileCountY - 1)
-            int blackMajorRank = Mathf.Clamp(tileCountY - 1, 0, tileCountY - 1);
-            for (int x = 0; x < columns; x++)
-            {
-                SpawnPieceAt(majors[x], Team.Black, new Vector2Int(x, blackMajorRank), blackTeamPrefabs, blackPiecesParent);
-            }
-        }
-
         public void ClearBoardPieces()
         {
             if (board == null)
@@ -421,6 +353,7 @@ namespace ChessTheMasterPiece.ChessPiece
                 InitializeBoard();
             }
 
+            // 1. Clear active board pieces
             for (int x = 0; x < board.GetLength(0); x++)
             {
                 for (int y = 0; y < board.GetLength(1); y++)
@@ -433,6 +366,16 @@ namespace ChessTheMasterPiece.ChessPiece
                         board[x, y] = null;
                     }
                 }
+            }
+
+            // 2. Clear captured pieces (Visuals)
+            foreach (var piece in whiteCaptured)
+            {
+                if (piece != null) Destroy(piece.gameObject);
+            }
+            foreach (var piece in blackCaptured)
+            {
+                if (piece != null) Destroy(piece.gameObject);
             }
 
             whiteCaptured.Clear();
@@ -517,21 +460,6 @@ namespace ChessTheMasterPiece.ChessPiece
         }
 
         /// <summary>
-        /// Event handler called when the player chooses a team from the UI.
-        /// </summary>
-        private void HandleTeamChosen(int chosenTeam)
-        {
-            // cache player's choice
-            playerTeam = (Team)chosenTeam;
-
-            // unsubscribe (we only need the event once)
-            TeamSelectionUI.OnTeamChosen -= HandleTeamChosen;
-
-            // spawn pieces with the chosen side on player's side
-            SpawnDefaultSetupForPlayer();
-        }
-
-        /// <summary>
         /// Spawn default chess setup (standard 8x8) respecting player's chosen team.
         /// </summary>
         private void SpawnDefaultSetupForPlayer()
@@ -606,6 +534,37 @@ namespace ChessTheMasterPiece.ChessPiece
 
         #endregion
 
+        #region UI Event Handlers
+
+        private void HandleTeamChosen(int teamIndex)
+        {
+            playerTeam = (Team)teamIndex;
+            isGameOver = false; // Ensure game over flag is reset on new game
+            SpawnDefaultSetupForPlayer();
+        }
+
+        private void HandlePromotionChoice(ChessPieceType chosenType)
+        {
+            // If the pawn is invalid or we reset the game, abort
+            if (pawnPendingPromotion == null)
+            {
+                return;
+            }
+
+            PromotePiece(pawnPendingPromotion, chosenType);
+            pawnPendingPromotion = null;
+        }
+
+        private void HandleGameReset()
+        {
+            isGameOver = false;
+            pawnPendingPromotion = null; // Clear any pending promotion references so they don't spawn zombies
+            ClearBoardPieces();
+            currentTurn = Team.White;
+        }
+
+        #endregion
+
         #region Input / Drag & Drop
 
         /// <summary>
@@ -615,7 +574,7 @@ namespace ChessTheMasterPiece.ChessPiece
         private void HandlePointer(Vector2 screenPosition)
         {
             // Block all pointer handling while UI is open
-            if (TeamSelectionUI.IsOpen || PromotionUI.IsOpen)
+            if (UIManager.Instance != null && UIManager.Instance.IsUIBlocking())
             {
                 return;
             }
@@ -765,9 +724,9 @@ namespace ChessTheMasterPiece.ChessPiece
                 return;
             }
 
-            if (TeamSelectionUI.IsOpen)
+            // Block all pointer handling while UI is open
+            if (UIManager.Instance.IsUIBlocking())
             {
-                // Selection UI is open — block any interaction.
                 return;
             }
 
@@ -963,6 +922,20 @@ namespace ChessTheMasterPiece.ChessPiece
                 return;
             }
 
+            // Check for Game Over condition (King Capture)
+            if (victim.type == ChessPieceType.King)
+            {
+                int winningTeam = (victim.team == 0) ? 1 : 0;
+                isGameOver = true; // Set global game over flag
+
+                if (UIManager.Instance != null)
+                {
+                    UIManager.Instance.TriggerGameOver(winningTeam);
+                }
+                // FIX: Removed "return" here so the king piece is also physically moved 
+                // to the captured pile and tracked in the captured list.
+            }
+
             // Remove from board data
             if (board[victim.currentX, victim.currentY] == victim)
             {
@@ -983,13 +956,10 @@ namespace ChessTheMasterPiece.ChessPiece
             float stackSpacing = Mathf.Max(0.01f, deathSpacing);
             int stackIndex = capturedList.Count - 1;
 
-            // Determine X position (Right side for White, Left side for Black)
             float xPos = isWhite
                 ? boardOrigin.x + tileCountX * tileSize + outsideBoardMargin
                 : boardOrigin.x - outsideBoardMargin;
 
-            // Determine Z position (Stacking direction)
-            // White pieces stack upwards (+Z), Black pieces stack downwards (-Z)
             float zPos;
             if (isWhite)
             {
@@ -1031,6 +1001,12 @@ namespace ChessTheMasterPiece.ChessPiece
 
         private void ProcessSpecialMove()
         {
+            // Fix: If the game ended (King captured), do NOT process other specials like promotion
+            if (isGameOver)
+            {
+                return;
+            }
+
             if (specialMove == SpecialMove.EnPassant)
             {
                 ProcessEnPassant();
@@ -1164,25 +1140,24 @@ namespace ChessTheMasterPiece.ChessPiece
                 return;
             }
 
-            // Determine target rank
-            int promotionRank = (targetPawn.team == (int)Team.White) ? tileCountY - 1 : 0;
+            // Fix: Determine promotion rank based on Move Direction, not just Team Color.
+            // If Player is Black, they move UP (+1) so they promote at tileCountY - 1.
+            // If Player is White, they move UP (+1) so they promote at tileCountY - 1.
+            // If Opponent (White or Black) moves DOWN (-1), they promote at 0.
+            int promotionRank = (targetPawn.moveDirection == 1) ? tileCountY - 1 : 0;
 
             if (targetPos.y == promotionRank)
             {
-                // Pause the logic by storing the pawn reference
                 pawnPendingPromotion = targetPawn;
 
-                // Open the UI (Check if instance exists to avoid errors)
-                if (PromotionUI.Instance != null)
+                if (UIManager.Instance != null)
                 {
-                    PromotionUI.Instance.EnableUI();
+                    UIManager.Instance.ShowPromotionUI();
                 }
                 else
                 {
-                    // Fallback if UI is missing: Auto-promote to Queen
-                    Debug.LogWarning("[Chessboard] PromotionUI not found. Auto-promoting to Queen.");
+                    Debug.LogWarning("No UI Manager! Auto-promoting Queen.");
                     PromotePiece(targetPawn, ChessPieceType.Queen);
-                    pawnPendingPromotion = null;
                 }
             }
         }
@@ -1214,21 +1189,6 @@ namespace ChessTheMasterPiece.ChessPiece
             {
                 newPiece.hasMoved = true;
             }
-        }
-
-        private void HandlePromotionChoice(ChessPieceType chosenType)
-        {
-            // Ensure we actually have a pawn waiting
-            if (pawnPendingPromotion == null)
-            {
-                return;
-            }
-
-            // Execute the promotion with the user's choice
-            PromotePiece(pawnPendingPromotion, chosenType);
-
-            // Clear the pending reference
-            pawnPendingPromotion = null;
         }
 
         #endregion
@@ -1325,6 +1285,31 @@ namespace ChessTheMasterPiece.ChessPiece
         #endregion
 
         #region Utilities / Queries
+
+        private void CleanupTiles()
+        {
+            if (tiles == null)
+            {
+                return;
+            }
+
+            for (int x = 0; x < tiles.GetLength(0); x++)
+            {
+                for (int y = 0; y < tiles.GetLength(1); y++)
+                {
+                    GameObject tile = tiles[x, y];
+                    if (tile != null)
+                    {
+                        MeshFilter mf = tile.GetComponent<MeshFilter>();
+                        if (mf != null && mf.sharedMesh != null)
+                        {
+                            Destroy(mf.sharedMesh);
+                        }
+                        Destroy(tile);
+                    }
+                }
+            }
+        }
 
         private void SetTileHighlight(Vector2Int idx, bool highlight)
         {
