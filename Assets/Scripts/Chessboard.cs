@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using ChessTheMasterPiece.UI;
 
 namespace ChessTheMasterPiece.ChessPiece
 {
@@ -76,6 +77,9 @@ namespace ChessTheMasterPiece.ChessPiece
         private Team playerTeam = Team.White;    // player's chosen side (default to white)
         private Team currentTurn = Team.White;   // whose turn it is (white always starts)
 
+        // Promotion handling
+        private ChessPiece pawnPendingPromotion;
+
         #endregion
 
         #region Unity Lifecycle
@@ -96,6 +100,8 @@ namespace ChessTheMasterPiece.ChessPiece
 
             InitializeBoard();
             CreateTiles();
+
+            PromotionUI.OnPieceChosen += HandlePromotionChoice;
 
             // If the team selection UI is open, wait for the player to choose and
             // spawn pieces after the choice. Otherwise spawn immediately using the current selection.
@@ -154,8 +160,10 @@ namespace ChessTheMasterPiece.ChessPiece
 
         private void OnDestroy()
         {
-            // unsubscribe from team selection event
+            // unsubscribe from Ui events
             TeamSelectionUI.OnTeamChosen -= HandleTeamChosen;
+
+            PromotionUI.OnPieceChosen -= HandlePromotionChoice;
 
             // cleanup generated meshes
             if (tiles == null)
@@ -606,8 +614,8 @@ namespace ChessTheMasterPiece.ChessPiece
         /// <param name="screenPosition"></param>
         private void HandlePointer(Vector2 screenPosition)
         {
-            // Block all pointer handling while team selection UI is open
-            if (TeamSelectionUI.IsOpen)
+            // Block all pointer handling while UI is open
+            if (TeamSelectionUI.IsOpen || PromotionUI.IsOpen)
             {
                 return;
             }
@@ -1032,6 +1040,11 @@ namespace ChessTheMasterPiece.ChessPiece
             {
                 ProcessCastling();
             }
+
+            if (specialMove == SpecialMove.Promotion)
+            {
+                ProcessPromotion();
+            }
         }
 
         private void ProcessEnPassant()
@@ -1136,6 +1149,86 @@ namespace ChessTheMasterPiece.ChessPiece
             Vector3 worldPos = GetTileCenter(newPos.x, newPos.y);
             worldPos.y = tilesYOffset + pieceYOffset;
             rook.SetPosition(worldPos);
+        }
+
+        private void ProcessPromotion()
+        {
+            Vector2Int[] lastMove = moveList[moveList.Count - 1];
+            Vector2Int targetPos = lastMove[1];
+
+            ChessPiece targetPawn = board[targetPos.x, targetPos.y];
+
+            // Safety checks
+            if (targetPawn == null || targetPawn.type != ChessPieceType.Pawn)
+            {
+                return;
+            }
+
+            // Determine target rank
+            int promotionRank = (targetPawn.team == (int)Team.White) ? tileCountY - 1 : 0;
+
+            if (targetPos.y == promotionRank)
+            {
+                // Pause the logic by storing the pawn reference
+                pawnPendingPromotion = targetPawn;
+
+                // Open the UI (Check if instance exists to avoid errors)
+                if (PromotionUI.Instance != null)
+                {
+                    PromotionUI.Instance.EnableUI();
+                }
+                else
+                {
+                    // Fallback if UI is missing: Auto-promote to Queen
+                    Debug.LogWarning("[Chessboard] PromotionUI not found. Auto-promoting to Queen.");
+                    PromotePiece(targetPawn, ChessPieceType.Queen);
+                    pawnPendingPromotion = null;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Handles the physical swapping of a Pawn for a new promoted piece type.
+        /// </summary>
+        private void PromotePiece(ChessPiece originalPawn, ChessPieceType newType)
+        {
+            // Capture Data
+            int team = originalPawn.team;
+            Vector2Int location = new Vector2Int(originalPawn.currentX, originalPawn.currentY);
+
+            // Select the correct prefab set
+            GameObject[] prefabs = (team == (int)Team.White) ? whiteTeamPrefabs : blackTeamPrefabs;
+            Transform parent = (team == (int)Team.White) ? whitePiecesParent : blackPiecesParent;
+
+            // Destroy the Pawn Object
+            // We explicitly remove it from the board logic immediately to prevent conflicts during spawn
+            board[location.x, location.y] = null;
+            Destroy(originalPawn.gameObject);
+
+            // Spawn the New Piece
+            ChessPiece newPiece = SpawnPieceAt(newType, (Team)team, location, prefabs, parent);
+
+            // Update State
+            // SpawnPieceAt handles board array placement, but we ensure it's marked as having moved
+            if (newPiece != null)
+            {
+                newPiece.hasMoved = true;
+            }
+        }
+
+        private void HandlePromotionChoice(ChessPieceType chosenType)
+        {
+            // Ensure we actually have a pawn waiting
+            if (pawnPendingPromotion == null)
+            {
+                return;
+            }
+
+            // Execute the promotion with the user's choice
+            PromotePiece(pawnPendingPromotion, chosenType);
+
+            // Clear the pending reference
+            pawnPendingPromotion = null;
         }
 
         #endregion

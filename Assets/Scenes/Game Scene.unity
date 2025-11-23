@@ -1366,10 +1366,10 @@ RectTransform:
   - {fileID: 95939181}
   m_Father: {fileID: 532498613}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 1}
-  m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 728.75, y: -200}
-  m_SizeDelta: {x: 432.5, y: 200}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &624938697
 MonoBehaviour:
@@ -1487,10 +1487,10 @@ RectTransform:
   - {fileID: 1986678550}
   m_Father: {fileID: 532498613}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 1}
-  m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 266.25, y: -200}
-  m_SizeDelta: {x: 432.5, y: 200}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &627254016
 MonoBehaviour:
@@ -2107,10 +2107,10 @@ RectTransform:
   - {fileID: 446247927}
   m_Father: {fileID: 532498613}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 1}
-  m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 1191.25, y: -200}
-  m_SizeDelta: {x: 432.5, y: 200}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1163051297
 MonoBehaviour:
@@ -2555,13 +2555,14 @@ GameObject:
   - component: {fileID: 1612257542}
   - component: {fileID: 1612257544}
   - component: {fileID: 1612257543}
+  - component: {fileID: 1612257545}
   m_Layer: 5
   m_Name: Promotion
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &1612257542
 RectTransform:
   m_ObjectHideFlags: 0
@@ -2621,6 +2622,22 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1612257541}
   m_CullTransparentMesh: 1
+--- !u!114 &1612257545
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1612257541}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6d033c74401a06048b6b43910ffa8afa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PromotionUI
+  queenButton: {fileID: 627254016}
+  rookButton: {fileID: 1619530755}
+  bishopButton: {fileID: 1163051297}
+  knightButton: {fileID: 624938697}
 --- !u!1 &1619530753
 GameObject:
   m_ObjectHideFlags: 0
@@ -2655,10 +2672,10 @@ RectTransform:
   - {fileID: 2144857680}
   m_Father: {fileID: 532498613}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 1}
-  m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 1653.75, y: -200}
-  m_SizeDelta: {x: 432.5, y: 200}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1619530755
 MonoBehaviour:

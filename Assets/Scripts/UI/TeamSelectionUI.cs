@@ -2,70 +2,95 @@ using System;
 using UnityEngine;
 using UnityEngine.UI;
 
-public class TeamSelectionUI : MonoBehaviour
+namespace ChessTheMasterPiece.UI
 {
-    [Header("Buttons")]
-    [SerializeField] private Button whiteTeamButton;
-    [SerializeField] private Button blackTeamButton;
-
-    // The team chosen by the player (White = 0, Black = 1)
-    public static int ChosenTeam { get; private set; } = 0;
-
-    // Is the selection UI open? Other systems should block input while this is true.
-    public static bool IsOpen { get; private set; } = true;
-
-    // Notifies subscribers when a team is chosen. Parameter is the chosen team int (0 = white, 1 = black).
-    public static event Action<int> OnTeamChosen;
-
-    private void Awake()
+    public class TeamSelectionUI : MonoBehaviour
     {
-        // UI starts open by default if this GameObject is active in the scene.
-        IsOpen = gameObject.activeSelf;
+        #region Inspector Fields
 
-        if (whiteTeamButton == null)
+        [Header("Team Buttons")]
+        [SerializeField] private Button whiteTeamButton;
+        [SerializeField] private Button blackTeamButton;
+
+        #endregion
+
+        #region Public State
+
+        // 0 = White, 1 = Black
+        public static int ChosenTeam { get; private set; } = 0;
+
+        // Blocks game input when true
+        public static bool IsOpen { get; private set; } = true;
+
+        public static event Action<int> OnTeamChosen;
+
+        #endregion
+
+        #region Unity Lifecycle
+
+        private void Awake()
         {
-            Debug.LogWarning("[TeamSelectionUI] whiteTeamButton reference missing.");
+            // Determine start state based on whether the object is active in the scene
+            IsOpen = gameObject.activeSelf;
+
+            RegisterListeners();
         }
-        if (blackTeamButton == null)
+
+        private void OnDestroy()
         {
-            Debug.LogWarning("[TeamSelectionUI] blackTeamButton reference missing.");
+            UnregisterListeners();
         }
 
-        if (whiteTeamButton != null)
-            whiteTeamButton.onClick.AddListener(OnWhiteTeamChosen);
-        if (blackTeamButton != null)
-            blackTeamButton.onClick.AddListener(OnBlackTeamChosen);
-    }
+        #endregion
 
-    private void OnDestroy()
-    {
-        if (whiteTeamButton != null)
-            whiteTeamButton.onClick.RemoveListener(OnWhiteTeamChosen);
-        if (blackTeamButton != null)
-            blackTeamButton.onClick.RemoveListener(OnBlackTeamChosen);
-    }
+        #region Internal Logic
 
-    private void OnWhiteTeamChosen()
-    {
-        ChosenTeam = 0; // White
-        CloseAndNotify();
-    }
+        private void RegisterListeners()
+        {
+            if (whiteTeamButton != null)
+                whiteTeamButton.onClick.AddListener(OnWhiteTeamChosen);
+            else
+                Debug.LogWarning("[TeamSelectionUI] White Team Button is not assigned.");
 
-    private void OnBlackTeamChosen()
-    {
-        ChosenTeam = 1; // Black
-        CloseAndNotify();
-    }
+            if (blackTeamButton != null)
+                blackTeamButton.onClick.AddListener(OnBlackTeamChosen);
+            else
+                Debug.LogWarning("[TeamSelectionUI] Black Team Button is not assigned.");
+        }
 
-    private void CloseAndNotify()
-    {
-        // Mark UI closed so background input can resume.
-        IsOpen = false;
+        private void UnregisterListeners()
+        {
+            if (whiteTeamButton != null)
+                whiteTeamButton.onClick.RemoveListener(OnWhiteTeamChosen);
 
-        // Notify listeners (Chessboard) so it can spawn/adjust orientation.
-        OnTeamChosen?.Invoke(ChosenTeam);
+            if (blackTeamButton != null)
+                blackTeamButton.onClick.RemoveListener(OnBlackTeamChosen);
+        }
 
-        // Disable UI screen
-        gameObject.SetActive(false);
+        private void OnWhiteTeamChosen()
+        {
+            ConfirmSelection(0);
+        }
+
+        private void OnBlackTeamChosen()
+        {
+            ConfirmSelection(1);
+        }
+
+        private void ConfirmSelection(int teamIndex)
+        {
+            ChosenTeam = teamIndex;
+
+            // Release input lock
+            IsOpen = false;
+
+            // Notify Chessboard
+            OnTeamChosen?.Invoke(ChosenTeam);
+
+            // Hide UI
+            gameObject.SetActive(false);
+        }
+
+        #endregion
     }
 }
