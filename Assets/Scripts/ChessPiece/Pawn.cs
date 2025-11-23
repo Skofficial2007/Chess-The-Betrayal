@@ -10,6 +10,7 @@ namespace ChessTheMasterPiece.ChessPiece
             List<Vector2Int> moves = new List<Vector2Int>();
 
             // Movement direction: white (team == 0) moves +1 in Y, black (team == 1) moves -1.
+            // UNLESS we are playing as Black, in which case Black moves +1.
             int direction = moveDirection;
 
             int x = currentX;
@@ -31,7 +32,8 @@ namespace ChessTheMasterPiece.ChessPiece
                     moves.Add(new Vector2Int(x, oneForwardY));
 
                     // Forward two (only when one-forward is empty and pawn is on its starting rank)
-                    int startRow = (initialY >= 0) ? initialY : ((team == 0) ? 1 : (tileCountY - 2));
+                    // We use initialY to reliably check if it's the first move, regardless of team orientation
+                    int startRow = (initialY >= 0) ? initialY : ((direction == 1) ? 1 : (tileCountY - 2));
                     int twoForwardY = y + (direction * 2);
 
                     if (y == startRow && IsInside(x, twoForwardY))
@@ -76,12 +78,10 @@ namespace ChessTheMasterPiece.ChessPiece
 
         public override SpecialMove GetSpecialMoves(ChessPiece[,] board, List<Vector2Int[]> moveHistory, List<Vector2Int> availableMoves)
         {
-            // Check for Promotion
-            // A promotion happens if ANY of our available moves lands on the last rank.
-            // White Target: tileCountY - 1
-            // Black Target: 0
-
-            int promotionRank = (team == 0) ? board.GetLength(1) - 1 : 0;
+            // FIX: Determine promotion rank based on Move Direction, not strictly team color.
+            // If moving UP (+1), promotion is at the top (Height - 1).
+            // If moving DOWN (-1), promotion is at the bottom (0).
+            int promotionRank = (moveDirection == 1) ? board.GetLength(1) - 1 : 0;
 
             foreach (Vector2Int move in availableMoves)
             {
