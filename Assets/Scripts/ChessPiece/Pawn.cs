@@ -76,7 +76,22 @@ namespace ChessTheMasterPiece.ChessPiece
 
         public override SpecialMove GetSpecialMoves(ChessPiece[,] board, List<Vector2Int[]> moveHistory, List<Vector2Int> availableMoves)
         {
-            // We cannot perform En Passant if no moves have occurred
+            // Check for Promotion
+            // A promotion happens if ANY of our available moves lands on the last rank.
+            // White Target: tileCountY - 1
+            // Black Target: 0
+
+            int promotionRank = (team == 0) ? board.GetLength(1) - 1 : 0;
+
+            foreach (Vector2Int move in availableMoves)
+            {
+                if (move.y == promotionRank)
+                {
+                    return SpecialMove.Promotion;
+                }
+            }
+
+            // Check for En Passant
             if (moveHistory.Count == 0)
             {
                 return SpecialMove.None;
