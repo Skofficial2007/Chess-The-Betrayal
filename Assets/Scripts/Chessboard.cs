@@ -937,6 +937,8 @@ namespace ChessTheMasterPiece.ChessPiece
             // Record History
             moveList.Add(new Vector2Int[] { previousPosition, targetIndex });
 
+            piece.hasMoved = true;
+
             // Handle Special Mechanics (En Passant, etc.)
             if (specialMove != SpecialMove.None)
             {
@@ -1025,6 +1027,11 @@ namespace ChessTheMasterPiece.ChessPiece
             {
                 ProcessEnPassant();
             }
+
+            if (specialMove == SpecialMove.Castling)
+            {
+                ProcessCastling();
+            }
         }
 
         private void ProcessEnPassant()
@@ -1068,6 +1075,67 @@ namespace ChessTheMasterPiece.ChessPiece
                     CapturePiece(enemyPawn);
                 }
             }
+        }
+
+        private void ProcessCastling()
+        {
+            // The King has just moved to its castling destination (Target X = 2 or 6).
+            // We access the last move to find out where the King landed.
+
+            Vector2Int[] lastMove = moveList[moveList.Count - 1];
+            Vector2Int kingTargetPos = lastMove[1];
+
+            // X = 2: Left Castle (Queenside)
+            // X = 6: Right Castle (Kingside)
+
+            if (kingTargetPos.x == 2)
+            {
+                // Left Side Castling
+                // Rook is at X:0, needs to move to X:3 (right side of King)
+
+                Vector2Int rookOrigin = new Vector2Int(0, kingTargetPos.y);
+                Vector2Int rookTarget = new Vector2Int(3, kingTargetPos.y);
+
+                MovePieceForCastle(rookOrigin, rookTarget);
+            }
+            else if (kingTargetPos.x == 6)
+            {
+                // Right Side Castling
+                // Rook is at X:7, needs to move to X:5 (left side of King)
+
+                Vector2Int rookOrigin = new Vector2Int(7, kingTargetPos.y);
+                Vector2Int rookTarget = new Vector2Int(5, kingTargetPos.y);
+
+                MovePieceForCastle(rookOrigin, rookTarget);
+            }
+        }
+
+        /// <summary>
+        /// Helper to move the Rook without triggering a full "MoveTo" (which records history/turns).
+        /// Castling counts as one single move in history, so the Rook's jump is purely a board/visual update.
+        /// </summary>
+        private void MovePieceForCastle(Vector2Int oldPos, Vector2Int newPos)
+        {
+            ChessPiece rook = board[oldPos.x, oldPos.y];
+
+            if (rook == null)
+            {
+                Debug.LogWarning("[Chessboard] ProcessCastling: Rook missing at expected position.");
+                return;
+            }
+
+            // Update Board Data
+            board[oldPos.x, oldPos.y] = null;
+            board[newPos.x, newPos.y] = rook;
+
+            rook.currentX = newPos.x;
+            rook.currentY = newPos.y;
+            rook.hasMoved = true; // Ensure rook can't castle again (redundant but safe)
+
+            // Update Visuals
+            Vector3 worldPos = GetTileCenter(newPos.x, newPos.y);
+            worldPos.y = tilesYOffset + pieceYOffset;
+            rook.SetPosition(worldPos);
         }
 
         #endregion

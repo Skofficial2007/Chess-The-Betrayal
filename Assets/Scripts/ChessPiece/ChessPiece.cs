@@ -47,6 +47,9 @@ namespace ChessTheMasterPiece.ChessPiece
         [Tooltip("The Y index (row) where this piece was spawned. Used to determine a pawn's initial rank for 2-step moves.")]
         public int initialY = -1;
 
+        [Tooltip("Has this piece moved at least once?")]
+        public bool hasMoved = false;
+
         // internal smoothing targets
         private Vector3 targetPosition;
         private Vector3 targetScale = Vector3.one;
