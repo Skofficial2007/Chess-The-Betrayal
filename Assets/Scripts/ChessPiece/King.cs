@@ -62,5 +62,75 @@ namespace ChessTheMasterPiece.ChessPiece
 
             return moves;
         }
+
+        public override SpecialMove GetSpecialMoves(ChessPiece[,] board, List<Vector2Int[]> moveList, List<Vector2Int> availableMoves)
+        {
+            SpecialMove specialMove = SpecialMove.None;
+
+            // King must not have moved
+            if (hasMoved)
+            {
+                return SpecialMove.None;
+            }
+
+            // Find the partner Rooks (Queenside at x=0, Kingside at x=7)
+
+            // Left Rook
+            if (CheckCastle(board, -1, 0, currentY, new int[] { 1, 2, 3 }))
+            {
+                // King moves 2 steps left (to X = 2)
+                availableMoves.Add(new Vector2Int(2, currentY));
+                specialMove = SpecialMove.Castling;
+            }
+
+            // Right Rook
+            if (CheckCastle(board, 1, 7, currentY, new int[] { 5, 6 }))
+            {
+                // King moves 2 steps right (to X = 6)
+                availableMoves.Add(new Vector2Int(6, currentY));
+                specialMove = SpecialMove.Castling;
+            }
+
+            return specialMove;
+        }
+
+        /// <summary>
+        /// Validates if castling is possible towards a specific rook.
+        /// </summary>
+        /// <param name="direction"> -1 for Left, +1 for Right (not strictly used here but good for context)</param>
+        /// <param name="rookX">The X index where the Rook should be (0 or 7)</param>
+        /// <param name="rankY">The Y index (Rank) we are checking (0 or 7)</param>
+        /// <param name="emptyIndexes">The X indexes between King and Rook that must be empty</param>
+        private bool CheckCastle(ChessPiece[,] board, int direction, int rookX, int rankY, int[] emptyIndexes)
+        {
+            ChessPiece rook = board[rookX, rankY];
+
+            // Rook must exist, be on our team, and be a Rook
+            if (rook == null || rook.team != team || rook.type != ChessPieceType.Rook)
+            {
+                return false;
+            }
+
+            // Rook must not have moved
+            if (rook.hasMoved)
+            {
+                return false;
+            }
+
+            // Path must be clear
+            for (int i = 0; i < emptyIndexes.Length; i++)
+            {
+                if (board[emptyIndexes[i], rankY] != null)
+                {
+                    return false;
+                }
+            }
+
+            // NOTE: Technically we also need to check "IsSquareUnderAttack" here.
+            // You cannot castle out of, through, or into check. 
+            // Since we haven't implemented attack maps yet, we skip this for now.
+
+            return true;
+        }
     }
 }

@@ -117,5 +117,10 @@ namespace ChessTheMasterPiece.ChessPiece
 
             return moves;
         }
+
+        public override SpecialMove GetSpecialMoves(ChessPiece[,] board, List<Vector2Int[]> moveList, List<Vector2Int> availableMoves)
+        {
+            return SpecialMove.None;
+        }
     }
 }
