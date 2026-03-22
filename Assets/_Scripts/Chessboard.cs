@@ -414,7 +414,7 @@ namespace ChessTheMasterPiece.ChessPiece
             }
 
             Vector3 pos = GetTileCenter(index);
-            pos.y = tilesYOffset + pieceYOffset;
+            pos.y += pieceYOffset;  // Changed from: pos.y = tilesYOffset + pieceYOffset;
 
             GameObject go = Instantiate(prefab, pos, Quaternion.identity, parent);
 
@@ -620,7 +620,7 @@ namespace ChessTheMasterPiece.ChessPiece
 
             if (draggingPiece != null)
             {
-                Plane p = new Plane(Vector3.up, Vector3.up * tilesYOffset);
+                Plane p = new Plane(Vector3.up, Vector3.up * (boardOrigin.y + tilesYOffset));  // Changed from: Vector3.up * tilesYOffset
                 if (p.Raycast(ray, out float enter))
                 {
                     Vector3 world = ray.GetPoint(enter) + Vector3.up * dragHeight;
@@ -847,7 +847,7 @@ namespace ChessTheMasterPiece.ChessPiece
             board[idx.x, idx.y] = piece;
 
             Vector3 center = GetTileCenter(idx);
-            center.y = tilesYOffset + pieceYOffset;
+            center.y += pieceYOffset;  // Changed from: center.y = tilesYOffset + pieceYOffset;
             piece.SetPosition(center, force: true);
         }
 
@@ -898,7 +898,7 @@ namespace ChessTheMasterPiece.ChessPiece
 
             // Execute Move (Update Visuals)
             Vector3 worldPos = GetTileCenter(x, y);
-            worldPos.y = tilesYOffset + pieceYOffset;
+            worldPos.y += pieceYOffset;  // Changed from: worldPos.y = tilesYOffset + pieceYOffset;
             piece.SetPosition(worldPos, force: true);
 
             // Record History
@@ -972,7 +972,7 @@ namespace ChessTheMasterPiece.ChessPiece
                 zPos = startZ - (stackIndex * stackSpacing);
             }
 
-            float yPos = tilesYOffset + pieceYOffset;
+            float yPos = boardOrigin.y + tilesYOffset + pieceYOffset;  // Changed from: float yPos = tilesYOffset + pieceYOffset;
             Vector3 finalPos = new Vector3(xPos, yPos, zPos);
             Vector3 boardCenterPos = boardOrigin + new Vector3(tileCountX * tileSize * 0.5f, 0f, tileCountY * tileSize * 0.5f);
 
@@ -1123,7 +1123,7 @@ namespace ChessTheMasterPiece.ChessPiece
 
             // Update Visuals
             Vector3 worldPos = GetTileCenter(newPos.x, newPos.y);
-            worldPos.y = tilesYOffset + pieceYOffset;
+            worldPos.y += pieceYOffset;  // Changed from: worldPos.y = tilesYOffset + pieceYOffset;
             rook.SetPosition(worldPos);
         }
 
