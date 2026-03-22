@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using ChessTheMasterPiece.UI;
+using Unity.Collections;
 
 namespace ChessTheMasterPiece.ChessPiece
 {
@@ -53,6 +54,9 @@ namespace ChessTheMasterPiece.ChessPiece
 
         private readonly List<ChessPiece> whiteCaptured = new();
         private readonly List<ChessPiece> blackCaptured = new();
+
+        // Used to calculate legal moves without generating Garbage Collection spikes
+        private readonly List<Vector2Int> safeMovesCache = new List<Vector2Int>();
 
         private List<Vector2Int> currentAvailableMoves = new List<Vector2Int>();
 
@@ -748,6 +752,9 @@ namespace ChessTheMasterPiece.ChessPiece
             // Get Special Moves
             specialMove = cp.GetSpecialMoves(board, moveList, avail);
 
+            // Prevent moves that would put own king in check (for King, this also prevents moving into check)
+            PreventCheck(cp, ref avail);
+
             // Begin dragging: remove from board occupancy and store reference.
             draggingPiece = cp;
             board[idx.x, idx.y] = null;
@@ -1279,6 +1286,117 @@ namespace ChessTheMasterPiece.ChessPiece
                 }
             }
 
+            return false;
+        }
+
+        #endregion
+
+        #region Check Prevention
+
+        /// <summary>
+        /// Simulates available moves on the live board and removes any that leave the King in check.
+        /// </summary>
+        private void PreventCheck(ChessPiece piece, ref List<Vector2Int> availableMoves)
+        {
+            // 1. Locate the current team's King
+            ChessPiece myKing = null;
+            for (int x = 0; x < tileCountX; x++)
+            {
+                for (int y = 0; y < tileCountY; y++)
+                {
+                    ChessPiece p = board[x, y];
+                    if (p != null && p.type == ChessPieceType.King && p.team == piece.team)
+                    {
+                        myKing = p;
+                        break;
+                    }
+                }
+                if (myKing != null) break;
+            }
+
+            if (myKing == null)
+            {
+                Debug.LogWarning("[Chessboard] PreventCheck: King not found!");
+                return;
+            }
+
+            // Clear our cached list to reuse its memory footprint
+            safeMovesCache.Clear();
+
+            int attackerTeam = (piece.team == 0) ? 1 : 0;
+
+            // Cache the original starting position
+            int startX = piece.currentX;
+            int startY = piece.currentY;
+
+            // 2. Simulate each move on the REAL board
+            for (int i = 0; i < availableMoves.Count; i++)
+            {
+                Vector2Int move = availableMoves[i];
+                int targetX = move.x;
+                int targetY = move.y;
+
+                // Cache whatever is currently sitting on the target square (enemy or null)
+                ChessPiece targetOccupant = board[targetX, targetY];
+
+                // --- SIMULATE ---
+                board[startX, startY] = null;     // Empty the start square
+                board[targetX, targetY] = piece;  // Move our piece to the target square
+                piece.currentX = targetX;         // Update internal coordinate
+                piece.currentY = targetY;
+
+                // Determine the King's coordinate for this specific simulation
+                // (If we are moving the King itself, its position is the target square)
+                Vector2Int kingPos = (piece.type == ChessPieceType.King)
+                    ? new Vector2Int(targetX, targetY)
+                    : new Vector2Int(myKing.currentX, myKing.currentY);
+
+                // --- EVALUATE ---
+                if (!IsSquareUnderAttack(kingPos, attackerTeam))
+                {
+                    // If the king is safe, this move is legal
+                    safeMovesCache.Add(move);
+                }
+
+                // --- REVERT ---
+                board[startX, startY] = piece;               // Put our piece back
+                board[targetX, targetY] = targetOccupant;    // Restore the captured enemy (or null)
+                piece.currentX = startX;                     // Revert internal coordinate
+                piece.currentY = startY;
+            }
+
+            // 3. Update the reference list to only include the verified safe moves
+            availableMoves.Clear();
+            availableMoves.AddRange(safeMovesCache);
+        }
+
+        /// <summary>
+        /// Scans the board to see if any piece from the attackerTeam can move to the targetSquare.
+        /// </summary>
+        private bool IsSquareUnderAttack(Vector2Int targetSquare, int attackerTeam)
+        {
+            for (int x = 0; x < tileCountX; x++)
+            {
+                for (int y = 0; y < tileCountY; y++)
+                {
+                    ChessPiece attacker = board[x, y];
+
+                    if (attacker != null && attacker.team == attackerTeam)
+                    {
+                        // Ask the enemy piece what squares it can see right now
+                        List<Vector2Int> sightlines = attacker.GetAvailableMoves(board, tileCountX, tileCountY);
+
+                        // If the target square is in their sightline, the square is under attack
+                        for (int i = 0; i < sightlines.Count; i++)
+                        {
+                            if (sightlines[i].x == targetSquare.x && sightlines[i].y == targetSquare.y)
+                            {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
             return false;
         }
 
