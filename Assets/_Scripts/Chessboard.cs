@@ -4,6 +4,8 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using ChessTheMasterPiece.UI;
 using Unity.Collections;
+using System.Security.Cryptography;
+using UnityEngine.Rendering;
 
 namespace ChessTheMasterPiece.ChessPiece
 {
@@ -919,6 +921,9 @@ namespace ChessTheMasterPiece.ChessPiece
                 ProcessSpecialMove();
             }
 
+            // We pass the piece that just moved so the engine knows who is attacking
+            EvaluateEndgameConditions(piece);
+
             return true;
         }
 
@@ -1398,6 +1403,86 @@ namespace ChessTheMasterPiece.ChessPiece
                 }
             }
             return false;
+        }
+
+        #endregion
+
+        #region Checkmate & Stalemate Detection
+
+        /// <summary>
+        /// Evaluates if the opposing team has any legal moves left. 
+        /// If 0 moves remain, it triggers either Checkmate or Stalemate.
+        /// </summary>
+        private void EvaluateEndgameConditions(ChessPiece lastMovedPiece)
+        {
+            // The team that needs to be evaluated is the enemy of the piece that just moved
+            int defendingTeam = (lastMovedPiece.team == 0) ? 1 : 0;
+            int attackingTeam = lastMovedPiece.team;
+
+            ChessPiece defendingKing = null;
+            bool hasAnyLegalMove = false;
+
+            // Locate the defending King and check if ANY defending piece has a legal move
+            for (int x = 0; x < tileCountX && !hasAnyLegalMove; x++)
+            {
+                for (int y = 0; y < tileCountY && !hasAnyLegalMove; y++)
+                {
+                    ChessPiece p = board[x, y];
+
+                    if (p != null && p.team == defendingTeam)
+                    {
+                        if (p.type == ChessPieceType.King)
+                        {
+                            defendingKing = p;
+                        }
+
+                        // Get raw moves for this piece
+                        List<Vector2Int> rawMoves = p.GetAvailableMoves(board, tileCountX, tileCountY) ?? new List<Vector2Int>();
+
+                        // Filter out any moves that leave the King in check
+                        PreventCheck(p, ref rawMoves);
+
+                        // If this piece has at least one valid move, the game continues!
+                        if (rawMoves.Count > 0)
+                        {
+                            hasAnyLegalMove = true;
+                        }
+                    }
+                }
+            }
+
+            // If they have moves, the game continues normally.
+            if (hasAnyLegalMove)
+            {
+                return;
+            }
+
+            // If NO legal moves exist, the game is over. 
+            // We must determine if it is Checkmate or Stalemate.
+            if (defendingKing == null) return; // Failsafe
+
+            Vector2Int kingPos = new Vector2Int(defendingKing.currentX, defendingKing.currentY);
+            bool isKingInCheck = IsSquareUnderAttack(kingPos, attackingTeam);
+
+            isGameOver = true;
+
+            if (isKingInCheck)
+            {
+                Debug.Log($"[Chessboard] CHECKMATE! Team {attackingTeam} wins.");
+                if (UIManager.Instance != null)
+                {
+                    UIManager.Instance.TriggerGameOver(attackingTeam);
+                }
+            }
+            else
+            {
+                Debug.Log("[Chessboard] STALEMATE! The game is a draw.");
+                if (UIManager.Instance != null)
+                {
+                    // Pass -1 to signify a draw
+                    UIManager.Instance.TriggerGameOver(-1);
+                }
+            }
         }
 
         #endregion

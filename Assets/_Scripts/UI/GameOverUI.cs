@@ -37,7 +37,18 @@ namespace ChessTheMasterPiece.UI
         {
             if (winnerText != null)
             {
-                winnerText.text = (winnerTeam == 0) ? "White Team Won!" : "Black Team Won!";
+                if (winnerTeam == 0)
+                {
+                    winnerText.text = "White Team Won!";
+                }
+                else if (winnerTeam == 1)
+                {
+                    winnerText.text = "Black Team Won!";
+                }
+                else
+                {
+                    winnerText.text = "Stalemate! Draw.";
+                }
             }
         }
     }
