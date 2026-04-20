@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 using UnityEngine.UI;
-using ChessTheMasterPiece.ChessPiece;
+using ChessTheMasterPiece.Data;
 
 namespace ChessTheMasterPiece.UI
 {
