@@ -1,6 +1,6 @@
 using System;
 using UnityEngine;
-using ChessTheMasterPiece.ChessPiece;
+using ChessTheMasterPiece.Data;
 
 namespace ChessTheMasterPiece.UI
 {
@@ -58,6 +58,11 @@ namespace ChessTheMasterPiece.UI
             if (gameHUD != null)
             {
                 gameHUD.SetActive(false);
+            }
+
+            if (mainMenuUI != null)
+            {
+                mainMenuUI.SetActive(true);
             }
         }
 
