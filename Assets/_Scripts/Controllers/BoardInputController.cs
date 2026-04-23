@@ -12,6 +12,7 @@ namespace ChessTheMasterPiece.Controllers
     /// Handles all physical input (Raycasting, Dragging, Clicking).
     /// Acts as the "Hands" of the player, communicating with GameManager.
     /// Zero game logic - purely translates player input into move requests.
+    /// GC-optimized to work with buffer-passing pattern.
     /// </summary>
     public class BoardInputController : MonoBehaviour
     {
@@ -134,7 +135,8 @@ namespace ChessTheMasterPiece.Controllers
                 draggingVisualTransform = BoardVisuals.Instance.GetPieceTransformAt(gridPos);
 
                 // Get legal moves from GameManager and tell visuals to highlight them
-                List<MoveCommand> legalMoves = GameManager.Instance.GetLegalMovesAt(gridPos);
+                // Updated to use IReadOnlyList interface
+                IReadOnlyList<MoveCommand> legalMoves = GameManager.Instance.GetLegalMovesAt(gridPos);
                 BoardVisuals.Instance.HighlightLegalMoves(legalMoves);
             }
         }

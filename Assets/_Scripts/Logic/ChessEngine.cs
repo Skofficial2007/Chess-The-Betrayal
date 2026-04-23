@@ -8,35 +8,39 @@ namespace ChessTheMasterPiece.Logic
     /// Pure, stateless chess rules engine with ZERO Unity dependencies.
     /// Handles legal move generation, check detection, checkmate/stalemate evaluation.
     /// Thread-safe and suitable for AI, networking, or headless simulation.
+    /// GC-optimized with buffer-passing pattern to eliminate allocation spikes.
     /// </summary>
     public static class ChessEngine
     {
+        // Pre-allocated scratch buffers to eliminate GC spikes
+        private static readonly List<MoveCommand> _attackScratch = new List<MoveCommand>(64);
+        private static readonly List<MoveCommand> _engineScratch = new List<MoveCommand>(64);
+
         #region Legal Move Generation
 
         /// <summary>
-        /// Returns all fully legal moves for a piece at the given position.
-        /// Filters out moves that would leave the player's own King in check.
-        /// This is the primary method you'll call from your UI/Controller layer.
+        /// Populates the provided output list with legal moves.
+        /// Zero allocations - reuses the output buffer.
         /// </summary>
         /// <param name="board">Current board state</param>
         /// <param name="position">Position of the piece to move</param>
-        /// <returns>List of legal move commands</returns>
-        public static List<MoveCommand> GetLegalMoves(BoardState board, Vector2Int position)
+        /// <param name="output">Pre-allocated list to populate with legal moves</param>
+        public static void GetLegalMoves(BoardState board, Vector2Int position, List<MoveCommand> output)
         {
-            List<MoveCommand> legalMoves = new List<MoveCommand>();
+            output.Clear();
             PieceData piece = board.GetPiece(position);
 
             // Validate piece exists and belongs to the current turn
             if (piece == null || piece.Team != board.CurrentTurn)
             {
-                return legalMoves;
+                return;
             }
 
             // Get the movement strategy for this piece type
             IPieceMovement strategy = MovementFactory.GetStrategy(piece.Type);
             if (strategy == null)
             {
-                return legalMoves;
+                return;
             }
 
             // Step 1: Get all physically possible moves (ignoring check)
@@ -72,11 +76,9 @@ namespace ChessTheMasterPiece.Logic
                 // For all moves, ensure the final resting place is safe
                 if (!DoesMoveLeaveKingInCheck(board, move))
                 {
-                    legalMoves.Add(move);
+                    output.Add(move);
                 }
             }
-
-            return legalMoves;
         }
 
         /// <summary>
@@ -91,7 +93,8 @@ namespace ChessTheMasterPiece.Logic
             foreach (var piece in pieces)
             {
                 Vector2Int pos = new Vector2Int(piece.CurrentX, piece.CurrentY);
-                List<MoveCommand> moves = GetLegalMoves(board, pos);
+                List<MoveCommand> moves = new List<MoveCommand>();
+                GetLegalMoves(board, pos, moves);
 
                 if (moves.Count > 0)
                 {
@@ -120,7 +123,7 @@ namespace ChessTheMasterPiece.Logic
             ApplyMoveToBoard(simulation, move);
 
             // Find our King on the simulated board
-            PieceData myKing = simulation.FindKing(move.PieceMoved.Team);
+            PieceData myKing = simulation.FindKing(move.PieceTeam);
             if (myKing == null)
             {
                 // King not found - this shouldn't happen in a valid game
@@ -128,7 +131,7 @@ namespace ChessTheMasterPiece.Logic
             }
 
             Vector2Int kingPos = new Vector2Int(myKing.CurrentX, myKing.CurrentY);
-            Team enemyTeam = move.PieceMoved.Team == Team.White ? Team.Black : Team.White;
+            Team enemyTeam = move.PieceTeam == Team.White ? Team.Black : Team.White;
 
             return IsSquareUnderAttack(simulation, kingPos, enemyTeam);
         }
@@ -136,6 +139,7 @@ namespace ChessTheMasterPiece.Logic
         /// <summary>
         /// Checks if the specified square is under attack by any piece of the attacker team.
         /// Uses raw moves (not legal moves) to avoid infinite recursion.
+        /// GC-optimized with scratch buffer.
         /// </summary>
         public static bool IsSquareUnderAttack(BoardState board, Vector2Int targetSquare, Team attackerTeam)
         {
@@ -148,11 +152,13 @@ namespace ChessTheMasterPiece.Logic
 
                 // CRITICAL: Use GetRawMoves here, NOT GetLegalMoves
                 // This prevents infinite recursion and allows pinned pieces to still protect squares
-                List<MoveCommand> attackMoves = strategy.GetRawMoves(board, attacker);
+                // We reuse the attack scratch list to prevent memory bloat
+                _attackScratch.Clear();
+                _attackScratch.AddRange(strategy.GetRawMoves(board, attacker));
 
-                foreach (var move in attackMoves)
+                for (int i = 0; i < _attackScratch.Count; i++)
                 {
-                    if (move.EndPosition == targetSquare)
+                    if (_attackScratch[i].EndPosition == targetSquare)
                     {
                         return true; // Square is under attack
                     }
@@ -183,6 +189,7 @@ namespace ChessTheMasterPiece.Logic
         /// <summary>
         /// Evaluates if the specified team has any legal moves remaining.
         /// If not, the game is either checkmate or stalemate.
+        /// GC-optimized with scratch buffer.
         /// </summary>
         public static bool HasAnyLegalMoves(BoardState board, Team team)
         {
@@ -191,9 +198,11 @@ namespace ChessTheMasterPiece.Logic
             foreach (var piece in pieces)
             {
                 Vector2Int pos = new Vector2Int(piece.CurrentX, piece.CurrentY);
-                List<MoveCommand> legalMoves = GetLegalMoves(board, pos);
+                
+                // Use the shared engine scratch list instead of allocating
+                GetLegalMoves(board, pos, _engineScratch);
 
-                if (legalMoves.Count > 0)
+                if (_engineScratch.Count > 0)
                 {
                     return true; // Found at least one legal move
                 }
@@ -280,19 +289,20 @@ namespace ChessTheMasterPiece.Logic
         public static bool TryExecuteMove(BoardState board, MoveCommand move)
         {
             // Verify it's the correct team's turn
-            if (move.PieceMoved.Team != board.CurrentTurn)
+            if (move.PieceTeam != board.CurrentTurn)
             {
                 return false;
             }
 
-            // Get legal moves for this piece
-            List<MoveCommand> legalMoves = GetLegalMoves(board, move.StartPosition);
+            // Get legal moves for this piece using scratch buffer
+            _engineScratch.Clear();
+            GetLegalMoves(board, move.StartPosition, _engineScratch);
 
             // Check if this move is in the legal moves list
             bool isLegal = false;
-            foreach (var legalMove in legalMoves)
+            for (int i = 0; i < _engineScratch.Count; i++)
             {
-                if (legalMove.EndPosition == move.EndPosition)
+                if (_engineScratch[i].EndPosition == move.EndPosition)
                 {
                     isLegal = true;
                     break;

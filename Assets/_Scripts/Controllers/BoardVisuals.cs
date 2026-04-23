@@ -303,7 +303,7 @@ namespace ChessTheMasterPiece.View
         private void AnimateMove(MoveCommand move)
         {
             // Safety check for invalid commands
-            if (move.PieceMoved == null) return;
+            if (move.PieceType == ChessPieceType.None) return;
 
             // 1. Handle Captures
             if (move.IsCapture)
@@ -330,11 +330,11 @@ namespace ChessTheMasterPiece.View
                     Destroy(movingPiece.gameObject);
 
                     PieceData promotedData = new PieceData(
-                        move.PieceMoved.Team,
+                        move.PieceTeam,
                         move.PromotedTo,
                         move.EndPosition.x,
                         move.EndPosition.y,
-                        move.PieceMoved.MoveDirection
+                        move.PieceMoveDirection
                     );
                     SpawnSinglePiece(promotedData, move.EndPosition);
                 }
@@ -509,11 +509,13 @@ namespace ChessTheMasterPiece.View
 
         /// <summary>
         /// Highlights all legal move destinations.
+        /// GC-optimized to accept read-only buffer interface.
         /// </summary>
-        public void HighlightLegalMoves(List<MoveCommand> moves)
+        public void HighlightLegalMoves(IReadOnlyList<MoveCommand> moves)
         {
             ClearLegalMoveHighlights();
 
+            // IReadOnlyList still supports foreach perfectly!
             foreach (var move in moves)
             {
                 currentLegalHighlights.Add(move.EndPosition);

@@ -24,4 +24,14 @@ namespace ChessTheMasterPiece.Data
         White = 0,
         Black = 1
     }
+
+    // State Machine Phases for Game Flow
+    public enum TurnPhase
+    {
+        Normal,               // Standard chess movement
+        RetributionPending,   // Player chose Betrayal, must capture Betrayer
+        ResolutionFailed,     // Betrayer defected — resolve check if needed
+        ForcedSave,           // Player's King is in check after defection
+        GameOver              // Game is inactive/finished
+    }
 }
