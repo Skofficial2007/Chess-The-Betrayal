@@ -24,9 +24,8 @@ namespace ChessTheMasterPiece.Logic.Movement
             { -1, -1 }  // Down-Left
         };
 
-        public List<MoveCommand> GetRawMoves(BoardState board, PieceData piece)
+        public void GetRawMoves(BoardState board, PieceData piece, List<MoveCommand> buffer)
         {
-            List<MoveCommand> moves = new List<MoveCommand>();
             Vector2Int pos = new Vector2Int(piece.CurrentX, piece.CurrentY);
 
             // 1. Standard one-step moves in all 8 directions
@@ -41,7 +40,7 @@ namespace ChessTheMasterPiece.Logic.Movement
                 // Can move to empty squares or capture enemy pieces
                 if (targetPiece == null || targetPiece.Team != piece.Team)
                 {
-                    moves.Add(MoveCommand.CreateStandardMove(pos, target, piece, targetPiece));
+                    buffer.Add(MoveCommand.CreateStandardMove(pos, target, piece, targetPiece));
                 }
             }
 
@@ -51,7 +50,7 @@ namespace ChessTheMasterPiece.Logic.Movement
                 // Queenside Castling (left side)
                 // King at e1 → c1, Rook at a1 → d1
                 EvaluateCastling(
-                    board, moves, piece, pos,
+                    board, buffer, piece, pos,
                     rookX: 0,
                     emptyXPaths: new[] { 1, 2, 3 },
                     kingTargetX: 2,
@@ -61,15 +60,13 @@ namespace ChessTheMasterPiece.Logic.Movement
                 // Kingside Castling (right side)
                 // King at e1 → g1, Rook at h1 → f1
                 EvaluateCastling(
-                    board, moves, piece, pos,
+                    board, buffer, piece, pos,
                     rookX: 7,
                     emptyXPaths: new[] { 5, 6 },
                     kingTargetX: 6,
                     rookTargetX: 5
                 );
             }
-
-            return moves;
         }
 
         /// <summary>
@@ -86,7 +83,7 @@ namespace ChessTheMasterPiece.Logic.Movement
         /// <param name="rookTargetX">Where the Rook will land</param>
         private void EvaluateCastling(
             BoardState board,
-            List<MoveCommand> moves,
+            List<MoveCommand> buffer,
             PieceData king,
             Vector2Int kingPos,
             int rookX,
@@ -125,7 +122,7 @@ namespace ChessTheMasterPiece.Logic.Movement
             // 2. King doesn't pass through check
             // 3. King doesn't land in check
             // This is handled by DoesMoveLeaveKingInCheck() on each move candidate
-            moves.Add(MoveCommand.CreateCastlingMove(kingPos, kingTarget, king, rookPos, rookTarget));
+            buffer.Add(MoveCommand.CreateCastlingMove(kingPos, kingTarget, king, rookPos, rookTarget));
         }
     }
 }
