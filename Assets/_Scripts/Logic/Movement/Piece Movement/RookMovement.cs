@@ -19,9 +19,8 @@ namespace ChessTheMasterPiece.Logic.Movement
             { -1, 0 }   // Left
         };
 
-        public List<MoveCommand> GetRawMoves(BoardState board, PieceData piece)
+        public void GetRawMoves(BoardState board, PieceData piece, List<MoveCommand> buffer)
         {
-            List<MoveCommand> moves = new List<MoveCommand>();
             Vector2Int pos = new Vector2Int(piece.CurrentX, piece.CurrentY);
 
             // Slide in each of the 4 straight directions
@@ -43,22 +42,20 @@ namespace ChessTheMasterPiece.Logic.Movement
                     if (targetPiece == null)
                     {
                         // Empty square - can move here and continue sliding
-                        moves.Add(MoveCommand.CreateStandardMove(pos, target, piece));
+                        buffer.Add(MoveCommand.CreateStandardMove(pos, target, piece));
                     }
                     else
                     {
                         // Hit a piece - check if we can capture it
                         if (targetPiece.Team != piece.Team)
                         {
-                            moves.Add(MoveCommand.CreateStandardMove(pos, target, piece, targetPiece));
+                            buffer.Add(MoveCommand.CreateStandardMove(pos, target, piece, targetPiece));
                         }
                         // Either way, we're blocked - stop sliding in this direction
                         break;
                     }
                 }
             }
-
-            return moves;
         }
     }
 }

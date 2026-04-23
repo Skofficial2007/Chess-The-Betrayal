@@ -10,9 +10,14 @@ namespace ChessTheMasterPiece.Logic.Movement
     /// </summary>
     public class PawnMovement : IPieceMovement
     {
-        public List<MoveCommand> GetRawMoves(BoardState board, PieceData piece)
+        public void GetRawMoves(BoardState board, PieceData piece, List<MoveCommand> buffer)
         {
-            List<MoveCommand> moves = new List<MoveCommand>();
+            // Delegate to history-aware implementation using the board's move history
+            GetRawMovesWithHistory(board, piece, buffer, board.MoveHistory);
+        }
+
+        public void GetRawMovesWithHistory(BoardState board, PieceData piece, List<MoveCommand> buffer, List<Vector2Int> moveHistory)
+        {
             Vector2Int pos = new Vector2Int(piece.CurrentX, piece.CurrentY);
             int dir = piece.MoveDirection; // +1 for white (moving up), -1 for black (moving down)
 
@@ -20,7 +25,7 @@ namespace ChessTheMasterPiece.Logic.Movement
             Vector2Int oneForward = new Vector2Int(pos.x, pos.y + dir);
             if (board.IsValidIndex(oneForward) && board.GetPiece(oneForward) == null)
             {
-                CheckAndAddPromotion(board, moves, pos, oneForward, piece, null);
+                CheckAndAddPromotion(board, buffer, pos, oneForward, piece, null);
 
                 // 2. Double Forward Move (only from starting position and if one forward is clear)
                 if (pos.y == piece.InitialY && !piece.HasMoved)
@@ -28,7 +33,7 @@ namespace ChessTheMasterPiece.Logic.Movement
                     Vector2Int twoForward = new Vector2Int(pos.x, pos.y + (dir * 2));
                     if (board.IsValidIndex(twoForward) && board.GetPiece(twoForward) == null)
                     {
-                        moves.Add(MoveCommand.CreateStandardMove(pos, twoForward, piece));
+                        buffer.Add(MoveCommand.CreateStandardMove(pos, twoForward, piece));
                     }
                 }
             }
@@ -37,26 +42,24 @@ namespace ChessTheMasterPiece.Logic.Movement
             Vector2Int leftCapture = new Vector2Int(pos.x - 1, pos.y + dir);
             Vector2Int rightCapture = new Vector2Int(pos.x + 1, pos.y + dir);
 
-            EvaluateCapture(board, moves, piece, pos, leftCapture);
-            EvaluateCapture(board, moves, piece, pos, rightCapture);
+            EvaluateCapture(board, buffer, piece, pos, leftCapture);
+            EvaluateCapture(board, buffer, piece, pos, rightCapture);
 
-            // 4. En Passant
-            EvaluateEnPassant(board, moves, piece, pos, dir);
-
-            return moves;
+            // 4. En Passant (needs the move history)
+            EvaluateEnPassant(board, buffer, piece, pos, dir, moveHistory);
         }
 
         /// <summary>
         /// Checks if a diagonal square contains an enemy piece and adds the capture move.
         /// </summary>
-        private void EvaluateCapture(BoardState board, List<MoveCommand> moves, PieceData pawn, Vector2Int start, Vector2Int target)
+        private void EvaluateCapture(BoardState board, List<MoveCommand> buffer, PieceData pawn, Vector2Int start, Vector2Int target)
         {
             if (!board.IsValidIndex(target)) return;
 
             PieceData targetPiece = board.GetPiece(target);
             if (targetPiece != null && targetPiece.Team != pawn.Team)
             {
-                CheckAndAddPromotion(board, moves, start, target, pawn, targetPiece);
+                CheckAndAddPromotion(board, buffer, start, target, pawn, targetPiece);
             }
         }
 
@@ -64,7 +67,7 @@ namespace ChessTheMasterPiece.Logic.Movement
         /// Adds a move, checking if it results in promotion.
         /// If yes, generates all 4 promotion options (Queen, Rook, Knight, Bishop).
         /// </summary>
-        private void CheckAndAddPromotion(BoardState board, List<MoveCommand> moves, Vector2Int start, Vector2Int target, PieceData pawn, PieceData captured)
+        private void CheckAndAddPromotion(BoardState board, List<MoveCommand> buffer, Vector2Int start, Vector2Int target, PieceData pawn, PieceData captured)
         {
             // Check if pawn reaches the promotion rank
             int promotionRank = (pawn.MoveDirection == 1) ? board.TileCountY - 1 : 0;
@@ -73,14 +76,14 @@ namespace ChessTheMasterPiece.Logic.Movement
             {
                 // Generate all promotion options
                 // In a real game, the player chooses; in AI, we evaluate all possibilities
-                moves.Add(MoveCommand.CreatePromotionMove(start, target, pawn, ChessPieceType.Queen, captured));
-                moves.Add(MoveCommand.CreatePromotionMove(start, target, pawn, ChessPieceType.Rook, captured));
-                moves.Add(MoveCommand.CreatePromotionMove(start, target, pawn, ChessPieceType.Knight, captured));
-                moves.Add(MoveCommand.CreatePromotionMove(start, target, pawn, ChessPieceType.Bishop, captured));
+                buffer.Add(MoveCommand.CreatePromotionMove(start, target, pawn, ChessPieceType.Queen, captured));
+                buffer.Add(MoveCommand.CreatePromotionMove(start, target, pawn, ChessPieceType.Rook, captured));
+                buffer.Add(MoveCommand.CreatePromotionMove(start, target, pawn, ChessPieceType.Knight, captured));
+                buffer.Add(MoveCommand.CreatePromotionMove(start, target, pawn, ChessPieceType.Bishop, captured));
             }
             else
             {
-                moves.Add(MoveCommand.CreateStandardMove(start, target, pawn, captured));
+                buffer.Add(MoveCommand.CreateStandardMove(start, target, pawn, captured));
             }
         }
 
@@ -88,12 +91,14 @@ namespace ChessTheMasterPiece.Logic.Movement
         /// Evaluates if en passant capture is legal.
         /// Requirements: Last move was a 2-square pawn move, landing beside this pawn.
         /// </summary>
-        private void EvaluateEnPassant(BoardState board, List<MoveCommand> moves, PieceData pawn, Vector2Int pos, int dir)
+        private void EvaluateEnPassant(BoardState board, List<MoveCommand> buffer, PieceData pawn, Vector2Int pos, int dir, List<Vector2Int> moveHistory)
         {
-            var lastMoveOpt = board.GetLastMove();
-            if (!lastMoveOpt.HasValue) return;
+            if (moveHistory == null || moveHistory.Count < 2) return;
 
-            var (lastStart, lastEnd) = lastMoveOpt.Value;
+            int lastIndex = moveHistory.Count - 1;
+            Vector2Int lastEnd = moveHistory[lastIndex];
+            Vector2Int lastStart = moveHistory[lastIndex - 1];
+
             PieceData lastMovedPiece = board.GetPiece(lastEnd);
 
             // Verify last move was an enemy pawn
@@ -118,7 +123,7 @@ namespace ChessTheMasterPiece.Logic.Movement
                 Vector2Int enPassantTarget = new Vector2Int(lastMovedPiece.CurrentX, pos.y + dir);
                 Vector2Int capturePosition = new Vector2Int(lastMovedPiece.CurrentX, lastMovedPiece.CurrentY);
 
-                moves.Add(MoveCommand.CreateEnPassantMove(pos, enPassantTarget, pawn, lastMovedPiece, capturePosition));
+                buffer.Add(MoveCommand.CreateEnPassantMove(pos, enPassantTarget, pawn, lastMovedPiece, capturePosition));
             }
         }
     }

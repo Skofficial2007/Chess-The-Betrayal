@@ -44,7 +44,8 @@ namespace ChessTheMasterPiece.Logic
             }
 
             // Step 1: Get all physically possible moves (ignoring check)
-            List<MoveCommand> rawMoves = strategy.GetRawMovesWithHistory(board, piece, board.MoveHistory);
+            // Populate the provided output buffer with raw moves first (zero-alloc).
+            strategy.GetRawMovesWithHistory(board, piece, output, board.MoveHistory);
 
             bool isKing = piece.Type == ChessPieceType.King;
             bool isCurrentlyInCheck = false;
@@ -57,8 +58,12 @@ namespace ChessTheMasterPiece.Logic
             }
 
             // Step 2: Filter out moves that leave our own King in check
-            foreach (var move in rawMoves)
+            // We filter in-place to avoid allocations: compact valid moves to the start of the list.
+            int write = 0;
+            for (int i = 0; i < output.Count; i++)
             {
+                MoveCommand move = output[i];
+
                 // Enforce strict Castling rules
                 if (move.IsCastling)
                 {
@@ -69,40 +74,46 @@ namespace ChessTheMasterPiece.Logic
                     // The King moves 2 steps. The intermediate square is 1 step in that direction.
                     int direction = move.EndPosition.x > move.StartPosition.x ? 1 : -1;
                     Vector2Int passThroughSquare = new Vector2Int(move.StartPosition.x + direction, move.StartPosition.y);
-                    
+
                     if (IsSquareUnderAttack(board, passThroughSquare, enemyTeam)) continue;
                 }
 
                 // For all moves, ensure the final resting place is safe
                 if (!DoesMoveLeaveKingInCheck(board, move))
                 {
-                    output.Add(move);
+                    output[write++] = move;
                 }
+            }
+
+            if (write < output.Count)
+            {
+                output.RemoveRange(write, output.Count - write);
             }
         }
 
         /// <summary>
-        /// Similar to GetLegalMoves but for all pieces of a given team.
-        /// Useful for AI move generation or UI highlighting.
+        /// High-performance AI move generator. 
+        /// Populates a single master buffer with ALL legal moves for a specific team.
+        /// 100% Zero Allocation.
         /// </summary>
-        public static Dictionary<Vector2Int, List<MoveCommand>> GetAllLegalMoves(BoardState board, Team team)
+        public static void GetAllLegalMoves(BoardState board, Team team, List<MoveCommand> masterBuffer)
         {
-            Dictionary<Vector2Int, List<MoveCommand>> allMoves = new Dictionary<Vector2Int, List<MoveCommand>>();
-            List<PieceData> pieces = board.GetAllPieces(team);
+            masterBuffer.Clear();
 
-            foreach (var piece in pieces)
+            // Loop directly over the array to avoid GetAllPieces() list allocations
+            for (int x = 0; x < board.TileCountX; x++)
             {
-                Vector2Int pos = new Vector2Int(piece.CurrentX, piece.CurrentY);
-                List<MoveCommand> moves = new List<MoveCommand>();
-                GetLegalMoves(board, pos, moves);
-
-                if (moves.Count > 0)
+                for (int y = 0; y < board.TileCountY; y++)
                 {
-                    allMoves[pos] = moves;
+                    PieceData piece = board.GetPiece(x, y);
+                    if (piece != null && piece.Team == team)
+                    {
+                        Vector2Int pos = new Vector2Int(piece.CurrentX, piece.CurrentY);
+                        GetLegalMoves(board, pos, _engineScratch);
+                        masterBuffer.AddRange(_engineScratch);
+                    }
                 }
             }
-
-            return allMoves;
         }
 
         #endregion
@@ -139,32 +150,36 @@ namespace ChessTheMasterPiece.Logic
         /// <summary>
         /// Checks if the specified square is under attack by any piece of the attacker team.
         /// Uses raw moves (not legal moves) to avoid infinite recursion.
-        /// GC-optimized with scratch buffer.
+        /// GC-optimized with scratch buffer and 2D array traversal.
         /// </summary>
         public static bool IsSquareUnderAttack(BoardState board, Vector2Int targetSquare, Team attackerTeam)
         {
-            List<PieceData> attackers = board.GetAllPieces(attackerTeam);
-
-            foreach (PieceData attacker in attackers)
+            // Zero-allocation loop over the board
+            for (int x = 0; x < board.TileCountX; x++)
             {
-                IPieceMovement strategy = MovementFactory.GetStrategy(attacker.Type);
-                if (strategy == null) continue;
-
-                // CRITICAL: Use GetRawMoves here, NOT GetLegalMoves
-                // This prevents infinite recursion and allows pinned pieces to still protect squares
-                // We reuse the attack scratch list to prevent memory bloat
-                _attackScratch.Clear();
-                _attackScratch.AddRange(strategy.GetRawMoves(board, attacker));
-
-                for (int i = 0; i < _attackScratch.Count; i++)
+                for (int y = 0; y < board.TileCountY; y++)
                 {
-                    if (_attackScratch[i].EndPosition == targetSquare)
+                    PieceData attacker = board.GetPiece(x, y);
+                    
+                    if (attacker != null && attacker.Team == attackerTeam)
                     {
-                        return true; // Square is under attack
+                        IPieceMovement strategy = MovementFactory.GetStrategy(attacker.Type);
+                        if (strategy == null) continue;
+
+                        // Zero-allocation raw move generation
+                        _attackScratch.Clear();
+                        strategy.GetRawMoves(board, attacker, _attackScratch);
+
+                        for (int i = 0; i < _attackScratch.Count; i++)
+                        {
+                            if (_attackScratch[i].EndPosition == targetSquare)
+                            {
+                                return true; 
+                            }
+                        }
                     }
                 }
             }
-
             return false;
         }
 
@@ -188,26 +203,29 @@ namespace ChessTheMasterPiece.Logic
 
         /// <summary>
         /// Evaluates if the specified team has any legal moves remaining.
-        /// If not, the game is either checkmate or stalemate.
-        /// GC-optimized with scratch buffer.
+        /// GC-optimized with scratch buffer and 2D array traversal.
         /// </summary>
         public static bool HasAnyLegalMoves(BoardState board, Team team)
         {
-            List<PieceData> pieces = board.GetAllPieces(team);
-
-            foreach (var piece in pieces)
+            // Zero-allocation loop over the board
+            for (int x = 0; x < board.TileCountX; x++)
             {
-                Vector2Int pos = new Vector2Int(piece.CurrentX, piece.CurrentY);
-                
-                // Use the shared engine scratch list instead of allocating
-                GetLegalMoves(board, pos, _engineScratch);
-
-                if (_engineScratch.Count > 0)
+                for (int y = 0; y < board.TileCountY; y++)
                 {
-                    return true; // Found at least one legal move
+                    PieceData piece = board.GetPiece(x, y);
+                    
+                    if (piece != null && piece.Team == team)
+                    {
+                        Vector2Int pos = new Vector2Int(piece.CurrentX, piece.CurrentY);
+                        GetLegalMoves(board, pos, _engineScratch);
+
+                        if (_engineScratch.Count > 0)
+                        {
+                            return true; // Found at least one legal move
+                        }
+                    }
                 }
             }
-
             return false; // No legal moves available
         }
 
