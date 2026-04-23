@@ -4,7 +4,10 @@ using UnityEngine;
 using ChessTheMasterPiece.Data;
 using ChessTheMasterPiece.Logic;
 using ChessTheMasterPiece.UI;
+
+#if UNITY_EDITOR
 using UnityEditor.Experimental.GraphView;
+#endif
 
 namespace ChessTheMasterPiece.Controllers
 {
@@ -12,6 +15,7 @@ namespace ChessTheMasterPiece.Controllers
     /// The central orchestrator of the game. 
     /// Bridges the pure C# logic (BoardState/ChessEngine) with the Unity environment.
     /// Manages game flow, validates moves, and broadcasts state changes to other systems.
+    /// GC-optimized with buffer-passing pattern.
     /// </summary>
     public class GameManager : MonoBehaviour
     {
@@ -46,9 +50,16 @@ namespace ChessTheMasterPiece.Controllers
         public Team PlayerTeam { get; private set; } = Team.White;
 
         /// <summary>
-        /// Quick check if the game has started.
+        /// Current phase of the turn state machine.
+        /// Controls game flow and locks out actions during special phases.
         /// </summary>
-        public bool IsGameActive { get; private set; }
+        public TurnPhase CurrentPhase { get; private set; } = TurnPhase.GameOver;
+
+        /// <summary>
+        /// Quick check if the game has started.
+        /// Derived property keeps existing UI/Input checks from breaking.
+        /// </summary>
+        public bool IsGameActive => CurrentPhase != TurnPhase.GameOver;
 
         #endregion
 
@@ -66,6 +77,10 @@ namespace ChessTheMasterPiece.Controllers
         #region Private Fields
 
         private MoveCommand pendingPromotionMove;
+
+        // GC-optimized buffers to eliminate allocations
+        private readonly List<MoveCommand> _legalMovesBuffer = new List<MoveCommand>(32);
+        private readonly List<MoveCommand> _targetMatchesBuffer = new List<MoveCommand>(4);
 
         #endregion
 
@@ -130,14 +145,15 @@ namespace ChessTheMasterPiece.Controllers
 
             SetupStandardPieces();
 
-            IsGameActive = true;
+            // Enter the Normal phase to start the game
+            CurrentPhase = TurnPhase.Normal;
 
             // Broadcast to BoardVisuals and other systems
             OnGameStarted?.Invoke(LiveBoard);
 
             if (logMoves)
             {
-                Debug.Log($"[GameManager] New game started. Player is {PlayerTeam}.");
+                Debug.Log($"[GameManager] New game started. Player is {PlayerTeam}. Phase: {CurrentPhase}");
             }
         }
 
@@ -148,14 +164,16 @@ namespace ChessTheMasterPiece.Controllers
         private void HandleGameReset()
         {
             LiveBoard.Clear();
-            IsGameActive = false;
             pendingPromotionMove = default;
+
+            // Shift to GameOver state
+            CurrentPhase = TurnPhase.GameOver;
 
             OnGameReset?.Invoke();
 
             if (logMoves)
             {
-                Debug.Log("[GameManager] Game reset.");
+                Debug.Log("[GameManager] Game reset. Phase: GameOver");
             }
         }
 
@@ -197,10 +215,13 @@ namespace ChessTheMasterPiece.Controllers
         /// <summary>
         /// Entry point for move requests. 
         /// Handles the transition from player intent to engine validation.
+        /// GC-optimized with zero allocations.
         /// </summary>
         public bool RequestMove(ChessTheMasterPiece.Data.Vector2Int from, ChessTheMasterPiece.Data.Vector2Int to)
         {
-            if (!IsGameActive || LiveBoard.IsGameOver)
+            // Standard move requests should only be processed during the Normal phase.
+            // When Betrayal phases are active, standard movement is locked out.
+            if (CurrentPhase != TurnPhase.Normal || LiveBoard.IsGameOver)
             {
                 return false;
             }
@@ -222,15 +243,21 @@ namespace ChessTheMasterPiece.Controllers
                 to = new ChessTheMasterPiece.Data.Vector2Int(castlingX, from.y);
             }
 
-            // Fetch ALL legal moves for this specific piece
-            List<MoveCommand> legalMoves = ChessEngine.GetLegalMoves(LiveBoard, from);
+            // Zero-allocation move generation
+            ChessEngine.GetLegalMoves(LiveBoard, from, _legalMovesBuffer);
 
-            // Filter moves that match our target destination
-            // We use FindAll because a single square can have multiple valid MoveCommands (Promotions)
-            List<MoveCommand> destinationMatches = legalMoves.FindAll(m => m.EndPosition == to);
+            // Zero-allocation filtering
+            _targetMatchesBuffer.Clear();
+            for (int i = 0; i < _legalMovesBuffer.Count; i++)
+            {
+                if (_legalMovesBuffer[i].EndPosition == to)
+                {
+                    _targetMatchesBuffer.Add(_legalMovesBuffer[i]);
+                }
+            }
 
             // Illegal Move Safety
-            if (destinationMatches.Count == 0)
+            if (_targetMatchesBuffer.Count == 0)
             {
                 if (logMoves) Debug.Log($"[GameManager] Illegal move attempted: {from} -> {to}");
                 return false;
@@ -238,12 +265,20 @@ namespace ChessTheMasterPiece.Controllers
 
             // AMBIGUITY RESOLUTION: Promotion
             // If the engine has generated multiple moves for one square, it's a promotion choice.
-            bool isPromotionChoice = destinationMatches.Exists(m => m.IsPromotion);
+            bool isPromotionChoice = false;
+            for (int i = 0; i < _targetMatchesBuffer.Count; i++)
+            {
+                if (_targetMatchesBuffer[i].IsPromotion)
+                {
+                    isPromotionChoice = true;
+                    break;
+                }
+            }
 
             if (isPromotionChoice)
             {
                 // Store the first match as a template for position/capture data
-                pendingPromotionMove = destinationMatches[0];
+                pendingPromotionMove = _targetMatchesBuffer[0];
 
                 if (logMoves) Debug.Log($"[GameManager] Promotion detected at {to}. Halting for UI choice.");
 
@@ -255,18 +290,19 @@ namespace ChessTheMasterPiece.Controllers
 
             // SINGLE-MOVE RESOLUTION (Standard, Castling, or En Passant)
             // If it's not a promotion, there is only ever one logical command.
-            MoveCommand validMove = destinationMatches[0];
+            MoveCommand validMove = _targetMatchesBuffer[0];
             ExecuteValidatedMove(validMove);
             return true;
         }
 
         /// <summary>
         /// Called by the UI when a player chooses their promotion piece.
+        /// GC-optimized with zero allocations.
         /// </summary>
         private void HandlePromotionChoice(ChessPieceType chosenType)
         {
             // Ensure we are in a valid promotion state
-            if (pendingPromotionMove.PieceMoved == null)
+            if (pendingPromotionMove.PieceType == ChessPieceType.None)
             {
                 Debug.LogWarning("[GameManager] Received promotion choice but no move was pending.");
                 return;
@@ -274,16 +310,17 @@ namespace ChessTheMasterPiece.Controllers
 
             // RE-VALIDATION: Ask the engine for the options again to get the exact validated command
             // This is safer than manual construction and protects against metadata loss.
-            List<MoveCommand> options = ChessEngine.GetLegalMoves(LiveBoard, pendingPromotionMove.StartPosition);
+            ChessEngine.GetLegalMoves(LiveBoard, pendingPromotionMove.StartPosition, _legalMovesBuffer);
 
-            foreach (var move in options)
+            for (int i = 0; i < _legalMovesBuffer.Count; i++)
             {
-                if (move.EndPosition == pendingPromotionMove.EndPosition &&
-                    move.PromotedTo == chosenType)
+                if (_legalMovesBuffer[i].EndPosition == pendingPromotionMove.EndPosition &&
+                    _legalMovesBuffer[i].PromotedTo == chosenType)
                 {
                     // Found the specific command matching the player's choice. Execute it.
+                    MoveCommand finalMove = _legalMovesBuffer[i];
                     pendingPromotionMove = default; // Reset state
-                    ExecuteValidatedMove(move);
+                    ExecuteValidatedMove(finalMove);
                     return;
                 }
             }
@@ -349,6 +386,9 @@ namespace ChessTheMasterPiece.Controllers
             LiveBoard.IsGameOver = true;
             LiveBoard.Winner = winner;
 
+            // Lock the state machine
+            CurrentPhase = TurnPhase.GameOver;
+
             int result = winner.HasValue ? (int)winner.Value : -1;
             UIManager.Instance?.TriggerGameOver(result);
 
@@ -362,15 +402,20 @@ namespace ChessTheMasterPiece.Controllers
         /// <summary>
         /// Returns all legal moves for a piece at the given position.
         /// Used by UI/Input systems to show move highlights.
+        /// GC-optimized - returns internal buffer as readonly to prevent external modification.
         /// </summary>
-        public List<MoveCommand> GetLegalMovesAt(ChessTheMasterPiece.Data.Vector2Int position)
+        public IReadOnlyList<MoveCommand> GetLegalMovesAt(ChessTheMasterPiece.Data.Vector2Int position)
         {
-            if (!IsGameActive || LiveBoard.IsGameOver)
+            _legalMovesBuffer.Clear();
+
+            // Gate visual highlights based on the current phase
+            if (CurrentPhase == TurnPhase.Normal && !LiveBoard.IsGameOver)
             {
-                return new List<MoveCommand>();
+                ChessEngine.GetLegalMoves(LiveBoard, position, _legalMovesBuffer);
             }
 
-            return ChessEngine.GetLegalMoves(LiveBoard, position);
+            // Return as interface to prevent external scripts from modifying the buffer
+            return _legalMovesBuffer;
         }
 
         /// <summary>
@@ -378,7 +423,8 @@ namespace ChessTheMasterPiece.Controllers
         /// </summary>
         public bool CanSelectPiece(ChessTheMasterPiece.Data.Vector2Int position)
         {
-            if (!IsGameActive || LiveBoard.IsGameOver)
+            // Gate physical piece selection
+            if (CurrentPhase != TurnPhase.Normal || LiveBoard.IsGameOver)
             {
                 return false;
             }
