@@ -12,12 +12,6 @@ namespace ChessTheMasterPiece.Logic.Movement
     {
         public void GetRawMoves(BoardState board, PieceData piece, List<MoveCommand> buffer)
         {
-            // Delegate to history-aware implementation using the board's move history
-            GetRawMovesWithHistory(board, piece, buffer, board.MoveHistory);
-        }
-
-        public void GetRawMovesWithHistory(BoardState board, PieceData piece, List<MoveCommand> buffer, List<Vector2Int> moveHistory)
-        {
             Vector2Int pos = new Vector2Int(piece.CurrentX, piece.CurrentY);
             int dir = piece.MoveDirection; // +1 for white (moving up), -1 for black (moving down)
 
@@ -33,20 +27,17 @@ namespace ChessTheMasterPiece.Logic.Movement
                     Vector2Int twoForward = new Vector2Int(pos.x, pos.y + (dir * 2));
                     if (board.IsValidIndex(twoForward) && board.GetPiece(twoForward) == null)
                     {
-                        buffer.Add(MoveCommand.CreateStandardMove(pos, twoForward, piece));
+                        buffer.Add(MoveCommand.CreateStandardMove(pos, twoForward, piece, null, board));
                     }
                 }
             }
 
             // 3. Diagonal Captures
-            Vector2Int leftCapture = new Vector2Int(pos.x - 1, pos.y + dir);
-            Vector2Int rightCapture = new Vector2Int(pos.x + 1, pos.y + dir);
+            EvaluateCapture(board, buffer, piece, pos, new Vector2Int(pos.x - 1, pos.y + dir));
+            EvaluateCapture(board, buffer, piece, pos, new Vector2Int(pos.x + 1, pos.y + dir));
 
-            EvaluateCapture(board, buffer, piece, pos, leftCapture);
-            EvaluateCapture(board, buffer, piece, pos, rightCapture);
-
-            // 4. En Passant (needs the move history)
-            EvaluateEnPassant(board, buffer, piece, pos, dir, moveHistory);
+            // 4. En Passant (O(1) access to last move via board.MoveHistory)
+            EvaluateEnPassant(board, buffer, piece, pos, dir);
         }
 
         /// <summary>
@@ -76,54 +67,43 @@ namespace ChessTheMasterPiece.Logic.Movement
             {
                 // Generate all promotion options
                 // In a real game, the player chooses; in AI, we evaluate all possibilities
-                buffer.Add(MoveCommand.CreatePromotionMove(start, target, pawn, ChessPieceType.Queen, captured));
-                buffer.Add(MoveCommand.CreatePromotionMove(start, target, pawn, ChessPieceType.Rook, captured));
-                buffer.Add(MoveCommand.CreatePromotionMove(start, target, pawn, ChessPieceType.Knight, captured));
-                buffer.Add(MoveCommand.CreatePromotionMove(start, target, pawn, ChessPieceType.Bishop, captured));
+                buffer.Add(MoveCommand.CreatePromotionMove(start, target, pawn, ChessPieceType.Queen, captured, board));
+                buffer.Add(MoveCommand.CreatePromotionMove(start, target, pawn, ChessPieceType.Rook, captured, board));
+                buffer.Add(MoveCommand.CreatePromotionMove(start, target, pawn, ChessPieceType.Knight, captured, board));
+                buffer.Add(MoveCommand.CreatePromotionMove(start, target, pawn, ChessPieceType.Bishop, captured, board));
             }
             else
             {
-                buffer.Add(MoveCommand.CreateStandardMove(start, target, pawn, captured));
+                buffer.Add(MoveCommand.CreateStandardMove(start, target, pawn, captured, board));
             }
         }
 
         /// <summary>
         /// Evaluates if en passant capture is legal.
-        /// Requirements: Last move was a 2-square pawn move, landing beside this pawn.
+        /// O(1) complexity - directly checks the board's CurrentEnPassantFile state variable.
+        /// This is mathematically perfect for Zobrist hashing and transposition tables.
         /// </summary>
-        private void EvaluateEnPassant(BoardState board, List<MoveCommand> buffer, PieceData pawn, Vector2Int pos, int dir, List<Vector2Int> moveHistory)
+        private void EvaluateEnPassant(BoardState board, List<MoveCommand> buffer, PieceData pawn, Vector2Int pos, int dir)
         {
-            if (moveHistory == null || moveHistory.Count < 2) return;
+            // Simply check if an En Passant file is currently active on the board state
+            if (!board.CurrentEnPassantFile.HasValue) return;
 
-            int lastIndex = moveHistory.Count - 1;
-            Vector2Int lastEnd = moveHistory[lastIndex];
-            Vector2Int lastStart = moveHistory[lastIndex - 1];
+            int epFileX = board.CurrentEnPassantFile.Value;
 
-            PieceData lastMovedPiece = board.GetPiece(lastEnd);
-
-            // Verify last move was an enemy pawn
-            if (lastMovedPiece == null ||
-                lastMovedPiece.Type != ChessPieceType.Pawn ||
-                lastMovedPiece.Team == pawn.Team)
+            // Check if the vulnerable pawn is directly adjacent to our pawn
+            if (System.Math.Abs(epFileX - pos.x) == 1)
             {
-                return;
-            }
+                // The enemy pawn must be on the same Y rank as our pawn
+                PieceData enemyPawn = board.GetPiece(new Vector2Int(epFileX, pos.y));
 
-            // Check if the enemy pawn is beside us
-            bool isBeside = lastMovedPiece.CurrentY == pawn.CurrentY &&
-                           System.Math.Abs(lastMovedPiece.CurrentX - pawn.CurrentX) == 1;
+                if (enemyPawn != null && enemyPawn.Team != pawn.Team && enemyPawn.Type == ChessPieceType.Pawn)
+                {
+                    // Target is one square diagonal forward
+                    Vector2Int enPassantTarget = new Vector2Int(epFileX, pos.y + dir);
+                    Vector2Int capturePosition = new Vector2Int(epFileX, pos.y);
 
-            if (!isBeside) return;
-
-            // Check if the last move was a 2-square advance
-            int moveDistance = System.Math.Abs(lastEnd.y - lastStart.y);
-            if (moveDistance == 2)
-            {
-                // En passant target square is diagonal to our pawn
-                Vector2Int enPassantTarget = new Vector2Int(lastMovedPiece.CurrentX, pos.y + dir);
-                Vector2Int capturePosition = new Vector2Int(lastMovedPiece.CurrentX, lastMovedPiece.CurrentY);
-
-                buffer.Add(MoveCommand.CreateEnPassantMove(pos, enPassantTarget, pawn, lastMovedPiece, capturePosition));
+                    buffer.Add(MoveCommand.CreateEnPassantMove(pos, enPassantTarget, pawn, enemyPawn, capturePosition, board));
+                }
             }
         }
     }

@@ -42,14 +42,14 @@ namespace ChessTheMasterPiece.Logic.Movement
                     if (targetPiece == null)
                     {
                         // Empty square - can move here and continue sliding
-                        buffer.Add(MoveCommand.CreateStandardMove(pos, target, piece));
+                        buffer.Add(MoveCommand.CreateStandardMove(pos, target, piece, null, board));
                     }
                     else
                     {
                         // Hit a piece - check if we can capture it
                         if (targetPiece.Team != piece.Team)
                         {
-                            buffer.Add(MoveCommand.CreateStandardMove(pos, target, piece, targetPiece));
+                            buffer.Add(MoveCommand.CreateStandardMove(pos, target, piece, targetPiece, board));
                         }
                         // Either way, we're blocked - stop sliding in this direction
                         break;

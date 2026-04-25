@@ -14,25 +14,11 @@ namespace ChessTheMasterPiece.Logic.Movement
         /// Zero-allocation.
         /// Does NOT validate if moves leave the King in check - that's the engine's job.
         /// Returns fully-formed MoveCommands with all metadata (captures, special moves, etc).
+        /// Pieces requiring move history (Pawn for En Passant, King for Castling) can access board.MoveHistory directly.
         /// </summary>
-        /// <param name="board">The current board state</param>
+        /// <param name="board">The current board state (includes MoveHistory for special moves)</param>
         /// <param name="piece">The piece to generate moves for</param>
         /// <param name="buffer">Pre-allocated list to populate with raw moves</param>
         void GetRawMoves(BoardState board, PieceData piece, List<MoveCommand> buffer);
-
-        /// <summary>
-        /// Optional: Some pieces (King, Rook, Pawn) may need access to move history
-        /// for special moves like castling or en passant. Override if needed.
-        /// Zero-allocation.
-        /// </summary>
-        /// <param name="board">The current board state</param>
-        /// <param name="piece">The piece to generate moves for</param>
-        /// <param name="buffer">Pre-allocated list to populate with raw moves</param>
-        /// <param name="moveHistory">The game's move history</param>
-        void GetRawMovesWithHistory(BoardState board, PieceData piece, List<MoveCommand> buffer, List<Vector2Int> moveHistory)
-        {
-            // Default implementation ignores history
-            GetRawMoves(board, piece, buffer);
-        }
     }
 }

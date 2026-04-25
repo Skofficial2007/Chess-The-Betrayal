@@ -59,7 +59,8 @@ namespace ChessTheMasterPiece.View
 
         // Highlighting state
         private ChessTheMasterPiece.Data.Vector2Int hoverIndex = ChessTheMasterPiece.Data.Vector2Int.Invalid;
-        private List<ChessTheMasterPiece.Data.Vector2Int> currentLegalHighlights = new List<ChessTheMasterPiece.Data.Vector2Int>();
+        // Pre-allocate capacity to prevent internal array resizing during gameplay
+        private readonly List<ChessTheMasterPiece.Data.Vector2Int> currentLegalHighlights = new List<ChessTheMasterPiece.Data.Vector2Int>(32);
 
         // Cached values
         private Vector3 boardOrigin;
@@ -509,27 +510,30 @@ namespace ChessTheMasterPiece.View
 
         /// <summary>
         /// Highlights all legal move destinations.
-        /// GC-optimized to accept read-only buffer interface.
+        /// Zero allocations - uses for-loop to prevent IEnumerator boxing.
         /// </summary>
         public void HighlightLegalMoves(IReadOnlyList<MoveCommand> moves)
         {
             ClearLegalMoveHighlights();
 
-            // IReadOnlyList still supports foreach perfectly!
-            foreach (var move in moves)
+            // Use index-based for-loop instead of foreach to eliminate enumerator boxing
+            for (int i = 0; i < moves.Count; i++)
             {
-                currentLegalHighlights.Add(move.EndPosition);
-                SetTileLayer(move.EndPosition, isHover: false);
+                currentLegalHighlights.Add(moves[i].EndPosition);
+                SetTileLayer(moves[i].EndPosition, isHover: false);
             }
         }
 
         /// <summary>
         /// Clears all legal move highlights.
+        /// Zero allocations - uses for-loop to prevent IEnumerator boxing.
         /// </summary>
         public void ClearLegalMoveHighlights()
         {
-            foreach (var pos in currentLegalHighlights)
+            // Use index-based for-loop instead of foreach to eliminate enumerator boxing
+            for (int i = 0; i < currentLegalHighlights.Count; i++)
             {
+                ChessTheMasterPiece.Data.Vector2Int pos = currentLegalHighlights[i];
                 if (pos.x >= 0 && pos.x < tileCountX && pos.y >= 0 && pos.y < tileCountY && tiles[pos.x, pos.y] != null)
                 {
                     tiles[pos.x, pos.y].layer = tileLayer;

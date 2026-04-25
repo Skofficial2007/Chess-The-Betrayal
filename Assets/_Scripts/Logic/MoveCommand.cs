@@ -31,6 +31,10 @@ namespace ChessTheMasterPiece.Logic
         public readonly Vector2Int? RookEndPosition;
         public readonly Vector2Int? EnPassantCapturePosition;
 
+        // Snapshots of board special states BEFORE this move (for perfect Make/Unmake)
+        public readonly int PreviousCastlingMask;
+        public readonly int? PreviousEnPassantFile;
+
         /// <summary>
         /// Master constructor that flattens PieceData objects into primitive snapshots.
         /// </summary>
@@ -43,7 +47,9 @@ namespace ChessTheMasterPiece.Logic
             ChessPieceType promotedTo = ChessPieceType.None,
             Vector2Int? rookStartPosition = null,
             Vector2Int? rookEndPosition = null,
-            Vector2Int? enPassantCapturePosition = null)
+            Vector2Int? enPassantCapturePosition = null,
+            int previousCastlingMask = 0,
+            int? previousEnPassantFile = null)
         {
             StartPosition = startPosition;
             EndPosition = endPosition;
@@ -85,28 +91,35 @@ namespace ChessTheMasterPiece.Logic
             RookStartPosition = rookStartPosition;
             RookEndPosition = rookEndPosition;
             EnPassantCapturePosition = enPassantCapturePosition;
+            PreviousCastlingMask = previousCastlingMask;
+            PreviousEnPassantFile = previousEnPassantFile;
         }
 
         #region Factory Methods
         
-        public static MoveCommand CreateStandardMove(Vector2Int from, Vector2Int to, PieceData piece, PieceData captured = null)
+        public static MoveCommand CreateStandardMove(Vector2Int from, Vector2Int to, PieceData piece, PieceData captured = null, BoardState board = null)
         {
-            return new MoveCommand(from, to, piece, captured);
+            return new MoveCommand(from, to, piece, captured,
+                previousCastlingMask: board?.CurrentCastlingMask ?? 0,
+                previousEnPassantFile: board?.CurrentEnPassantFile);
         }
 
-        public static MoveCommand CreateCastlingMove(Vector2Int kingFrom, Vector2Int kingTo, PieceData king, Vector2Int rookFrom, Vector2Int rookTo)
+        public static MoveCommand CreateCastlingMove(Vector2Int kingFrom, Vector2Int kingTo, PieceData king, Vector2Int rookFrom, Vector2Int rookTo, BoardState board = null)
         {
-            return new MoveCommand(kingFrom, kingTo, king, null, SpecialMove.Castling, ChessPieceType.None, rookFrom, rookTo, null);
+            return new MoveCommand(kingFrom, kingTo, king, null, SpecialMove.Castling, ChessPieceType.None, rookFrom, rookTo, null,
+                board?.CurrentCastlingMask ?? 0, board?.CurrentEnPassantFile);
         }
 
-        public static MoveCommand CreateEnPassantMove(Vector2Int from, Vector2Int to, PieceData pawn, PieceData capturedPawn, Vector2Int capturePosition)
+        public static MoveCommand CreateEnPassantMove(Vector2Int from, Vector2Int to, PieceData pawn, PieceData capturedPawn, Vector2Int capturePosition, BoardState board = null)
         {
-            return new MoveCommand(from, to, pawn, capturedPawn, SpecialMove.EnPassant, ChessPieceType.None, null, null, capturePosition);
+            return new MoveCommand(from, to, pawn, capturedPawn, SpecialMove.EnPassant, ChessPieceType.None, null, null, capturePosition,
+                board?.CurrentCastlingMask ?? 0, board?.CurrentEnPassantFile);
         }
 
-        public static MoveCommand CreatePromotionMove(Vector2Int from, Vector2Int to, PieceData pawn, ChessPieceType promotedTo, PieceData captured = null)
+        public static MoveCommand CreatePromotionMove(Vector2Int from, Vector2Int to, PieceData pawn, ChessPieceType promotedTo, PieceData captured = null, BoardState board = null)
         {
-            return new MoveCommand(from, to, pawn, captured, SpecialMove.Promotion, promotedTo, null, null, null);
+            return new MoveCommand(from, to, pawn, captured, SpecialMove.Promotion, promotedTo, null, null, null,
+                board?.CurrentCastlingMask ?? 0, board?.CurrentEnPassantFile);
         }
 
         #endregion
