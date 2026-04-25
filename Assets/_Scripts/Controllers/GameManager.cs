@@ -206,6 +206,9 @@ namespace ChessTheMasterPiece.Controllers
                 // Black Majors (Rank 7)
                 LiveBoard.SetPiece(new PieceData(Team.Black, backRank[x], x, boardSizeY - 1, direction: -1), x, boardSizeY - 1);
             }
+
+            // Compute the initial Zobrist hash from the starting position
+            LiveBoard.ComputeFullZobristHash();
         }
 
         #endregion
@@ -336,11 +339,8 @@ namespace ChessTheMasterPiece.Controllers
         {
             if (logMoves) Debug.Log($"[GameManager] Executing: {move}");
 
-            // This moves the piece in the PieceData[,] and handles captures/state changes.
+            // ApplyMoveToBoard now handles RecordMove internally for proper Make/Unmake simulation
             ChessEngine.ApplyMoveToBoard(LiveBoard, move);
-
-            // Update move history (essential for En Passant and Castling checks)
-            LiveBoard.RecordMove(move.StartPosition, move.EndPosition);
 
             // BoardVisuals hears this and triggers the animations based on the move metadata.
             OnMoveExecuted?.Invoke(move);

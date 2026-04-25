@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace ChessTheMasterPiece.Data
@@ -9,6 +10,164 @@ namespace ChessTheMasterPiece.Data
     /// </summary>
     public class BoardState
     {
+        #region Zobrist Hashing
+
+        // [Team (2), PieceType (7), Square (64)]
+        private static readonly ulong[,,] PieceKeys;
+        private static readonly ulong BlackToMoveKey;
+        // 16 possible castling right combinations (4-bit mask)
+        private static readonly ulong[] CastlingKeys;
+        // 8 possible files for an En Passant target (X coordinates 0-7)
+        private static readonly ulong[] EnPassantKeys;
+        // Future Custom Mechanic Support
+        private static readonly ulong BetrayalPhaseKey;
+
+        /// <summary>
+        /// Incrementally updated hash for transposition table lookups.
+        /// Uses Zobrist hashing - XOR operations make it reversible for Make/Unmake.
+        /// </summary>
+        public ulong ZobristHash { get; set; }
+
+        /// <summary>
+        /// 4-bit mask tracking available castling rights.
+        /// Bit 0: White Kingside, Bit 1: White Queenside, Bit 2: Black Kingside, Bit 3: Black Queenside
+        /// </summary>
+        public int CurrentCastlingMask { get; set; }
+
+        /// <summary>
+        /// The file (X coordinate 0-7) where an en passant capture is currently legal.
+        /// Null if no en passant is available this turn.
+        /// </summary>
+        public int? CurrentEnPassantFile { get; set; }
+
+        // Castling mask bit constants for clarity
+        public const int CastlingWhiteKingside = 1;   // Bit 0
+        public const int CastlingWhiteQueenside = 2;  // Bit 1
+        public const int CastlingBlackKingside = 4;   // Bit 2
+        public const int CastlingBlackQueenside = 8;  // Bit 3
+        public const int CastlingAllRights = 15;      // All bits set
+
+        static BoardState()
+        {
+            // Fixed seed ensures reproducibility across network clients and AI threads
+            var rng = new Random(42);
+
+            // Helper to generate 64-bit randoms
+            ulong NextUlong()
+            {
+                byte[] buffer = new byte[8];
+                rng.NextBytes(buffer);
+                return BitConverter.ToUInt64(buffer, 0);
+            }
+
+            PieceKeys = new ulong[2, 7, 64];
+            for (int t = 0; t < 2; t++)
+            {
+                for (int p = 0; p < 7; p++)
+                {
+                    for (int s = 0; s < 64; s++)
+                    {
+                        PieceKeys[t, p, s] = NextUlong();
+                    }
+                }
+            }
+
+            CastlingKeys = new ulong[16];
+            for (int i = 0; i < 16; i++)
+            {
+                CastlingKeys[i] = NextUlong();
+            }
+
+            EnPassantKeys = new ulong[8];
+            for (int i = 0; i < 8; i++)
+            {
+                EnPassantKeys[i] = NextUlong();
+            }
+
+            BlackToMoveKey = NextUlong();
+            BetrayalPhaseKey = NextUlong();
+        }
+
+        /// <summary>
+        /// XORs a piece at a specific location into or out of the hash.
+        /// Because XOR is its own inverse, calling this twice with the same parameters cancels out.
+        /// </summary>
+        public void TogglePieceHash(Team team, ChessPieceType type, int x, int y)
+        {
+            if (type == ChessPieceType.None) return;
+
+            int squareIndex = (y * TileCountX) + x;
+            ZobristHash ^= PieceKeys[(int)team, (int)type, squareIndex];
+        }
+
+        /// <summary>
+        /// XORs the turn state. If called, it flips the hash's perspective of whose turn it is.
+        /// </summary>
+        public void ToggleTurnHash()
+        {
+            ZobristHash ^= BlackToMoveKey;
+        }
+
+        /// <summary>
+        /// XORs a castling rights mask into or out of the hash.
+        /// </summary>
+        public void ToggleCastlingHash(int castlingMask)
+        {
+            ZobristHash ^= CastlingKeys[castlingMask];
+        }
+
+        /// <summary>
+        /// XORs an en passant file into or out of the hash.
+        /// </summary>
+        public void ToggleEnPassantHash(int xCoordinate)
+        {
+            if (xCoordinate >= 0 && xCoordinate < 8)
+            {
+                ZobristHash ^= EnPassantKeys[xCoordinate];
+            }
+        }
+
+        /// <summary>
+        /// XORs the Betrayal phase flag.
+        /// </summary>
+        public void ToggleBetrayalHash()
+        {
+            ZobristHash ^= BetrayalPhaseKey;
+        }
+
+        /// <summary>
+        /// Computes the full Zobrist hash from scratch by iterating all pieces.
+        /// Call this once when initializing the board, then use incremental updates.
+        /// </summary>
+        public void ComputeFullZobristHash()
+        {
+            ZobristHash = 0;
+            for (int x = 0; x < TileCountX; x++)
+            {
+                for (int y = 0; y < TileCountY; y++)
+                {
+                    PieceData piece = LogicalBoard[x, y];
+                    if (piece != null)
+                    {
+                        TogglePieceHash(piece.Team, piece.Type, x, y);
+                    }
+                }
+            }
+            if (CurrentTurn == Team.Black)
+            {
+                ToggleTurnHash();
+            }
+            // Include castling rights in the hash
+            ToggleCastlingHash(CurrentCastlingMask);
+            // Include en passant file in the hash (if any)
+            if (CurrentEnPassantFile.HasValue)
+            {
+                ToggleEnPassantHash(CurrentEnPassantFile.Value);
+            }
+        }
+
+        #endregion
+
         // The mathematical grid - holds pure data, not GameObjects
         public PieceData[,] LogicalBoard { get; private set; }
 
@@ -187,6 +346,9 @@ namespace ChessTheMasterPiece.Data
             IsGameOver = false;
             Winner = null;
             CurrentTurn = Team.White;
+            ZobristHash = 0;
+            CurrentCastlingMask = CastlingAllRights; // Reset to all castling available
+            CurrentEnPassantFile = null;
         }
 
         /// <summary>
@@ -288,6 +450,9 @@ namespace ChessTheMasterPiece.Data
             clone.CurrentTurn = this.CurrentTurn;
             clone.IsGameOver = this.IsGameOver;
             clone.Winner = this.Winner;
+            clone.ZobristHash = this.ZobristHash;
+            clone.CurrentCastlingMask = this.CurrentCastlingMask;
+            clone.CurrentEnPassantFile = this.CurrentEnPassantFile;
 
             // Clone the board
             for (int x = 0; x < TileCountX; x++)

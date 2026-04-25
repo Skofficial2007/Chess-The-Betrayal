@@ -24,6 +24,10 @@ namespace ChessTheMasterPiece.Logic.Movement
             { -1, -1 }  // Down-Left
         };
 
+        // Pre-allocated arrays for castling path validation (zero GC)
+        private static readonly int[] QueensideEmptyPaths = { 1, 2, 3 };
+        private static readonly int[] KingsideEmptyPaths = { 5, 6 };
+
         public void GetRawMoves(BoardState board, PieceData piece, List<MoveCommand> buffer)
         {
             Vector2Int pos = new Vector2Int(piece.CurrentX, piece.CurrentY);
@@ -40,7 +44,7 @@ namespace ChessTheMasterPiece.Logic.Movement
                 // Can move to empty squares or capture enemy pieces
                 if (targetPiece == null || targetPiece.Team != piece.Team)
                 {
-                    buffer.Add(MoveCommand.CreateStandardMove(pos, target, piece, targetPiece));
+                    buffer.Add(MoveCommand.CreateStandardMove(pos, target, piece, targetPiece, board));
                 }
             }
 
@@ -52,7 +56,7 @@ namespace ChessTheMasterPiece.Logic.Movement
                 EvaluateCastling(
                     board, buffer, piece, pos,
                     rookX: 0,
-                    emptyXPaths: new[] { 1, 2, 3 },
+                    emptyXPaths: QueensideEmptyPaths,
                     kingTargetX: 2,
                     rookTargetX: 3
                 );
@@ -62,7 +66,7 @@ namespace ChessTheMasterPiece.Logic.Movement
                 EvaluateCastling(
                     board, buffer, piece, pos,
                     rookX: 7,
-                    emptyXPaths: new[] { 5, 6 },
+                    emptyXPaths: KingsideEmptyPaths,
                     kingTargetX: 6,
                     rookTargetX: 5
                 );
@@ -122,7 +126,7 @@ namespace ChessTheMasterPiece.Logic.Movement
             // 2. King doesn't pass through check
             // 3. King doesn't land in check
             // This is handled by DoesMoveLeaveKingInCheck() on each move candidate
-            buffer.Add(MoveCommand.CreateCastlingMove(kingPos, kingTarget, king, rookPos, rookTarget));
+            buffer.Add(MoveCommand.CreateCastlingMove(kingPos, kingTarget, king, rookPos, rookTarget, board));
         }
     }
 }
