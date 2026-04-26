@@ -372,11 +372,12 @@ namespace ChessTheMasterPiece.Data
         }
 
         /// <summary>
-        /// Gets all pieces belonging to the specified team.
+        /// Populates a pre-allocated buffer with all pieces belonging to a specific team.
+        /// Zero-allocation buffer-passing pattern.
         /// </summary>
-        public List<PieceData> GetAllPieces(Team team)
+        public void GetAllPieces(Team team, List<PieceData> output)
         {
-            List<PieceData> pieces = new List<PieceData>();
+            output.Clear();
             for (int x = 0; x < TileCountX; x++)
             {
                 for (int y = 0; y < TileCountY; y++)
@@ -384,11 +385,10 @@ namespace ChessTheMasterPiece.Data
                     PieceData piece = LogicalBoard[x, y];
                     if (piece != null && piece.Team == team)
                     {
-                        pieces.Add(piece);
+                        output.Add(piece);
                     }
                 }
             }
-            return pieces;
         }
 
         /// <summary>

@@ -12,9 +12,19 @@ namespace ChessTheMasterPiece.Logic
     /// </summary>
     public static class ChessEngine
     {
-        // Pre-allocated scratch buffers to eliminate GC spikes
-        private static readonly List<MoveCommand> _attackScratch = new List<MoveCommand>(64);
-        private static readonly List<MoveCommand> _engineScratch = new List<MoveCommand>(64);
+        // Pre-allocated thread-local scratch buffers to eliminate GC spikes and ensure thread-safety
+        [System.ThreadStatic]
+        private static List<MoveCommand> _attackScratch;
+        private static List<MoveCommand> AttackScratch => _attackScratch ??= new List<MoveCommand>(64);
+
+        [System.ThreadStatic]
+        private static List<MoveCommand> _engineScratch;
+        private static List<MoveCommand> EngineScratch => _engineScratch ??= new List<MoveCommand>(64);
+
+        // Thread-local piece scratch used by multi-threaded AI to avoid shared allocations
+        [System.ThreadStatic]
+        private static List<PieceData> _threadPieceScratch;
+        private static List<PieceData> ThreadPieceScratch => _threadPieceScratch ??= new List<PieceData>(16);
 
         #region Legal Move Generation
 
@@ -109,8 +119,8 @@ namespace ChessTheMasterPiece.Logic
                     if (piece != null && piece.Team == team)
                     {
                         Vector2Int pos = new Vector2Int(piece.CurrentX, piece.CurrentY);
-                        GetLegalMoves(board, pos, _engineScratch);
-                        masterBuffer.AddRange(_engineScratch);
+                            GetLegalMoves(board, pos, EngineScratch);
+                            masterBuffer.AddRange(EngineScratch);
                     }
                 }
             }
@@ -172,12 +182,12 @@ namespace ChessTheMasterPiece.Logic
                         if (strategy == null) continue;
 
                         // Zero-allocation raw move generation
-                        _attackScratch.Clear();
-                        strategy.GetRawMoves(board, attacker, _attackScratch);
+                        AttackScratch.Clear();
+                        strategy.GetRawMoves(board, attacker, AttackScratch);
 
-                        for (int i = 0; i < _attackScratch.Count; i++)
+                        for (int i = 0; i < AttackScratch.Count; i++)
                         {
-                            if (_attackScratch[i].EndPosition == targetSquare)
+                            if (AttackScratch[i].EndPosition == targetSquare)
                             {
                                 return true; 
                             }
@@ -222,9 +232,9 @@ namespace ChessTheMasterPiece.Logic
                     if (piece != null && piece.Team == team)
                     {
                         Vector2Int pos = new Vector2Int(piece.CurrentX, piece.CurrentY);
-                        GetLegalMoves(board, pos, _engineScratch);
+                        GetLegalMoves(board, pos, EngineScratch);
 
-                        if (_engineScratch.Count > 0)
+                        if (EngineScratch.Count > 0)
                         {
                             return true; // Found at least one legal move
                         }
@@ -573,15 +583,15 @@ namespace ChessTheMasterPiece.Logic
                 return false;
             }
 
-            // Get legal moves for this piece using scratch buffer
-            _engineScratch.Clear();
-            GetLegalMoves(board, move.StartPosition, _engineScratch);
+            // Get legal moves for this piece using thread-local scratch buffer
+            EngineScratch.Clear();
+            GetLegalMoves(board, move.StartPosition, EngineScratch);
 
             // Check if this move is in the legal moves list
             bool isLegal = false;
-            for (int i = 0; i < _engineScratch.Count; i++)
+            for (int i = 0; i < EngineScratch.Count; i++)
             {
-                if (_engineScratch[i].EndPosition == move.EndPosition)
+                if (EngineScratch[i].EndPosition == move.EndPosition)
                 {
                     isLegal = true;
                     break;
