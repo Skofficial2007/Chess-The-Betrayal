@@ -102,6 +102,8 @@ namespace ChessTheMasterPiece.View
             // Subscribe to GameManager events
             GameManager.Instance.OnGameStarted += HandleGameStarted;
             GameManager.Instance.OnMoveExecuted += AnimateMove;
+            GameManager.Instance.OnMoveRejected += HandleMoveRejected;
+            GameManager.Instance.OnPromotionRequested += HandlePromotionOptimisticSnap;
             GameManager.Instance.OnGameReset += ClearAllVisuals;
         }
 
@@ -112,6 +114,8 @@ namespace ChessTheMasterPiece.View
             {
                 GameManager.Instance.OnGameStarted -= HandleGameStarted;
                 GameManager.Instance.OnMoveExecuted -= AnimateMove;
+                GameManager.Instance.OnMoveRejected -= HandleMoveRejected;
+                GameManager.Instance.OnPromotionRequested -= HandlePromotionOptimisticSnap;
                 GameManager.Instance.OnGameReset -= ClearAllVisuals;
             }
         }
@@ -422,6 +426,49 @@ namespace ChessTheMasterPiece.View
                 Vector3 worldPos = GetTileCenter(gridPos.x, gridPos.y);
                 worldPos.y += pieceYOffset;
                 piece.SetPosition(worldPos, force: true);
+            }
+        }
+
+        /// <summary>
+        /// Handles move rejection events from GameManager.
+        /// Called when a move is validated as illegal - snaps the piece back to its original position.
+        /// This enables optimistic prediction for future networking.
+        /// </summary>
+        private void HandleMoveRejected(ChessTheMasterPiece.Data.Vector2Int from, ChessTheMasterPiece.Data.Vector2Int to)
+        {
+            SnapPieceBack(from);
+        }
+
+        /// <summary>
+        /// Optimistically snap the dragged piece to the center of the promotion square
+        /// while the UI waits for the player's choice.
+        /// Finds the nearest visual piece to the target tile and snaps it there if close enough.
+        /// </summary>
+        private void HandlePromotionOptimisticSnap(ChessTheMasterPiece.Data.Vector2Int targetPos)
+        {
+            Vector3 center = GetTileCenter(targetPos.x, targetPos.y);
+            float threshold = Mathf.Max(0.01f, tileSize * 0.75f);
+
+            ChessPiece nearest = null;
+            float bestSqr = float.MaxValue;
+
+            foreach (var kv in visualPieces)
+            {
+                ChessPiece p = kv.Value;
+                if (p == null) continue;
+                float d = (p.transform.position - center).sqrMagnitude;
+                if (d < bestSqr)
+                {
+                    bestSqr = d;
+                    nearest = p;
+                }
+            }
+
+            if (nearest != null && bestSqr <= threshold * threshold)
+            {
+                Vector3 snapPos = center;
+                snapPos.y += pieceYOffset;
+                nearest.SetPosition(snapPos, force: true);
             }
         }
 

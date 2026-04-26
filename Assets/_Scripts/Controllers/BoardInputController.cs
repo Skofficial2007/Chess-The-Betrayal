@@ -153,29 +153,21 @@ namespace ChessTheMasterPiece.Controllers
                 BoardVisuals.Instance.ClearLegalMoveHighlights();
             }
 
-            // If dropped off the board, snap back
-            if (dropGridPos == ChessTheMasterPiece.Data.Vector2Int.Invalid)
+            // FIRE AND FORGET - Optimistic prediction for async/network readiness
+            if (dropGridPos != ChessTheMasterPiece.Data.Vector2Int.Invalid)
             {
-                if (BoardVisuals.Instance != null)
-                {
-                    BoardVisuals.Instance.SnapPieceBack(dragStartGridPos);
-                }
-                draggingVisualTransform = null;
-                return;
+                // Request the move - piece stays where it landed (optimistic)
+                // If illegal, GameManager will fire OnMoveRejected and BoardVisuals will snap it back
+                GameManager.Instance.RequestMove(dragStartGridPos, dropGridPos);
+            }
+            else
+            {
+                // Dropped completely off the board? Request a move to its own square
+                // to intentionally trigger an OnMoveRejected event and snap it back.
+                GameManager.Instance.RequestMove(dragStartGridPos, dragStartGridPos);
             }
 
-            // Request the move from GameManager
-            bool moveWasLegal = GameManager.Instance.RequestMove(dragStartGridPos, dropGridPos);
-
-            // If illegal, snap the visual back to original position
-            if (!moveWasLegal)
-            {
-                if (BoardVisuals.Instance != null)
-                {
-                    BoardVisuals.Instance.SnapPieceBack(dragStartGridPos);
-                }
-            }
-
+            // Clear state immediately (Do NOT force snap-backs here!)
             draggingVisualTransform = null;
         }
 

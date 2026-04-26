@@ -33,24 +33,36 @@ namespace ChessTheMasterPiece.View
 
         private void Update()
         {
-            // Smooth position interpolation
+            bool isMoving = false;
+
+            // 1. Position Interpolation
             if ((transform.position - targetPosition).sqrMagnitude > 0.000001f)
             {
                 transform.position = Vector3.Lerp(transform.position, targetPosition, Time.deltaTime * PositionLerpSpeed);
+                isMoving = true;
             }
             else
             {
+                // Snap to exact target to prevent floating point micro-drifting
                 transform.position = targetPosition;
             }
 
-            // Smooth scale interpolation
+            // 2. Scale Interpolation
             if ((transform.localScale - targetScale).sqrMagnitude > 0.000001f)
             {
                 transform.localScale = Vector3.Lerp(transform.localScale, targetScale, Time.deltaTime * ScaleLerpSpeed);
+                isMoving = true;
             }
             else
             {
+                // Snap to exact scale
                 transform.localScale = targetScale;
+            }
+
+            // 3. Put the piece to sleep if it has reached its destination
+            if (!isMoving)
+            {
+                enabled = false;
             }
         }
 
@@ -71,6 +83,11 @@ namespace ChessTheMasterPiece.View
             {
                 transform.position = worldPos;
             }
+            else
+            {
+                // Wake the Update loop back up to begin interpolating
+                enabled = true;
+            }
         }
 
         /// <summary>
@@ -89,6 +106,11 @@ namespace ChessTheMasterPiece.View
             if (force)
             {
                 transform.localScale = scale;
+            }
+            else
+            {
+                // Wake the Update loop back up to begin interpolating
+                enabled = true;
             }
         }
 

@@ -71,16 +71,20 @@ namespace ChessTheMasterPiece.Controllers
         public event Action OnTurnChanged;
         public event Action<Team> OnCheck;
         public event Action OnGameReset;
+        
+        // Command Pattern events for async move handling
+        public event Action<ChessTheMasterPiece.Data.Vector2Int, ChessTheMasterPiece.Data.Vector2Int> OnMoveRejected;
+        public event Action<ChessTheMasterPiece.Data.Vector2Int> OnPromotionRequested;
 
         #endregion
 
         #region Private Fields
 
-        private MoveCommand pendingPromotionMove;
+        // Command Pattern executor - handles all move validation logic
+        private IMoveExecutor _moveExecutor;
 
-        // GC-optimized buffers to eliminate allocations
+        // GC-optimized buffer for legal move queries
         private readonly List<MoveCommand> _legalMovesBuffer = new List<MoveCommand>(32);
-        private readonly List<MoveCommand> _targetMatchesBuffer = new List<MoveCommand>(4);
 
         #endregion
 
@@ -130,6 +134,18 @@ namespace ChessTheMasterPiece.Controllers
             }
         }
 
+        // Executor callbacks (named so we can unsubscribe cleanly)
+        private void OnExecutorMoveRejected(ChessTheMasterPiece.Data.Vector2Int from, ChessTheMasterPiece.Data.Vector2Int to)
+        {
+            OnMoveRejected?.Invoke(from, to);
+        }
+
+        private void OnExecutorPromotionRequired(ChessTheMasterPiece.Data.Vector2Int pos)
+        {
+            OnPromotionRequested?.Invoke(pos);
+            UIManager.Instance?.ShowPromotionUI();
+        }
+
         #endregion
 
         #region Game Flow
@@ -144,6 +160,23 @@ namespace ChessTheMasterPiece.Controllers
             LiveBoard.Clear();
 
             SetupStandardPieces();
+
+            // Clean up old executor to prevent memory leaks on game restart
+            if (_moveExecutor != null)
+            {
+                _moveExecutor.OnMoveConfirmed -= ExecuteValidatedMove;
+                _moveExecutor.OnMoveRejected -= OnExecutorMoveRejected;
+                _moveExecutor.OnPromotionRequired -= OnExecutorPromotionRequired;
+                _moveExecutor = null;
+            }
+
+            // Initialize the Command Pattern executor
+            _moveExecutor = new LocalMoveExecutor(LiveBoard, logMoves);
+            
+            // Wire executor responses to the GameManager state machine
+            _moveExecutor.OnMoveConfirmed += ExecuteValidatedMove;
+            _moveExecutor.OnMoveRejected += OnExecutorMoveRejected;
+            _moveExecutor.OnPromotionRequired += OnExecutorPromotionRequired;
 
             // Enter the Normal phase to start the game
             CurrentPhase = TurnPhase.Normal;
@@ -164,7 +197,13 @@ namespace ChessTheMasterPiece.Controllers
         private void HandleGameReset()
         {
             LiveBoard.Clear();
-            pendingPromotionMove = default;
+            if (_moveExecutor != null)
+            {
+                _moveExecutor.OnMoveConfirmed -= ExecuteValidatedMove;
+                _moveExecutor.OnMoveRejected -= OnExecutorMoveRejected;
+                _moveExecutor.OnPromotionRequired -= OnExecutorPromotionRequired;
+                _moveExecutor = null;
+            }
 
             // Shift to GameOver state
             CurrentPhase = TurnPhase.GameOver;
@@ -217,119 +256,29 @@ namespace ChessTheMasterPiece.Controllers
 
         /// <summary>
         /// Entry point for move requests. 
-        /// Handles the transition from player intent to engine validation.
-        /// GC-optimized with zero allocations.
+        /// Now uses the Command Pattern for async-ready execution.
+        /// Fire-and-forget - result comes back via events.
         /// </summary>
-        public bool RequestMove(ChessTheMasterPiece.Data.Vector2Int from, ChessTheMasterPiece.Data.Vector2Int to)
+        public void RequestMove(ChessTheMasterPiece.Data.Vector2Int from, ChessTheMasterPiece.Data.Vector2Int to)
         {
-            // Standard move requests should only be processed during the Normal phase.
-            // When Betrayal phases are active, standard movement is locked out.
+            // Gate physical piece selection globally based on game phase
             if (CurrentPhase != TurnPhase.Normal || LiveBoard.IsGameOver)
             {
-                return false;
+                OnMoveRejected?.Invoke(from, to);
+                return;
             }
 
-            PieceData movingPiece = LiveBoard.GetPiece(from);
-
-            if (movingPiece == null || movingPiece.Team != LiveBoard.CurrentTurn)
-            {
-                return false;
-            }
-
-            // If the player dragged the King onto a friendly Rook, remap the 'to' target to the standard 2-step castling square.
-            PieceData targetPiece = LiveBoard.GetPiece(to);
-            if (movingPiece.Type == ChessPieceType.King && targetPiece != null && 
-                targetPiece.Type == ChessPieceType.Rook && targetPiece.Team == movingPiece.Team)
-            {
-                // If Rook is at X=7 (Kingside), Target is X=6. If Rook is at X=0 (Queenside), Target is X=2.
-                int castlingX = to.x > from.x ? 6 : 2;
-                to = new ChessTheMasterPiece.Data.Vector2Int(castlingX, from.y);
-            }
-
-            // Zero-allocation move generation
-            ChessEngine.GetLegalMoves(LiveBoard, from, _legalMovesBuffer);
-
-            // Zero-allocation filtering
-            _targetMatchesBuffer.Clear();
-            for (int i = 0; i < _legalMovesBuffer.Count; i++)
-            {
-                if (_legalMovesBuffer[i].EndPosition == to)
-                {
-                    _targetMatchesBuffer.Add(_legalMovesBuffer[i]);
-                }
-            }
-
-            // Illegal Move Safety
-            if (_targetMatchesBuffer.Count == 0)
-            {
-                if (logMoves) Debug.Log($"[GameManager] Illegal move attempted: {from} -> {to}");
-                return false;
-            }
-
-            // AMBIGUITY RESOLUTION: Promotion
-            // If the engine has generated multiple moves for one square, it's a promotion choice.
-            bool isPromotionChoice = false;
-            for (int i = 0; i < _targetMatchesBuffer.Count; i++)
-            {
-                if (_targetMatchesBuffer[i].IsPromotion)
-                {
-                    isPromotionChoice = true;
-                    break;
-                }
-            }
-
-            if (isPromotionChoice)
-            {
-                // Store the first match as a template for position/capture data
-                pendingPromotionMove = _targetMatchesBuffer[0];
-
-                if (logMoves) Debug.Log($"[GameManager] Promotion detected at {to}. Halting for UI choice.");
-
-                // Show the UI. The InputController receives 'true', so the piece snaps to the tile,
-                // but the turn DOES NOT switch yet.
-                UIManager.Instance?.ShowPromotionUI();
-                return true;
-            }
-
-            // SINGLE-MOVE RESOLUTION (Standard, Castling, or En Passant)
-            // If it's not a promotion, there is only ever one logical command.
-            MoveCommand validMove = _targetMatchesBuffer[0];
-            ExecuteValidatedMove(validMove);
-            return true;
+            // Hand off to the executor (Fire and Forget!)
+            _moveExecutor?.RequestMove(from, to);
         }
 
         /// <summary>
         /// Called by the UI when a player chooses their promotion piece.
-        /// GC-optimized with zero allocations.
+        /// Now delegates to the executor for validation.
         /// </summary>
         private void HandlePromotionChoice(ChessPieceType chosenType)
         {
-            // Ensure we are in a valid promotion state
-            if (pendingPromotionMove.PieceType == ChessPieceType.None)
-            {
-                Debug.LogWarning("[GameManager] Received promotion choice but no move was pending.");
-                return;
-            }
-
-            // RE-VALIDATION: Ask the engine for the options again to get the exact validated command
-            // This is safer than manual construction and protects against metadata loss.
-            ChessEngine.GetLegalMoves(LiveBoard, pendingPromotionMove.StartPosition, _legalMovesBuffer);
-
-            for (int i = 0; i < _legalMovesBuffer.Count; i++)
-            {
-                if (_legalMovesBuffer[i].EndPosition == pendingPromotionMove.EndPosition &&
-                    _legalMovesBuffer[i].PromotedTo == chosenType)
-                {
-                    // Found the specific command matching the player's choice. Execute it.
-                    MoveCommand finalMove = _legalMovesBuffer[i];
-                    pendingPromotionMove = default; // Reset state
-                    ExecuteValidatedMove(finalMove);
-                    return;
-                }
-            }
-
-            Debug.LogError($"[GameManager] Could not find valid {chosenType} promotion in engine results.");
-            pendingPromotionMove = default;
+            _moveExecutor?.RequestPromotion(chosenType);
         }
 
         /// <summary>
