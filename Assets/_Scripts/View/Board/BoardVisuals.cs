@@ -7,9 +7,8 @@ using ChessTheMasterPiece.Controllers;
 namespace ChessTheMasterPiece.View
 {
     /// <summary>
-    /// The "Eyes" of the game. Strictly handles rendering meshes, spawning prefabs,
-    /// highlighting tiles, and playing smooth animations.
-    /// Has ZERO understanding of chess rules - just listens to GameManager and animates.
+    /// The eyes of the game. Spawns and moves piece GameObjects, highlights tiles, and plays animations.
+    /// It has no idea how chess rules work — it just listens to GameManager and reacts.
     /// </summary>
     public class BoardVisuals : MonoBehaviour
     {
@@ -47,11 +46,11 @@ namespace ChessTheMasterPiece.View
         #region Private Fields
 
         // Maps logical grid coordinates to visual GameObjects
-        private Dictionary<ChessTheMasterPiece.Data.Vector2Int, ChessPiece> visualPieces = new Dictionary<ChessTheMasterPiece.Data.Vector2Int, ChessPiece>();
+        private Dictionary<ChessTheMasterPiece.Data.Vector2Int, ChessPiece> _piecesByPosition = new Dictionary<ChessTheMasterPiece.Data.Vector2Int, ChessPiece>();
 
         // Tile meshes and lookup for raycasting
         private GameObject[,] tiles;
-        private Dictionary<Transform, ChessTheMasterPiece.Data.Vector2Int> tileLookup = new Dictionary<Transform, ChessTheMasterPiece.Data.Vector2Int>();
+        private Dictionary<Transform, ChessTheMasterPiece.Data.Vector2Int> _tileByTransform = new Dictionary<Transform, ChessTheMasterPiece.Data.Vector2Int>();
 
         // Death piles
         private List<ChessPiece> deadWhitePieces = new List<ChessPiece>();
@@ -59,13 +58,11 @@ namespace ChessTheMasterPiece.View
 
         // Highlighting state
         private ChessTheMasterPiece.Data.Vector2Int hoverIndex = ChessTheMasterPiece.Data.Vector2Int.Invalid;
-        // Pre-allocate capacity to prevent internal array resizing during gameplay
-        private readonly List<ChessTheMasterPiece.Data.Vector2Int> currentLegalHighlights = new List<ChessTheMasterPiece.Data.Vector2Int>(32);
-        
-        // Companion HashSet for O(1) hover lookups
-        private readonly HashSet<ChessTheMasterPiece.Data.Vector2Int> _legalHighlightSet = new HashSet<ChessTheMasterPiece.Data.Vector2Int>(32);
-        // NEW: Reusable scratch list to prevent IEnumerator boxing during visual teardowns
-        private readonly List<ChessPiece> _clearScratch = new List<ChessPiece>(32);
+        private readonly List<ChessTheMasterPiece.Data.Vector2Int> _highlightedSquares = new List<ChessTheMasterPiece.Data.Vector2Int>(32);
+
+        // Mirror of the list above, used for fast "is this square highlighted?" checks.
+        private readonly HashSet<ChessTheMasterPiece.Data.Vector2Int> _highlightedSquaresLookup = new HashSet<ChessTheMasterPiece.Data.Vector2Int>(32);
+        private readonly List<ChessPiece> _destroyQueue = new List<ChessPiece>(32);
 
         // Cached values
         private Vector3 boardOrigin;
@@ -151,7 +148,7 @@ namespace ChessTheMasterPiece.View
             }
 
             // Spawn all pieces based on board state
-            SpawnPiecesFromData(initialBoard);
+            SpawnAllPieces(initialBoard);
         }
 
         /// <summary>
@@ -160,7 +157,7 @@ namespace ChessTheMasterPiece.View
         private void GenerateTileMeshes()
         {
             tiles = new GameObject[tileCountX, tileCountY];
-            tileLookup.Clear();
+            _tileByTransform.Clear();
 
             for (int x = 0; x < tileCountX; x++)
             {
@@ -203,7 +200,7 @@ namespace ChessTheMasterPiece.View
 
                     // Store references
                     tiles[x, y] = tileGO;
-                    tileLookup[tileGO.transform] = new ChessTheMasterPiece.Data.Vector2Int(x, y);
+                    _tileByTransform[tileGO.transform] = new ChessTheMasterPiece.Data.Vector2Int(x, y);
                 }
             }
         }
@@ -211,7 +208,7 @@ namespace ChessTheMasterPiece.View
         /// <summary>
         /// Spawns visual piece GameObjects for all pieces in the board state.
         /// </summary>
-        private void SpawnPiecesFromData(BoardState board)
+        private void SpawnAllPieces(BoardState board)
         {
             for (int x = 0; x < board.TileCountX; x++)
             {
@@ -268,27 +265,26 @@ namespace ChessTheMasterPiece.View
             visualPiece.type = data.Type;
 
             // Store in lookup
-            visualPieces[pos] = visualPiece;
+            _piecesByPosition[pos] = visualPiece;
         }
 
         /// <summary>
-        /// Destroys all visual pieces and clears state.
-        /// Zero-allocation refactor: uses for-loops and scratch buffers to prevent GC boxing.
+        /// Destroys all piece GameObjects and resets all visual state.
         /// </summary>
         private void ClearAllVisuals()
         {
-            _clearScratch.Clear();
+            _destroyQueue.Clear();
 
             // Dictionary<K,V> enumerator is a struct - safe to foreach the key-value pairs
-            foreach (var kv in visualPieces)
+            foreach (var kv in _piecesByPosition)
             {
-                _clearScratch.Add(kv.Value);
+                _destroyQueue.Add(kv.Value);
             }
 
             // Standard for-loops guarantee zero heap allocations
-            for (int i = 0; i < _clearScratch.Count; i++)
+            for (int i = 0; i < _destroyQueue.Count; i++)
             {
-                if (_clearScratch[i] != null) Destroy(_clearScratch[i].gameObject);
+                if (_destroyQueue[i] != null) Destroy(_destroyQueue[i].gameObject);
             }
 
             for (int i = 0; i < deadWhitePieces.Count; i++)
@@ -302,10 +298,10 @@ namespace ChessTheMasterPiece.View
             }
 
             // Clear collections (O(1) allocation-free)
-            visualPieces.Clear();
+            _piecesByPosition.Clear();
             deadWhitePieces.Clear();
             deadBlackPieces.Clear();
-            _clearScratch.Clear();
+            _destroyQueue.Clear();
 
             // Clear highlights
             ClearLegalMoveHighlights();
@@ -317,8 +313,7 @@ namespace ChessTheMasterPiece.View
         #region Animations & Movement Execution
 
         /// <summary>
-        /// Reads a MoveCommand and triggers all necessary visual updates.
-        /// This is the heart of the visual layer - it just reads commands and animates.
+        /// Reads a completed MoveCommand and triggers all the necessary animations — moving pieces, handling captures, castling, and promotion.
         /// </summary>
         private void AnimateMove(MoveCommand move)
         {
@@ -332,17 +327,17 @@ namespace ChessTheMasterPiece.View
                     ? move.EnPassantCapturePosition.Value
                     : move.EndPosition;
 
-                if (visualPieces.TryGetValue(capturePos, out ChessPiece deadPiece))
+                if (_piecesByPosition.TryGetValue(capturePos, out ChessPiece deadPiece))
                 {
-                    visualPieces.Remove(capturePos);
+                    _piecesByPosition.Remove(capturePos);
                     AnimateDeath(deadPiece);
                 }
             }
 
             // 2. Move the Primary Piece
-            if (visualPieces.TryGetValue(move.StartPosition, out ChessPiece movingPiece))
+            if (_piecesByPosition.TryGetValue(move.StartPosition, out ChessPiece movingPiece))
             {
-                visualPieces.Remove(move.StartPosition);
+                _piecesByPosition.Remove(move.StartPosition);
 
                 // Handle Promotion: destroy old piece and spawn new one
                 if (move.IsPromotion)
@@ -361,7 +356,7 @@ namespace ChessTheMasterPiece.View
                 else
                 {
                     // Standard move: update dictionary and slide piece
-                    visualPieces[move.EndPosition] = movingPiece;
+                    _piecesByPosition[move.EndPosition] = movingPiece;
 
                     Vector3 targetPos = GetTileCenter(move.EndPosition.x, move.EndPosition.y);
                     targetPos.y += pieceYOffset;
@@ -372,10 +367,10 @@ namespace ChessTheMasterPiece.View
             // 3. Handle Castling (move the Rook)
             if (move.IsCastling && move.RookStartPosition.HasValue && move.RookEndPosition.HasValue)
             {
-                if (visualPieces.TryGetValue(move.RookStartPosition.Value, out ChessPiece rook))
+                if (_piecesByPosition.TryGetValue(move.RookStartPosition.Value, out ChessPiece rook))
                 {
-                    visualPieces.Remove(move.RookStartPosition.Value);
-                    visualPieces[move.RookEndPosition.Value] = rook;
+                    _piecesByPosition.Remove(move.RookStartPosition.Value);
+                    _piecesByPosition[move.RookEndPosition.Value] = rook;
 
                     Vector3 rookPos = GetTileCenter(move.RookEndPosition.Value.x, move.RookEndPosition.Value.y);
                     rookPos.y += pieceYOffset;
@@ -432,7 +427,7 @@ namespace ChessTheMasterPiece.View
         /// </summary>
         public void SnapPieceBack(ChessTheMasterPiece.Data.Vector2Int gridPos)
         {
-            if (visualPieces.TryGetValue(gridPos, out ChessPiece piece))
+            if (_piecesByPosition.TryGetValue(gridPos, out ChessPiece piece))
             {
                 Vector3 worldPos = GetTileCenter(gridPos.x, gridPos.y);
                 worldPos.y += pieceYOffset;
@@ -463,7 +458,7 @@ namespace ChessTheMasterPiece.View
             ChessPiece nearest = null;
             float bestSqr = float.MaxValue;
 
-            foreach (var kv in visualPieces)
+            foreach (var kv in _piecesByPosition)
             {
                 ChessPiece p = kv.Value;
                 if (p == null) continue;
@@ -498,7 +493,7 @@ namespace ChessTheMasterPiece.View
 
             while (cur != null && safety++ < 16)
             {
-                if (tileLookup.TryGetValue(cur, out ChessTheMasterPiece.Data.Vector2Int idx))
+                if (_tileByTransform.TryGetValue(cur, out ChessTheMasterPiece.Data.Vector2Int idx))
                 {
                     return idx;
                 }
@@ -514,7 +509,7 @@ namespace ChessTheMasterPiece.View
         /// </summary>
         public Transform GetPieceTransformAt(ChessTheMasterPiece.Data.Vector2Int gridPos)
         {
-            if (visualPieces.TryGetValue(gridPos, out ChessPiece piece))
+            if (_piecesByPosition.TryGetValue(gridPos, out ChessPiece piece))
             {
                 return piece.transform;
             }
@@ -568,19 +563,16 @@ namespace ChessTheMasterPiece.View
 
         /// <summary>
         /// Highlights all legal move destinations.
-        /// Zero allocations - uses for-loop to prevent IEnumerator boxing.
         /// </summary>
         public void HighlightLegalMoves(IReadOnlyList<MoveCommand> moves)
         {
             ClearLegalMoveHighlights();
-
-            // Use index-based for-loop instead of foreach to eliminate enumerator boxing
             for (int i = 0; i < moves.Count; i++)
             {
-                currentLegalHighlights.Add(moves[i].EndPosition);
+                _highlightedSquares.Add(moves[i].EndPosition);
                 
                 // Add to the HashSet in sync
-                _legalHighlightSet.Add(moves[i].EndPosition);
+                _highlightedSquaresLookup.Add(moves[i].EndPosition);
                 
                 SetTileLayer(moves[i].EndPosition, isHover: false);
             }
@@ -588,23 +580,21 @@ namespace ChessTheMasterPiece.View
 
         /// <summary>
         /// Clears all legal move highlights.
-        /// Zero allocations - uses for-loop to prevent IEnumerator boxing.
         /// </summary>
         public void ClearLegalMoveHighlights()
         {
-            // Use index-based for-loop instead of foreach to eliminate enumerator boxing
-            for (int i = 0; i < currentLegalHighlights.Count; i++)
+            for (int i = 0; i < _highlightedSquares.Count; i++)
             {
-                ChessTheMasterPiece.Data.Vector2Int pos = currentLegalHighlights[i];
+                ChessTheMasterPiece.Data.Vector2Int pos = _highlightedSquares[i];
                 if (pos.x >= 0 && pos.x < tileCountX && pos.y >= 0 && pos.y < tileCountY && tiles[pos.x, pos.y] != null)
                 {
                     tiles[pos.x, pos.y].layer = tileLayer;
                 }
             }
-            currentLegalHighlights.Clear();
+            _highlightedSquares.Clear();
             
             // Clear the HashSet in sync
-            _legalHighlightSet.Clear();
+            _highlightedSquaresLookup.Clear();
 
             // Restore hover if active
             if (hoverIndex != ChessTheMasterPiece.Data.Vector2Int.Invalid)
@@ -627,8 +617,8 @@ namespace ChessTheMasterPiece.View
             {
                 tile.layer = highlightLayer;
             }
-            // Use the HashSet for instant O(1) lookup instead of currentLegalHighlights
-            else if (_legalHighlightSet.Contains(pos))
+            // Check the lookup set, not the list — it's much faster for this kind of check
+            else if (_highlightedSquaresLookup.Contains(pos))
             {
                 tile.layer = moveHighlightLayer;
             }
@@ -643,7 +633,7 @@ namespace ChessTheMasterPiece.View
         #region Initialization Helpers
 
         /// <summary>
-        /// Caches layer indices to avoid string lookups every frame.
+        /// Looks up the layer IDs by name once at startup so we're not doing string lookups every frame.
         /// </summary>
         private void CacheLayers()
         {

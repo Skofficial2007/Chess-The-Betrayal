@@ -5,6 +5,9 @@ using ChessTheMasterPiece.Data;
 
 namespace ChessTheMasterPiece.UI
 {
+    /// <summary>
+    /// Presents promotion choices to the player and forwards the selection.
+    /// </summary>
     public class PromotionUI : MonoBehaviour
     {
         [Header("UI References")]

@@ -24,7 +24,7 @@ namespace ChessTheMasterPiece.Logic.Movement
             { -1, -1 }  // Down-Left
         };
 
-        // Pre-allocated arrays for castling path validation (zero GC)
+        // The squares that must be empty for castling to work on each side.
         private static readonly int[] QueensideEmptyPaths = { 1, 2, 3 };
         private static readonly int[] KingsideEmptyPaths = { 5, 6 };
 
@@ -74,8 +74,8 @@ namespace ChessTheMasterPiece.Logic.Movement
         }
 
         /// <summary>
-        /// Evaluates if castling is physically possible in a given direction.
-        /// Does NOT check if squares are under attack - that's handled by ChessEngine.
+        /// Checks if the King can castle in a given direction. Verifies the rook is in place, hasn't moved, and the path between them is clear.
+        /// The engine handles the 'can't castle through check' rule separately.
         /// </summary>
         /// <param name="board">Current board state</param>
         /// <param name="moves">List to add the castling move to if valid</param>

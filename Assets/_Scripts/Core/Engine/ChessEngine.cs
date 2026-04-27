@@ -5,36 +5,33 @@ using ChessTheMasterPiece.Logic.Movement;
 namespace ChessTheMasterPiece.Logic
 {
     /// <summary>
-    /// Pure, stateless chess rules engine with ZERO Unity dependencies.
-    /// Handles legal move generation, check detection, checkmate/stalemate evaluation.
-    /// Thread-safe and suitable for AI, networking, or headless simulation.
-    /// GC-optimized with buffer-passing pattern to eliminate allocation spikes.
+    /// The rules referee. Handles move generation, check detection, and figuring out when the game is over.
+    /// Nothing in here touches Unity — it's pure chess logic that can run on any thread.
     /// </summary>
     public static class ChessEngine
     {
-        // Pre-allocated thread-local scratch buffers to eliminate GC spikes and ensure thread-safety
+        // Thread-local buffers — each thread gets its own so parallel AI searches don't step on each other.
         [System.ThreadStatic]
-        private static List<MoveCommand> _attackScratch;
-        private static List<MoveCommand> AttackScratch => _attackScratch ??= new List<MoveCommand>(64);
+        private static List<MoveCommand> _attackCheckBuffer;
+        private static List<MoveCommand> AttackCheckBuffer => _attackCheckBuffer ??= new List<MoveCommand>(64);
 
         [System.ThreadStatic]
-        private static List<MoveCommand> _engineScratch;
-        private static List<MoveCommand> EngineScratch => _engineScratch ??= new List<MoveCommand>(64);
+        private static List<MoveCommand> _moveGenBuffer;
+        private static List<MoveCommand> MoveGenBuffer => _moveGenBuffer ??= new List<MoveCommand>(64);
 
-        // Thread-local piece scratch used by multi-threaded AI to avoid shared allocations
+        // Thread-local buffers — each thread gets its own so parallel AI searches don't step on each other.
         [System.ThreadStatic]
-        private static List<PieceData> _threadPieceScratch;
-        private static List<PieceData> ThreadPieceScratch => _threadPieceScratch ??= new List<PieceData>(16);
+        private static List<PieceData> _pieceListBuffer;
+        private static List<PieceData> PieceListBuffer => _pieceListBuffer ??= new List<PieceData>(16);
 
         #region Legal Move Generation
 
         /// <summary>
         /// Populates the provided output list with legal moves.
-        /// Zero allocations - reuses the output buffer.
         /// </summary>
         /// <param name="board">Current board state</param>
         /// <param name="position">Position of the piece to move</param>
-        /// <param name="output">Pre-allocated list to populate with legal moves</param>
+        /// <param name="output">List to populate with legal moves</param>
         public static void GetLegalMoves(BoardState board, Vector2Int position, List<MoveCommand> output)
         {
             output.Clear();
@@ -54,7 +51,7 @@ namespace ChessTheMasterPiece.Logic
             }
 
             // Step 1: Get all physically possible moves (ignoring check)
-            // Populate the provided output buffer with raw moves first (zero-alloc).
+            // Populate the provided output buffer with raw moves first.
             strategy.GetRawMoves(board, piece, output);
 
             bool isKing = piece.Type == ChessPieceType.King;
@@ -63,12 +60,12 @@ namespace ChessTheMasterPiece.Logic
 
             if (isKing)
             {
-                // Check if the King is in check BEFORE he makes a move
+                // Check if the King is in check before the move
                 isCurrentlyInCheck = IsSquareUnderAttack(board, position, enemyTeam);
             }
 
             // Step 2: Filter out moves that leave our own King in check
-            // We filter in-place to avoid allocations: compact valid moves to the start of the list.
+            // We filter in-place: compact valid moves to the start of the list.
             int write = 0;
             for (int i = 0; i < output.Count; i++)
             {
@@ -102,15 +99,13 @@ namespace ChessTheMasterPiece.Logic
         }
 
         /// <summary>
-        /// High-performance AI move generator. 
-        /// Populates a single master buffer with ALL legal moves for a specific team.
-        /// 100% Zero Allocation.
+        /// Fills one list with every legal move available to a team.
         /// </summary>
         public static void GetAllLegalMoves(BoardState board, Team team, List<MoveCommand> masterBuffer)
         {
             masterBuffer.Clear();
-
-            // Loop directly over the array to avoid GetAllPieces() list allocations
+            
+            
             for (int x = 0; x < board.TileCountX; x++)
             {
                 for (int y = 0; y < board.TileCountY; y++)
@@ -119,8 +114,8 @@ namespace ChessTheMasterPiece.Logic
                     if (piece != null && piece.Team == team)
                     {
                         Vector2Int pos = new Vector2Int(piece.CurrentX, piece.CurrentY);
-                            GetLegalMoves(board, pos, EngineScratch);
-                            masterBuffer.AddRange(EngineScratch);
+                            GetLegalMoves(board, pos, MoveGenBuffer);
+                            masterBuffer.AddRange(MoveGenBuffer);
                     }
                 }
             }
@@ -132,8 +127,6 @@ namespace ChessTheMasterPiece.Logic
 
         /// <summary>
         /// Determines if a move would leave the moving player's King in check.
-        /// Uses Make/Unmake pattern to eliminate GC pressure from deep move trees.
-        /// Zero allocations - mutates and restores the live board state.
         /// </summary>
         private static bool DoesMoveLeaveKingInCheck(BoardState board, MoveCommand move)
         {
@@ -165,11 +158,9 @@ namespace ChessTheMasterPiece.Logic
         /// <summary>
         /// Checks if the specified square is under attack by any piece of the attacker team.
         /// Uses raw moves (not legal moves) to avoid infinite recursion.
-        /// GC-optimized with scratch buffer and 2D array traversal.
         /// </summary>
         public static bool IsSquareUnderAttack(BoardState board, Vector2Int targetSquare, Team attackerTeam)
         {
-            // Zero-allocation loop over the board
             for (int x = 0; x < board.TileCountX; x++)
             {
                 for (int y = 0; y < board.TileCountY; y++)
@@ -181,13 +172,13 @@ namespace ChessTheMasterPiece.Logic
                         IPieceMovement strategy = MovementFactory.GetStrategy(attacker.Type);
                         if (strategy == null) continue;
 
-                        // Zero-allocation raw move generation
-                        AttackScratch.Clear();
-                        strategy.GetRawMoves(board, attacker, AttackScratch);
+                        // Generate raw moves into the attack buffer
+                        AttackCheckBuffer.Clear();
+                        strategy.GetRawMoves(board, attacker, AttackCheckBuffer);
 
-                        for (int i = 0; i < AttackScratch.Count; i++)
+                        for (int i = 0; i < AttackCheckBuffer.Count; i++)
                         {
-                            if (AttackScratch[i].EndPosition == targetSquare)
+                            if (AttackCheckBuffer[i].EndPosition == targetSquare)
                             {
                                 return true; 
                             }
@@ -218,11 +209,9 @@ namespace ChessTheMasterPiece.Logic
 
         /// <summary>
         /// Evaluates if the specified team has any legal moves remaining.
-        /// GC-optimized with scratch buffer and 2D array traversal.
         /// </summary>
         public static bool HasAnyLegalMoves(BoardState board, Team team)
         {
-            // Zero-allocation loop over the board
             for (int x = 0; x < board.TileCountX; x++)
             {
                 for (int y = 0; y < board.TileCountY; y++)
@@ -232,9 +221,9 @@ namespace ChessTheMasterPiece.Logic
                     if (piece != null && piece.Team == team)
                     {
                         Vector2Int pos = new Vector2Int(piece.CurrentX, piece.CurrentY);
-                        GetLegalMoves(board, pos, EngineScratch);
+                        GetLegalMoves(board, pos, MoveGenBuffer);
 
-                        if (EngineScratch.Count > 0)
+                        if (MoveGenBuffer.Count > 0)
                         {
                             return true; // Found at least one legal move
                         }
@@ -258,6 +247,7 @@ namespace ChessTheMasterPiece.Logic
                 return isInCheck ? GameState.Checkmate : GameState.Stalemate;
             }
 
+            // TODO (Betrayal): Add GameState.BetrayalInitiated and GameState.RetributionFailed here when the custom mechanic is implemented. GameManager's EvaluateGameStatus() will handle the phase transitions.
             return isInCheck ? GameState.Check : GameState.Normal;
         }
 
@@ -266,9 +256,7 @@ namespace ChessTheMasterPiece.Logic
         #region Move Execution
 
         /// <summary>
-        /// XORs all moving parts of a command into or out of the board's Zobrist Hash.
-        /// Calling this once applies the move to the hash. Calling it again perfectly reverses it.
-        /// Zero allocations - pure bitwise XOR operations.
+        /// Updates the Zobrist hash for a move. Because XOR is self-cancelling, calling this on the same move twice will perfectly undo the change — which is how move undo works.
         /// </summary>
         private static void ApplyZobristMove(BoardState board, MoveCommand move, int previousCastlingMask, int? previousEnPassantFile)
         {
@@ -307,16 +295,16 @@ namespace ChessTheMasterPiece.Logic
             // XOR out the old castling rights
             board.ToggleCastlingHash(previousCastlingMask);
             // XOR in the new castling rights
-            board.ToggleCastlingHash(board.CurrentCastlingMask);
+            board.ToggleCastlingHash(board.CastlingRights);
 
             // 7. Toggle En Passant State Change
             if (previousEnPassantFile.HasValue)
             {
                 board.ToggleEnPassantHash(previousEnPassantFile.Value);
             }
-            if (board.CurrentEnPassantFile.HasValue)
+            if (board.EnPassantFile.HasValue)
             {
-                board.ToggleEnPassantHash(board.CurrentEnPassantFile.Value);
+                board.ToggleEnPassantHash(board.EnPassantFile.Value);
             }
         }
 
@@ -326,7 +314,7 @@ namespace ChessTheMasterPiece.Logic
         /// </summary>
         private static int ComputeNewCastlingMask(BoardState board, MoveCommand move)
         {
-            int mask = board.CurrentCastlingMask;
+            int mask = board.CastlingRights;
 
             // If King moves, lose both castling rights for that team
             if (move.PieceType == ChessPieceType.King)
@@ -399,15 +387,13 @@ namespace ChessTheMasterPiece.Logic
         }
 
         /// <summary>
-        /// Applies a move command to a board state.
-        /// Handles standard moves, captures, and special moves.
-        /// This modifies the board state - use on clones for simulation.
+        /// Applies a move command to a board state. Handles standard moves, captures, and special moves.
         /// </summary>
         public static void ApplyMoveToBoard(BoardState board, MoveCommand move)
         {
             // Snapshot the previous state for Zobrist updates
-            int previousCastlingMask = board.CurrentCastlingMask;
-            int? previousEnPassantFile = board.CurrentEnPassantFile;
+            int previousCastlingMask = board.CastlingRights;
+            int? previousEnPassantFile = board.EnPassantFile;
 
             // Push this move to the history stack for En Passant detection during simulation
             board.RecordMove(move.StartPosition, move.EndPosition);
@@ -422,8 +408,8 @@ namespace ChessTheMasterPiece.Logic
                 board.MovePiece(move.RookStartPosition.Value, move.RookEndPosition.Value);
 
                 // Update castling mask and en passant state
-                board.CurrentCastlingMask = ComputeNewCastlingMask(board, move);
-                board.CurrentEnPassantFile = ComputeNewEnPassantFile(move);
+                board.CastlingRights = ComputeNewCastlingMask(board, move);
+                board.EnPassantFile = ComputeNewEnPassantFile(move);
 
                 // Update Zobrist hash after board modification
                 ApplyZobristMove(board, move, previousCastlingMask, previousEnPassantFile);
@@ -439,8 +425,8 @@ namespace ChessTheMasterPiece.Logic
                 board.RemovePiece(move.EnPassantCapturePosition.Value);
 
                 // Update castling mask and en passant state
-                board.CurrentCastlingMask = ComputeNewCastlingMask(board, move);
-                board.CurrentEnPassantFile = ComputeNewEnPassantFile(move);
+                board.CastlingRights = ComputeNewCastlingMask(board, move);
+                board.EnPassantFile = ComputeNewEnPassantFile(move);
 
                 // Update Zobrist hash after board modification
                 ApplyZobristMove(board, move, previousCastlingMask, previousEnPassantFile);
@@ -464,37 +450,36 @@ namespace ChessTheMasterPiece.Logic
                 else
                 {
                     // This should never happen in a valid game
+                    // TODO: Replace UnityEngine.Debug.LogError with a C# exception or a delegate callback so this class stays Unity-free.
                     UnityEngine.Debug.LogError($"[ChessEngine] Promotion failed: No piece found at {move.EndPosition}");
                 }
             }
 
             // Update castling mask and en passant state
-            board.CurrentCastlingMask = ComputeNewCastlingMask(board, move);
-            board.CurrentEnPassantFile = ComputeNewEnPassantFile(move);
+            board.CastlingRights = ComputeNewCastlingMask(board, move);
+            board.EnPassantFile = ComputeNewEnPassantFile(move);
 
             // Update Zobrist hash after board modification
             ApplyZobristMove(board, move, previousCastlingMask, previousEnPassantFile);
         }
 
         /// <summary>
-        /// Perfectly reverses a MoveCommand, restoring the board to its exact previous state.
-        /// This includes restoring captured pieces from the graveyard and resetting 'HasMoved' flags.
-        /// Zero allocations - essential for high-performance AI move tree evaluation.
+        /// Rolls back a move completely, restoring the board to exactly how it was before. This is how the AI can explore thousands of move sequences without ever making a copy of the board.
         /// </summary>
         private static void UndoMoveOnBoard(BoardState board, MoveCommand move)
         {
             // Snapshot current state for Zobrist reversal
-            int currentCastlingMask = board.CurrentCastlingMask;
-            int? currentEnPassantFile = board.CurrentEnPassantFile;
+            int currentCastlingMask = board.CastlingRights;
+            int? currentEnPassantFile = board.EnPassantFile;
 
             // Restore the previous castling and en passant state from the move snapshot
-            board.CurrentCastlingMask = move.PreviousCastlingMask;
-            board.CurrentEnPassantFile = move.PreviousEnPassantFile;
+            board.CastlingRights = move.PreviousCastlingMask;
+            board.EnPassantFile = move.PreviousEnPassantFile;
 
             // Reverse the Zobrist hash exactly (XOR is self-inverse)
             ApplyZobristMove(board, move, currentCastlingMask, currentEnPassantFile);
 
-            // Pop this move from the history stack (O(1) operation)
+            // Pop this move from the history stack
             // Each move adds 2 entries (start, end), so we remove both
             if (board.MoveHistory.Count >= 2)
             {
@@ -529,7 +514,7 @@ namespace ChessTheMasterPiece.Logic
                 List<PieceData> graveyard = move.CapturedTeam == Team.White ? board.WhiteCaptured : board.BlackCaptured;
                 PieceData resurrectedPiece = null;
 
-                // Pluck it out of the graveyard to prevent memory leaks during simulation
+                // Pull the last piece from the captured list and put it back on the board
                 if (graveyard.Count > 0)
                 {
                     resurrectedPiece = graveyard[graveyard.Count - 1];
@@ -583,15 +568,15 @@ namespace ChessTheMasterPiece.Logic
                 return false;
             }
 
-            // Get legal moves for this piece using thread-local scratch buffer
-            EngineScratch.Clear();
-            GetLegalMoves(board, move.StartPosition, EngineScratch);
+            // Check if this move is actually legal
+            MoveGenBuffer.Clear();
+            GetLegalMoves(board, move.StartPosition, MoveGenBuffer);
 
             // Check if this move is in the legal moves list
             bool isLegal = false;
-            for (int i = 0; i < EngineScratch.Count; i++)
+            for (int i = 0; i < MoveGenBuffer.Count; i++)
             {
-                if (EngineScratch[i].EndPosition == move.EndPosition)
+                if (MoveGenBuffer[i].EndPosition == move.EndPosition)
                 {
                     isLegal = true;
                     break;

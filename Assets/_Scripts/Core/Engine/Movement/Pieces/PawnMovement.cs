@@ -19,10 +19,10 @@ namespace ChessTheMasterPiece.Logic.Movement
             Vector2Int oneForward = new Vector2Int(pos.x, pos.y + dir);
             if (board.IsValidIndex(oneForward) && board.GetPiece(oneForward) == null)
             {
-                CheckAndAddPromotion(board, buffer, pos, oneForward, piece, null);
+                AddMoveOrPromotion(board, buffer, pos, oneForward, piece, null);
 
                 // 2. Double Forward Move (only from starting position and if one forward is clear)
-                if (pos.y == piece.InitialY && !piece.HasMoved)
+                if (pos.y == piece.StartRow && !piece.HasMoved)
                 {
                     Vector2Int twoForward = new Vector2Int(pos.x, pos.y + (dir * 2));
                     if (board.IsValidIndex(twoForward) && board.GetPiece(twoForward) == null)
@@ -33,32 +33,31 @@ namespace ChessTheMasterPiece.Logic.Movement
             }
 
             // 3. Diagonal Captures
-            EvaluateCapture(board, buffer, piece, pos, new Vector2Int(pos.x - 1, pos.y + dir));
-            EvaluateCapture(board, buffer, piece, pos, new Vector2Int(pos.x + 1, pos.y + dir));
+            TryAddDiagonalCapture(board, buffer, piece, pos, new Vector2Int(pos.x - 1, pos.y + dir));
+            TryAddDiagonalCapture(board, buffer, piece, pos, new Vector2Int(pos.x + 1, pos.y + dir));
 
-            // 4. En Passant (O(1) access to last move via board.MoveHistory)
-            EvaluateEnPassant(board, buffer, piece, pos, dir);
+            // 4. En Passant (history-dependent; uses board.EnPassantFile)
+            TryAddEnPassant(board, buffer, piece, pos, dir);
         }
 
         /// <summary>
         /// Checks if a diagonal square contains an enemy piece and adds the capture move.
         /// </summary>
-        private void EvaluateCapture(BoardState board, List<MoveCommand> buffer, PieceData pawn, Vector2Int start, Vector2Int target)
+        private void TryAddDiagonalCapture(BoardState board, List<MoveCommand> buffer, PieceData pawn, Vector2Int start, Vector2Int target)
         {
             if (!board.IsValidIndex(target)) return;
 
             PieceData targetPiece = board.GetPiece(target);
             if (targetPiece != null && targetPiece.Team != pawn.Team)
             {
-                CheckAndAddPromotion(board, buffer, start, target, pawn, targetPiece);
+                AddMoveOrPromotion(board, buffer, start, target, pawn, targetPiece);
             }
         }
 
         /// <summary>
-        /// Adds a move, checking if it results in promotion.
-        /// If yes, generates all 4 promotion options (Queen, Rook, Knight, Bishop).
+        /// Adds a pawn's forward move. If the pawn is about to reach the last rank, we generate all four promotion options instead so the player (or AI) can choose.
         /// </summary>
-        private void CheckAndAddPromotion(BoardState board, List<MoveCommand> buffer, Vector2Int start, Vector2Int target, PieceData pawn, PieceData captured)
+        private void AddMoveOrPromotion(BoardState board, List<MoveCommand> buffer, Vector2Int start, Vector2Int target, PieceData pawn, PieceData captured)
         {
             // Check if pawn reaches the promotion rank
             int promotionRank = (pawn.MoveDirection == 1) ? board.TileCountY - 1 : 0;
@@ -79,16 +78,14 @@ namespace ChessTheMasterPiece.Logic.Movement
         }
 
         /// <summary>
-        /// Evaluates if en passant capture is legal.
-        /// O(1) complexity - directly checks the board's CurrentEnPassantFile state variable.
-        /// This is mathematically perfect for Zobrist hashing and transposition tables.
+        /// Checks if an en passant capture is available and adds it if so. We use the board's EnPassantFile directly rather than scanning move history.
         /// </summary>
-        private void EvaluateEnPassant(BoardState board, List<MoveCommand> buffer, PieceData pawn, Vector2Int pos, int dir)
+        private void TryAddEnPassant(BoardState board, List<MoveCommand> buffer, PieceData pawn, Vector2Int pos, int dir)
         {
             // Simply check if an En Passant file is currently active on the board state
-            if (!board.CurrentEnPassantFile.HasValue) return;
+            if (!board.EnPassantFile.HasValue) return;
 
-            int epFileX = board.CurrentEnPassantFile.Value;
+            int epFileX = board.EnPassantFile.Value;
 
             // Check if the vulnerable pawn is directly adjacent to our pawn
             if (System.Math.Abs(epFileX - pos.x) == 1)

@@ -26,6 +26,8 @@ namespace ChessTheMasterPiece.Data
     }
 
     // State Machine Phases for Game Flow
+    // The Betrayal mechanic runs through RetributionPending → ResolutionFailed/ForcedSave.
+    // If you're adding a new phase, make sure GameManager's TransitionToPhase() handles it.
     public enum TurnPhase
     {
         Normal,               // Standard chess movement

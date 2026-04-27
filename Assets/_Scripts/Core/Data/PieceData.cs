@@ -1,9 +1,7 @@
 namespace ChessTheMasterPiece.Data
 {
     /// <summary>
-    /// Pure C# representation of a chess piece - no Unity dependencies.
-    /// This is the source of truth for piece state in the game logic layer.
-    /// Serializable for network sync, game saves, or move simulation.
+    /// All the data that describes one chess piece — its type, team, position, and whether it has moved yet. No Unity code, so it's safe to clone and pass around freely.
     /// </summary>
     public class PieceData
     {
@@ -11,7 +9,7 @@ namespace ChessTheMasterPiece.Data
         public ChessPieceType Type { get; set; }
         public int CurrentX { get; set; }
         public int CurrentY { get; set; }
-        public int InitialY { get; set; }
+        public int StartRow { get; set; }
         public int MoveDirection { get; set; }
         public bool HasMoved { get; set; }
 
@@ -24,33 +22,28 @@ namespace ChessTheMasterPiece.Data
             Type = type;
             CurrentX = x;
             CurrentY = y;
-            InitialY = y;
+            StartRow = y;
             MoveDirection = direction;
             HasMoved = false;
         }
 
-        /// <summary>
-        /// Private constructor for cloning (preserves all fields including HasMoved).
-        /// </summary>
-        private PieceData(Team team, ChessPieceType type, int x, int y, int direction, int initialY, bool hasMoved)
+        private PieceData(Team team, ChessPieceType type, int x, int y, int direction, int startRow, bool hasMoved)
         {
             Team = team;
             Type = type;
             CurrentX = x;
             CurrentY = y;
-            InitialY = initialY;
+            StartRow = startRow;
             MoveDirection = direction;
             HasMoved = hasMoved;
         }
 
         /// <summary>
-        /// Creates a deep copy of this piece's data.
-        /// Critical for simulating moves during check/checkmate detection 
-        /// without modifying the actual game state.
+        /// Returns an exact copy of this piece. The AI uses this to simulate moves without touching the real board.
         /// </summary>
         public PieceData Clone()
         {
-            return new PieceData(Team, Type, CurrentX, CurrentY, MoveDirection, InitialY, HasMoved);
+            return new PieceData(Team, Type, CurrentX, CurrentY, MoveDirection, StartRow, HasMoved);
         }
 
         /// <summary>
@@ -64,13 +57,12 @@ namespace ChessTheMasterPiece.Data
         }
 
         /// <summary>
-        /// Promotes a pawn to a new piece type. This method is called when a pawn reaches the opposite end of the board.
+        /// Changes a pawn's type when it reaches the far end of the board.
         /// </summary>
-        /// <param name="newType">The new type to which the pawn will be promoted.</param>
+        /// <param name="newType">The new piece type.</param>
         public void PromoteTo(ChessPieceType newType)
         {
             Type = newType;
-            // We preserve InitialY and MoveDirection as they are historical markers
         }
 
         /// <summary>

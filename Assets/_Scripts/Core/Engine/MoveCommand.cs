@@ -3,8 +3,8 @@ using ChessTheMasterPiece.Data;
 namespace ChessTheMasterPiece.Logic
 {
     /// <summary>
-    /// Encapsulates all data required to execute (or undo) a single move.
-    /// Uses pure value-type snapshots to prevent reference mutation bugs.
+    /// A snapshot of one move — where a piece came from, where it went, what was captured, and any special move type.
+    /// Because it's a readonly struct, it's safe to store and pass around without worrying about data being changed underneath you.
     /// </summary>
     public readonly struct MoveCommand
     {
@@ -14,7 +14,7 @@ namespace ChessTheMasterPiece.Logic
         // Snapshot of the moved piece
         public readonly Team PieceTeam;
         public readonly ChessPieceType PieceType;
-        public readonly int PieceMoveDirection;
+        public readonly int PieceMoveDirection; // +1 for White (moving up the board), -1 for Black (moving down)
         public readonly bool PieceHadMoved;
 
         // Snapshot of the captured piece (if any)
@@ -36,7 +36,7 @@ namespace ChessTheMasterPiece.Logic
         public readonly int? PreviousEnPassantFile;
 
         /// <summary>
-        /// Master constructor that flattens PieceData objects into primitive snapshots.
+        /// Builds a move command from two piece references. We pull the data we need out of them immediately so the command doesn't hold live references.
         /// </summary>
         public MoveCommand(
             Vector2Int startPosition,
@@ -96,37 +96,34 @@ namespace ChessTheMasterPiece.Logic
         }
 
         #region Factory Methods
-        
+
         public static MoveCommand CreateStandardMove(Vector2Int from, Vector2Int to, PieceData piece, PieceData captured = null, BoardState board = null)
         {
             return new MoveCommand(from, to, piece, captured,
-                previousCastlingMask: board?.CurrentCastlingMask ?? 0,
-                previousEnPassantFile: board?.CurrentEnPassantFile);
+                previousCastlingMask: board?.CastlingRights ?? 0,
+                previousEnPassantFile: board?.EnPassantFile);
         }
 
         public static MoveCommand CreateCastlingMove(Vector2Int kingFrom, Vector2Int kingTo, PieceData king, Vector2Int rookFrom, Vector2Int rookTo, BoardState board = null)
         {
             return new MoveCommand(kingFrom, kingTo, king, null, SpecialMove.Castling, ChessPieceType.None, rookFrom, rookTo, null,
-                board?.CurrentCastlingMask ?? 0, board?.CurrentEnPassantFile);
+                board?.CastlingRights ?? 0, board?.EnPassantFile);
         }
 
         public static MoveCommand CreateEnPassantMove(Vector2Int from, Vector2Int to, PieceData pawn, PieceData capturedPawn, Vector2Int capturePosition, BoardState board = null)
         {
             return new MoveCommand(from, to, pawn, capturedPawn, SpecialMove.EnPassant, ChessPieceType.None, null, null, capturePosition,
-                board?.CurrentCastlingMask ?? 0, board?.CurrentEnPassantFile);
+                board?.CastlingRights ?? 0, board?.EnPassantFile);
         }
 
         public static MoveCommand CreatePromotionMove(Vector2Int from, Vector2Int to, PieceData pawn, ChessPieceType promotedTo, PieceData captured = null, BoardState board = null)
         {
             return new MoveCommand(from, to, pawn, captured, SpecialMove.Promotion, promotedTo, null, null, null,
-                board?.CurrentCastlingMask ?? 0, board?.CurrentEnPassantFile);
+                board?.CastlingRights ?? 0, board?.EnPassantFile);
         }
 
         #endregion
 
-        /// <summary>
-        /// Convenience properties for readability.
-        /// </summary>
         public bool IsCapture => HasCapture;
         public bool IsPromotion => PromotedTo != ChessPieceType.None;
         public bool IsCastling => SpecialMoveType == SpecialMove.Castling;

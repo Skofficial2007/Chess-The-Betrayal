@@ -6,6 +6,9 @@ using ChessTheMasterPiece.Data;
 
 namespace ChessTheMasterPiece.UI
 {
+    /// <summary>
+    /// Handles the game-over panel UI (winner text, replay and exit actions).
+    /// </summary>
     public class GameOverUI : MonoBehaviour
     {
         [Header("UI References")]

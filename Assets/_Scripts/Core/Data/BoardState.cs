@@ -4,15 +4,13 @@ using System.Collections.Generic;
 namespace ChessTheMasterPiece.Data
 {
     /// <summary>
-    /// Pure C# representation of the chess board state - no Unity dependencies.
-    /// This is the single source of truth for the game's logical state.
-    /// Can be serialized for network sync, game saves, or AI simulation.
+    /// The complete snapshot of a chess game at any moment — the board, whose turn it is, captured pieces, and move history.
+    /// No Unity code lives here, so it can be safely used in background threads, saved to disk, or sent over the network.
     /// </summary>
     public class BoardState
     {
         #region Zobrist Hashing
-
-        // [Team (2), PieceType (7), Square (64)]
+        // PieceKeys dimensions: Team x PieceType x Square. (2 x 7 x 64)
         private static readonly ulong[,,] PieceKeys;
         private static readonly ulong BlackToMoveKey;
         // 16 possible castling right combinations (4-bit mask)
@@ -24,7 +22,6 @@ namespace ChessTheMasterPiece.Data
 
         /// <summary>
         /// Incrementally updated hash for transposition table lookups.
-        /// Uses Zobrist hashing - XOR operations make it reversible for Make/Unmake.
         /// </summary>
         public ulong ZobristHash { get; set; }
 
@@ -32,27 +29,26 @@ namespace ChessTheMasterPiece.Data
         /// 4-bit mask tracking available castling rights.
         /// Bit 0: White Kingside, Bit 1: White Queenside, Bit 2: Black Kingside, Bit 3: Black Queenside
         /// </summary>
-        public int CurrentCastlingMask { get; set; }
+        public int CastlingRights { get; set; }
 
         /// <summary>
         /// The file (X coordinate 0-7) where an en passant capture is currently legal.
         /// Null if no en passant is available this turn.
         /// </summary>
-        public int? CurrentEnPassantFile { get; set; }
+        public int? EnPassantFile { get; set; }
 
         // Castling mask bit constants for clarity
         public const int CastlingWhiteKingside = 1;   // Bit 0
         public const int CastlingWhiteQueenside = 2;  // Bit 1
         public const int CastlingBlackKingside = 4;   // Bit 2
         public const int CastlingBlackQueenside = 8;  // Bit 3
-        public const int CastlingAllRights = 15;      // All bits set
+        public const int CastlingAllRights = 15;
 
         static BoardState()
         {
             // Fixed seed ensures reproducibility across network clients and AI threads
             var rng = new Random(42);
 
-            // Helper to generate 64-bit randoms
             ulong NextUlong()
             {
                 byte[] buffer = new byte[8];
@@ -85,12 +81,12 @@ namespace ChessTheMasterPiece.Data
             }
 
             BlackToMoveKey = NextUlong();
+            // TODO (Betrayal): Toggle this in the hash whenever the BetrayalRight is consumed for the match.
             BetrayalPhaseKey = NextUlong();
         }
 
         /// <summary>
-        /// XORs a piece at a specific location into or out of the hash.
-        /// Because XOR is its own inverse, calling this twice with the same parameters cancels out.
+        /// Flips a piece in or out of the hash at a given square. Calling it twice on the same piece cancels out, which is what makes move undo possible.
         /// </summary>
         public void TogglePieceHash(Team team, ChessPieceType type, int x, int y)
         {
@@ -101,7 +97,7 @@ namespace ChessTheMasterPiece.Data
         }
 
         /// <summary>
-        /// XORs the turn state. If called, it flips the hash's perspective of whose turn it is.
+        /// Flips whose turn it is in the hash.
         /// </summary>
         public void ToggleTurnHash()
         {
@@ -136,8 +132,7 @@ namespace ChessTheMasterPiece.Data
         }
 
         /// <summary>
-        /// Computes the full Zobrist hash from scratch by iterating all pieces.
-        /// Call this once when initializing the board, then use incremental updates.
+        /// Builds the hash from scratch by reading every piece on the board. Call this once at game start, then keep it up to date incrementally as moves happen.
         /// </summary>
         public void ComputeFullZobristHash()
         {
@@ -158,11 +153,11 @@ namespace ChessTheMasterPiece.Data
                 ToggleTurnHash();
             }
             // Include castling rights in the hash
-            ToggleCastlingHash(CurrentCastlingMask);
+            ToggleCastlingHash(CastlingRights);
             // Include en passant file in the hash (if any)
-            if (CurrentEnPassantFile.HasValue)
+            if (EnPassantFile.HasValue)
             {
-                ToggleEnPassantHash(CurrentEnPassantFile.Value);
+                ToggleEnPassantHash(EnPassantFile.Value);
             }
         }
 
@@ -242,9 +237,7 @@ namespace ChessTheMasterPiece.Data
         }
 
         /// <summary>
-        /// Moves a piece from one position to another.
-        /// Does NOT validate if the move is legal - that's the rules engine's job.
-        /// Returns the captured piece if any.
+        /// Moves a piece and returns whatever was captured, if anything.
         /// </summary>
         public PieceData MovePiece(int fromX, int fromY, int toX, int toY)
         {
@@ -293,7 +286,7 @@ namespace ChessTheMasterPiece.Data
         }
 
         /// <summary>
-        /// Removes a piece from the board (for en passant, etc).
+        /// Removes a piece from the board (used for en passant captures, where the taken pawn isn't on the landing square).
         /// </summary>
         public PieceData RemovePiece(int x, int y)
         {
@@ -347,13 +340,13 @@ namespace ChessTheMasterPiece.Data
             Winner = null;
             CurrentTurn = Team.White;
             ZobristHash = 0;
-            CurrentCastlingMask = CastlingAllRights; // Reset to all castling available
-            CurrentEnPassantFile = null;
+            CastlingRights = CastlingAllRights; // Reset to all castling available
+            EnPassantFile = null;
         }
 
         /// <summary>
         /// Finds the king of the specified team.
-        /// Returns null if not found (shouldn't happen in a valid game).
+        /// Returns null if not found.
         /// </summary>
         public PieceData FindKing(Team team)
         {
@@ -372,8 +365,7 @@ namespace ChessTheMasterPiece.Data
         }
 
         /// <summary>
-        /// Populates a pre-allocated buffer with all pieces belonging to a specific team.
-        /// Zero-allocation buffer-passing pattern.
+        /// Populates the provided list with all pieces belonging to the specified team.
         /// </summary>
         public void GetAllPieces(Team team, List<PieceData> output)
         {
@@ -440,17 +432,8 @@ namespace ChessTheMasterPiece.Data
         }
 
         /// <summary>
-        /// Creates a full deep copy including complete move history.
-        /// EXPENSIVE. Use only for save/load and network state snapshots,
-        /// NOT for move simulation (use ChessEngine make/unmake instead).
+        /// Creates a full copy of this board state. Mainly used for saving/loading and network sync — the AI uses make/unmake instead, which is much faster.
         /// </summary>
-        /// <remarks>
-        /// The make/unmake system is working correctly for AI simulation — <c>Clone()</c> is no longer needed for check detection.
-        /// However, if <c>Clone()</c> is called (for network snapshots, save games, or test utilities) it deep-copies the
-        /// entire <c>MoveHistory</c> list. <c>MoveHistory</c> stores start/end pairs (two entries per move), so after 40
-        /// moves the list will contain 80 entries. This method is not currently a hotspot, but copying move history
-        /// can become a time bomb for any feature that snapshots the board frequently.
-        /// </remarks>
         public BoardState Clone()
         {
             BoardState clone = new BoardState(TileCountX, TileCountY);
@@ -458,8 +441,8 @@ namespace ChessTheMasterPiece.Data
             clone.IsGameOver = this.IsGameOver;
             clone.Winner = this.Winner;
             clone.ZobristHash = this.ZobristHash;
-            clone.CurrentCastlingMask = this.CurrentCastlingMask;
-            clone.CurrentEnPassantFile = this.CurrentEnPassantFile;
+            clone.CastlingRights = this.CastlingRights;
+            clone.EnPassantFile = this.EnPassantFile;
 
             // Clone the board
             for (int x = 0; x < TileCountX; x++)
