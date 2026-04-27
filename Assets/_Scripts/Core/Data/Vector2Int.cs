@@ -1,8 +1,7 @@
 namespace ChessTheMasterPiece.Data
 {
     /// <summary>
-    /// Custom struct for position representation.
-    /// Implements IEquatable to prevent GC boxing when used as Dictionary/HashSet keys.
+    /// A simple X/Y position on the board. We define our own instead of using Unity's so this code can run outside of Unity (for AI threads, tests, etc.).
     /// </summary>
     public struct Vector2Int : System.IEquatable<Vector2Int>
     {
@@ -18,13 +17,11 @@ namespace ChessTheMasterPiece.Data
         public static bool operator ==(Vector2Int a, Vector2Int b) => a.x == b.x && a.y == b.y;
         public static bool operator !=(Vector2Int a, Vector2Int b) => !(a == b);
 
-        // Interface method for zero-allocation dictionary comparisons
         public bool Equals(Vector2Int other)
         {
             return this.x == other.x && this.y == other.y;
         }
-
-        // Standard object override
+        
         public override bool Equals(object obj)
         {
             return obj is Vector2Int other && Equals(other);
@@ -32,8 +29,7 @@ namespace ChessTheMasterPiece.Data
 
         public override int GetHashCode()
         {
-            // Zero-allocation polynomial hash (prime multiplication + XOR)
-            // Very fast for small board coordinates and avoids ValueTuple hashing overhead.
+            // A simple, fast hash for small numbers like board coordinates.
             return x * 1000003 ^ y;
         }
 

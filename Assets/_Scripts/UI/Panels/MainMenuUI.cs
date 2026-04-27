@@ -4,6 +4,9 @@ using UnityEngine.UI;
 
 namespace ChessTheMasterPiece.UI
 {
+    /// <summary>
+    /// Main menu controller exposing Play and Exit events.
+    /// </summary>
     public class MainMenuUI : MonoBehaviour
     {
         [Header("UI References")]

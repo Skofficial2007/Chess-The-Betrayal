@@ -61,8 +61,7 @@ namespace ChessTheMasterPiece.Controllers
         }
 
         /// <summary>
-        /// Cinemachine handles transitions based on Priority. 
-        /// The camera with the highest priority takes control of the Main Camera.
+        /// Switches to a camera by giving it the highest priority. Cinemachine's Brain handles the smooth blend automatically.
         /// </summary>
         private void ActivateCamera(CinemachineCamera targetCam)
         {

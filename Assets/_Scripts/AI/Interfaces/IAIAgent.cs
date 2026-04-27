@@ -5,13 +5,12 @@ using ChessTheMasterPiece.Logic;
 namespace ChessTheMasterPiece.AI
 {
     /// <summary>
-    /// Contract for any AI opponent (Minimax, Random, Neural Net).
+    /// Defines what any AI player needs to be able to do. Implement this if you want to add a new AI difficulty or strategy.
     /// </summary>
     public interface IAIAgent
     {
         /// <summary>
-        /// Requests the best move for the current position.
-        /// Async-ready: result must be fired via OnMoveDecided event.
+        /// Ask the AI to pick a move. When it has an answer, it fires the <c>OnMoveDecided</c> event — it won't return the move directly.
         /// </summary>
         void RequestBestMove(BoardState board, Team team);
         

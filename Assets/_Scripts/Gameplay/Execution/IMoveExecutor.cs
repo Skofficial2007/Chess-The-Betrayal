@@ -5,9 +5,8 @@ using ChessTheMasterPiece.Logic;
 namespace ChessTheMasterPiece.Controllers
 {
     /// <summary>
-    /// Contract for move execution. 
-    /// Allows swapping between local logic and future Server/Client RPC networking.
-    /// Implements the Command Pattern for optimistic client prediction.
+    /// Defines how a move request travels from the player's input to the game board.
+    /// The local offline version validates immediately; a future network version will ask the server first.
     /// </summary>
     public interface IMoveExecutor
     {
