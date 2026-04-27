@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using ChessTheMasterPiece.Data;
 
@@ -6,21 +7,21 @@ namespace ChessTheMasterPiece.Logic.Movement
     /// <summary>
     /// Factory for retrieving piece movement strategies.
     /// Uses the Strategy Pattern to decouple piece logic from the core engine.
-    /// Caches strategy instances to prevent GC pressure.
+    /// Thread-safe: Uses [ThreadStatic] to provide lock-free caching for multi-threaded AI.
     /// </summary>
     public static class MovementFactory
     {
-        // Lazy-initialized strategy cache
-        private static Dictionary<ChessPieceType, IPieceMovement> strategies;
+        // ThreadStatic ensures each background thread (and the main thread) 
+        // gets its own completely isolated instance of this dictionary.
+        [ThreadStatic]
+        private static Dictionary<ChessPieceType, IPieceMovement> _threadStrategies;
 
         /// <summary>
-        /// Initialize the strategy dictionary. Called automatically on first access.
+        /// Creates a fresh set of strategies for the calling thread.
         /// </summary>
-        private static void Initialize()
+        private static Dictionary<ChessPieceType, IPieceMovement> CreateStrategies()
         {
-            if (strategies != null) return;
-
-            strategies = new Dictionary<ChessPieceType, IPieceMovement>
+            return new Dictionary<ChessPieceType, IPieceMovement>
             {
                 { ChessPieceType.Pawn, new PawnMovement() },
                 { ChessPieceType.Knight, new KnightMovement() },
@@ -37,9 +38,11 @@ namespace ChessTheMasterPiece.Logic.Movement
         /// </summary>
         public static IPieceMovement GetStrategy(ChessPieceType type)
         {
-            Initialize();
+            // The null-coalescing assignment operator (??=) is a clean C# 8+ 
+            // way to initialize only if null on the current thread.
+            _threadStrategies ??= CreateStrategies();
 
-            if (strategies.TryGetValue(type, out IPieceMovement strategy))
+            if (_threadStrategies.TryGetValue(type, out IPieceMovement strategy))
             {
                 return strategy;
             }
@@ -49,21 +52,21 @@ namespace ChessTheMasterPiece.Logic.Movement
 
         /// <summary>
         /// Registers a custom piece movement strategy (for modding/custom pieces).
-        /// Example: RegisterStrategy(ChessPieceType.Custom, new BetrayerMovement());
+        /// NOTE: Because of ThreadStatic, this only registers the strategy on the CURRENT thread.
         /// </summary>
         public static void RegisterStrategy(ChessPieceType type, IPieceMovement strategy)
         {
-            Initialize();
-            strategies[type] = strategy;
+            _threadStrategies ??= CreateStrategies();
+            _threadStrategies[type] = strategy;
         }
 
         /// <summary>
-        /// Clears all registered strategies (useful for unit testing).
+        /// Clears all registered strategies for the CURRENT thread.
         /// </summary>
         public static void ClearStrategies()
         {
-            strategies?.Clear();
-            strategies = null;
+            _threadStrategies?.Clear();
+            _threadStrategies = null;
         }
     }
 }

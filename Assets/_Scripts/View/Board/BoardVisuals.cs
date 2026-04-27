@@ -59,7 +59,11 @@ namespace ChessTheMasterPiece.View
 
         // Highlighting state
         private ChessTheMasterPiece.Data.Vector2Int hoverIndex = ChessTheMasterPiece.Data.Vector2Int.Invalid;
-        private List<ChessTheMasterPiece.Data.Vector2Int> currentLegalHighlights = new List<ChessTheMasterPiece.Data.Vector2Int>();
+        // Pre-allocate capacity to prevent internal array resizing during gameplay
+        private readonly List<ChessTheMasterPiece.Data.Vector2Int> currentLegalHighlights = new List<ChessTheMasterPiece.Data.Vector2Int>(32);
+        
+        // Companion HashSet for O(1) hover lookups
+        private readonly HashSet<ChessTheMasterPiece.Data.Vector2Int> _legalHighlightSet = new HashSet<ChessTheMasterPiece.Data.Vector2Int>(32);
 
         // Cached values
         private Vector3 boardOrigin;
@@ -101,6 +105,8 @@ namespace ChessTheMasterPiece.View
             // Subscribe to GameManager events
             GameManager.Instance.OnGameStarted += HandleGameStarted;
             GameManager.Instance.OnMoveExecuted += AnimateMove;
+            GameManager.Instance.OnMoveRejected += HandleMoveRejected;
+            GameManager.Instance.OnPromotionRequested += HandlePromotionOptimisticSnap;
             GameManager.Instance.OnGameReset += ClearAllVisuals;
         }
 
@@ -111,6 +117,8 @@ namespace ChessTheMasterPiece.View
             {
                 GameManager.Instance.OnGameStarted -= HandleGameStarted;
                 GameManager.Instance.OnMoveExecuted -= AnimateMove;
+                GameManager.Instance.OnMoveRejected -= HandleMoveRejected;
+                GameManager.Instance.OnPromotionRequested -= HandlePromotionOptimisticSnap;
                 GameManager.Instance.OnGameReset -= ClearAllVisuals;
             }
         }
@@ -424,6 +432,49 @@ namespace ChessTheMasterPiece.View
             }
         }
 
+        /// <summary>
+        /// Handles move rejection events from GameManager.
+        /// Called when a move is validated as illegal - snaps the piece back to its original position.
+        /// This enables optimistic prediction for future networking.
+        /// </summary>
+        private void HandleMoveRejected(ChessTheMasterPiece.Data.Vector2Int from, ChessTheMasterPiece.Data.Vector2Int to)
+        {
+            SnapPieceBack(from);
+        }
+
+        /// <summary>
+        /// Optimistically snap the dragged piece to the center of the promotion square
+        /// while the UI waits for the player's choice.
+        /// Finds the nearest visual piece to the target tile and snaps it there if close enough.
+        /// </summary>
+        private void HandlePromotionOptimisticSnap(ChessTheMasterPiece.Data.Vector2Int targetPos)
+        {
+            Vector3 center = GetTileCenter(targetPos.x, targetPos.y);
+            float threshold = Mathf.Max(0.01f, tileSize * 0.75f);
+
+            ChessPiece nearest = null;
+            float bestSqr = float.MaxValue;
+
+            foreach (var kv in visualPieces)
+            {
+                ChessPiece p = kv.Value;
+                if (p == null) continue;
+                float d = (p.transform.position - center).sqrMagnitude;
+                if (d < bestSqr)
+                {
+                    bestSqr = d;
+                    nearest = p;
+                }
+            }
+
+            if (nearest != null && bestSqr <= threshold * threshold)
+            {
+                Vector3 snapPos = center;
+                snapPos.y += pieceYOffset;
+                nearest.SetPosition(snapPos, force: true);
+            }
+        }
+
         #endregion
 
         #region Public Getters for Input Controller
@@ -509,33 +560,43 @@ namespace ChessTheMasterPiece.View
 
         /// <summary>
         /// Highlights all legal move destinations.
-        /// GC-optimized to accept read-only buffer interface.
+        /// Zero allocations - uses for-loop to prevent IEnumerator boxing.
         /// </summary>
         public void HighlightLegalMoves(IReadOnlyList<MoveCommand> moves)
         {
             ClearLegalMoveHighlights();
 
-            // IReadOnlyList still supports foreach perfectly!
-            foreach (var move in moves)
+            // Use index-based for-loop instead of foreach to eliminate enumerator boxing
+            for (int i = 0; i < moves.Count; i++)
             {
-                currentLegalHighlights.Add(move.EndPosition);
-                SetTileLayer(move.EndPosition, isHover: false);
+                currentLegalHighlights.Add(moves[i].EndPosition);
+                
+                // Add to the HashSet in sync
+                _legalHighlightSet.Add(moves[i].EndPosition);
+                
+                SetTileLayer(moves[i].EndPosition, isHover: false);
             }
         }
 
         /// <summary>
         /// Clears all legal move highlights.
+        /// Zero allocations - uses for-loop to prevent IEnumerator boxing.
         /// </summary>
         public void ClearLegalMoveHighlights()
         {
-            foreach (var pos in currentLegalHighlights)
+            // Use index-based for-loop instead of foreach to eliminate enumerator boxing
+            for (int i = 0; i < currentLegalHighlights.Count; i++)
             {
+                ChessTheMasterPiece.Data.Vector2Int pos = currentLegalHighlights[i];
                 if (pos.x >= 0 && pos.x < tileCountX && pos.y >= 0 && pos.y < tileCountY && tiles[pos.x, pos.y] != null)
                 {
                     tiles[pos.x, pos.y].layer = tileLayer;
                 }
             }
             currentLegalHighlights.Clear();
+            
+            // Clear the HashSet in sync
+            _legalHighlightSet.Clear();
 
             // Restore hover if active
             if (hoverIndex != ChessTheMasterPiece.Data.Vector2Int.Invalid)
@@ -558,7 +619,8 @@ namespace ChessTheMasterPiece.View
             {
                 tile.layer = highlightLayer;
             }
-            else if (currentLegalHighlights.Contains(pos))
+            // Use the HashSet for instant O(1) lookup instead of currentLegalHighlights
+            else if (_legalHighlightSet.Contains(pos))
             {
                 tile.layer = moveHighlightLayer;
             }
