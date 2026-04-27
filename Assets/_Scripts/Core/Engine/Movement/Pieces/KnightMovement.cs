@@ -36,7 +36,7 @@ namespace ChessTheMasterPiece.Logic.Movement
                 // Can move to empty squares or capture enemy pieces
                 if (targetPiece == null || targetPiece.Team != piece.Team)
                 {
-                    buffer.Add(MoveCommand.CreateStandardMove(startPos, target, piece, targetPiece));
+                    buffer.Add(MoveCommand.CreateStandardMove(startPos, target, piece, targetPiece, board));
                 }
             }
         }

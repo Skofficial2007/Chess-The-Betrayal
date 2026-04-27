@@ -4,26 +4,33 @@ using ChessTheMasterPiece.Data;
 namespace ChessTheMasterPiece.Logic.Movement
 {
     /// <summary>
-    /// Movement strategy for the Bishop piece.
-    /// Bishops move diagonally, any distance.
+    /// Movement strategy for the Queen piece.
+    /// Queens move like a Rook + Bishop combined: straight or diagonal, any distance.
     /// Cannot jump over pieces - stops when encountering any piece.
+    /// Most powerful piece in standard chess.
     /// </summary>
-    public class BishopMovement : IPieceMovement
+    public class QueenMovement : IPieceMovement
     {
-        // Diagonal directions: Up-Right, Up-Left, Down-Right, Down-Left
+        // All 8 directions combined (4 straight + 4 diagonal)
         private static readonly int[,] Directions = new int[,]
         {
-            { 1, 1 },    // Up-Right
-            { -1, 1 },   // Up-Left
-            { 1, -1 },   // Down-Right
-            { -1, -1 }   // Down-Left
+            // Straight directions (Rook-like)
+            { 0, 1 },   // Up
+            { 0, -1 },  // Down
+            { 1, 0 },   // Right
+            { -1, 0 },  // Left
+            // Diagonal directions (Bishop-like)
+            { 1, 1 },   // Up-Right
+            { -1, 1 },  // Up-Left
+            { 1, -1 },  // Down-Right
+            { -1, -1 }  // Down-Left
         };
 
         public void GetRawMoves(BoardState board, PieceData piece, List<MoveCommand> buffer)
         {
             Vector2Int pos = new Vector2Int(piece.CurrentX, piece.CurrentY);
 
-            // Slide in each of the 4 diagonal directions
+            // Slide in each of the 8 directions
             for (int d = 0; d < Directions.GetLength(0); d++)
             {
                 int stepX = Directions[d, 0];
@@ -42,14 +49,14 @@ namespace ChessTheMasterPiece.Logic.Movement
                     if (targetPiece == null)
                     {
                         // Empty square - can move here and continue sliding
-                        buffer.Add(MoveCommand.CreateStandardMove(pos, target, piece));
+                        buffer.Add(MoveCommand.CreateStandardMove(pos, target, piece, null, board));
                     }
                     else
                     {
                         // Hit a piece - check if we can capture it
                         if (targetPiece.Team != piece.Team)
                         {
-                            buffer.Add(MoveCommand.CreateStandardMove(pos, target, piece, targetPiece));
+                            buffer.Add(MoveCommand.CreateStandardMove(pos, target, piece, targetPiece, board));
                         }
                         // Either way, we're blocked - stop sliding in this direction
                         break;
