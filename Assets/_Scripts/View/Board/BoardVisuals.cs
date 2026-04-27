@@ -61,6 +61,9 @@ namespace ChessTheMasterPiece.View
         private ChessTheMasterPiece.Data.Vector2Int hoverIndex = ChessTheMasterPiece.Data.Vector2Int.Invalid;
         // Pre-allocate capacity to prevent internal array resizing during gameplay
         private readonly List<ChessTheMasterPiece.Data.Vector2Int> currentLegalHighlights = new List<ChessTheMasterPiece.Data.Vector2Int>(32);
+        
+        // Companion HashSet for O(1) hover lookups
+        private readonly HashSet<ChessTheMasterPiece.Data.Vector2Int> _legalHighlightSet = new HashSet<ChessTheMasterPiece.Data.Vector2Int>(32);
 
         // Cached values
         private Vector3 boardOrigin;
@@ -567,6 +570,10 @@ namespace ChessTheMasterPiece.View
             for (int i = 0; i < moves.Count; i++)
             {
                 currentLegalHighlights.Add(moves[i].EndPosition);
+                
+                // Add to the HashSet in sync
+                _legalHighlightSet.Add(moves[i].EndPosition);
+                
                 SetTileLayer(moves[i].EndPosition, isHover: false);
             }
         }
@@ -587,6 +594,9 @@ namespace ChessTheMasterPiece.View
                 }
             }
             currentLegalHighlights.Clear();
+            
+            // Clear the HashSet in sync
+            _legalHighlightSet.Clear();
 
             // Restore hover if active
             if (hoverIndex != ChessTheMasterPiece.Data.Vector2Int.Invalid)
@@ -609,7 +619,8 @@ namespace ChessTheMasterPiece.View
             {
                 tile.layer = highlightLayer;
             }
-            else if (currentLegalHighlights.Contains(pos))
+            // Use the HashSet for instant O(1) lookup instead of currentLegalHighlights
+            else if (_legalHighlightSet.Contains(pos))
             {
                 tile.layer = moveHighlightLayer;
             }
