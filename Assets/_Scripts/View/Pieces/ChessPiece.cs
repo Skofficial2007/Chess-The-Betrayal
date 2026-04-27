@@ -20,6 +20,7 @@ namespace ChessTheMasterPiece.View
         // Internal smoothing targets
         private Vector3 targetPosition;
         private Vector3 targetScale = Vector3.one;
+        private Collider _col;
 
         // Smoothing speeds
         private const float PositionLerpSpeed = 12f;
@@ -29,6 +30,8 @@ namespace ChessTheMasterPiece.View
         {
             targetPosition = transform.position;
             targetScale = transform.localScale;
+
+            _col = GetComponent<Collider>();
         }
 
         private void Update()
@@ -121,6 +124,17 @@ namespace ChessTheMasterPiece.View
         {
             return !(float.IsNaN(v.x) || float.IsNaN(v.y) || float.IsNaN(v.z) ||
                      float.IsInfinity(v.x) || float.IsInfinity(v.y) || float.IsInfinity(v.z));
+        }
+
+        /// <summary>
+        /// Safely disables the physical collider without expensive GetComponent calls.
+        /// </summary>
+        public void DisableCollider()
+        {
+            if (_col != null)
+            {
+                _col.enabled = false;
+            }
         }
     }
 }

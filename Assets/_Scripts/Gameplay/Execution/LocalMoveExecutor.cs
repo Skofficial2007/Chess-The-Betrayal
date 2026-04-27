@@ -26,6 +26,13 @@ namespace ChessTheMasterPiece.Controllers
         private bool _isAwaitingPromotion;
         private bool _logMoves;
 
+        /// <summary>
+        /// Local move validation for offline play.
+        /// IMPORTANT: Takes a direct reference to the live BoardState.
+        /// NetworkMoveExecutor must NOT follow this pattern — it must
+        /// validate against a server-owned snapshot, not the client board.
+        /// See: IMoveExecutor contract.
+        /// </summary>
         public LocalMoveExecutor(BoardState board, bool logMoves = true)
         {
             _board = board;

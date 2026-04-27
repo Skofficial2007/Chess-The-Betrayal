@@ -42,10 +42,8 @@ namespace ChessTheMasterPiece.Controllers
             }
         }
 
-        private void HandleTeamSelected(int teamIndex)
+        private void HandleTeamSelected(Team selectedTeam)
         {
-            Team selectedTeam = (Team)teamIndex;
-
             if (selectedTeam == Team.White)
             {
                 ActivateCamera(whiteTeamCam);

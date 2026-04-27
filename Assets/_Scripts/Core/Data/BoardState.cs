@@ -440,10 +440,17 @@ namespace ChessTheMasterPiece.Data
         }
 
         /// <summary>
-        /// Creates a completely independent deep copy of the entire board state.
-        /// Critical for AI simulation and "what-if" move validation (check prevention).
-        /// This is expensive - use sparingly and only when needed.
+        /// Creates a full deep copy including complete move history.
+        /// EXPENSIVE. Use only for save/load and network state snapshots,
+        /// NOT for move simulation (use ChessEngine make/unmake instead).
         /// </summary>
+        /// <remarks>
+        /// The make/unmake system is working correctly for AI simulation — <c>Clone()</c> is no longer needed for check detection.
+        /// However, if <c>Clone()</c> is called (for network snapshots, save games, or test utilities) it deep-copies the
+        /// entire <c>MoveHistory</c> list. <c>MoveHistory</c> stores start/end pairs (two entries per move), so after 40
+        /// moves the list will contain 80 entries. This method is not currently a hotspot, but copying move history
+        /// can become a time bomb for any feature that snapshots the board frequently.
+        /// </remarks>
         public BoardState Clone()
         {
             BoardState clone = new BoardState(TileCountX, TileCountY);

@@ -16,7 +16,7 @@ namespace ChessTheMasterPiece.UI
         [SerializeField] private GameHUD gameHUD;
 
         // Events
-        public event Action<int> OnTeamSelected;
+        public event Action<Team> OnTeamSelected;
         public event Action<ChessPieceType> OnPromotionSelected;
         public event Action OnGameReset;
 
@@ -236,7 +236,7 @@ namespace ChessTheMasterPiece.UI
             }
         }
 
-        public void TriggerGameOver(int winningTeam)
+        public void TriggerGameOver(Team? winningTeam)
         {
             if (gameOverUI != null)
             {
@@ -268,7 +268,7 @@ namespace ChessTheMasterPiece.UI
 #endif
         }
 
-        private void HandleTeamSelected(int teamIndex)
+        private void HandleTeamSelected(Team team)
         {
             if (teamSelectionUI != null)
             {
@@ -280,7 +280,7 @@ namespace ChessTheMasterPiece.UI
                 gameHUD.SetActive(true);
             }
 
-            OnTeamSelected?.Invoke(teamIndex);
+            OnTeamSelected?.Invoke(team);
         }
 
         private void HandlePromotionSelected(ChessPieceType type)

@@ -82,6 +82,14 @@ namespace ChessTheMasterPiece.Controllers
         // GC-optimized buffer for legal move queries
         private readonly List<MoveCommand> _legalMovesBuffer = new List<MoveCommand>(32);
 
+        // Static allocation (Zero GC per game restart)
+        private static readonly ChessPieceType[] StandardBackRank = new ChessPieceType[]
+        {
+            ChessPieceType.Rook,   ChessPieceType.Knight, ChessPieceType.Bishop,
+            ChessPieceType.Queen,  ChessPieceType.King,   ChessPieceType.Bishop,
+            ChessPieceType.Knight, ChessPieceType.Rook
+        };
+
         #endregion
 
         #region Unity Lifecycle
@@ -150,9 +158,9 @@ namespace ChessTheMasterPiece.Controllers
         /// Called when the player selects White or Black from the team selection UI.
         /// Sets up the board and starts a new game.
         /// </summary>
-        private void HandleTeamSelected(int teamIndex)
+        private void HandleTeamSelected(Team selectedTeam)
         {
-            PlayerTeam = (Team)teamIndex;
+            PlayerTeam = selectedTeam;
             LiveBoard.Clear();
 
             SetupStandardPieces();
@@ -175,7 +183,7 @@ namespace ChessTheMasterPiece.Controllers
             _moveExecutor.OnPromotionRequired += OnExecutorPromotionRequired;
 
             // Enter the Normal phase to start the game
-            CurrentPhase = TurnPhase.Normal;
+            TransitionToPhase(TurnPhase.Normal);
 
             // Broadcast to BoardVisuals and other systems
             OnGameStarted?.Invoke(LiveBoard);
@@ -202,7 +210,7 @@ namespace ChessTheMasterPiece.Controllers
             }
 
             // Shift to GameOver state
-            CurrentPhase = TurnPhase.GameOver;
+            TransitionToPhase(TurnPhase.GameOver);
 
             OnGameReset?.Invoke();
 
@@ -218,17 +226,11 @@ namespace ChessTheMasterPiece.Controllers
         /// </summary>
         private void SetupStandardPieces()
         {
-            ChessPieceType[] backRank = new ChessPieceType[]
-            {
-                ChessPieceType.Rook, ChessPieceType.Knight, ChessPieceType.Bishop, ChessPieceType.Queen,
-                ChessPieceType.King, ChessPieceType.Bishop, ChessPieceType.Knight, ChessPieceType.Rook
-            };
-
             // Setup White Team (Always logical bottom, moving UP)
             for (int x = 0; x < boardSizeX; x++)
             {
                 // White Majors (Rank 0)
-                LiveBoard.SetPiece(new PieceData(Team.White, backRank[x], x, 0, direction: 1), x, 0);
+                LiveBoard.SetPiece(new PieceData(Team.White, StandardBackRank[x], x, 0, direction: 1), x, 0);
                 // White Pawns (Rank 1)
                 LiveBoard.SetPiece(new PieceData(Team.White, ChessPieceType.Pawn, x, 1, direction: 1), x, 1);
             }
@@ -239,7 +241,7 @@ namespace ChessTheMasterPiece.Controllers
                 // Black Pawns (Rank 6)
                 LiveBoard.SetPiece(new PieceData(Team.Black, ChessPieceType.Pawn, x, boardSizeY - 2, direction: -1), x, boardSizeY - 2);
                 // Black Majors (Rank 7)
-                LiveBoard.SetPiece(new PieceData(Team.Black, backRank[x], x, boardSizeY - 1, direction: -1), x, boardSizeY - 1);
+                LiveBoard.SetPiece(new PieceData(Team.Black, StandardBackRank[x], x, boardSizeY - 1, direction: -1), x, boardSizeY - 1);
             }
 
             // Compute the initial Zobrist hash from the starting position
@@ -324,6 +326,20 @@ namespace ChessTheMasterPiece.Controllers
                     OnTurnChanged?.Invoke();
                     break;
             }
+
+            // --- FUTURE BETRAYAL STUBS ---
+            // TODO: Add GameState.BetrayalInitiated to ChessEngine Enum
+            // if (state == GameState.BetrayalInitiated)
+            // {
+            //     TransitionToPhase(TurnPhase.RetributionPending);
+            //     // Fire UI event for Betrayer selection
+            // }
+            // TODO: Add GameState.RetributionFailed to ChessEngine Enum
+            // if (state == GameState.RetributionFailed)
+            // {
+            //     TransitionToPhase(TurnPhase.ResolutionFailed);
+            //     // Fire UI event / logic for defection execution
+            // }
         }
 
         private void EndGame(Team? winner)
@@ -332,10 +348,9 @@ namespace ChessTheMasterPiece.Controllers
             LiveBoard.Winner = winner;
 
             // Lock the state machine
-            CurrentPhase = TurnPhase.GameOver;
+            TransitionToPhase(TurnPhase.GameOver);
 
-            int result = winner.HasValue ? (int)winner.Value : -1;
-            UIManager.Instance?.TriggerGameOver(result);
+            UIManager.Instance?.TriggerGameOver(winner);
 
             if (logMoves) Debug.Log($"[GameManager] Game Over. Winner: {(winner.HasValue ? winner.ToString() : "Draw")}");
         }
@@ -376,6 +391,23 @@ namespace ChessTheMasterPiece.Controllers
 
             PieceData piece = LiveBoard.GetPiece(position);
             return piece != null && piece.Team == LiveBoard.CurrentTurn;
+        }
+
+        #endregion
+
+        #region State Machine
+
+        /// <summary>
+        /// Centralized state transition method. 
+        /// Logs phase changes for easier debugging during complex Betrayal scenarios.
+        /// </summary>
+        private void TransitionToPhase(TurnPhase nextPhase)
+        {
+            if (logMoves && CurrentPhase != nextPhase)
+            {
+                Debug.Log($"[GameManager] Phase Transition: {CurrentPhase} -> {nextPhase}");
+            }
+            CurrentPhase = nextPhase;
         }
 
         #endregion

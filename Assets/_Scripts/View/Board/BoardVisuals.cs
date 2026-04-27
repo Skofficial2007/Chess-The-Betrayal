@@ -64,6 +64,8 @@ namespace ChessTheMasterPiece.View
         
         // Companion HashSet for O(1) hover lookups
         private readonly HashSet<ChessTheMasterPiece.Data.Vector2Int> _legalHighlightSet = new HashSet<ChessTheMasterPiece.Data.Vector2Int>(32);
+        // NEW: Reusable scratch list to prevent IEnumerator boxing during visual teardowns
+        private readonly List<ChessPiece> _clearScratch = new List<ChessPiece>(32);
 
         // Cached values
         private Vector3 boardOrigin;
@@ -271,29 +273,39 @@ namespace ChessTheMasterPiece.View
 
         /// <summary>
         /// Destroys all visual pieces and clears state.
+        /// Zero-allocation refactor: uses for-loops and scratch buffers to prevent GC boxing.
         /// </summary>
         private void ClearAllVisuals()
         {
-            // Destroy active pieces
-            foreach (var piece in visualPieces.Values)
+            _clearScratch.Clear();
+
+            // Dictionary<K,V> enumerator is a struct - safe to foreach the key-value pairs
+            foreach (var kv in visualPieces)
             {
-                if (piece != null) Destroy(piece.gameObject);
+                _clearScratch.Add(kv.Value);
             }
 
-            // Destroy dead pieces
-            foreach (var dead in deadWhitePieces)
+            // Standard for-loops guarantee zero heap allocations
+            for (int i = 0; i < _clearScratch.Count; i++)
             {
-                if (dead != null) Destroy(dead.gameObject);
-            }
-            foreach (var dead in deadBlackPieces)
-            {
-                if (dead != null) Destroy(dead.gameObject);
+                if (_clearScratch[i] != null) Destroy(_clearScratch[i].gameObject);
             }
 
-            // Clear collections
+            for (int i = 0; i < deadWhitePieces.Count; i++)
+            {
+                if (deadWhitePieces[i] != null) Destroy(deadWhitePieces[i].gameObject);
+            }
+
+            for (int i = 0; i < deadBlackPieces.Count; i++)
+            {
+                if (deadBlackPieces[i] != null) Destroy(deadBlackPieces[i].gameObject);
+            }
+
+            // Clear collections (O(1) allocation-free)
             visualPieces.Clear();
             deadWhitePieces.Clear();
             deadBlackPieces.Clear();
+            _clearScratch.Clear();
 
             // Clear highlights
             ClearLegalMoveHighlights();
@@ -377,11 +389,7 @@ namespace ChessTheMasterPiece.View
         /// </summary>
         private void AnimateDeath(ChessPiece victim)
         {
-            Collider col = victim.GetComponent<Collider>();
-            if (col != null)
-            {
-                col.enabled = false;
-            }
+            victim.DisableCollider();
 
             List<ChessPiece> graveyard = victim.team == Team.White ? deadWhitePieces : deadBlackPieces;
             graveyard.Add(victim);
