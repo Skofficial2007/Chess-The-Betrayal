@@ -2,6 +2,7 @@ using System;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using ChessTheMasterPiece.Data;
 
 namespace ChessTheMasterPiece.UI
 {
@@ -33,15 +34,15 @@ namespace ChessTheMasterPiece.UI
             gameObject.SetActive(active);
         }
 
-        public void SetWinnerText(int winnerTeam)
+        public void SetWinnerText(Team? winnerTeam)
         {
             if (winnerText != null)
             {
-                if (winnerTeam == 0)
+                if (winnerTeam == Team.White)
                 {
                     winnerText.text = "White Team Won!";
                 }
-                else if (winnerTeam == 1)
+                else if (winnerTeam == Team.Black)
                 {
                     winnerText.text = "Black Team Won!";
                 }

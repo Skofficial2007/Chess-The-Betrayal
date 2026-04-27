@@ -2042,7 +2042,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::GameManager
   boardSizeX: 8
   boardSizeY: 8
-  logMoves: 1
+  logMoves: 0
 --- !u!114 &608628694
 MonoBehaviour:
   m_ObjectHideFlags: 0

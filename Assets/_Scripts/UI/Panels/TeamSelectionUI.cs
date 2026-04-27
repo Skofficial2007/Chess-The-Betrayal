@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using UnityEngine.UI;
+using ChessTheMasterPiece.Data;
 
 namespace ChessTheMasterPiece.UI
 {
@@ -10,18 +11,18 @@ namespace ChessTheMasterPiece.UI
         [SerializeField] private Button whiteTeamButton;
         [SerializeField] private Button blackTeamButton;
 
-        public event Action<int> OnTeamSelected;
+        public event Action<Team> OnTeamSelected;
 
         private void Awake()
         {
             if (whiteTeamButton != null)
             {
-                whiteTeamButton.onClick.AddListener(() => OnTeamSelected?.Invoke(0));
+                whiteTeamButton.onClick.AddListener(() => OnTeamSelected?.Invoke(Team.White));
             }
 
             if (blackTeamButton != null)
             {
-                blackTeamButton.onClick.AddListener(() => OnTeamSelected?.Invoke(1));
+                blackTeamButton.onClick.AddListener(() => OnTeamSelected?.Invoke(Team.Black));
             }
         }
 
