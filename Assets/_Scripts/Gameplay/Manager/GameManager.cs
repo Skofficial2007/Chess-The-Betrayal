@@ -5,10 +5,6 @@ using ChessTheMasterPiece.Data;
 using ChessTheMasterPiece.Logic;
 using ChessTheMasterPiece.UI;
 
-#if UNITY_EDITOR
-using UnityEditor.Experimental.GraphView;
-#endif
-
 namespace ChessTheMasterPiece.Controllers
 {
     /// <summary>
