@@ -1,0 +1,110 @@
+using System.Collections.Generic;
+using ChessTheMasterPiece.Data;
+
+namespace ChessTheMasterPiece.Logic.Movement
+{
+    /// <summary>
+    /// Movement strategy for the Pawn piece.
+    /// Handles: forward moves, double-step from start, diagonal captures, en passant, promotion.
+    /// Most complex piece due to special rules and asymmetric movement.
+    /// </summary>
+    public class PawnMovement : IPieceMovement
+    {
+        public void GetRawMoves(BoardState board, PieceData piece, List<MoveCommand> buffer)
+        {
+            Vector2Int pos = new Vector2Int(piece.CurrentX, piece.CurrentY);
+            int dir = piece.MoveDirection; // +1 for white (moving up), -1 for black (moving down)
+
+            // 1. Single Forward Move
+            Vector2Int oneForward = new Vector2Int(pos.x, pos.y + dir);
+            if (board.IsValidIndex(oneForward) && board.GetPiece(oneForward) == null)
+            {
+                CheckAndAddPromotion(board, buffer, pos, oneForward, piece, null);
+
+                // 2. Double Forward Move (only from starting position and if one forward is clear)
+                if (pos.y == piece.InitialY && !piece.HasMoved)
+                {
+                    Vector2Int twoForward = new Vector2Int(pos.x, pos.y + (dir * 2));
+                    if (board.IsValidIndex(twoForward) && board.GetPiece(twoForward) == null)
+                    {
+                        buffer.Add(MoveCommand.CreateStandardMove(pos, twoForward, piece, null, board));
+                    }
+                }
+            }
+
+            // 3. Diagonal Captures
+            EvaluateCapture(board, buffer, piece, pos, new Vector2Int(pos.x - 1, pos.y + dir));
+            EvaluateCapture(board, buffer, piece, pos, new Vector2Int(pos.x + 1, pos.y + dir));
+
+            // 4. En Passant (O(1) access to last move via board.MoveHistory)
+            EvaluateEnPassant(board, buffer, piece, pos, dir);
+        }
+
+        /// <summary>
+        /// Checks if a diagonal square contains an enemy piece and adds the capture move.
+        /// </summary>
+        private void EvaluateCapture(BoardState board, List<MoveCommand> buffer, PieceData pawn, Vector2Int start, Vector2Int target)
+        {
+            if (!board.IsValidIndex(target)) return;
+
+            PieceData targetPiece = board.GetPiece(target);
+            if (targetPiece != null && targetPiece.Team != pawn.Team)
+            {
+                CheckAndAddPromotion(board, buffer, start, target, pawn, targetPiece);
+            }
+        }
+
+        /// <summary>
+        /// Adds a move, checking if it results in promotion.
+        /// If yes, generates all 4 promotion options (Queen, Rook, Knight, Bishop).
+        /// </summary>
+        private void CheckAndAddPromotion(BoardState board, List<MoveCommand> buffer, Vector2Int start, Vector2Int target, PieceData pawn, PieceData captured)
+        {
+            // Check if pawn reaches the promotion rank
+            int promotionRank = (pawn.MoveDirection == 1) ? board.TileCountY - 1 : 0;
+
+            if (target.y == promotionRank)
+            {
+                // Generate all promotion options
+                // In a real game, the player chooses; in AI, we evaluate all possibilities
+                buffer.Add(MoveCommand.CreatePromotionMove(start, target, pawn, ChessPieceType.Queen, captured, board));
+                buffer.Add(MoveCommand.CreatePromotionMove(start, target, pawn, ChessPieceType.Rook, captured, board));
+                buffer.Add(MoveCommand.CreatePromotionMove(start, target, pawn, ChessPieceType.Knight, captured, board));
+                buffer.Add(MoveCommand.CreatePromotionMove(start, target, pawn, ChessPieceType.Bishop, captured, board));
+            }
+            else
+            {
+                buffer.Add(MoveCommand.CreateStandardMove(start, target, pawn, captured, board));
+            }
+        }
+
+        /// <summary>
+        /// Evaluates if en passant capture is legal.
+        /// O(1) complexity - directly checks the board's CurrentEnPassantFile state variable.
+        /// This is mathematically perfect for Zobrist hashing and transposition tables.
+        /// </summary>
+        private void EvaluateEnPassant(BoardState board, List<MoveCommand> buffer, PieceData pawn, Vector2Int pos, int dir)
+        {
+            // Simply check if an En Passant file is currently active on the board state
+            if (!board.CurrentEnPassantFile.HasValue) return;
+
+            int epFileX = board.CurrentEnPassantFile.Value;
+
+            // Check if the vulnerable pawn is directly adjacent to our pawn
+            if (System.Math.Abs(epFileX - pos.x) == 1)
+            {
+                // The enemy pawn must be on the same Y rank as our pawn
+                PieceData enemyPawn = board.GetPiece(new Vector2Int(epFileX, pos.y));
+
+                if (enemyPawn != null && enemyPawn.Team != pawn.Team && enemyPawn.Type == ChessPieceType.Pawn)
+                {
+                    // Target is one square diagonal forward
+                    Vector2Int enPassantTarget = new Vector2Int(epFileX, pos.y + dir);
+                    Vector2Int capturePosition = new Vector2Int(epFileX, pos.y);
+
+                    buffer.Add(MoveCommand.CreateEnPassantMove(pos, enPassantTarget, pawn, enemyPawn, capturePosition, board));
+                }
+            }
+        }
+    }
+}
