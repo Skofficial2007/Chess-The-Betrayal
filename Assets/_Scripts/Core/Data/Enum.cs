@@ -21,8 +21,9 @@ namespace ChessTheMasterPiece.Data
 
     public enum Team
     {
-        White = 0,
-        Black = 1
+        None  = -1,
+        White =  0,
+        Black =  1
     }
 
     // State Machine Phases for Game Flow

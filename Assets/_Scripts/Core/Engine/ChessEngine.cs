@@ -34,7 +34,7 @@ namespace ChessTheMasterPiece.Logic
             output.Clear();
             PieceData piece = board.GetPiece(position);
 
-            if (piece == null || piece.Team != board.CurrentTurn)
+            if (piece.IsEmpty || piece.Team != board.CurrentTurn)
             {
                 return;
             }
@@ -46,7 +46,7 @@ namespace ChessTheMasterPiece.Logic
             }
 
             // Step 1: Ask the piece for every square it could physically reach, ignoring check rules.
-            strategy.GetRawMoves(board, piece, output);
+            strategy.GetRawMoves(board, piece, position, output);
 
             bool isKing = piece.Type == ChessPieceType.King;
             bool isCurrentlyInCheck = false;
@@ -96,20 +96,15 @@ namespace ChessTheMasterPiece.Logic
         public static void GetAllLegalMoves(BoardState board, Team team, List<MoveCommand> masterBuffer)
         {
             masterBuffer.Clear();
-            
-            
-            for (int x = 0; x < board.TileCountX; x++)
+
+            List<int> indices = board.GetPieceIndices(team);
+
+            for (int i = 0; i < indices.Count; i++)
             {
-                for (int y = 0; y < board.TileCountY; y++)
-                {
-                    PieceData piece = board.GetPiece(x, y);
-                    if (piece != null && piece.Team == team)
-                    {
-                        Vector2Int pos = new Vector2Int(piece.CurrentX, piece.CurrentY);
-                            GetLegalMoves(board, pos, MoveGenBuffer);
-                            masterBuffer.AddRange(MoveGenBuffer);
-                    }
-                }
+                int idx = indices[i];
+                Vector2Int pos = new Vector2Int(idx % board.TileCountX, idx / board.TileCountX);
+                GetLegalMoves(board, pos, MoveGenBuffer);
+                masterBuffer.AddRange(MoveGenBuffer);
             }
         }
 
@@ -123,26 +118,19 @@ namespace ChessTheMasterPiece.Logic
         /// </summary>
         private static bool DoesMoveLeaveKingInCheck(BoardState board, MoveCommand move)
         {
-            // 1. MAKE: Apply the move to the live board.
             ApplyMoveToBoard(board, move);
 
-            // 2. EVALUATE: Find our King and see if he's under attack.
-            PieceData myKing = board.FindKing(move.PieceTeam);
-            bool inCheck = false;
-            
-            if (myKing != null)
+            bool inCheck;
+            if (board.TryFindKing(move.PieceTeam, out Vector2Int kingPos))
             {
-                Vector2Int kingPos = new Vector2Int(myKing.CurrentX, myKing.CurrentY);
                 Team enemyTeam = move.PieceTeam == Team.White ? Team.Black : Team.White;
                 inCheck = IsSquareUnderAttack(board, kingPos, enemyTeam);
             }
             else
             {
-                // King not found — this shouldn't happen in a valid game, but assume illegal to be safe.
                 inCheck = true;
             }
 
-            // 3. UNMAKE: Restore the board to exactly how it was before.
             UndoMoveOnBoard(board, move);
 
             return inCheck;
@@ -154,30 +142,29 @@ namespace ChessTheMasterPiece.Logic
         /// </summary>
         public static bool IsSquareUnderAttack(BoardState board, Vector2Int targetSquare, Team attackerTeam)
         {
-            for (int x = 0; x < board.TileCountX; x++)
+            List<int> indices = board.GetPieceIndices(attackerTeam);
+
+            for (int i = 0; i < indices.Count; i++)
             {
-                for (int y = 0; y < board.TileCountY; y++)
+                int idx = indices[i];
+                int ax = idx % board.TileCountX;
+                int ay = idx / board.TileCountX;
+                PieceData attacker = board.GetPiece(ax, ay);
+                Vector2Int attackerPos = new Vector2Int(ax, ay);
+
+                IPieceMovement strategy = MovementFactory.GetStrategy(attacker.Type);
+                if (strategy == null) continue;
+
+                AttackCheckBuffer.Clear();
+                strategy.GetRawMoves(board, attacker, attackerPos, AttackCheckBuffer);
+
+                for (int j = 0; j < AttackCheckBuffer.Count; j++)
                 {
-                    PieceData attacker = board.GetPiece(x, y);
-                    
-                    if (attacker != null && attacker.Team == attackerTeam)
-                    {
-                        IPieceMovement strategy = MovementFactory.GetStrategy(attacker.Type);
-                        if (strategy == null) continue;
-
-                        AttackCheckBuffer.Clear();
-                        strategy.GetRawMoves(board, attacker, AttackCheckBuffer);
-
-                        for (int i = 0; i < AttackCheckBuffer.Count; i++)
-                        {
-                            if (AttackCheckBuffer[i].EndPosition == targetSquare)
-                            {
-                                return true;
-                            }
-                        }
-                    }
+                    if (AttackCheckBuffer[j].EndPosition == targetSquare)
+                        return true;
                 }
             }
+
             return false;
         }
 
@@ -186,10 +173,9 @@ namespace ChessTheMasterPiece.Logic
         /// </summary>
         public static bool IsKingInCheck(BoardState board, Team team)
         {
-            PieceData king = board.FindKing(team);
-            if (king == null) return false;
+            if (!board.TryFindKing(team, out Vector2Int kingPos))
+                return false;
 
-            Vector2Int kingPos = new Vector2Int(king.CurrentX, king.CurrentY);
             Team enemyTeam = team == Team.White ? Team.Black : Team.White;
 
             return IsSquareUnderAttack(board, kingPos, enemyTeam);
@@ -210,9 +196,9 @@ namespace ChessTheMasterPiece.Logic
                 {
                     PieceData piece = board.GetPiece(x, y);
                     
-                    if (piece != null && piece.Team == team)
+                    if (!piece.IsEmpty && piece.Team == team)
                     {
-                        Vector2Int pos = new Vector2Int(piece.CurrentX, piece.CurrentY);
+                        Vector2Int pos = new Vector2Int(x, y);
                         GetLegalMoves(board, pos, MoveGenBuffer);
 
                         if (MoveGenBuffer.Count > 0)
@@ -416,17 +402,14 @@ namespace ChessTheMasterPiece.Logic
 
             if (move.IsPromotion)
             {
-                // The pawn has already moved to the end square — grab it there and change its type.
                 PieceData pieceOnBoard = board.GetPiece(move.EndPosition);
 
-                if (pieceOnBoard != null)
+                if (!pieceOnBoard.IsEmpty)
                 {
-                    pieceOnBoard.PromoteTo(move.PromotedTo);
+                    board.SetPiece(pieceOnBoard.WithType(move.PromotedTo), move.EndPosition.x, move.EndPosition.y);
                 }
                 else
                 {
-                    // This should never happen in a valid game.
-                    // TODO: Replace UnityEngine.Debug.LogError with a C# exception or a delegate callback so this class stays Unity-free.
                     UnityEngine.Debug.LogError($"[ChessEngine] Promotion failed: No piece found at {move.EndPosition}");
                 }
             }
@@ -459,29 +442,20 @@ namespace ChessTheMasterPiece.Logic
                 board.MoveHistory.RemoveAt(board.MoveHistory.Count - 1);
             }
 
-            // 1. Grab the primary piece from its destination.
             PieceData primaryPiece = board.GetPiece(move.EndPosition);
 
-            // If it was promoted, turn it back into a pawn.
-            if (move.IsPromotion && primaryPiece != null)
+            if (move.IsPromotion && !primaryPiece.IsEmpty)
             {
-                primaryPiece.Type = ChessPieceType.Pawn;
+                primaryPiece = primaryPiece.WithType(ChessPieceType.Pawn);
             }
 
-            // 2. Move it back to where it came from.
-            // We use SetPiece instead of MovePiece here to avoid triggering capture logic.
-            board.SetPiece(null, move.EndPosition.x, move.EndPosition.y);
-            board.SetPiece(primaryPiece, move.StartPosition.x, move.StartPosition.y);
-            if (primaryPiece != null)
-            {
-                primaryPiece.HasMoved = move.PieceHadMoved;
-            }
+            board.SetPiece(PieceData.Empty, move.EndPosition.x, move.EndPosition.y);
+            board.SetPiece(primaryPiece.WithHasMoved(move.PieceHadMoved), move.StartPosition.x, move.StartPosition.y);
 
-            // 3. Bring back any piece that was captured.
             if (move.HasCapture)
             {
                 List<PieceData> graveyard = move.CapturedTeam == Team.White ? board.WhiteCaptured : board.BlackCaptured;
-                PieceData resurrectedPiece = null;
+                PieceData resurrectedPiece;
                 if (graveyard.Count > 0)
                 {
                     resurrectedPiece = graveyard[graveyard.Count - 1];
@@ -489,32 +463,23 @@ namespace ChessTheMasterPiece.Logic
                 }
                 else
                 {
-                    // Failsafe: recreate the piece if the graveyard is somehow empty (shouldn't happen).
                     int dir = move.CapturedTeam == Team.White ? 1 : -1;
-                    resurrectedPiece = new PieceData(move.CapturedTeam, move.CapturedType, 0, 0, dir);
+                    resurrectedPiece = new PieceData(move.CapturedTeam, move.CapturedType, dir, 0, false);
                 }
-                resurrectedPiece.HasMoved = move.CapturedHadMoved;
+                resurrectedPiece = resurrectedPiece.WithHasMoved(move.CapturedHadMoved);
 
-                // En passant captures happen on a different square than the landing square.
                 Vector2Int capturePos = move.IsEnPassant && move.EnPassantCapturePosition.HasValue
                     ? move.EnPassantCapturePosition.Value
                     : move.EndPosition;
                 board.SetPiece(resurrectedPiece, capturePos.x, capturePos.y);
             }
 
-            // 4. Move the Rook back if this was a castling move.
             if (move.IsCastling && move.RookStartPosition.HasValue && move.RookEndPosition.HasValue)
             {
                 PieceData rook = board.GetPiece(move.RookEndPosition.Value);
 
-                board.SetPiece(null, move.RookEndPosition.Value.x, move.RookEndPosition.Value.y);
-                board.SetPiece(rook, move.RookStartPosition.Value.x, move.RookStartPosition.Value.y);
-
-                // The Rook definitely hadn't moved before castling, so restore that state.
-                if (rook != null)
-                {
-                    rook.HasMoved = false;
-                }
+                board.SetPiece(PieceData.Empty, move.RookEndPosition.Value.x, move.RookEndPosition.Value.y);
+                board.SetPiece(rook.WithHasMoved(false), move.RookStartPosition.Value.x, move.RookStartPosition.Value.y);
             }
         }
 
@@ -570,7 +535,7 @@ namespace ChessTheMasterPiece.Logic
                 for (int y = 0; y < board.TileCountY; y++)
                 {
                     PieceData piece = board.GetPiece(x, y);
-                    if (piece == null) continue;
+                    if (piece.IsEmpty) continue;
 
                     int value = GetPieceValue(piece.Type);
 

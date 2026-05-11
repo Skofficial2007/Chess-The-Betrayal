@@ -42,7 +42,7 @@ namespace ChessTheMasterPiece.Logic
             Vector2Int startPosition,
             Vector2Int endPosition,
             PieceData pieceMoved,
-            PieceData pieceCaptured = null,
+            PieceData pieceCaptured = default,
             SpecialMove specialMoveType = SpecialMove.None,
             ChessPieceType promotedTo = ChessPieceType.None,
             Vector2Int? rookStartPosition = null,
@@ -54,8 +54,7 @@ namespace ChessTheMasterPiece.Logic
             StartPosition = startPosition;
             EndPosition = endPosition;
 
-            // Extract Moving Piece Snapshot
-            if (pieceMoved != null)
+            if (!pieceMoved.IsEmpty)
             {
                 PieceTeam = pieceMoved.Team;
                 PieceType = pieceMoved.Type;
@@ -70,8 +69,7 @@ namespace ChessTheMasterPiece.Logic
                 PieceHadMoved = false;
             }
 
-            // Extract Captured Piece Snapshot
-            if (pieceCaptured != null)
+            if (!pieceCaptured.IsEmpty)
             {
                 HasCapture = true;
                 CapturedTeam = pieceCaptured.Team;
@@ -97,7 +95,7 @@ namespace ChessTheMasterPiece.Logic
 
         #region Factory Methods
 
-        public static MoveCommand CreateStandardMove(Vector2Int from, Vector2Int to, PieceData piece, PieceData captured = null, BoardState board = null)
+        public static MoveCommand CreateStandardMove(Vector2Int from, Vector2Int to, PieceData piece, PieceData captured = default, BoardState board = null)
         {
             return new MoveCommand(from, to, piece, captured,
                 previousCastlingMask: board?.CastlingRights ?? 0,
@@ -106,7 +104,7 @@ namespace ChessTheMasterPiece.Logic
 
         public static MoveCommand CreateCastlingMove(Vector2Int kingFrom, Vector2Int kingTo, PieceData king, Vector2Int rookFrom, Vector2Int rookTo, BoardState board = null)
         {
-            return new MoveCommand(kingFrom, kingTo, king, null, SpecialMove.Castling, ChessPieceType.None, rookFrom, rookTo, null,
+            return new MoveCommand(kingFrom, kingTo, king, default, SpecialMove.Castling, ChessPieceType.None, rookFrom, rookTo, null,
                 board?.CastlingRights ?? 0, board?.EnPassantFile);
         }
 
@@ -116,7 +114,7 @@ namespace ChessTheMasterPiece.Logic
                 board?.CastlingRights ?? 0, board?.EnPassantFile);
         }
 
-        public static MoveCommand CreatePromotionMove(Vector2Int from, Vector2Int to, PieceData pawn, ChessPieceType promotedTo, PieceData captured = null, BoardState board = null)
+        public static MoveCommand CreatePromotionMove(Vector2Int from, Vector2Int to, PieceData pawn, ChessPieceType promotedTo, PieceData captured = default, BoardState board = null)
         {
             return new MoveCommand(from, to, pawn, captured, SpecialMove.Promotion, promotedTo, null, null, null,
                 board?.CastlingRights ?? 0, board?.EnPassantFile);

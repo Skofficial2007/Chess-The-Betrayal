@@ -10,24 +10,23 @@ namespace ChessTheMasterPiece.Logic.Movement
     /// </summary>
     public class PawnMovement : IPieceMovement
     {
-        public void GetRawMoves(BoardState board, PieceData piece, List<MoveCommand> buffer)
+        public void GetRawMoves(BoardState board, PieceData piece, Vector2Int pos, List<MoveCommand> buffer)
         {
-            Vector2Int pos = new Vector2Int(piece.CurrentX, piece.CurrentY);
             int dir = piece.MoveDirection; // +1 for white (moving up), -1 for black (moving down)
 
             // 1. Single Forward Move
             Vector2Int oneForward = new Vector2Int(pos.x, pos.y + dir);
-            if (board.IsValidIndex(oneForward) && board.GetPiece(oneForward) == null)
+            if (board.IsValidIndex(oneForward) && board.GetPiece(oneForward).IsEmpty)
             {
-                AddMoveOrPromotion(board, buffer, pos, oneForward, piece, null);
+                AddMoveOrPromotion(board, buffer, pos, oneForward, piece, default);
 
                 // 2. Double Forward Move (only from starting position and if one forward is clear)
                 if (pos.y == piece.StartRow && !piece.HasMoved)
                 {
                     Vector2Int twoForward = new Vector2Int(pos.x, pos.y + (dir * 2));
-                    if (board.IsValidIndex(twoForward) && board.GetPiece(twoForward) == null)
+                    if (board.IsValidIndex(twoForward) && board.GetPiece(twoForward).IsEmpty)
                     {
-                        buffer.Add(MoveCommand.CreateStandardMove(pos, twoForward, piece, null, board));
+                        buffer.Add(MoveCommand.CreateStandardMove(pos, twoForward, piece, default, board));
                     }
                 }
             }
@@ -48,7 +47,7 @@ namespace ChessTheMasterPiece.Logic.Movement
             if (!board.IsValidIndex(target)) return;
 
             PieceData targetPiece = board.GetPiece(target);
-            if (targetPiece != null && targetPiece.Team != pawn.Team)
+            if (!targetPiece.IsEmpty && targetPiece.Team != pawn.Team)
             {
                 AddMoveOrPromotion(board, buffer, start, target, pawn, targetPiece);
             }
@@ -93,7 +92,7 @@ namespace ChessTheMasterPiece.Logic.Movement
                 // The enemy pawn must be on the same Y rank as our pawn
                 PieceData enemyPawn = board.GetPiece(new Vector2Int(epFileX, pos.y));
 
-                if (enemyPawn != null && enemyPawn.Team != pawn.Team && enemyPawn.Type == ChessPieceType.Pawn)
+                if (!enemyPawn.IsEmpty && enemyPawn.Team != pawn.Team && enemyPawn.Type == ChessPieceType.Pawn)
                 {
                     // Target is one square diagonal forward
                     Vector2Int enPassantTarget = new Vector2Int(epFileX, pos.y + dir);

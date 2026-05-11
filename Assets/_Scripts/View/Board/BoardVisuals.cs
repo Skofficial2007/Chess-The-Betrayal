@@ -215,7 +215,7 @@ namespace ChessTheMasterPiece.View
                 for (int y = 0; y < board.TileCountY; y++)
                 {
                     PieceData data = board.GetPiece(x, y);
-                    if (data != null)
+                    if (!data.IsEmpty)
                     {
                         SpawnSinglePiece(data, new ChessTheMasterPiece.Data.Vector2Int(x, y));
                     }
@@ -345,11 +345,11 @@ namespace ChessTheMasterPiece.View
                     Destroy(movingPiece.gameObject);
 
                     PieceData promotedData = new PieceData(
-                        move.PieceTeam,
-                        move.PromotedTo,
-                        move.EndPosition.x,
-                        move.EndPosition.y,
-                        move.PieceMoveDirection
+                        team: move.PieceTeam,
+                        type: move.PromotedTo,
+                        moveDirection: move.PieceMoveDirection,
+                        startRow: 0,
+                        hasMoved: true
                     );
                     SpawnSinglePiece(promotedData, move.EndPosition);
                 }
