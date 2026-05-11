@@ -212,18 +212,16 @@ namespace ChessTheMasterPiece.Controllers
         /// </summary>
         private void SetupStandardPieces()
         {
-            // White starts at the bottom (rank 0 and 1), moving up.
             for (int x = 0; x < boardSizeX; x++)
             {
-                LiveBoard.SetPiece(new PieceData(Team.White, StandardBackRank[x], x, 0, direction: 1), x, 0);
-                LiveBoard.SetPiece(new PieceData(Team.White, ChessPieceType.Pawn, x, 1, direction: 1), x, 1);
+                LiveBoard.SetPiece(new PieceData(Team.White, StandardBackRank[x], moveDirection: 1, startRow: 0), x, 0);
+                LiveBoard.SetPiece(new PieceData(Team.White, ChessPieceType.Pawn, moveDirection: 1, startRow: 1), x, 1);
             }
 
-            // Black starts at the top (rank 6 and 7), moving down.
             for (int x = 0; x < boardSizeX; x++)
             {
-                LiveBoard.SetPiece(new PieceData(Team.Black, ChessPieceType.Pawn, x, boardSizeY - 2, direction: -1), x, boardSizeY - 2);
-                LiveBoard.SetPiece(new PieceData(Team.Black, StandardBackRank[x], x, boardSizeY - 1, direction: -1), x, boardSizeY - 1);
+                LiveBoard.SetPiece(new PieceData(Team.Black, ChessPieceType.Pawn, moveDirection: -1, startRow: boardSizeY - 2), x, boardSizeY - 2);
+                LiveBoard.SetPiece(new PieceData(Team.Black, StandardBackRank[x], moveDirection: -1, startRow: boardSizeY - 1), x, boardSizeY - 1);
             }
 
             LiveBoard.ComputeFullZobristHash();
@@ -358,7 +356,7 @@ namespace ChessTheMasterPiece.Controllers
             }
 
             PieceData piece = LiveBoard.GetPiece(position);
-            return piece != null && piece.Team == LiveBoard.CurrentTurn;
+            return !piece.IsEmpty && piece.Team == LiveBoard.CurrentTurn;
         }
 
         #endregion

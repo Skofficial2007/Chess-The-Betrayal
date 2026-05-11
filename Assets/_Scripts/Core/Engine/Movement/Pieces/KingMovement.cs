@@ -28,10 +28,8 @@ namespace ChessTheMasterPiece.Logic.Movement
         private static readonly int[] QueensideEmptyPaths = { 1, 2, 3 };
         private static readonly int[] KingsideEmptyPaths = { 5, 6 };
 
-        public void GetRawMoves(BoardState board, PieceData piece, List<MoveCommand> buffer)
+        public void GetRawMoves(BoardState board, PieceData piece, Vector2Int pos, List<MoveCommand> buffer)
         {
-            Vector2Int pos = new Vector2Int(piece.CurrentX, piece.CurrentY);
-
             // 1. Standard one-step moves in all 8 directions
             for (int i = 0; i < Offsets.GetLength(0); i++)
             {
@@ -42,7 +40,7 @@ namespace ChessTheMasterPiece.Logic.Movement
                 PieceData targetPiece = board.GetPiece(target);
 
                 // Can move to empty squares or capture enemy pieces
-                if (targetPiece == null || targetPiece.Team != piece.Team)
+                if (targetPiece.IsEmpty || targetPiece.Team != piece.Team)
                 {
                     buffer.Add(MoveCommand.CreateStandardMove(pos, target, piece, targetPiece, board));
                 }
@@ -99,7 +97,7 @@ namespace ChessTheMasterPiece.Logic.Movement
             PieceData rook = board.GetPiece(rookPos);
 
             // Validate Rook exists, is correct type, same team, and hasn't moved
-            if (rook == null ||
+            if (rook.IsEmpty ||
                 rook.Type != ChessPieceType.Rook ||
                 rook.Team != king.Team ||
                 rook.HasMoved)
@@ -111,7 +109,7 @@ namespace ChessTheMasterPiece.Logic.Movement
             foreach (int x in emptyXPaths)
             {
                 Vector2Int checkPos = new Vector2Int(x, kingPos.y);
-                if (board.GetPiece(checkPos) != null)
+                if (!board.GetPiece(checkPos).IsEmpty)
                 {
                     return; // Path is blocked
                 }

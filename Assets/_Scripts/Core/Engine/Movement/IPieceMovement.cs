@@ -16,7 +16,8 @@ namespace ChessTheMasterPiece.Logic.Movement
         /// </summary>
         /// <param name="board">The current board state (read EnPassantFile and use piece.HasMoved for history-dependent moves)</param>
         /// <param name="piece">The piece to generate moves for</param>
+        /// <param name="position">The position of the piece on the board</param>
         /// <param name="buffer">The list to populate with raw MoveCommands</param>
-        void GetRawMoves(BoardState board, PieceData piece, List<MoveCommand> buffer);
+        void GetRawMoves(BoardState board, PieceData piece, Vector2Int position, List<MoveCommand> buffer);
     }
 }

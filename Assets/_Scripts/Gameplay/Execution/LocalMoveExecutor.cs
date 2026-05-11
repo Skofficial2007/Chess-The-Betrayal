@@ -49,17 +49,15 @@ namespace ChessTheMasterPiece.Controllers
 
             // Validate piece ownership
             PieceData piece = _board.GetPiece(from);
-            if (piece == null || piece.Team != _board.CurrentTurn)
+            if (piece.IsEmpty || piece.Team != _board.CurrentTurn)
             {
                 if (_logMoves) Debug.Log($"[LocalMoveExecutor] Move rejected: wrong piece or turn");
                 OnMoveRejected?.Invoke(from, to);
                 return;
             }
 
-            // Handle King-on-Rook castling shortcut
-            // If the player dragged the King onto a friendly Rook, remap the 'to' target to the standard 2-step castling square.
             PieceData targetPiece = _board.GetPiece(to);
-            if (piece.Type == ChessPieceType.King && targetPiece != null && 
+            if (piece.Type == ChessPieceType.King && !targetPiece.IsEmpty && 
                 targetPiece.Type == ChessPieceType.Rook && targetPiece.Team == piece.Team)
             {
                 // If Rook is at X=7 (Kingside), Target is X=6. If Rook is at X=0 (Queenside), Target is X=2.

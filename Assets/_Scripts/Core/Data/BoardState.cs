@@ -142,7 +142,7 @@ namespace ChessTheMasterPiece.Data
                 for (int y = 0; y < TileCountY; y++)
                 {
                     PieceData piece = LogicalBoard[x, y];
-                    if (piece != null)
+                    if (!piece.IsEmpty)
                     {
                         TogglePieceHash(piece.Team, piece.Type, x, y);
                     }
@@ -165,6 +165,9 @@ namespace ChessTheMasterPiece.Data
 
         // The mathematical grid - holds pure data, not GameObjects
         public PieceData[,] LogicalBoard { get; private set; }
+
+        private readonly List<int> _whitePieceIndices = new List<int>(16);
+        private readonly List<int> _blackPieceIndices = new List<int>(16);
 
         public Team CurrentTurn { get; set; }
         public int TileCountX { get; private set; }
@@ -204,13 +207,33 @@ namespace ChessTheMasterPiece.Data
         /// </summary>
         public void SetPiece(PieceData piece, int x, int y)
         {
-            if (IsValidIndex(x, y))
+            if (!IsValidIndex(x, y)) return;
+
+            PieceData existing = LogicalBoard[x, y];
+
+            if (!existing.IsEmpty)
             {
-                LogicalBoard[x, y] = piece;
-                if (piece != null)
+                if (existing.Team == Team.White) 
                 {
-                    piece.CurrentX = x;
-                    piece.CurrentY = y;
+                    _whitePieceIndices.Remove(y * TileCountX + x);
+                }
+                else
+                {
+                    _blackPieceIndices.Remove(y * TileCountX + x);
+                }
+            }
+
+            LogicalBoard[x, y] = piece;
+
+            if (!piece.IsEmpty)
+            {
+                if (piece.Team == Team.White)
+                {
+                    _whitePieceIndices.Add(y * TileCountX + x);
+                }
+                else
+                {
+                    _blackPieceIndices.Add(y * TileCountX + x);
                 }
             }
         }
@@ -225,7 +248,7 @@ namespace ChessTheMasterPiece.Data
             {
                 return LogicalBoard[x, y];
             }
-            return null;
+            return PieceData.Empty;
         }
 
         /// <summary>
@@ -243,26 +266,21 @@ namespace ChessTheMasterPiece.Data
         {
             if (!IsValidIndex(fromX, fromY) || !IsValidIndex(toX, toY))
             {
-                return null;
+                return PieceData.Empty;
             }
 
             PieceData movingPiece = LogicalBoard[fromX, fromY];
-            if (movingPiece == null)
+            if (movingPiece.IsEmpty)
             {
-                return null;
+                return PieceData.Empty;
             }
 
             PieceData capturedPiece = LogicalBoard[toX, toY];
 
-            // Update board
-            LogicalBoard[fromX, fromY] = null;
-            LogicalBoard[toX, toY] = movingPiece;
+            SetPiece(PieceData.Empty, fromX, fromY);
+            SetPiece(movingPiece.WithMoved(), toX, toY);
 
-            // Update piece data
-            movingPiece.MoveTo(toX, toY);
-
-            // Track captures
-            if (capturedPiece != null)
+            if (!capturedPiece.IsEmpty)
             {
                 if (capturedPiece.IsWhite)
                 {
@@ -292,13 +310,13 @@ namespace ChessTheMasterPiece.Data
         {
             if (!IsValidIndex(x, y))
             {
-                return null;
+                return PieceData.Empty;
             }
 
             PieceData piece = LogicalBoard[x, y];
-            LogicalBoard[x, y] = null;
+            SetPiece(PieceData.Empty, x, y);
 
-            if (piece != null)
+            if (!piece.IsEmpty)
             {
                 if (piece.IsWhite)
                 {
@@ -330,12 +348,14 @@ namespace ChessTheMasterPiece.Data
             {
                 for (int y = 0; y < TileCountY; y++)
                 {
-                    LogicalBoard[x, y] = null;
+                    LogicalBoard[x, y] = PieceData.Empty;
                 }
             }
             WhiteCaptured.Clear();
             BlackCaptured.Clear();
             MoveHistory.Clear();
+            _whitePieceIndices.Clear();
+            _blackPieceIndices.Clear();
             IsGameOver = false;
             Winner = null;
             CurrentTurn = Team.White;
@@ -344,24 +364,57 @@ namespace ChessTheMasterPiece.Data
             EnPassantFile = null;
         }
 
-        /// <summary>
-        /// Finds the king of the specified team.
-        /// Returns null if not found.
-        /// </summary>
-        public PieceData FindKing(Team team)
+        public bool TryFindKing(Team team, out Vector2Int kingPos)
         {
-            for (int x = 0; x < TileCountX; x++)
+            List<int> indices = GetPieceIndices(team);
+            for (int i = 0; i < indices.Count; i++)
             {
-                for (int y = 0; y < TileCountY; y++)
+                int idx = indices[i];
+                int x = idx % TileCountX;
+                int y = idx / TileCountX;
+                PieceData piece = LogicalBoard[x, y];
+                if (piece.Type == ChessPieceType.King)
                 {
-                    PieceData piece = LogicalBoard[x, y];
-                    if (piece != null && piece.Type == ChessPieceType.King && piece.Team == team)
-                    {
-                        return piece;
-                    }
+                    kingPos = new Vector2Int(x, y);
+                    return true;
                 }
             }
-            return null;
+            kingPos = Vector2Int.Invalid;
+            return false;
+        }
+
+        public PieceData FindKing(Team team)
+        {
+            List<int> indices = GetPieceIndices(team);
+            for (int i = 0; i < indices.Count; i++)
+            {
+                int idx = indices[i];
+                int x = idx % TileCountX;
+                int y = idx / TileCountX;
+                PieceData piece = LogicalBoard[x, y];
+                if (piece.Type == ChessPieceType.King)
+                {
+                    return piece;
+                }
+            }
+            return PieceData.Empty;
+        }
+
+        public Vector2Int FindKingPosition(Team team)
+        {
+            List<int> indices = GetPieceIndices(team);
+            for (int i = 0; i < indices.Count; i++)
+            {
+                int idx = indices[i];
+                int x = idx % TileCountX;
+                int y = idx / TileCountX;
+                PieceData piece = LogicalBoard[x, y];
+                if (piece.Type == ChessPieceType.King)
+                {
+                    return new Vector2Int(x, y);
+                }
+            }
+            return Vector2Int.Invalid;
         }
 
         /// <summary>
@@ -375,7 +428,7 @@ namespace ChessTheMasterPiece.Data
                 for (int y = 0; y < TileCountY; y++)
                 {
                     PieceData piece = LogicalBoard[x, y];
-                    if (piece != null && piece.Team == team)
+                    if (!piece.IsEmpty && piece.Team == team)
                     {
                         output.Add(piece);
                     }
@@ -444,29 +497,17 @@ namespace ChessTheMasterPiece.Data
             clone.CastlingRights = this.CastlingRights;
             clone.EnPassantFile = this.EnPassantFile;
 
-            // Clone the board
-            for (int x = 0; x < TileCountX; x++)
-            {
-                for (int y = 0; y < TileCountY; y++)
-                {
-                    if (this.LogicalBoard[x, y] != null)
-                    {
-                        clone.LogicalBoard[x, y] = this.LogicalBoard[x, y].Clone();
-                    }
-                }
-            }
+            Array.Copy(this.LogicalBoard, clone.LogicalBoard, this.LogicalBoard.Length);
 
-            // Clone captured pieces
             foreach (var piece in WhiteCaptured)
             {
-                clone.WhiteCaptured.Add(piece.Clone());
+                clone.WhiteCaptured.Add(piece);
             }
             foreach (var piece in BlackCaptured)
             {
-                clone.BlackCaptured.Add(piece.Clone());
+                clone.BlackCaptured.Add(piece);
             }
 
-            // Clone move history
             foreach (var move in MoveHistory)
             {
                 clone.MoveHistory.Add(move);
@@ -474,5 +515,8 @@ namespace ChessTheMasterPiece.Data
 
             return clone;
         }
+
+        public List<int> GetPieceIndices(Team team) =>
+            team == Team.White ? _whitePieceIndices : _blackPieceIndices;
     }
 }
