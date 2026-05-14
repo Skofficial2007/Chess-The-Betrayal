@@ -15,7 +15,7 @@ namespace ChessTheMasterPiece.Controllers
     {
         public event Action<MoveCommand> OnMoveConfirmed;
         public event Action<ChessTheMasterPiece.Data.Vector2Int, ChessTheMasterPiece.Data.Vector2Int> OnMoveRejected;
-        public event Action<ChessTheMasterPiece.Data.Vector2Int> OnPromotionRequired;
+        public event Action<ChessTheMasterPiece.Data.Vector2Int, ChessTheMasterPiece.Data.Vector2Int> OnPromotionRequired;
 
         private readonly BoardState _board;
         private readonly List<MoveCommand> _legalMoves = new List<MoveCommand>(32);
@@ -105,7 +105,7 @@ namespace ChessTheMasterPiece.Controllers
                 if (_logMoves) Debug.Log($"[LocalMoveExecutor] Promotion detected at {to}. Awaiting UI choice.");
 
                 // Fire the promotion event - UI will show the dialog
-                OnPromotionRequired?.Invoke(to);
+                OnPromotionRequired?.Invoke(_pendingPromotionMove.StartPosition, to);
                 return;
             }
 
