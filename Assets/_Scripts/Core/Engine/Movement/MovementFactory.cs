@@ -5,14 +5,10 @@ using ChessTheMasterPiece.Data;
 namespace ChessTheMasterPiece.Logic.Movement
 {
     /// <summary>
-    /// Factory for retrieving piece movement strategies.
-    /// Uses the Strategy Pattern to decouple piece logic from the core engine.
-    /// Thread-safe: Uses [ThreadStatic] to provide lock-free caching for multi-threaded AI.
+    /// Hands out the right movement rules for any piece type. Because each AI thread needs its own copy to work safely in parallel, we use [ThreadStatic] to give every thread its own private set.
     /// </summary>
     public static class MovementFactory
     {
-        // ThreadStatic ensures each background thread (and the main thread) 
-        // gets its own completely isolated instance of this dictionary.
         [ThreadStatic]
         private static Dictionary<ChessPieceType, IPieceMovement> _threadStrategies;
 
@@ -38,8 +34,6 @@ namespace ChessTheMasterPiece.Logic.Movement
         /// </summary>
         public static IPieceMovement GetStrategy(ChessPieceType type)
         {
-            // The null-coalescing assignment operator (??=) is a clean C# 8+ 
-            // way to initialize only if null on the current thread.
             _threadStrategies ??= CreateStrategies();
 
             if (_threadStrategies.TryGetValue(type, out IPieceMovement strategy))
@@ -52,7 +46,8 @@ namespace ChessTheMasterPiece.Logic.Movement
 
         /// <summary>
         /// Registers a custom piece movement strategy (for modding/custom pieces).
-        /// NOTE: Because of ThreadStatic, this only registers the strategy on the CURRENT thread.
+        /// Heads up: because of how [ThreadStatic] works, this only registers the strategy for whichever thread calls it.
+        /// If you're registering custom pieces, make sure you do it on every thread that needs them.
         /// </summary>
         public static void RegisterStrategy(ChessPieceType type, IPieceMovement strategy)
         {

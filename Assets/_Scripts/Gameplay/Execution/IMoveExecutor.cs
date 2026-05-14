@@ -5,9 +5,8 @@ using ChessTheMasterPiece.Logic;
 namespace ChessTheMasterPiece.Controllers
 {
     /// <summary>
-    /// Contract for move execution. 
-    /// Allows swapping between local logic and future Server/Client RPC networking.
-    /// Implements the Command Pattern for optimistic client prediction.
+    /// Defines how a move request travels from the player's input to the game board.
+    /// The local offline version validates immediately; a future network version will ask the server first.
     /// </summary>
     public interface IMoveExecutor
     {
@@ -34,11 +33,11 @@ namespace ChessTheMasterPiece.Controllers
         /// Visual layer listens to this to snap pieces back.
         /// </summary>
         event Action<Vector2Int, Vector2Int> OnMoveRejected;
-        
+
         /// <summary>
         /// Fired when a pawn reaches the end and needs promotion.
-        /// UI layer listens to this to show the promotion dialog.
+        /// Passes (from, to) so the visual layer can optimistically snap the correct piece.
         /// </summary>
-        event Action<Vector2Int> OnPromotionRequired;
+        event Action<Vector2Int, Vector2Int> OnPromotionRequired;
     }
 }

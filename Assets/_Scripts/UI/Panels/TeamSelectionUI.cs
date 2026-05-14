@@ -5,6 +5,9 @@ using ChessTheMasterPiece.Data;
 
 namespace ChessTheMasterPiece.UI
 {
+    /// <summary>
+    /// Lets the player pick a team and emits the choice.
+    /// </summary>
     public class TeamSelectionUI : MonoBehaviour
     {
         [Header("UI References")]

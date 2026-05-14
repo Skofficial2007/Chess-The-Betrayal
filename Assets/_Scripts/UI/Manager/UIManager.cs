@@ -4,6 +4,9 @@ using ChessTheMasterPiece.Data;
 
 namespace ChessTheMasterPiece.UI
 {
+    /// <summary>
+    /// The traffic controller for all UI panels. It knows which panels should be open at any given time and listens to UI events to pass player choices (team selection, promotions) up to GameManager.
+    /// </summary>
     public class UIManager : MonoBehaviour
     {
         public static UIManager Instance { get; private set; }
@@ -34,7 +37,6 @@ namespace ChessTheMasterPiece.UI
 
         private void Start()
         {
-            // Initial State: Hide all panels
             if (teamSelectionUI != null)
             {
                 teamSelectionUI.SetActive(false);

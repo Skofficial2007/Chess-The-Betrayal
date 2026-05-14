@@ -5,57 +5,53 @@ using ChessTheMasterPiece.Logic.Movement;
 namespace ChessTheMasterPiece.Logic
 {
     /// <summary>
-    /// Pure, stateless chess rules engine with ZERO Unity dependencies.
-    /// Handles legal move generation, check detection, checkmate/stalemate evaluation.
-    /// Thread-safe and suitable for AI, networking, or headless simulation.
-    /// GC-optimized with buffer-passing pattern to eliminate allocation spikes.
+    /// The rules referee. Handles move generation, check detection, and figuring out when the game is over.
+    /// Nothing in here touches Unity — it's pure chess logic that can run on any thread.
     /// </summary>
     public static class ChessEngine
     {
-        // Pre-allocated thread-local scratch buffers to eliminate GC spikes and ensure thread-safety
+        /// <summary>
+        /// The theoretical maximum number of legal moves available to a single player in any valid chess position.
+        /// </summary>
+        public const int MaxMovesPerPosition = 218;
+
+        // Each thread gets its own private buffers so parallel AI searches don't step on each other.
         [System.ThreadStatic]
-        private static List<MoveCommand> _attackScratch;
-        private static List<MoveCommand> AttackScratch => _attackScratch ??= new List<MoveCommand>(64);
+        private static List<MoveCommand> _attackCheckBuffer;
+        private static List<MoveCommand> AttackCheckBuffer => _attackCheckBuffer ??= new List<MoveCommand>(64);
 
         [System.ThreadStatic]
-        private static List<MoveCommand> _engineScratch;
-        private static List<MoveCommand> EngineScratch => _engineScratch ??= new List<MoveCommand>(64);
+        private static List<MoveCommand> _moveGenBuffer;
+        private static List<MoveCommand> MoveGenBuffer => _moveGenBuffer ??= new List<MoveCommand>(64);
 
-        // Thread-local piece scratch used by multi-threaded AI to avoid shared allocations
         [System.ThreadStatic]
-        private static List<PieceData> _threadPieceScratch;
-        private static List<PieceData> ThreadPieceScratch => _threadPieceScratch ??= new List<PieceData>(16);
+        private static List<PieceData> _pieceListBuffer;
+        private static List<PieceData> PieceListBuffer => _pieceListBuffer ??= new List<PieceData>(16);
 
         #region Legal Move Generation
 
         /// <summary>
-        /// Populates the provided output list with legal moves.
-        /// Zero allocations - reuses the output buffer.
+        /// Fills <paramref name="output"/> with every legal move the piece at <paramref name="position"/> can make.
+        /// Illegal moves (ones that leave your own King in check) are filtered out before returning.
         /// </summary>
-        /// <param name="board">Current board state</param>
-        /// <param name="position">Position of the piece to move</param>
-        /// <param name="output">Pre-allocated list to populate with legal moves</param>
         public static void GetLegalMoves(BoardState board, Vector2Int position, List<MoveCommand> output)
         {
             output.Clear();
             PieceData piece = board.GetPiece(position);
 
-            // Validate piece exists and belongs to the current turn
-            if (piece == null || piece.Team != board.CurrentTurn)
+            if (piece.IsEmpty || piece.Team != board.CurrentTurn)
             {
                 return;
             }
 
-            // Get the movement strategy for this piece type
             IPieceMovement strategy = MovementFactory.GetStrategy(piece.Type);
             if (strategy == null)
             {
                 return;
             }
 
-            // Step 1: Get all physically possible moves (ignoring check)
-            // Populate the provided output buffer with raw moves first (zero-alloc).
-            strategy.GetRawMoves(board, piece, output);
+            // Step 1: Ask the piece for every square it could physically reach, ignoring check rules.
+            strategy.GetRawMoves(board, piece, position, output);
 
             bool isKing = piece.Type == ChessPieceType.King;
             bool isCurrentlyInCheck = false;
@@ -63,32 +59,30 @@ namespace ChessTheMasterPiece.Logic
 
             if (isKing)
             {
-                // Check if the King is in check BEFORE he makes a move
                 isCurrentlyInCheck = IsSquareUnderAttack(board, position, enemyTeam);
             }
 
-            // Step 2: Filter out moves that leave our own King in check
-            // We filter in-place to avoid allocations: compact valid moves to the start of the list.
+            // Step 2: Walk through the raw moves and throw out any that leave our King in danger.
             int write = 0;
             for (int i = 0; i < output.Count; i++)
             {
                 MoveCommand move = output[i];
 
-                // Enforce strict Castling rules
+                // Castling has extra rules beyond just "does it leave the King in check?"
                 if (move.IsCastling)
                 {
-                    // Rule 1: Cannot castle out of check
+                    // Rule 1: Cannot castle out of check.
                     if (isCurrentlyInCheck) continue;
 
-                    // Rule 2: Cannot pass through an attacked square
-                    // The King moves 2 steps. The intermediate square is 1 step in that direction.
+                    // Rule 2: Cannot pass through an attacked square.
+                    // The King moves 2 steps; the square in between must be safe too.
                     int direction = move.EndPosition.x > move.StartPosition.x ? 1 : -1;
                     Vector2Int passThroughSquare = new Vector2Int(move.StartPosition.x + direction, move.StartPosition.y);
 
                     if (IsSquareUnderAttack(board, passThroughSquare, enemyTeam)) continue;
                 }
 
-                // For all moves, ensure the final resting place is safe
+                // For all moves, make sure the King isn't sitting in check after it resolves.
                 if (!DoesMoveLeaveKingInCheck(board, move))
                 {
                     output[write++] = move;
@@ -102,27 +96,26 @@ namespace ChessTheMasterPiece.Logic
         }
 
         /// <summary>
-        /// High-performance AI move generator. 
-        /// Populates a single master buffer with ALL legal moves for a specific team.
-        /// 100% Zero Allocation.
+        /// Fills <paramref name="masterBuffer"/> with every legal move available to a team.
         /// </summary>
         public static void GetAllLegalMoves(BoardState board, Team team, List<MoveCommand> masterBuffer)
         {
             masterBuffer.Clear();
 
-            // Loop directly over the array to avoid GetAllPieces() list allocations
-            for (int x = 0; x < board.TileCountX; x++)
+            if (masterBuffer.Capacity < MaxMovesPerPosition)
             {
-                for (int y = 0; y < board.TileCountY; y++)
-                {
-                    PieceData piece = board.GetPiece(x, y);
-                    if (piece != null && piece.Team == team)
-                    {
-                        Vector2Int pos = new Vector2Int(piece.CurrentX, piece.CurrentY);
-                            GetLegalMoves(board, pos, EngineScratch);
-                            masterBuffer.AddRange(EngineScratch);
-                    }
-                }
+                masterBuffer.Capacity = MaxMovesPerPosition;
+            }
+
+            List<int> indices = board.GetPieceIndices(team);
+
+            for (int i = 0; i < indices.Count; i++)
+            {
+                int idx = indices[i];
+                Vector2Int pos = new Vector2Int(idx % board.TileCountX, idx / board.TileCountX);
+
+                GetLegalMoves(board, pos, MoveGenBuffer);
+                masterBuffer.AddRange(MoveGenBuffer);
             }
         }
 
@@ -131,82 +124,69 @@ namespace ChessTheMasterPiece.Logic
         #region Check Detection
 
         /// <summary>
-        /// Determines if a move would leave the moving player's King in check.
-        /// Uses Make/Unmake pattern to eliminate GC pressure from deep move trees.
-        /// Zero allocations - mutates and restores the live board state.
+        /// Returns true if making this move would leave the moving player's King in check.
+        /// We apply the move, check the result, then undo it — the board ends up exactly as it started.
         /// </summary>
         private static bool DoesMoveLeaveKingInCheck(BoardState board, MoveCommand move)
         {
-            // 1. MAKE: Apply the move directly to the live board
-            ApplyMoveToBoard(board, move);
+            ApplyMoveToBoard(board, move, recordHistory: false);
 
-            // 2. EVALUATE: Find our King and check if he is under attack
-            PieceData myKing = board.FindKing(move.PieceTeam);
-            bool inCheck = false;
-            
-            if (myKing != null)
+            bool inCheck;
+            if (board.TryFindKing(move.PieceTeam, out Vector2Int kingPos))
             {
-                Vector2Int kingPos = new Vector2Int(myKing.CurrentX, myKing.CurrentY);
                 Team enemyTeam = move.PieceTeam == Team.White ? Team.Black : Team.White;
                 inCheck = IsSquareUnderAttack(board, kingPos, enemyTeam);
             }
             else
             {
-                // King not found - this shouldn't happen in a valid game
-                inCheck = true; // Assume illegal to be safe
+                inCheck = true;
             }
 
-            // 3. UNMAKE: Reverse time to restore the live board perfectly
-            UndoMoveOnBoard(board, move);
+            UndoMoveOnBoard(board, move, recordHistory: false);
 
             return inCheck;
         }
 
         /// <summary>
-        /// Checks if the specified square is under attack by any piece of the attacker team.
-        /// Uses raw moves (not legal moves) to avoid infinite recursion.
-        /// GC-optimized with scratch buffer and 2D array traversal.
+        /// Returns true if any piece on <paramref name="attackerTeam"/> can reach <paramref name="targetSquare"/>.
+        /// Uses raw moves (not legal moves) to avoid infinite recursion with check detection.
         /// </summary>
         public static bool IsSquareUnderAttack(BoardState board, Vector2Int targetSquare, Team attackerTeam)
         {
-            // Zero-allocation loop over the board
-            for (int x = 0; x < board.TileCountX; x++)
+            List<int> indices = board.GetPieceIndices(attackerTeam);
+
+            for (int i = 0; i < indices.Count; i++)
             {
-                for (int y = 0; y < board.TileCountY; y++)
+                int idx = indices[i];
+                int ax = idx % board.TileCountX;
+                int ay = idx / board.TileCountX;
+                PieceData attacker = board.GetPiece(ax, ay);
+                Vector2Int attackerPos = new Vector2Int(ax, ay);
+
+                IPieceMovement strategy = MovementFactory.GetStrategy(attacker.Type);
+                if (strategy == null) continue;
+
+                AttackCheckBuffer.Clear();
+                strategy.GetRawMoves(board, attacker, attackerPos, AttackCheckBuffer);
+
+                for (int j = 0; j < AttackCheckBuffer.Count; j++)
                 {
-                    PieceData attacker = board.GetPiece(x, y);
-                    
-                    if (attacker != null && attacker.Team == attackerTeam)
-                    {
-                        IPieceMovement strategy = MovementFactory.GetStrategy(attacker.Type);
-                        if (strategy == null) continue;
-
-                        // Zero-allocation raw move generation
-                        AttackScratch.Clear();
-                        strategy.GetRawMoves(board, attacker, AttackScratch);
-
-                        for (int i = 0; i < AttackScratch.Count; i++)
-                        {
-                            if (AttackScratch[i].EndPosition == targetSquare)
-                            {
-                                return true; 
-                            }
-                        }
-                    }
+                    if (AttackCheckBuffer[j].EndPosition == targetSquare)
+                        return true;
                 }
             }
+
             return false;
         }
 
         /// <summary>
-        /// Determines if the specified team's King is currently in check.
+        /// Returns true if the given team's King is currently in check.
         /// </summary>
         public static bool IsKingInCheck(BoardState board, Team team)
         {
-            PieceData king = board.FindKing(team);
-            if (king == null) return false;
+            if (!board.TryFindKing(team, out Vector2Int kingPos))
+                return false;
 
-            Vector2Int kingPos = new Vector2Int(king.CurrentX, king.CurrentY);
             Team enemyTeam = team == Team.White ? Team.Black : Team.White;
 
             return IsSquareUnderAttack(board, kingPos, enemyTeam);
@@ -217,48 +197,45 @@ namespace ChessTheMasterPiece.Logic
         #region Game State Evaluation
 
         /// <summary>
-        /// Evaluates if the specified team has any legal moves remaining.
-        /// GC-optimized with scratch buffer and 2D array traversal.
+        /// Returns true if the given team has at least one legal move available.
+        /// Optimized to use O(N) piece list instead of O(64) board scan.
         /// </summary>
         public static bool HasAnyLegalMoves(BoardState board, Team team)
         {
-            // Zero-allocation loop over the board
-            for (int x = 0; x < board.TileCountX; x++)
+            List<int> indices = board.GetPieceIndices(team);
+            for (int i = 0; i < indices.Count; i++)
             {
-                for (int y = 0; y < board.TileCountY; y++)
-                {
-                    PieceData piece = board.GetPiece(x, y);
-                    
-                    if (piece != null && piece.Team == team)
-                    {
-                        Vector2Int pos = new Vector2Int(piece.CurrentX, piece.CurrentY);
-                        GetLegalMoves(board, pos, EngineScratch);
+                int idx = indices[i];
+                Vector2Int pos = new Vector2Int(idx % board.TileCountX, idx / board.TileCountX);
 
-                        if (EngineScratch.Count > 0)
-                        {
-                            return true; // Found at least one legal move
-                        }
-                    }
+                // We only need to find ONE legal move to prove the game isn't over.
+                GetLegalMoves(board, pos, MoveGenBuffer);
+                if (MoveGenBuffer.Count > 0)
+                {
+                    return true;
                 }
             }
-            return false; // No legal moves available
+            return false;
         }
 
         /// <summary>
-        /// Evaluates the current game state for the specified team.
-        /// Returns: Checkmate, Stalemate, Check, or Normal.
+        /// Checks the board and tells you whether the given team is in checkmate, stalemate, check, or playing normally.
         /// </summary>
         public static GameState EvaluateGameState(BoardState board, Team team)
         {
-            bool isInCheck = IsKingInCheck(board, team);
             bool hasLegalMoves = HasAnyLegalMoves(board, team);
 
-            if (!hasLegalMoves)
+            if (hasLegalMoves) // Removed the '!' - this block runs if the game is still going
             {
-                return isInCheck ? GameState.Checkmate : GameState.Stalemate;
+                // IsKingInCheck is used to satisfy the GameState return type for the GameManager.
+                return IsKingInCheck(board, team) ? GameState.Check : GameState.Normal;
             }
 
-            return isInCheck ? GameState.Check : GameState.Normal;
+            // TODO (Betrayal): Add GameState.BetrayalInitiated and GameState.RetributionFailed here when
+            // the custom mechanic is implemented. GameManager's CheckForGameEnd() will handle the transitions.
+
+            // No legal moves: disambiguate checkmate vs stalemate
+            return IsKingInCheck(board, team) ? GameState.Checkmate : GameState.Stalemate;
         }
 
         #endregion
@@ -266,20 +243,19 @@ namespace ChessTheMasterPiece.Logic
         #region Move Execution
 
         /// <summary>
-        /// XORs all moving parts of a command into or out of the board's Zobrist Hash.
-        /// Calling this once applies the move to the hash. Calling it again perfectly reverses it.
-        /// Zero allocations - pure bitwise XOR operations.
+        /// Updates the Zobrist hash to reflect a move. Because XOR is self-cancelling, calling this
+        /// on the same move twice perfectly undoes the change — which is how move undo works.
         /// </summary>
         private static void ApplyZobristMove(BoardState board, MoveCommand move, int previousCastlingMask, int? previousEnPassantFile)
         {
-            // 1. Toggle Turn
+            // 1. Toggle whose turn it is.
             board.ToggleTurnHash();
 
-            // 2. Toggle Primary Piece (Remove from start, Add to end)
+            // 2. Move the primary piece: remove it from the start square, add it to the end square.
             board.TogglePieceHash(move.PieceTeam, move.PieceType, move.StartPosition.x, move.StartPosition.y);
             board.TogglePieceHash(move.PieceTeam, move.PieceType, move.EndPosition.x, move.EndPosition.y);
 
-            // 3. Toggle Capture (Remove captured piece from its square)
+            // 3. Remove the captured piece from its square.
             if (move.HasCapture)
             {
                 Vector2Int capPos = move.IsEnPassant && move.EnPassantCapturePosition.HasValue
@@ -289,46 +265,44 @@ namespace ChessTheMasterPiece.Logic
                 board.TogglePieceHash(move.CapturedTeam, move.CapturedType, capPos.x, capPos.y);
             }
 
-            // 4. Toggle Promotion (Remove the pawn that arrived, Add the promoted piece)
+            // 4. For promotions: remove the pawn that arrived, add the promoted piece.
             if (move.IsPromotion)
             {
                 board.TogglePieceHash(move.PieceTeam, ChessPieceType.Pawn, move.EndPosition.x, move.EndPosition.y);
                 board.TogglePieceHash(move.PieceTeam, move.PromotedTo, move.EndPosition.x, move.EndPosition.y);
             }
 
-            // 5. Toggle Castling (Move the Rook)
+            // 5. For castling: move the Rook.
             if (move.IsCastling && move.RookStartPosition.HasValue && move.RookEndPosition.HasValue)
             {
                 board.TogglePieceHash(move.PieceTeam, ChessPieceType.Rook, move.RookStartPosition.Value.x, move.RookStartPosition.Value.y);
                 board.TogglePieceHash(move.PieceTeam, ChessPieceType.Rook, move.RookEndPosition.Value.x, move.RookEndPosition.Value.y);
             }
 
-            // 6. Toggle Castling Rights State Change
-            // XOR out the old castling rights
+            // 6. Swap out the old castling rights for the new ones.
             board.ToggleCastlingHash(previousCastlingMask);
-            // XOR in the new castling rights
-            board.ToggleCastlingHash(board.CurrentCastlingMask);
+            board.ToggleCastlingHash(board.CastlingRights);
 
-            // 7. Toggle En Passant State Change
+            // 7. Swap out the old en passant file for the new one (if either exists).
             if (previousEnPassantFile.HasValue)
             {
                 board.ToggleEnPassantHash(previousEnPassantFile.Value);
             }
-            if (board.CurrentEnPassantFile.HasValue)
+            if (board.EnPassantFile.HasValue)
             {
-                board.ToggleEnPassantHash(board.CurrentEnPassantFile.Value);
+                board.ToggleEnPassantHash(board.EnPassantFile.Value);
             }
         }
 
         /// <summary>
-        /// Computes the new castling mask after a move.
-        /// Removes rights when King/Rook moves or is captured.
+        /// Works out which castling rights should still be available after a move.
+        /// A King moving, a Rook moving, or a Rook being captured all cancel the relevant right.
         /// </summary>
         private static int ComputeNewCastlingMask(BoardState board, MoveCommand move)
         {
-            int mask = board.CurrentCastlingMask;
+            int mask = board.CastlingRights;
 
-            // If King moves, lose both castling rights for that team
+            // If the King moves, both castling options for that team are gone.
             if (move.PieceType == ChessPieceType.King)
             {
                 if (move.PieceTeam == Team.White)
@@ -341,7 +315,7 @@ namespace ChessTheMasterPiece.Logic
                 }
             }
 
-            // If Rook moves from corner, lose that side's castling right
+            // If a Rook leaves its starting corner, that side's castling right is gone.
             if (move.PieceType == ChessPieceType.Rook && !move.PieceHadMoved)
             {
                 if (move.PieceTeam == Team.White)
@@ -360,7 +334,7 @@ namespace ChessTheMasterPiece.Logic
                 }
             }
 
-            // If Rook is captured on corner, lose that side's castling right
+            // If an enemy Rook is captured on its starting corner, that side's castling right is also gone.
             if (move.HasCapture && move.CapturedType == ChessPieceType.Rook)
             {
                 Vector2Int capPos = move.IsEnPassant && move.EnPassantCapturePosition.HasValue
@@ -381,8 +355,8 @@ namespace ChessTheMasterPiece.Logic
         }
 
         /// <summary>
-        /// Computes the new en passant file after a move.
-        /// Only set when a pawn moves 2 squares.
+        /// Returns the en passant file that should be active after this move, or null if none.
+        /// En passant is only possible in the turn immediately after a pawn moves two squares.
         /// </summary>
         private static int? ComputeNewEnPassantFile(MoveCommand move)
         {
@@ -399,137 +373,104 @@ namespace ChessTheMasterPiece.Logic
         }
 
         /// <summary>
-        /// Applies a move command to a board state.
-        /// Handles standard moves, captures, and special moves.
-        /// This modifies the board state - use on clones for simulation.
+        /// Applies a move to the board, including all the side effects: captures, castling, promotion,
+        /// en passant, updated castling rights, and the Zobrist hash.
         /// </summary>
-        public static void ApplyMoveToBoard(BoardState board, MoveCommand move)
+        public static void ApplyMoveToBoard(BoardState board, MoveCommand move, bool recordHistory = true)
         {
-            // Snapshot the previous state for Zobrist updates
-            int previousCastlingMask = board.CurrentCastlingMask;
-            int? previousEnPassantFile = board.CurrentEnPassantFile;
+            int previousCastlingMask = board.CastlingRights;
+            int? previousEnPassantFile = board.EnPassantFile;
 
-            // Push this move to the history stack for En Passant detection during simulation
-            board.RecordMove(move.StartPosition, move.EndPosition);
+            if (recordHistory)
+            {
+                board.RecordMove(move.StartPosition, move.EndPosition);
+            }
 
-            // Handle special moves first
             if (move.IsCastling && move.RookStartPosition.HasValue && move.RookEndPosition.HasValue)
             {
-                // Move the King
                 board.MovePiece(move.StartPosition, move.EndPosition);
-
-                // Move the Rook
                 board.MovePiece(move.RookStartPosition.Value, move.RookEndPosition.Value);
+                board.CastlingRights = ComputeNewCastlingMask(board, move);
+                board.EnPassantFile = ComputeNewEnPassantFile(move);
 
-                // Update castling mask and en passant state
-                board.CurrentCastlingMask = ComputeNewCastlingMask(board, move);
-                board.CurrentEnPassantFile = ComputeNewEnPassantFile(move);
-
-                // Update Zobrist hash after board modification
                 ApplyZobristMove(board, move, previousCastlingMask, previousEnPassantFile);
                 return;
             }
 
             if (move.IsEnPassant && move.EnPassantCapturePosition.HasValue)
             {
-                // Move the pawn
                 board.MovePiece(move.StartPosition, move.EndPosition);
 
-                // Remove the captured pawn (at a different position than the landing square)
+                // The captured pawn sits on a different square than where we landed.
                 board.RemovePiece(move.EnPassantCapturePosition.Value);
+                board.CastlingRights = ComputeNewCastlingMask(board, move);
+                board.EnPassantFile = ComputeNewEnPassantFile(move);
 
-                // Update castling mask and en passant state
-                board.CurrentCastlingMask = ComputeNewCastlingMask(board, move);
-                board.CurrentEnPassantFile = ComputeNewEnPassantFile(move);
-
-                // Update Zobrist hash after board modification
                 ApplyZobristMove(board, move, previousCastlingMask, previousEnPassantFile);
                 return;
             }
 
-            // Standard move or capture
             board.MovePiece(move.StartPosition, move.EndPosition);
 
-            // Handle promotion - CORRECTED: Get the piece from its NEW position
             if (move.IsPromotion)
             {
-                // Fetch the piece that is NOW at the destination (the moved pawn)
                 PieceData pieceOnBoard = board.GetPiece(move.EndPosition);
-                
-                if (pieceOnBoard != null)
+
+                if (!pieceOnBoard.IsEmpty)
                 {
-                    // Use the dedicated PromoteTo method for proper state management
-                    pieceOnBoard.PromoteTo(move.PromotedTo);
+                    board.SetPiece(pieceOnBoard.WithType(move.PromotedTo), move.EndPosition.x, move.EndPosition.y);
                 }
                 else
                 {
-                    // This should never happen in a valid game
                     UnityEngine.Debug.LogError($"[ChessEngine] Promotion failed: No piece found at {move.EndPosition}");
                 }
             }
 
-            // Update castling mask and en passant state
-            board.CurrentCastlingMask = ComputeNewCastlingMask(board, move);
-            board.CurrentEnPassantFile = ComputeNewEnPassantFile(move);
-
-            // Update Zobrist hash after board modification
+            board.CastlingRights = ComputeNewCastlingMask(board, move);
+            board.EnPassantFile = ComputeNewEnPassantFile(move);
             ApplyZobristMove(board, move, previousCastlingMask, previousEnPassantFile);
         }
 
         /// <summary>
-        /// Perfectly reverses a MoveCommand, restoring the board to its exact previous state.
-        /// This includes restoring captured pieces from the graveyard and resetting 'HasMoved' flags.
-        /// Zero allocations - essential for high-performance AI move tree evaluation.
+        /// Rolls back a move completely, restoring the board to exactly how it was before.
+        /// This is how the AI can explore thousands of move sequences without ever copying the board.
         /// </summary>
-        private static void UndoMoveOnBoard(BoardState board, MoveCommand move)
+        private static void UndoMoveOnBoard(BoardState board, MoveCommand move, bool recordHistory = true)
         {
-            // Snapshot current state for Zobrist reversal
-            int currentCastlingMask = board.CurrentCastlingMask;
-            int? currentEnPassantFile = board.CurrentEnPassantFile;
+            int currentCastlingMask = board.CastlingRights;
+            int? currentEnPassantFile = board.EnPassantFile;
 
-            // Restore the previous castling and en passant state from the move snapshot
-            board.CurrentCastlingMask = move.PreviousCastlingMask;
-            board.CurrentEnPassantFile = move.PreviousEnPassantFile;
+            // Restore the castling and en passant state that was recorded on the move itself.
+            board.CastlingRights = move.PreviousCastlingMask;
+            board.EnPassantFile = move.PreviousEnPassantFile;
 
-            // Reverse the Zobrist hash exactly (XOR is self-inverse)
+            // Reverse the hash — XOR is self-inverse, so calling this again undoes it perfectly.
             ApplyZobristMove(board, move, currentCastlingMask, currentEnPassantFile);
 
-            // Pop this move from the history stack (O(1) operation)
-            // Each move adds 2 entries (start, end), so we remove both
-            if (board.MoveHistory.Count >= 2)
+            if (recordHistory)
             {
-                board.MoveHistory.RemoveAt(board.MoveHistory.Count - 1);
-                board.MoveHistory.RemoveAt(board.MoveHistory.Count - 1);
+                // Each move records two history entries (start and end), so we remove both.
+                if (board.MoveHistory.Count >= 2)
+                {
+                    board.MoveHistory.RemoveAt(board.MoveHistory.Count - 1);
+                    board.MoveHistory.RemoveAt(board.MoveHistory.Count - 1);
+                }
             }
 
-            // 1. Fetch the primary piece from its current destination
             PieceData primaryPiece = board.GetPiece(move.EndPosition);
 
-            // If it was a promotion, demote it back to a pawn
-            if (move.IsPromotion && primaryPiece != null)
+            if (move.IsPromotion && !primaryPiece.IsEmpty)
             {
-                primaryPiece.Type = ChessPieceType.Pawn;
+                primaryPiece = primaryPiece.WithType(ChessPieceType.Pawn);
             }
 
-            // 2. Move the primary piece BACK using SetPiece 
-            // (We use SetPiece instead of MovePiece to avoid triggering capture logic)
-            board.SetPiece(null, move.EndPosition.x, move.EndPosition.y); // Clear destination
-            board.SetPiece(primaryPiece, move.StartPosition.x, move.StartPosition.y); // Put back at start
+            board.SetPiece(PieceData.Empty, move.EndPosition.x, move.EndPosition.y);
+            board.SetPiece(primaryPiece.WithHasMoved(move.PieceHadMoved), move.StartPosition.x, move.StartPosition.y);
 
-            // Restore the piece's historical 'HasMoved' state
-            if (primaryPiece != null)
-            {
-                primaryPiece.HasMoved = move.PieceHadMoved;
-            }
-
-            // 3. Restore Captured Piece (if any)
             if (move.HasCapture)
             {
-                // Determine which graveyard the piece was sent to
                 List<PieceData> graveyard = move.CapturedTeam == Team.White ? board.WhiteCaptured : board.BlackCaptured;
-                PieceData resurrectedPiece = null;
-
-                // Pluck it out of the graveyard to prevent memory leaks during simulation
+                PieceData resurrectedPiece;
                 if (graveyard.Count > 0)
                 {
                     resurrectedPiece = graveyard[graveyard.Count - 1];
@@ -537,61 +478,43 @@ namespace ChessTheMasterPiece.Logic
                 }
                 else
                 {
-                    // Failsafe: Recreate the piece if the graveyard is empty (shouldn't happen)
                     int dir = move.CapturedTeam == Team.White ? 1 : -1;
-                    resurrectedPiece = new PieceData(move.CapturedTeam, move.CapturedType, 0, 0, dir);
+                    resurrectedPiece = new PieceData(move.CapturedTeam, move.CapturedType, dir, 0, false);
                 }
+                resurrectedPiece = resurrectedPiece.WithHasMoved(move.CapturedHadMoved);
 
-                // Restore its historical 'HasMoved' state
-                resurrectedPiece.HasMoved = move.CapturedHadMoved;
-
-                // Determine where it died (En Passant captures happen on a different square)
-                Vector2Int capturePos = move.IsEnPassant && move.EnPassantCapturePosition.HasValue 
-                    ? move.EnPassantCapturePosition.Value 
+                Vector2Int capturePos = move.IsEnPassant && move.EnPassantCapturePosition.HasValue
+                    ? move.EnPassantCapturePosition.Value
                     : move.EndPosition;
-
-                // Put it back on the board
                 board.SetPiece(resurrectedPiece, capturePos.x, capturePos.y);
             }
 
-            // 4. Reverse Castling (Move the Rook back)
             if (move.IsCastling && move.RookStartPosition.HasValue && move.RookEndPosition.HasValue)
             {
                 PieceData rook = board.GetPiece(move.RookEndPosition.Value);
-                
-                // Move Rook back
-                board.SetPiece(null, move.RookEndPosition.Value.x, move.RookEndPosition.Value.y);
-                board.SetPiece(rook, move.RookStartPosition.Value.x, move.RookStartPosition.Value.y);
-                
-                // If it was castling, the Rook definitely hadn't moved prior to this turn
-                if (rook != null)
-                {
-                    rook.HasMoved = false;
-                }
+
+                board.SetPiece(PieceData.Empty, move.RookEndPosition.Value.x, move.RookEndPosition.Value.y);
+                board.SetPiece(rook.WithHasMoved(false), move.RookStartPosition.Value.x, move.RookStartPosition.Value.y);
             }
         }
 
         /// <summary>
-        /// Validates and executes a move on the board if it's legal.
-        /// Returns true if the move was successfully executed.
+        /// Checks if a move is legal and, if so, applies it and advances the turn.
+        /// Returns true on success, false if the move was illegal.
         /// </summary>
         public static bool TryExecuteMove(BoardState board, MoveCommand move)
         {
-            // Verify it's the correct team's turn
             if (move.PieceTeam != board.CurrentTurn)
             {
                 return false;
             }
 
-            // Get legal moves for this piece using thread-local scratch buffer
-            EngineScratch.Clear();
-            GetLegalMoves(board, move.StartPosition, EngineScratch);
-
-            // Check if this move is in the legal moves list
+            MoveGenBuffer.Clear();
+            GetLegalMoves(board, move.StartPosition, MoveGenBuffer);
             bool isLegal = false;
-            for (int i = 0; i < EngineScratch.Count; i++)
+            for (int i = 0; i < MoveGenBuffer.Count; i++)
             {
-                if (EngineScratch[i].EndPosition == move.EndPosition)
+                if (MoveGenBuffer[i].EndPosition == move.EndPosition)
                 {
                     isLegal = true;
                     break;
@@ -602,8 +525,6 @@ namespace ChessTheMasterPiece.Logic
             {
                 return false;
             }
-
-            // Execute the move (ApplyMoveToBoard now handles RecordMove internally)
             ApplyMoveToBoard(board, move);
             board.NextTurn();
 
@@ -615,47 +536,51 @@ namespace ChessTheMasterPiece.Logic
         #region Utility Methods
 
         /// <summary>
-        /// Calculates the material value difference between teams.
-        /// Positive means White is ahead, negative means Black is ahead.
-        /// Useful for AI evaluation functions.
+        /// Returns the material difference between teams, from White's perspective.
+        /// Positive means White is ahead; negative means Black is ahead.
+        /// Optimized to use O(N) piece lists instead of O(64) board scans.
         /// </summary>
         public static int GetMaterialAdvantage(BoardState board)
         {
             int whiteValue = 0;
             int blackValue = 0;
 
-            for (int x = 0; x < board.TileCountX; x++)
+            // Calculate White Material
+            List<int> whiteIndices = board.GetPieceIndices(Team.White);
+
+            for (int i = 0; i < whiteIndices.Count; i++)
             {
-                for (int y = 0; y < board.TileCountY; y++)
-                {
-                    PieceData piece = board.GetPiece(x, y);
-                    if (piece == null) continue;
+                int idx = whiteIndices[i];
+                PieceData piece = board.GetPiece(idx % board.TileCountX, idx / board.TileCountX);
+                whiteValue += GetPieceValue(piece.Type);
+            }
 
-                    int value = GetPieceValue(piece.Type);
+            // Calculate Black Material
+            List<int> blackIndices = board.GetPieceIndices(Team.Black);
 
-                    if (piece.Team == Team.White)
-                        whiteValue += value;
-                    else
-                        blackValue += value;
-                }
+            for (int i = 0; i < blackIndices.Count; i++)
+            {
+                int idx = blackIndices[i];
+                PieceData piece = board.GetPiece(idx % board.TileCountX, idx / board.TileCountX);
+                blackValue += GetPieceValue(piece.Type);
             }
 
             return whiteValue - blackValue;
         }
 
         /// <summary>
-        /// Returns the standard material value of a piece type.
+        /// Returns the standard point value for a piece type.
         /// </summary>
         private static int GetPieceValue(ChessPieceType type)
         {
             return type switch
             {
-                ChessPieceType.Pawn => 1,
+                ChessPieceType.Pawn   => 1,
                 ChessPieceType.Knight => 3,
                 ChessPieceType.Bishop => 3,
-                ChessPieceType.Rook => 5,
-                ChessPieceType.Queen => 9,
-                ChessPieceType.King => 0, // King has no material value (priceless!)
+                ChessPieceType.Rook   => 5,
+                ChessPieceType.Queen  => 9,
+                ChessPieceType.King   => 0, // Priceless.
                 _ => 0
             };
         }
@@ -664,13 +589,13 @@ namespace ChessTheMasterPiece.Logic
     }
 
     /// <summary>
-    /// Represents the current state of the game from a specific team's perspective.
+    /// What state is the game in right now, from a specific team's point of view?
     /// </summary>
     public enum GameState
     {
-        Normal,      // Game continues normally
-        Check,       // King is in check but has escape moves
-        Checkmate,   // King is in check with no legal moves (game over)
-        Stalemate    // Not in check but no legal moves (draw)
+        Normal,     // Nothing special — game continues.
+        Check,      // King is in check but has at least one escape.
+        Checkmate,  // King is in check with no legal moves — game over.
+        Stalemate   // No legal moves, but not in check — draw.
     }
 }

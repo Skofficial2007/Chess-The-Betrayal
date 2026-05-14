@@ -4,21 +4,20 @@ using ChessTheMasterPiece.Data;
 namespace ChessTheMasterPiece.Logic.Movement
 {
     /// <summary>
-    /// Contract that all piece movement strategies must implement.
-    /// Each piece type (Pawn, Knight, etc.) will have its own implementation.
+    /// The contract every piece's movement logic must follow. If you want to add a custom piece type, implement this interface.
     /// </summary>
     public interface IPieceMovement
     {
         /// <summary>
-        /// Populates the provided buffer with all physically possible moves for this piece type.
-        /// Zero-allocation.
-        /// Does NOT validate if moves leave the King in check - that's the engine's job.
-        /// Returns fully-formed MoveCommands with all metadata (captures, special moves, etc).
-        /// Pieces requiring move history (Pawn for En Passant, King for Castling) can access board.MoveHistory directly.
+        /// Fills the buffer with every square this piece could physically move to, without worrying about whether it puts the King in check.
+        /// That filtering happens in ChessEngine.
+        /// For moves that depend on history (like en passant or castling), read from <c>board.EnPassantFile</c> and the piece's <c>HasMoved</c> flag.
+        /// Returns fully-formed <see cref="MoveCommand"/> values with metadata (captures, special moves, etc).
         /// </summary>
-        /// <param name="board">The current board state (includes MoveHistory for special moves)</param>
+        /// <param name="board">The current board state (read EnPassantFile and use piece.HasMoved for history-dependent moves)</param>
         /// <param name="piece">The piece to generate moves for</param>
-        /// <param name="buffer">Pre-allocated list to populate with raw moves</param>
-        void GetRawMoves(BoardState board, PieceData piece, List<MoveCommand> buffer);
+        /// <param name="position">The position of the piece on the board</param>
+        /// <param name="buffer">The list to populate with raw MoveCommands</param>
+        void GetRawMoves(BoardState board, PieceData piece, Vector2Int position, List<MoveCommand> buffer);
     }
 }

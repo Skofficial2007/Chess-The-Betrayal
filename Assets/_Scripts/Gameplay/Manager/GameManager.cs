@@ -8,10 +8,8 @@ using ChessTheMasterPiece.UI;
 namespace ChessTheMasterPiece.Controllers
 {
     /// <summary>
-    /// The central orchestrator of the game. 
-    /// Bridges the pure C# logic (BoardState/ChessEngine) with the Unity environment.
-    /// Manages game flow, validates moves, and broadcasts state changes to other systems.
-    /// GC-optimized with buffer-passing pattern.
+    /// The main conductor of the game. It connects the chess logic (BoardState, ChessEngine) to the Unity world (visuals, UI, input).
+    /// Everything that needs to happen in sequence — a move, a check, game over — flows through here.
     /// </summary>
     public class GameManager : MonoBehaviour
     {
@@ -35,8 +33,7 @@ namespace ChessTheMasterPiece.Controllers
         #region Public Properties
 
         /// <summary>
-        /// The single source of truth for the game state.
-        /// All game logic operates on this pure C# data structure.
+        /// The board. All game logic reads from and writes to this.
         /// </summary>
         public BoardState LiveBoard { get; private set; }
 
@@ -46,14 +43,12 @@ namespace ChessTheMasterPiece.Controllers
         public Team PlayerTeam { get; private set; } = Team.White;
 
         /// <summary>
-        /// Current phase of the turn state machine.
-        /// Controls game flow and locks out actions during special phases.
+        /// The current phase of the turn (Normal, Betrayal sub-phases, GameOver, etc.).
         /// </summary>
         public TurnPhase CurrentPhase { get; private set; } = TurnPhase.GameOver;
 
         /// <summary>
-        /// Quick check if the game has started.
-        /// Derived property keeps existing UI/Input checks from breaking.
+        /// True if a game is in progress. Used by UI and input scripts to know whether to respond to player actions.
         /// </summary>
         public bool IsGameActive => CurrentPhase != TurnPhase.GameOver;
 
@@ -61,28 +56,27 @@ namespace ChessTheMasterPiece.Controllers
 
         #region Events
 
-        // Events for other systems (Visuals, Input, UI) to listen to
+        // Other systems (BoardVisuals, BoardInputController, UIManager) subscribe to these.
         public event Action<BoardState> OnGameStarted;
         public event Action<MoveCommand> OnMoveExecuted;
         public event Action OnTurnChanged;
         public event Action<Team> OnCheck;
         public event Action OnGameReset;
-        
-        // Command Pattern events for async move handling
+
         public event Action<ChessTheMasterPiece.Data.Vector2Int, ChessTheMasterPiece.Data.Vector2Int> OnMoveRejected;
-        public event Action<ChessTheMasterPiece.Data.Vector2Int> OnPromotionRequested;
+        public event Action<ChessTheMasterPiece.Data.Vector2Int, ChessTheMasterPiece.Data.Vector2Int> OnPromotionRequested;
 
         #endregion
 
         #region Private Fields
 
-        // Command Pattern executor - handles all move validation logic
+        // Handles move validation. Swap this out for NetworkMoveExecutor to go online.
         private IMoveExecutor _moveExecutor;
 
-        // GC-optimized buffer for legal move queries
-        private readonly List<MoveCommand> _legalMovesBuffer = new List<MoveCommand>(32);
+        // Reused across calls so we're not allocating a new list every time someone hovers over a piece.
+        private readonly List<MoveCommand> _legalMoves = new List<MoveCommand>(32);
 
-        // Static allocation (Zero GC per game restart)
+        // The standard piece order for the back rank, left to right.
         private static readonly ChessPieceType[] StandardBackRank = new ChessPieceType[]
         {
             ChessPieceType.Rook,   ChessPieceType.Knight, ChessPieceType.Bishop,
@@ -96,7 +90,6 @@ namespace ChessTheMasterPiece.Controllers
 
         private void Awake()
         {
-            // Singleton pattern
             if (Instance != null && Instance != this)
             {
                 Destroy(gameObject);
@@ -104,7 +97,6 @@ namespace ChessTheMasterPiece.Controllers
             }
             Instance = this;
 
-            // Initialize the pure C# data structure
             LiveBoard = new BoardState(boardSizeX, boardSizeY);
         }
 
@@ -116,7 +108,6 @@ namespace ChessTheMasterPiece.Controllers
                 return;
             }
 
-            // Subscribe to UI events
             UIManager.Instance.OnTeamSelected += HandleTeamSelected;
             UIManager.Instance.OnGameReset += HandleGameReset;
             UIManager.Instance.OnPromotionSelected += HandlePromotionChoice;
@@ -129,7 +120,6 @@ namespace ChessTheMasterPiece.Controllers
 
         private void OnDestroy()
         {
-            // Unsubscribe from UI events
             if (UIManager.Instance != null)
             {
                 UIManager.Instance.OnTeamSelected -= HandleTeamSelected;
@@ -138,15 +128,15 @@ namespace ChessTheMasterPiece.Controllers
             }
         }
 
-        // Executor callbacks (named so we can unsubscribe cleanly)
+        // Named methods (rather than lambdas) so we can unsubscribe cleanly.
         private void OnExecutorMoveRejected(ChessTheMasterPiece.Data.Vector2Int from, ChessTheMasterPiece.Data.Vector2Int to)
         {
             OnMoveRejected?.Invoke(from, to);
         }
 
-        private void OnExecutorPromotionRequired(ChessTheMasterPiece.Data.Vector2Int pos)
+        private void OnExecutorPromotionRequired(ChessTheMasterPiece.Data.Vector2Int from, ChessTheMasterPiece.Data.Vector2Int to)
         {
-            OnPromotionRequested?.Invoke(pos);
+            OnPromotionRequested?.Invoke(from, to);
             UIManager.Instance?.ShowPromotionUI();
         }
 
@@ -155,8 +145,8 @@ namespace ChessTheMasterPiece.Controllers
         #region Game Flow
 
         /// <summary>
-        /// Called when the player selects White or Black from the team selection UI.
-        /// Sets up the board and starts a new game.
+        /// Called when the player picks White or Black from the team selection screen.
+        /// Clears the board, places all the pieces, and starts the game.
         /// </summary>
         private void HandleTeamSelected(Team selectedTeam)
         {
@@ -165,27 +155,23 @@ namespace ChessTheMasterPiece.Controllers
 
             SetupStandardPieces();
 
-            // Clean up old executor to prevent memory leaks on game restart
+            // Tear down the previous executor if one exists (e.g. the player hit Replay).
             if (_moveExecutor != null)
             {
-                _moveExecutor.OnMoveConfirmed -= ExecuteValidatedMove;
+                _moveExecutor.OnMoveConfirmed -= PlayMove;
                 _moveExecutor.OnMoveRejected -= OnExecutorMoveRejected;
                 _moveExecutor.OnPromotionRequired -= OnExecutorPromotionRequired;
                 _moveExecutor = null;
             }
 
-            // Initialize the Command Pattern executor
             _moveExecutor = new LocalMoveExecutor(LiveBoard, logMoves);
-            
-            // Wire executor responses to the GameManager state machine
-            _moveExecutor.OnMoveConfirmed += ExecuteValidatedMove;
+
+            _moveExecutor.OnMoveConfirmed += PlayMove;
             _moveExecutor.OnMoveRejected += OnExecutorMoveRejected;
             _moveExecutor.OnPromotionRequired += OnExecutorPromotionRequired;
 
-            // Enter the Normal phase to start the game
             TransitionToPhase(TurnPhase.Normal);
 
-            // Broadcast to BoardVisuals and other systems
             OnGameStarted?.Invoke(LiveBoard);
 
             if (logMoves)
@@ -195,21 +181,21 @@ namespace ChessTheMasterPiece.Controllers
         }
 
         /// <summary>
-        /// Called when the player clicks the reset button.
-        /// Clears the board and returns to team selection.
+        /// Called when the player hits the reset button.
+        /// Clears everything and waits for a new team selection.
         /// </summary>
         private void HandleGameReset()
         {
             LiveBoard.Clear();
+
             if (_moveExecutor != null)
             {
-                _moveExecutor.OnMoveConfirmed -= ExecuteValidatedMove;
+                _moveExecutor.OnMoveConfirmed -= PlayMove;
                 _moveExecutor.OnMoveRejected -= OnExecutorMoveRejected;
                 _moveExecutor.OnPromotionRequired -= OnExecutorPromotionRequired;
                 _moveExecutor = null;
             }
 
-            // Shift to GameOver state
             TransitionToPhase(TurnPhase.GameOver);
 
             OnGameReset?.Invoke();
@@ -221,30 +207,23 @@ namespace ChessTheMasterPiece.Controllers
         }
 
         /// <summary>
-        /// Populates the pure C# BoardState with initial piece configuration.
-        /// Does NOT spawn Unity GameObjects - that's the Visuals layer's job.
+        /// Fills the board with pieces in the standard starting configuration.
+        /// Does not spawn any GameObjects — that's BoardVisuals' job when it receives OnGameStarted.
         /// </summary>
         private void SetupStandardPieces()
         {
-            // Setup White Team (Always logical bottom, moving UP)
             for (int x = 0; x < boardSizeX; x++)
             {
-                // White Majors (Rank 0)
-                LiveBoard.SetPiece(new PieceData(Team.White, StandardBackRank[x], x, 0, direction: 1), x, 0);
-                // White Pawns (Rank 1)
-                LiveBoard.SetPiece(new PieceData(Team.White, ChessPieceType.Pawn, x, 1, direction: 1), x, 1);
+                LiveBoard.SetPiece(new PieceData(Team.White, StandardBackRank[x], moveDirection: 1, startRow: 0), x, 0);
+                LiveBoard.SetPiece(new PieceData(Team.White, ChessPieceType.Pawn, moveDirection: 1, startRow: 1), x, 1);
             }
 
-            // Setup Black Team (Always logical top, moving DOWN)
             for (int x = 0; x < boardSizeX; x++)
             {
-                // Black Pawns (Rank 6)
-                LiveBoard.SetPiece(new PieceData(Team.Black, ChessPieceType.Pawn, x, boardSizeY - 2, direction: -1), x, boardSizeY - 2);
-                // Black Majors (Rank 7)
-                LiveBoard.SetPiece(new PieceData(Team.Black, StandardBackRank[x], x, boardSizeY - 1, direction: -1), x, boardSizeY - 1);
+                LiveBoard.SetPiece(new PieceData(Team.Black, ChessPieceType.Pawn, moveDirection: -1, startRow: boardSizeY - 2), x, boardSizeY - 2);
+                LiveBoard.SetPiece(new PieceData(Team.Black, StandardBackRank[x], moveDirection: -1, startRow: boardSizeY - 1), x, boardSizeY - 1);
             }
 
-            // Compute the initial Zobrist hash from the starting position
             LiveBoard.ComputeFullZobristHash();
         }
 
@@ -253,26 +232,23 @@ namespace ChessTheMasterPiece.Controllers
         #region Move Execution
 
         /// <summary>
-        /// Entry point for move requests. 
-        /// Now uses the Command Pattern for async-ready execution.
-        /// Fire-and-forget - result comes back via events.
+        /// Sends a move request to the executor. The result comes back through events —
+        /// either OnMoveExecuted (if legal) or OnMoveRejected (if not).
         /// </summary>
         public void RequestMove(ChessTheMasterPiece.Data.Vector2Int from, ChessTheMasterPiece.Data.Vector2Int to)
         {
-            // Gate physical piece selection globally based on game phase
+            // Only accept moves during normal play.
             if (CurrentPhase != TurnPhase.Normal || LiveBoard.IsGameOver)
             {
                 OnMoveRejected?.Invoke(from, to);
                 return;
             }
 
-            // Hand off to the executor (Fire and Forget!)
             _moveExecutor?.RequestMove(from, to);
         }
 
         /// <summary>
-        /// Called by the UI when a player chooses their promotion piece.
-        /// Now delegates to the executor for validation.
+        /// Called by the UI when the player picks a piece to promote to.
         /// </summary>
         private void HandlePromotionChoice(ChessPieceType chosenType)
         {
@@ -280,27 +256,27 @@ namespace ChessTheMasterPiece.Controllers
         }
 
         /// <summary>
-        /// Final execution gate. Sequences the transition from Logic to Visuals.
+        /// Applies a validated move to the board and tells everyone who needs to know about it.
+        /// BoardVisuals will animate the move; then we check if the game is over.
         /// </summary>
-        private void ExecuteValidatedMove(MoveCommand move)
+        private void PlayMove(MoveCommand move)
         {
             if (logMoves) Debug.Log($"[GameManager] Executing: {move}");
 
-            // ApplyMoveToBoard now handles RecordMove internally for proper Make/Unmake simulation
             ChessEngine.ApplyMoveToBoard(LiveBoard, move);
 
-            // BoardVisuals hears this and triggers the animations based on the move metadata.
             OnMoveExecuted?.Invoke(move);
 
             LiveBoard.NextTurn();
-            
-            EvaluateGameStatus();
+
+            CheckForGameEnd();
         }
 
         /// <summary>
-        /// Checks for Check, Checkmate, or Stalemate after a turn ends.
+        /// Checks whether the game has ended (checkmate or stalemate) after a turn completes.
+        /// Also fires OnCheck if the next player is in check but still has moves.
         /// </summary>
-        private void EvaluateGameStatus()
+        private void CheckForGameEnd()
         {
             Team currentTeam = LiveBoard.CurrentTurn;
             GameState state = ChessEngine.EvaluateGameState(LiveBoard, currentTeam);
@@ -308,13 +284,13 @@ namespace ChessTheMasterPiece.Controllers
             switch (state)
             {
                 case GameState.Checkmate:
-                    // Winner is the person who JUST MOVED, not the current team.
+                    // The winner is whoever just moved, not the team currently being evaluated.
                     Team winner = currentTeam == Team.White ? Team.Black : Team.White;
                     EndGame(winner);
                     break;
 
                 case GameState.Stalemate:
-                    EndGame(null); // Draw
+                    EndGame(null); // Draw.
                     break;
 
                 case GameState.Check:
@@ -327,19 +303,13 @@ namespace ChessTheMasterPiece.Controllers
                     break;
             }
 
-            // --- FUTURE BETRAYAL STUBS ---
-            // TODO: Add GameState.BetrayalInitiated to ChessEngine Enum
-            // if (state == GameState.BetrayalInitiated)
-            // {
-            //     TransitionToPhase(TurnPhase.RetributionPending);
-            //     // Fire UI event for Betrayer selection
-            // }
-            // TODO: Add GameState.RetributionFailed to ChessEngine Enum
-            // if (state == GameState.RetributionFailed)
-            // {
-            //     TransitionToPhase(TurnPhase.ResolutionFailed);
-            //     // Fire UI event / logic for defection execution
-            // }
+            // --- BETRAYAL MECHANIC HOOKS ---
+            // When you implement The Betrayal, this is where the phase transitions live.
+            // After a normal move resolves, check if the Betrayal was triggered and call:
+            //   TransitionToPhase(TurnPhase.RetributionPending)
+            // If Retribution fails (no valid executioner), call:
+            //   TransitionToPhase(TurnPhase.ResolutionFailed)
+            // See TurnPhase in Enum.cs for the full state machine map.
         }
 
         private void EndGame(Team? winner)
@@ -347,7 +317,6 @@ namespace ChessTheMasterPiece.Controllers
             LiveBoard.IsGameOver = true;
             LiveBoard.Winner = winner;
 
-            // Lock the state machine
             TransitionToPhase(TurnPhase.GameOver);
 
             UIManager.Instance?.TriggerGameOver(winner);
@@ -361,36 +330,33 @@ namespace ChessTheMasterPiece.Controllers
 
         /// <summary>
         /// Returns all legal moves for a piece at the given position.
-        /// Used by UI/Input systems to show move highlights.
-        /// GC-optimized - returns internal buffer as readonly to prevent external modification.
+        /// BoardInputController calls this to know which squares to highlight.
+        /// Returns an empty list if it's not that team's turn or the game isn't active.
         /// </summary>
         public IReadOnlyList<MoveCommand> GetLegalMovesAt(ChessTheMasterPiece.Data.Vector2Int position)
         {
-            _legalMovesBuffer.Clear();
+            _legalMoves.Clear();
 
-            // Gate visual highlights based on the current phase
             if (CurrentPhase == TurnPhase.Normal && !LiveBoard.IsGameOver)
             {
-                ChessEngine.GetLegalMoves(LiveBoard, position, _legalMovesBuffer);
+                ChessEngine.GetLegalMoves(LiveBoard, position, _legalMoves);
             }
 
-            // Return as interface to prevent external scripts from modifying the buffer
-            return _legalMovesBuffer;
+            return _legalMoves;
         }
 
         /// <summary>
-        /// Checks if a piece at the given position can move (belongs to current player).
+        /// Returns true if the piece at this position belongs to the player whose turn it is.
         /// </summary>
         public bool CanSelectPiece(ChessTheMasterPiece.Data.Vector2Int position)
         {
-            // Gate physical piece selection
             if (CurrentPhase != TurnPhase.Normal || LiveBoard.IsGameOver)
             {
                 return false;
             }
 
             PieceData piece = LiveBoard.GetPiece(position);
-            return piece != null && piece.Team == LiveBoard.CurrentTurn;
+            return !piece.IsEmpty && piece.Team == LiveBoard.CurrentTurn;
         }
 
         #endregion
@@ -398,8 +364,9 @@ namespace ChessTheMasterPiece.Controllers
         #region State Machine
 
         /// <summary>
-        /// Centralized state transition method. 
-        /// Logs phase changes for easier debugging during complex Betrayal scenarios.
+        /// The only place in the codebase that changes CurrentPhase.
+        /// Keeping all transitions here makes it much easier to trace the game flow — especially
+        /// once the Betrayal sub-phases are added.
         /// </summary>
         private void TransitionToPhase(TurnPhase nextPhase)
         {
