@@ -1,6 +1,7 @@
-using System;
 using ChessTheMasterPiece.Data;
 using ChessTheMasterPiece.Logic;
+using System;
+using System.Threading;
 
 namespace ChessTheMasterPiece.AI
 {
@@ -10,10 +11,12 @@ namespace ChessTheMasterPiece.AI
     public interface IAIAgent
     {
         /// <summary>
-        /// Ask the AI to pick a move. When it has an answer, it fires the <c>OnMoveDecided</c> event — it won't return the move directly.
+        /// Starts an async best-move search. Pass a CancellationToken so the
+        /// search can be aborted on game reset or scene change.
+        /// Result fires via OnMoveDecided on the main thread.
         /// </summary>
-        void RequestBestMove(BoardState board, Team team);
-        
+        void RequestBestMove(BoardState board, Team team, CancellationToken cancellation = default);
+
         event Action<MoveCommand> OnMoveDecided;
     }
 }

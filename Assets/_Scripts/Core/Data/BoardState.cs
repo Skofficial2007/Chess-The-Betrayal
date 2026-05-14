@@ -166,8 +166,14 @@ namespace ChessTheMasterPiece.Data
         // The mathematical grid - holds pure data, not GameObjects
         public PieceData[,] LogicalBoard { get; private set; }
 
+        // For faster piece lookups, we maintain separate lists of occupied squares for each team.
+        // The boolean arrays track occupancy for quick checks,
+        // while the index lists allow iteration over pieces without scanning the whole board.
+        private readonly bool[] _whiteOccupied = new bool[64];
+        private readonly bool[] _blackOccupied = new bool[64];
         private readonly List<int> _whitePieceIndices = new List<int>(16);
         private readonly List<int> _blackPieceIndices = new List<int>(16);
+        private bool _indicesDirty = false;
 
         public Team CurrentTurn { get; set; }
         public int TileCountX { get; private set; }
@@ -203,24 +209,25 @@ namespace ChessTheMasterPiece.Data
 
         /// <summary>
         /// Places a piece on the board at the specified position.
-        /// Updates the piece's coordinates automatically.
         /// </summary>
         public void SetPiece(PieceData piece, int x, int y)
         {
             if (!IsValidIndex(x, y)) return;
 
             PieceData existing = LogicalBoard[x, y];
+            int sq = y * TileCountX + x;
 
             if (!existing.IsEmpty)
             {
-                if (existing.Team == Team.White) 
+                if (existing.Team == Team.White)
                 {
-                    _whitePieceIndices.Remove(y * TileCountX + x);
+                    _whiteOccupied[sq] = false;
                 }
                 else
                 {
-                    _blackPieceIndices.Remove(y * TileCountX + x);
+                    _blackOccupied[sq] = false;
                 }
+                _indicesDirty = true;
             }
 
             LogicalBoard[x, y] = piece;
@@ -229,18 +236,19 @@ namespace ChessTheMasterPiece.Data
             {
                 if (piece.Team == Team.White)
                 {
-                    _whitePieceIndices.Add(y * TileCountX + x);
+                    _whiteOccupied[sq] = true;
                 }
                 else
                 {
-                    _blackPieceIndices.Add(y * TileCountX + x);
+                    _blackOccupied[sq] = true;
                 }
+                _indicesDirty = true;
             }
         }
 
         /// <summary>
         /// Retrieves the piece at the specified position.
-        /// Returns null if the square is empty or out of bounds.
+        /// Returns PieceData.Empty if the square is empty or out of bounds.
         /// </summary>
         public PieceData GetPiece(int x, int y)
         {
@@ -351,11 +359,19 @@ namespace ChessTheMasterPiece.Data
                     LogicalBoard[x, y] = PieceData.Empty;
                 }
             }
+
+            for (int i = 0; i < 64; i++)
+            {
+                _whiteOccupied[i] = false;
+                _blackOccupied[i] = false;
+            }
+
             WhiteCaptured.Clear();
             BlackCaptured.Clear();
             MoveHistory.Clear();
             _whitePieceIndices.Clear();
             _blackPieceIndices.Clear();
+            _indicesDirty = false;
             IsGameOver = false;
             Winner = null;
             CurrentTurn = Team.White;
@@ -381,59 +397,6 @@ namespace ChessTheMasterPiece.Data
             }
             kingPos = Vector2Int.Invalid;
             return false;
-        }
-
-        public PieceData FindKing(Team team)
-        {
-            List<int> indices = GetPieceIndices(team);
-            for (int i = 0; i < indices.Count; i++)
-            {
-                int idx = indices[i];
-                int x = idx % TileCountX;
-                int y = idx / TileCountX;
-                PieceData piece = LogicalBoard[x, y];
-                if (piece.Type == ChessPieceType.King)
-                {
-                    return piece;
-                }
-            }
-            return PieceData.Empty;
-        }
-
-        public Vector2Int FindKingPosition(Team team)
-        {
-            List<int> indices = GetPieceIndices(team);
-            for (int i = 0; i < indices.Count; i++)
-            {
-                int idx = indices[i];
-                int x = idx % TileCountX;
-                int y = idx / TileCountX;
-                PieceData piece = LogicalBoard[x, y];
-                if (piece.Type == ChessPieceType.King)
-                {
-                    return new Vector2Int(x, y);
-                }
-            }
-            return Vector2Int.Invalid;
-        }
-
-        /// <summary>
-        /// Populates the provided list with all pieces belonging to the specified team.
-        /// </summary>
-        public void GetAllPieces(Team team, List<PieceData> output)
-        {
-            output.Clear();
-            for (int x = 0; x < TileCountX; x++)
-            {
-                for (int y = 0; y < TileCountY; y++)
-                {
-                    PieceData piece = LogicalBoard[x, y];
-                    if (!piece.IsEmpty && piece.Team == team)
-                    {
-                        output.Add(piece);
-                    }
-                }
-            }
         }
 
         /// <summary>
@@ -485,9 +448,10 @@ namespace ChessTheMasterPiece.Data
         }
 
         /// <summary>
-        /// Creates a full copy of this board state. Mainly used for saving/loading and network sync — the AI uses make/unmake instead, which is much faster.
+        /// Creates a full deep copy of this board state for save/load, UI, and network snapshots ONLY.
+        /// NEVER call this from an AI search tree or move simulation — use the Make/Unmake architecture in ChessEngine instead to prevent catastrophic heap allocation.
         /// </summary>
-        public BoardState Clone()
+        public BoardState CloneForSnapshot()
         {
             BoardState clone = new BoardState(TileCountX, TileCountY);
             clone.CurrentTurn = this.CurrentTurn;
@@ -498,6 +462,11 @@ namespace ChessTheMasterPiece.Data
             clone.EnPassantFile = this.EnPassantFile;
 
             Array.Copy(this.LogicalBoard, clone.LogicalBoard, this.LogicalBoard.Length);
+
+            // Copy the occupancy arrays and flag the lists for a rebuild
+            Array.Copy(this._whiteOccupied, clone._whiteOccupied, 64);
+            Array.Copy(this._blackOccupied, clone._blackOccupied, 64);
+            clone._indicesDirty = true;
 
             foreach (var piece in WhiteCaptured)
             {
@@ -516,7 +485,35 @@ namespace ChessTheMasterPiece.Data
             return clone;
         }
 
-        public List<int> GetPieceIndices(Team team) =>
-            team == Team.White ? _whitePieceIndices : _blackPieceIndices;
+        public List<int> GetPieceIndices(Team team)
+        {
+            if (_indicesDirty)
+            {
+                RebuildIndices();
+            }
+            return team == Team.White ? _whitePieceIndices : _blackPieceIndices;
+        }
+
+        /// <summary>
+        /// Rebuilds the lists of occupied-square indices for white and black pieces by scanning the flat 64-square
+        /// board arrays.
+        /// </summary>
+        /// <remarks>Clears existing index lists, performs a single linear pass over the 64 squares using
+        /// the _whiteOccupied and _blackOccupied arrays to repopulate _whitePieceIndices and _blackPieceIndices, and
+        /// resets the indices-dirty flag (_indicesDirty = false).</remarks>
+        private void RebuildIndices()
+        {
+            _whitePieceIndices.Clear();
+            _blackPieceIndices.Clear();
+
+            // Single linear pass over the flat 64-square array
+            for (int i = 0; i < 64; i++)
+            {
+                if (_whiteOccupied[i]) _whitePieceIndices.Add(i);
+                if (_blackOccupied[i]) _blackPieceIndices.Add(i);
+            }
+
+            _indicesDirty = false;
+        }
     }
 }

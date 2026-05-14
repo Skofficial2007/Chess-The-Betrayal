@@ -33,11 +33,11 @@ namespace ChessTheMasterPiece.Controllers
         /// Visual layer listens to this to snap pieces back.
         /// </summary>
         event Action<Vector2Int, Vector2Int> OnMoveRejected;
-        
+
         /// <summary>
         /// Fired when a pawn reaches the end and needs promotion.
-        /// UI layer listens to this to show the promotion dialog.
+        /// Passes (from, to) so the visual layer can optimistically snap the correct piece.
         /// </summary>
-        event Action<Vector2Int> OnPromotionRequired;
+        event Action<Vector2Int, Vector2Int> OnPromotionRequired;
     }
 }

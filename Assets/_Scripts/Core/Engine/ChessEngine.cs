@@ -10,6 +10,11 @@ namespace ChessTheMasterPiece.Logic
     /// </summary>
     public static class ChessEngine
     {
+        /// <summary>
+        /// The theoretical maximum number of legal moves available to a single player in any valid chess position.
+        /// </summary>
+        public const int MaxMovesPerPosition = 218;
+
         // Each thread gets its own private buffers so parallel AI searches don't step on each other.
         [System.ThreadStatic]
         private static List<MoveCommand> _attackCheckBuffer;
@@ -97,12 +102,18 @@ namespace ChessTheMasterPiece.Logic
         {
             masterBuffer.Clear();
 
+            if (masterBuffer.Capacity < MaxMovesPerPosition)
+            {
+                masterBuffer.Capacity = MaxMovesPerPosition;
+            }
+
             List<int> indices = board.GetPieceIndices(team);
 
             for (int i = 0; i < indices.Count; i++)
             {
                 int idx = indices[i];
                 Vector2Int pos = new Vector2Int(idx % board.TileCountX, idx / board.TileCountX);
+
                 GetLegalMoves(board, pos, MoveGenBuffer);
                 masterBuffer.AddRange(MoveGenBuffer);
             }
@@ -118,7 +129,7 @@ namespace ChessTheMasterPiece.Logic
         /// </summary>
         private static bool DoesMoveLeaveKingInCheck(BoardState board, MoveCommand move)
         {
-            ApplyMoveToBoard(board, move);
+            ApplyMoveToBoard(board, move, recordHistory: false);
 
             bool inCheck;
             if (board.TryFindKing(move.PieceTeam, out Vector2Int kingPos))
@@ -131,7 +142,7 @@ namespace ChessTheMasterPiece.Logic
                 inCheck = true;
             }
 
-            UndoMoveOnBoard(board, move);
+            UndoMoveOnBoard(board, move, recordHistory: false);
 
             return inCheck;
         }
@@ -187,25 +198,21 @@ namespace ChessTheMasterPiece.Logic
 
         /// <summary>
         /// Returns true if the given team has at least one legal move available.
+        /// Optimized to use O(N) piece list instead of O(64) board scan.
         /// </summary>
         public static bool HasAnyLegalMoves(BoardState board, Team team)
         {
-            for (int x = 0; x < board.TileCountX; x++)
+            List<int> indices = board.GetPieceIndices(team);
+            for (int i = 0; i < indices.Count; i++)
             {
-                for (int y = 0; y < board.TileCountY; y++)
-                {
-                    PieceData piece = board.GetPiece(x, y);
-                    
-                    if (!piece.IsEmpty && piece.Team == team)
-                    {
-                        Vector2Int pos = new Vector2Int(x, y);
-                        GetLegalMoves(board, pos, MoveGenBuffer);
+                int idx = indices[i];
+                Vector2Int pos = new Vector2Int(idx % board.TileCountX, idx / board.TileCountX);
 
-                        if (MoveGenBuffer.Count > 0)
-                        {
-                            return true;
-                        }
-                    }
+                // We only need to find ONE legal move to prove the game isn't over.
+                GetLegalMoves(board, pos, MoveGenBuffer);
+                if (MoveGenBuffer.Count > 0)
+                {
+                    return true;
                 }
             }
             return false;
@@ -216,17 +223,19 @@ namespace ChessTheMasterPiece.Logic
         /// </summary>
         public static GameState EvaluateGameState(BoardState board, Team team)
         {
-            bool isInCheck = IsKingInCheck(board, team);
             bool hasLegalMoves = HasAnyLegalMoves(board, team);
 
-            if (!hasLegalMoves)
+            if (hasLegalMoves) // Removed the '!' - this block runs if the game is still going
             {
-                return isInCheck ? GameState.Checkmate : GameState.Stalemate;
+                // IsKingInCheck is used to satisfy the GameState return type for the GameManager.
+                return IsKingInCheck(board, team) ? GameState.Check : GameState.Normal;
             }
 
             // TODO (Betrayal): Add GameState.BetrayalInitiated and GameState.RetributionFailed here when
             // the custom mechanic is implemented. GameManager's CheckForGameEnd() will handle the transitions.
-            return isInCheck ? GameState.Check : GameState.Normal;
+
+            // No legal moves: disambiguate checkmate vs stalemate
+            return IsKingInCheck(board, team) ? GameState.Checkmate : GameState.Stalemate;
         }
 
         #endregion
@@ -367,12 +376,15 @@ namespace ChessTheMasterPiece.Logic
         /// Applies a move to the board, including all the side effects: captures, castling, promotion,
         /// en passant, updated castling rights, and the Zobrist hash.
         /// </summary>
-        public static void ApplyMoveToBoard(BoardState board, MoveCommand move)
+        public static void ApplyMoveToBoard(BoardState board, MoveCommand move, bool recordHistory = true)
         {
             int previousCastlingMask = board.CastlingRights;
             int? previousEnPassantFile = board.EnPassantFile;
 
-            board.RecordMove(move.StartPosition, move.EndPosition);
+            if (recordHistory)
+            {
+                board.RecordMove(move.StartPosition, move.EndPosition);
+            }
 
             if (move.IsCastling && move.RookStartPosition.HasValue && move.RookEndPosition.HasValue)
             {
@@ -423,7 +435,7 @@ namespace ChessTheMasterPiece.Logic
         /// Rolls back a move completely, restoring the board to exactly how it was before.
         /// This is how the AI can explore thousands of move sequences without ever copying the board.
         /// </summary>
-        private static void UndoMoveOnBoard(BoardState board, MoveCommand move)
+        private static void UndoMoveOnBoard(BoardState board, MoveCommand move, bool recordHistory = true)
         {
             int currentCastlingMask = board.CastlingRights;
             int? currentEnPassantFile = board.EnPassantFile;
@@ -435,11 +447,14 @@ namespace ChessTheMasterPiece.Logic
             // Reverse the hash — XOR is self-inverse, so calling this again undoes it perfectly.
             ApplyZobristMove(board, move, currentCastlingMask, currentEnPassantFile);
 
-            // Each move records two history entries (start and end), so we remove both.
-            if (board.MoveHistory.Count >= 2)
+            if (recordHistory)
             {
-                board.MoveHistory.RemoveAt(board.MoveHistory.Count - 1);
-                board.MoveHistory.RemoveAt(board.MoveHistory.Count - 1);
+                // Each move records two history entries (start and end), so we remove both.
+                if (board.MoveHistory.Count >= 2)
+                {
+                    board.MoveHistory.RemoveAt(board.MoveHistory.Count - 1);
+                    board.MoveHistory.RemoveAt(board.MoveHistory.Count - 1);
+                }
             }
 
             PieceData primaryPiece = board.GetPiece(move.EndPosition);
@@ -523,27 +538,31 @@ namespace ChessTheMasterPiece.Logic
         /// <summary>
         /// Returns the material difference between teams, from White's perspective.
         /// Positive means White is ahead; negative means Black is ahead.
-        /// Handy for AI evaluation.
+        /// Optimized to use O(N) piece lists instead of O(64) board scans.
         /// </summary>
         public static int GetMaterialAdvantage(BoardState board)
         {
             int whiteValue = 0;
             int blackValue = 0;
 
-            for (int x = 0; x < board.TileCountX; x++)
+            // Calculate White Material
+            List<int> whiteIndices = board.GetPieceIndices(Team.White);
+
+            for (int i = 0; i < whiteIndices.Count; i++)
             {
-                for (int y = 0; y < board.TileCountY; y++)
-                {
-                    PieceData piece = board.GetPiece(x, y);
-                    if (piece.IsEmpty) continue;
+                int idx = whiteIndices[i];
+                PieceData piece = board.GetPiece(idx % board.TileCountX, idx / board.TileCountX);
+                whiteValue += GetPieceValue(piece.Type);
+            }
 
-                    int value = GetPieceValue(piece.Type);
+            // Calculate Black Material
+            List<int> blackIndices = board.GetPieceIndices(Team.Black);
 
-                    if (piece.Team == Team.White)
-                        whiteValue += value;
-                    else
-                        blackValue += value;
-                }
+            for (int i = 0; i < blackIndices.Count; i++)
+            {
+                int idx = blackIndices[i];
+                PieceData piece = board.GetPiece(idx % board.TileCountX, idx / board.TileCountX);
+                blackValue += GetPieceValue(piece.Type);
             }
 
             return whiteValue - blackValue;

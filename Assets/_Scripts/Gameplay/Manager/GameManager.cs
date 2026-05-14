@@ -64,7 +64,7 @@ namespace ChessTheMasterPiece.Controllers
         public event Action OnGameReset;
 
         public event Action<ChessTheMasterPiece.Data.Vector2Int, ChessTheMasterPiece.Data.Vector2Int> OnMoveRejected;
-        public event Action<ChessTheMasterPiece.Data.Vector2Int> OnPromotionRequested;
+        public event Action<ChessTheMasterPiece.Data.Vector2Int, ChessTheMasterPiece.Data.Vector2Int> OnPromotionRequested;
 
         #endregion
 
@@ -134,9 +134,9 @@ namespace ChessTheMasterPiece.Controllers
             OnMoveRejected?.Invoke(from, to);
         }
 
-        private void OnExecutorPromotionRequired(ChessTheMasterPiece.Data.Vector2Int pos)
+        private void OnExecutorPromotionRequired(ChessTheMasterPiece.Data.Vector2Int from, ChessTheMasterPiece.Data.Vector2Int to)
         {
-            OnPromotionRequested?.Invoke(pos);
+            OnPromotionRequested?.Invoke(from, to);
             UIManager.Instance?.ShowPromotionUI();
         }
 
