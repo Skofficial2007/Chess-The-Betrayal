@@ -17,10 +17,8 @@ namespace ChessTheMasterPiece.Logic.Movement
             { -1, -2 }, { -2, -1 }, { -2, +1 }, { -1, +2 }
         };
 
-        public void GetRawMoves(BoardState board, PieceData piece, List<MoveCommand> buffer)
+        public void GetRawMoves(BoardState board, PieceData piece, Vector2Int startPos, List<MoveCommand> buffer)
         {
-            Vector2Int startPos = new Vector2Int(piece.CurrentX, piece.CurrentY);
-
             for (int i = 0; i < KnightOffsets.GetLength(0); i++)
             {
                 Vector2Int target = new Vector2Int(
@@ -34,7 +32,7 @@ namespace ChessTheMasterPiece.Logic.Movement
                 PieceData targetPiece = board.GetPiece(target);
 
                 // Can move to empty squares or capture enemy pieces
-                if (targetPiece == null || targetPiece.Team != piece.Team)
+                if (targetPiece.IsEmpty || targetPiece.Team != piece.Team)
                 {
                     buffer.Add(MoveCommand.CreateStandardMove(startPos, target, piece, targetPiece, board));
                 }

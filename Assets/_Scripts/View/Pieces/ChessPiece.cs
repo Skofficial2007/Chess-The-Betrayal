@@ -127,7 +127,7 @@ namespace ChessTheMasterPiece.View
         }
 
         /// <summary>
-        /// Safely disables the physical collider without expensive GetComponent calls.
+        /// Turns off the piece's collider so it can no longer be clicked.
         /// </summary>
         public void DisableCollider()
         {

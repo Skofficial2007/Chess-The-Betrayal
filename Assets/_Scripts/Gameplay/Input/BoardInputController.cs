@@ -9,10 +9,7 @@ using ChessTheMasterPiece.View;
 namespace ChessTheMasterPiece.Controllers
 {
     /// <summary>
-    /// Handles all physical input (Raycasting, Dragging, Clicking).
-    /// Acts as the "Hands" of the player, communicating with GameManager.
-    /// Zero game logic - purely translates player input into move requests.
-    /// GC-optimized to work with buffer-passing pattern.
+    /// Reads mouse/touch input and translates it into move requests. This script knows nothing about chess rules — it just figures out which square the player clicked and tells GameManager.
     /// </summary>
     public class BoardInputController : MonoBehaviour
     {
@@ -29,7 +26,7 @@ namespace ChessTheMasterPiece.Controllers
         // Drag State
         private bool isDragging;
         private ChessTheMasterPiece.Data.Vector2Int dragStartGridPos;
-        private Transform draggingVisualTransform;
+        private Transform draggedPieceTransform;
 
         private void Awake()
         {
@@ -47,31 +44,35 @@ namespace ChessTheMasterPiece.Controllers
             if (UIManager.Instance != null && UIManager.Instance.IsUIBlocking()) return;
             if (GameManager.Instance == null || !GameManager.Instance.IsGameActive) return;
 
-            // 2. Get pointer position (supports both Input systems)
-            Vector2 pointerPos = GetPointerPosition();
-            if (pointerPos == Vector2.zero) return;
+            // 2. Get pointer position (safely handles 0,0 coordinates)
+            if (!TryGetPointerPosition(out Vector2 pointerPos)) return;
 
             // 3. Handle input
             HandlePointer(pointerPos);
         }
 
-        private Vector2 GetPointerPosition()
+        /// <summary>
+        /// Attempts to get the current pointer position supporting both PC (Mouse) and Mobile (Touch).
+        /// Returns true if an active input device is found.
+        /// </summary>
+        private bool TryGetPointerPosition(out Vector2 pos)
         {
-            // Try new Input System first
+            // Check for Mobile Touch first
+            if (UnityEngine.InputSystem.Touchscreen.current != null && UnityEngine.InputSystem.Touchscreen.current.primaryTouch.press.isPressed)
+            {
+                pos = UnityEngine.InputSystem.Touchscreen.current.primaryTouch.position.ReadValue();
+                return true;
+            }
+
+            // Check for PC Mouse
             if (Mouse.current != null)
             {
-                return Mouse.current.position.ReadValue();
+                pos = Mouse.current.position.ReadValue();
+                return true;
             }
 
-#pragma warning disable 618
-            // Fallback to legacy Input
-            if (Input.mousePresent)
-            {
-                return Input.mousePosition;
-            }
-#pragma warning restore 618
-
-            return Vector2.zero;
+            pos = Vector2.zero;
+            return false;
         }
 
         private void HandlePointer(Vector2 screenPos)
@@ -87,8 +88,6 @@ namespace ChessTheMasterPiece.Controllers
             bool hitSomething = Physics.Raycast(ray, out RaycastHit hit, 200f, raycastMask);
             ChessTheMasterPiece.Data.Vector2Int hoverIndex = ChessTheMasterPiece.Data.Vector2Int.Invalid;
 
-            // NOTE: BoardVisuals doesn't exist yet, so this will cause compiler errors temporarily
-            // We'll fix this when we create BoardVisuals in the next step
             if (hitSomething && BoardVisuals.Instance != null)
             {
                 hoverIndex = BoardVisuals.Instance.GetTileIndexFromTransform(hit.transform);
@@ -111,7 +110,7 @@ namespace ChessTheMasterPiece.Controllers
             }
 
             // Update dragging piece visual
-            if (isDragging && draggingVisualTransform != null)
+            if (isDragging && draggedPieceTransform != null)
             {
                 UpdateDragVisual(ray);
             }
@@ -132,7 +131,7 @@ namespace ChessTheMasterPiece.Controllers
             if (BoardVisuals.Instance != null)
             {
                 // Get the visual GameObject transform so we can drag it
-                draggingVisualTransform = BoardVisuals.Instance.GetPieceTransformAt(gridPos);
+                draggedPieceTransform = BoardVisuals.Instance.GetPieceTransformAt(gridPos);
 
                 // Get legal moves from GameManager and tell visuals to highlight them
                 // Updated to use IReadOnlyList interface
@@ -153,7 +152,7 @@ namespace ChessTheMasterPiece.Controllers
                 BoardVisuals.Instance.ClearLegalMoveHighlights();
             }
 
-            // FIRE AND FORGET - Optimistic prediction for async/network readiness
+            // Request the move and let GameManager decide if it's valid. If it's not, the piece will snap back automatically.
             if (dropGridPos != ChessTheMasterPiece.Data.Vector2Int.Invalid)
             {
                 // Request the move - piece stays where it landed (optimistic)
@@ -168,7 +167,7 @@ namespace ChessTheMasterPiece.Controllers
             }
 
             // Clear state immediately (Do NOT force snap-backs here!)
-            draggingVisualTransform = null;
+            draggedPieceTransform = null;
         }
 
         private void UpdateDragVisual(Ray ray)
@@ -190,9 +189,9 @@ namespace ChessTheMasterPiece.Controllers
                 Vector3 worldPos = ray.GetPoint(enter);
                 worldPos.y = actualBoardHeight + dragHeight; // Now it will be 4.3 + 1.0 = 5.3
 
-                draggingVisualTransform.position = worldPos;
+                draggedPieceTransform.position = worldPos;
 
-                if (draggingVisualTransform.TryGetComponent(out ChessPiece pieceComponent))
+                if (draggedPieceTransform.TryGetComponent(out ChessPiece pieceComponent))
                 {
                     pieceComponent.SetPosition(worldPos, force: true);
                 }
@@ -201,26 +200,40 @@ namespace ChessTheMasterPiece.Controllers
 
         private bool WasPointerPressed()
         {
-            if (Mouse.current != null)
+            // Android / Mobile Touch
+            if (UnityEngine.InputSystem.Touchscreen.current != null)
             {
-                return Mouse.current.leftButton.wasPressedThisFrame;
+                if (UnityEngine.InputSystem.Touchscreen.current.primaryTouch.press.wasPressedThisFrame)
+                    return true;
             }
 
-#pragma warning disable 618
-            return Input.GetMouseButtonDown(0);
-#pragma warning restore 618
+            // Steam / PC Mouse
+            if (Mouse.current != null)
+            {
+                if (Mouse.current.leftButton.wasPressedThisFrame)
+                    return true;
+            }
+
+            return false;
         }
 
         private bool WasPointerReleased()
         {
-            if (Mouse.current != null)
+            // Android / Mobile Touch
+            if (UnityEngine.InputSystem.Touchscreen.current != null)
             {
-                return Mouse.current.leftButton.wasReleasedThisFrame;
+                if (UnityEngine.InputSystem.Touchscreen.current.primaryTouch.press.wasReleasedThisFrame)
+                    return true;
             }
 
-#pragma warning disable 618
-            return Input.GetMouseButtonUp(0);
-#pragma warning restore 618
+            // Steam / PC Mouse
+            if (Mouse.current != null)
+            {
+                if (Mouse.current.leftButton.wasReleasedThisFrame)
+                    return true;
+            }
+
+            return false;
         }
     }
 }

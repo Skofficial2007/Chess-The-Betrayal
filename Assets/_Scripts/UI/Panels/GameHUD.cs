@@ -4,6 +4,9 @@ using UnityEngine.UI;
 
 namespace ChessTheMasterPiece.UI
 {
+    /// <summary>
+    /// Simple HUD controller exposing gameplay HUD controls (exit).
+    /// </summary>
     public class GameHUD : MonoBehaviour
     {
         [Header("UI References")]

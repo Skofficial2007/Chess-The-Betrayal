@@ -4,15 +4,13 @@ using System.Collections.Generic;
 namespace ChessTheMasterPiece.Data
 {
     /// <summary>
-    /// Pure C# representation of the chess board state - no Unity dependencies.
-    /// This is the single source of truth for the game's logical state.
-    /// Can be serialized for network sync, game saves, or AI simulation.
+    /// The complete snapshot of a chess game at any moment — the board, whose turn it is, captured pieces, and move history.
+    /// No Unity code lives here, so it can be safely used in background threads, saved to disk, or sent over the network.
     /// </summary>
     public class BoardState
     {
         #region Zobrist Hashing
-
-        // [Team (2), PieceType (7), Square (64)]
+        // PieceKeys dimensions: Team x PieceType x Square. (2 x 7 x 64)
         private static readonly ulong[,,] PieceKeys;
         private static readonly ulong BlackToMoveKey;
         // 16 possible castling right combinations (4-bit mask)
@@ -24,7 +22,6 @@ namespace ChessTheMasterPiece.Data
 
         /// <summary>
         /// Incrementally updated hash for transposition table lookups.
-        /// Uses Zobrist hashing - XOR operations make it reversible for Make/Unmake.
         /// </summary>
         public ulong ZobristHash { get; set; }
 
@@ -32,27 +29,26 @@ namespace ChessTheMasterPiece.Data
         /// 4-bit mask tracking available castling rights.
         /// Bit 0: White Kingside, Bit 1: White Queenside, Bit 2: Black Kingside, Bit 3: Black Queenside
         /// </summary>
-        public int CurrentCastlingMask { get; set; }
+        public int CastlingRights { get; set; }
 
         /// <summary>
         /// The file (X coordinate 0-7) where an en passant capture is currently legal.
         /// Null if no en passant is available this turn.
         /// </summary>
-        public int? CurrentEnPassantFile { get; set; }
+        public int? EnPassantFile { get; set; }
 
         // Castling mask bit constants for clarity
         public const int CastlingWhiteKingside = 1;   // Bit 0
         public const int CastlingWhiteQueenside = 2;  // Bit 1
         public const int CastlingBlackKingside = 4;   // Bit 2
         public const int CastlingBlackQueenside = 8;  // Bit 3
-        public const int CastlingAllRights = 15;      // All bits set
+        public const int CastlingAllRights = 15;
 
         static BoardState()
         {
             // Fixed seed ensures reproducibility across network clients and AI threads
             var rng = new Random(42);
 
-            // Helper to generate 64-bit randoms
             ulong NextUlong()
             {
                 byte[] buffer = new byte[8];
@@ -85,12 +81,12 @@ namespace ChessTheMasterPiece.Data
             }
 
             BlackToMoveKey = NextUlong();
+            // TODO (Betrayal): Toggle this in the hash whenever the BetrayalRight is consumed for the match.
             BetrayalPhaseKey = NextUlong();
         }
 
         /// <summary>
-        /// XORs a piece at a specific location into or out of the hash.
-        /// Because XOR is its own inverse, calling this twice with the same parameters cancels out.
+        /// Flips a piece in or out of the hash at a given square. Calling it twice on the same piece cancels out, which is what makes move undo possible.
         /// </summary>
         public void TogglePieceHash(Team team, ChessPieceType type, int x, int y)
         {
@@ -101,7 +97,7 @@ namespace ChessTheMasterPiece.Data
         }
 
         /// <summary>
-        /// XORs the turn state. If called, it flips the hash's perspective of whose turn it is.
+        /// Flips whose turn it is in the hash.
         /// </summary>
         public void ToggleTurnHash()
         {
@@ -136,8 +132,7 @@ namespace ChessTheMasterPiece.Data
         }
 
         /// <summary>
-        /// Computes the full Zobrist hash from scratch by iterating all pieces.
-        /// Call this once when initializing the board, then use incremental updates.
+        /// Builds the hash from scratch by reading every piece on the board. Call this once at game start, then keep it up to date incrementally as moves happen.
         /// </summary>
         public void ComputeFullZobristHash()
         {
@@ -147,7 +142,7 @@ namespace ChessTheMasterPiece.Data
                 for (int y = 0; y < TileCountY; y++)
                 {
                     PieceData piece = LogicalBoard[x, y];
-                    if (piece != null)
+                    if (!piece.IsEmpty)
                     {
                         TogglePieceHash(piece.Team, piece.Type, x, y);
                     }
@@ -158,11 +153,11 @@ namespace ChessTheMasterPiece.Data
                 ToggleTurnHash();
             }
             // Include castling rights in the hash
-            ToggleCastlingHash(CurrentCastlingMask);
+            ToggleCastlingHash(CastlingRights);
             // Include en passant file in the hash (if any)
-            if (CurrentEnPassantFile.HasValue)
+            if (EnPassantFile.HasValue)
             {
-                ToggleEnPassantHash(CurrentEnPassantFile.Value);
+                ToggleEnPassantHash(EnPassantFile.Value);
             }
         }
 
@@ -170,6 +165,15 @@ namespace ChessTheMasterPiece.Data
 
         // The mathematical grid - holds pure data, not GameObjects
         public PieceData[,] LogicalBoard { get; private set; }
+
+        // For faster piece lookups, we maintain separate lists of occupied squares for each team.
+        // The boolean arrays track occupancy for quick checks,
+        // while the index lists allow iteration over pieces without scanning the whole board.
+        private readonly bool[] _whiteOccupied = new bool[64];
+        private readonly bool[] _blackOccupied = new bool[64];
+        private readonly List<int> _whitePieceIndices = new List<int>(16);
+        private readonly List<int> _blackPieceIndices = new List<int>(16);
+        private bool _indicesDirty = false;
 
         public Team CurrentTurn { get; set; }
         public int TileCountX { get; private set; }
@@ -205,24 +209,46 @@ namespace ChessTheMasterPiece.Data
 
         /// <summary>
         /// Places a piece on the board at the specified position.
-        /// Updates the piece's coordinates automatically.
         /// </summary>
         public void SetPiece(PieceData piece, int x, int y)
         {
-            if (IsValidIndex(x, y))
+            if (!IsValidIndex(x, y)) return;
+
+            PieceData existing = LogicalBoard[x, y];
+            int sq = y * TileCountX + x;
+
+            if (!existing.IsEmpty)
             {
-                LogicalBoard[x, y] = piece;
-                if (piece != null)
+                if (existing.Team == Team.White)
                 {
-                    piece.CurrentX = x;
-                    piece.CurrentY = y;
+                    _whiteOccupied[sq] = false;
                 }
+                else
+                {
+                    _blackOccupied[sq] = false;
+                }
+                _indicesDirty = true;
+            }
+
+            LogicalBoard[x, y] = piece;
+
+            if (!piece.IsEmpty)
+            {
+                if (piece.Team == Team.White)
+                {
+                    _whiteOccupied[sq] = true;
+                }
+                else
+                {
+                    _blackOccupied[sq] = true;
+                }
+                _indicesDirty = true;
             }
         }
 
         /// <summary>
         /// Retrieves the piece at the specified position.
-        /// Returns null if the square is empty or out of bounds.
+        /// Returns PieceData.Empty if the square is empty or out of bounds.
         /// </summary>
         public PieceData GetPiece(int x, int y)
         {
@@ -230,7 +256,7 @@ namespace ChessTheMasterPiece.Data
             {
                 return LogicalBoard[x, y];
             }
-            return null;
+            return PieceData.Empty;
         }
 
         /// <summary>
@@ -242,34 +268,27 @@ namespace ChessTheMasterPiece.Data
         }
 
         /// <summary>
-        /// Moves a piece from one position to another.
-        /// Does NOT validate if the move is legal - that's the rules engine's job.
-        /// Returns the captured piece if any.
+        /// Moves a piece and returns whatever was captured, if anything.
         /// </summary>
         public PieceData MovePiece(int fromX, int fromY, int toX, int toY)
         {
             if (!IsValidIndex(fromX, fromY) || !IsValidIndex(toX, toY))
             {
-                return null;
+                return PieceData.Empty;
             }
 
             PieceData movingPiece = LogicalBoard[fromX, fromY];
-            if (movingPiece == null)
+            if (movingPiece.IsEmpty)
             {
-                return null;
+                return PieceData.Empty;
             }
 
             PieceData capturedPiece = LogicalBoard[toX, toY];
 
-            // Update board
-            LogicalBoard[fromX, fromY] = null;
-            LogicalBoard[toX, toY] = movingPiece;
+            SetPiece(PieceData.Empty, fromX, fromY);
+            SetPiece(movingPiece.WithMoved(), toX, toY);
 
-            // Update piece data
-            movingPiece.MoveTo(toX, toY);
-
-            // Track captures
-            if (capturedPiece != null)
+            if (!capturedPiece.IsEmpty)
             {
                 if (capturedPiece.IsWhite)
                 {
@@ -293,19 +312,19 @@ namespace ChessTheMasterPiece.Data
         }
 
         /// <summary>
-        /// Removes a piece from the board (for en passant, etc).
+        /// Removes a piece from the board (used for en passant captures, where the taken pawn isn't on the landing square).
         /// </summary>
         public PieceData RemovePiece(int x, int y)
         {
             if (!IsValidIndex(x, y))
             {
-                return null;
+                return PieceData.Empty;
             }
 
             PieceData piece = LogicalBoard[x, y];
-            LogicalBoard[x, y] = null;
+            SetPiece(PieceData.Empty, x, y);
 
-            if (piece != null)
+            if (!piece.IsEmpty)
             {
                 if (piece.IsWhite)
                 {
@@ -337,58 +356,47 @@ namespace ChessTheMasterPiece.Data
             {
                 for (int y = 0; y < TileCountY; y++)
                 {
-                    LogicalBoard[x, y] = null;
+                    LogicalBoard[x, y] = PieceData.Empty;
                 }
             }
+
+            for (int i = 0; i < 64; i++)
+            {
+                _whiteOccupied[i] = false;
+                _blackOccupied[i] = false;
+            }
+
             WhiteCaptured.Clear();
             BlackCaptured.Clear();
             MoveHistory.Clear();
+            _whitePieceIndices.Clear();
+            _blackPieceIndices.Clear();
+            _indicesDirty = false;
             IsGameOver = false;
             Winner = null;
             CurrentTurn = Team.White;
             ZobristHash = 0;
-            CurrentCastlingMask = CastlingAllRights; // Reset to all castling available
-            CurrentEnPassantFile = null;
+            CastlingRights = CastlingAllRights; // Reset to all castling available
+            EnPassantFile = null;
         }
 
-        /// <summary>
-        /// Finds the king of the specified team.
-        /// Returns null if not found (shouldn't happen in a valid game).
-        /// </summary>
-        public PieceData FindKing(Team team)
+        public bool TryFindKing(Team team, out Vector2Int kingPos)
         {
-            for (int x = 0; x < TileCountX; x++)
+            List<int> indices = GetPieceIndices(team);
+            for (int i = 0; i < indices.Count; i++)
             {
-                for (int y = 0; y < TileCountY; y++)
+                int idx = indices[i];
+                int x = idx % TileCountX;
+                int y = idx / TileCountX;
+                PieceData piece = LogicalBoard[x, y];
+                if (piece.Type == ChessPieceType.King)
                 {
-                    PieceData piece = LogicalBoard[x, y];
-                    if (piece != null && piece.Type == ChessPieceType.King && piece.Team == team)
-                    {
-                        return piece;
-                    }
+                    kingPos = new Vector2Int(x, y);
+                    return true;
                 }
             }
-            return null;
-        }
-
-        /// <summary>
-        /// Populates a pre-allocated buffer with all pieces belonging to a specific team.
-        /// Zero-allocation buffer-passing pattern.
-        /// </summary>
-        public void GetAllPieces(Team team, List<PieceData> output)
-        {
-            output.Clear();
-            for (int x = 0; x < TileCountX; x++)
-            {
-                for (int y = 0; y < TileCountY; y++)
-                {
-                    PieceData piece = LogicalBoard[x, y];
-                    if (piece != null && piece.Team == team)
-                    {
-                        output.Add(piece);
-                    }
-                }
-            }
+            kingPos = Vector2Int.Invalid;
+            return false;
         }
 
         /// <summary>
@@ -440,56 +448,72 @@ namespace ChessTheMasterPiece.Data
         }
 
         /// <summary>
-        /// Creates a full deep copy including complete move history.
-        /// EXPENSIVE. Use only for save/load and network state snapshots,
-        /// NOT for move simulation (use ChessEngine make/unmake instead).
+        /// Creates a full deep copy of this board state for save/load, UI, and network snapshots ONLY.
+        /// NEVER call this from an AI search tree or move simulation — use the Make/Unmake architecture in ChessEngine instead to prevent catastrophic heap allocation.
         /// </summary>
-        /// <remarks>
-        /// The make/unmake system is working correctly for AI simulation — <c>Clone()</c> is no longer needed for check detection.
-        /// However, if <c>Clone()</c> is called (for network snapshots, save games, or test utilities) it deep-copies the
-        /// entire <c>MoveHistory</c> list. <c>MoveHistory</c> stores start/end pairs (two entries per move), so after 40
-        /// moves the list will contain 80 entries. This method is not currently a hotspot, but copying move history
-        /// can become a time bomb for any feature that snapshots the board frequently.
-        /// </remarks>
-        public BoardState Clone()
+        public BoardState CloneForSnapshot()
         {
             BoardState clone = new BoardState(TileCountX, TileCountY);
             clone.CurrentTurn = this.CurrentTurn;
             clone.IsGameOver = this.IsGameOver;
             clone.Winner = this.Winner;
             clone.ZobristHash = this.ZobristHash;
-            clone.CurrentCastlingMask = this.CurrentCastlingMask;
-            clone.CurrentEnPassantFile = this.CurrentEnPassantFile;
+            clone.CastlingRights = this.CastlingRights;
+            clone.EnPassantFile = this.EnPassantFile;
 
-            // Clone the board
-            for (int x = 0; x < TileCountX; x++)
-            {
-                for (int y = 0; y < TileCountY; y++)
-                {
-                    if (this.LogicalBoard[x, y] != null)
-                    {
-                        clone.LogicalBoard[x, y] = this.LogicalBoard[x, y].Clone();
-                    }
-                }
-            }
+            Array.Copy(this.LogicalBoard, clone.LogicalBoard, this.LogicalBoard.Length);
 
-            // Clone captured pieces
+            // Copy the occupancy arrays and flag the lists for a rebuild
+            Array.Copy(this._whiteOccupied, clone._whiteOccupied, 64);
+            Array.Copy(this._blackOccupied, clone._blackOccupied, 64);
+            clone._indicesDirty = true;
+
             foreach (var piece in WhiteCaptured)
             {
-                clone.WhiteCaptured.Add(piece.Clone());
+                clone.WhiteCaptured.Add(piece);
             }
             foreach (var piece in BlackCaptured)
             {
-                clone.BlackCaptured.Add(piece.Clone());
+                clone.BlackCaptured.Add(piece);
             }
 
-            // Clone move history
             foreach (var move in MoveHistory)
             {
                 clone.MoveHistory.Add(move);
             }
 
             return clone;
+        }
+
+        public List<int> GetPieceIndices(Team team)
+        {
+            if (_indicesDirty)
+            {
+                RebuildIndices();
+            }
+            return team == Team.White ? _whitePieceIndices : _blackPieceIndices;
+        }
+
+        /// <summary>
+        /// Rebuilds the lists of occupied-square indices for white and black pieces by scanning the flat 64-square
+        /// board arrays.
+        /// </summary>
+        /// <remarks>Clears existing index lists, performs a single linear pass over the 64 squares using
+        /// the _whiteOccupied and _blackOccupied arrays to repopulate _whitePieceIndices and _blackPieceIndices, and
+        /// resets the indices-dirty flag (_indicesDirty = false).</remarks>
+        private void RebuildIndices()
+        {
+            _whitePieceIndices.Clear();
+            _blackPieceIndices.Clear();
+
+            // Single linear pass over the flat 64-square array
+            for (int i = 0; i < 64; i++)
+            {
+                if (_whiteOccupied[i]) _whitePieceIndices.Add(i);
+                if (_blackOccupied[i]) _blackPieceIndices.Add(i);
+            }
+
+            _indicesDirty = false;
         }
     }
 }

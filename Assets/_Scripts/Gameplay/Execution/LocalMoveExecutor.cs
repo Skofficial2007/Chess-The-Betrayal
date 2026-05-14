@@ -10,28 +10,23 @@ namespace ChessTheMasterPiece.Controllers
     /// Handles move validation for local, offline play.
     /// All the pure chess logic that was previously in GameManager now lives here.
     /// In the future, NetworkMoveExecutor will implement the same interface for multiplayer.
-    /// GC-optimized with buffer-passing pattern.
     /// </summary>
     public class LocalMoveExecutor : IMoveExecutor
     {
         public event Action<MoveCommand> OnMoveConfirmed;
         public event Action<ChessTheMasterPiece.Data.Vector2Int, ChessTheMasterPiece.Data.Vector2Int> OnMoveRejected;
-        public event Action<ChessTheMasterPiece.Data.Vector2Int> OnPromotionRequired;
+        public event Action<ChessTheMasterPiece.Data.Vector2Int, ChessTheMasterPiece.Data.Vector2Int> OnPromotionRequired;
 
         private readonly BoardState _board;
-        private readonly List<MoveCommand> _legalMovesBuffer = new List<MoveCommand>(32);
-        private readonly List<MoveCommand> _targetMatchesBuffer = new List<MoveCommand>(4);
+        private readonly List<MoveCommand> _legalMoves = new List<MoveCommand>(32);
+        private readonly List<MoveCommand> _movesToTarget = new List<MoveCommand>(4);
         
         private MoveCommand _pendingPromotionMove;
         private bool _isAwaitingPromotion;
         private bool _logMoves;
 
         /// <summary>
-        /// Local move validation for offline play.
-        /// IMPORTANT: Takes a direct reference to the live BoardState.
-        /// NetworkMoveExecutor must NOT follow this pattern — it must
-        /// validate against a server-owned snapshot, not the client board.
-        /// See: IMoveExecutor contract.
+        /// Note: We take a direct reference to the live board here. A network executor must NOT do this — it should validate against a server snapshot, not the client's version.
         /// </summary>
         public LocalMoveExecutor(BoardState board, bool logMoves = true)
         {
@@ -40,8 +35,7 @@ namespace ChessTheMasterPiece.Controllers
         }
 
         /// <summary>
-        /// Validates a move request using the chess engine.
-        /// This is the heart of the Command Pattern - pure logic validation.
+        /// Validates a move request and either fires OnMoveConfirmed (legal) or OnMoveRejected (illegal). If it's a promotion, we pause and fire OnPromotionRequired instead.
         /// </summary>
         public void RequestMove(ChessTheMasterPiece.Data.Vector2Int from, ChessTheMasterPiece.Data.Vector2Int to)
         {
@@ -55,17 +49,15 @@ namespace ChessTheMasterPiece.Controllers
 
             // Validate piece ownership
             PieceData piece = _board.GetPiece(from);
-            if (piece == null || piece.Team != _board.CurrentTurn)
+            if (piece.IsEmpty || piece.Team != _board.CurrentTurn)
             {
                 if (_logMoves) Debug.Log($"[LocalMoveExecutor] Move rejected: wrong piece or turn");
                 OnMoveRejected?.Invoke(from, to);
                 return;
             }
 
-            // Handle King-on-Rook castling shortcut
-            // If the player dragged the King onto a friendly Rook, remap the 'to' target to the standard 2-step castling square.
             PieceData targetPiece = _board.GetPiece(to);
-            if (piece.Type == ChessPieceType.King && targetPiece != null && 
+            if (piece.Type == ChessPieceType.King && !targetPiece.IsEmpty && 
                 targetPiece.Type == ChessPieceType.Rook && targetPiece.Team == piece.Team)
             {
                 // If Rook is at X=7 (Kingside), Target is X=6. If Rook is at X=0 (Queenside), Target is X=2.
@@ -73,34 +65,31 @@ namespace ChessTheMasterPiece.Controllers
                 to = new ChessTheMasterPiece.Data.Vector2Int(castlingX, from.y);
             }
 
-            // Zero-allocation move generation
-            _legalMovesBuffer.Clear();
-            ChessEngine.GetLegalMoves(_board, from, _legalMovesBuffer);
+            _legalMoves.Clear();
+            ChessEngine.GetLegalMoves(_board, from, _legalMoves);
 
-            // Zero-allocation filtering
-            _targetMatchesBuffer.Clear();
-            for (int i = 0; i < _legalMovesBuffer.Count; i++)
+            _movesToTarget.Clear();
+            for (int i = 0; i < _legalMoves.Count; i++)
             {
-                if (_legalMovesBuffer[i].EndPosition == to)
+                if (_legalMoves[i].EndPosition == to)
                 {
-                    _targetMatchesBuffer.Add(_legalMovesBuffer[i]);
+                    _movesToTarget.Add(_legalMoves[i]);
                 }
             }
 
             // No legal moves to this square
-            if (_targetMatchesBuffer.Count == 0)
+            if (_movesToTarget.Count == 0)
             {
                 if (_logMoves) Debug.Log($"[LocalMoveExecutor] Illegal move: {from} -> {to}");
                 OnMoveRejected?.Invoke(from, to);
                 return;
             }
 
-            // AMBIGUITY RESOLUTION: Promotion
-            // If the engine has generated multiple moves for one square, it's a promotion choice.
+            // If the engine generated promotion variants for this square, we need the player to pick one.
             bool isPromotionChoice = false;
-            for (int i = 0; i < _targetMatchesBuffer.Count; i++)
+            for (int i = 0; i < _movesToTarget.Count; i++)
             {
-                if (_targetMatchesBuffer[i].IsPromotion)
+                if (_movesToTarget[i].IsPromotion)
                 {
                     isPromotionChoice = true;
                     break;
@@ -110,19 +99,17 @@ namespace ChessTheMasterPiece.Controllers
             if (isPromotionChoice)
             {
                 // Store the first match as a template for position/capture data
-                _pendingPromotionMove = _targetMatchesBuffer[0];
+                _pendingPromotionMove = _movesToTarget[0];
                 _isAwaitingPromotion = true;
 
                 if (_logMoves) Debug.Log($"[LocalMoveExecutor] Promotion detected at {to}. Awaiting UI choice.");
 
                 // Fire the promotion event - UI will show the dialog
-                OnPromotionRequired?.Invoke(to);
+                OnPromotionRequired?.Invoke(_pendingPromotionMove.StartPosition, to);
                 return;
             }
 
-            // SINGLE-MOVE RESOLUTION (Standard, Castling, or En Passant)
-            // If it's not a promotion, there is only ever one logical command.
-            MoveCommand validMove = _targetMatchesBuffer[0];
+            MoveCommand validMove = _movesToTarget[0];
             
             if (_logMoves) Debug.Log($"[LocalMoveExecutor] Move confirmed: {validMove.StartPosition} -> {validMove.EndPosition}");
             
@@ -131,8 +118,7 @@ namespace ChessTheMasterPiece.Controllers
         }
 
         /// <summary>
-        /// Validates a promotion choice and confirms the final move command.
-        /// Re-validates to prevent memory injection / desyncs.
+        /// Confirms the player's promotion choice. We re-check legality here just to be safe before firing the final move event.
         /// </summary>
         public void RequestPromotion(ChessPieceType type)
         {
@@ -143,13 +129,13 @@ namespace ChessTheMasterPiece.Controllers
             }
 
             // Re-validate to prevent memory injection / desyncs
-            _legalMovesBuffer.Clear();
-            ChessEngine.GetLegalMoves(_board, _pendingPromotionMove.StartPosition, _legalMovesBuffer);
+            _legalMoves.Clear();
+            ChessEngine.GetLegalMoves(_board, _pendingPromotionMove.StartPosition, _legalMoves);
 
             bool found = false;
-            for (int i = 0; i < _legalMovesBuffer.Count; i++)
+            for (int i = 0; i < _legalMoves.Count; i++)
             {
-                MoveCommand cmd = _legalMovesBuffer[i];
+                MoveCommand cmd = _legalMoves[i];
                 if (cmd.EndPosition == _pendingPromotionMove.EndPosition && cmd.PromotedTo == type)
                 {
                     _isAwaitingPromotion = false;

@@ -21,11 +21,14 @@ namespace ChessTheMasterPiece.Data
 
     public enum Team
     {
-        White = 0,
-        Black = 1
+        None  = -1,
+        White =  0,
+        Black =  1
     }
 
     // State Machine Phases for Game Flow
+    // The Betrayal mechanic runs through RetributionPending → ResolutionFailed/ForcedSave.
+    // If you're adding a new phase, make sure GameManager's TransitionToPhase() handles it.
     public enum TurnPhase
     {
         Normal,               // Standard chess movement

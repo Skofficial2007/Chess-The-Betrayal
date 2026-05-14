@@ -1,10 +1,15 @@
-// TODO: Implement when Unity Netcode for GameObjects (NGO) sprint begins.
+// Multiplayer move handling — not yet implemented.
 //
-// ARCHITECTURE PATTERN: Server-Authoritative / Optimistic Client Prediction
-// 1. Client calls RequestMove -> Sends ServerRpc
-// 2. Server validates move against the Authoritative Server BoardState snapshot
-// 3. Server broadcasts ClientRpc with confirmed MoveCommand network struct
-// 4. Clients fire OnMoveConfirmed to update local visuals and pure C# state
+// When this is built, all move validation must happen on the server.
+// The client only sends what the player wants to do; the server decides if it's legal.
+//
+// Rough flow:
+//   1. Client calls RequestMove() → sends a ServerRpc
+//   2. Server validates against its own BoardState (the authority)
+//   3. Server broadcasts a ClientRpc with the confirmed MoveCommand
+//   4. All clients fire OnMoveConfirmed and update their visuals
+//
+// TODO (Betrayal + Network): The Retribution sub-phase must be fully validated server-side. The client should never be trusted to report whether a Retribution succeeded or failed.
 //
 // using System;
 // using Unity.Netcode;

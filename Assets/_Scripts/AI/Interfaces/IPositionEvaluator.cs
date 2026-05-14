@@ -3,9 +3,7 @@ using ChessTheMasterPiece.Data;
 namespace ChessTheMasterPiece.AI
 {
     /// <summary>
-    /// Evaluates a board position from the given team's perspective.
-    /// Positive = advantage for the requested team. Negative = disadvantage.
-    /// Implementations: MaterialEvaluator, PositionalEvaluator, etc.
+    /// Scores a board position from one team's point of view. Positive means that team is winning, negative means they're losing.
     /// </summary>
     public interface IPositionEvaluator
     {
