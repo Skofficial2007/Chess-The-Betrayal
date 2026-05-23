@@ -1,0 +1,15 @@
+{
+  "name": "ChessTheMasterPiece.Tests.EditMode",
+  "references": [
+    "ChessTheMasterPiece.Core",
+    "ChessTheMasterPiece.Tests.Utilities"
+  ],
+  "includePlatforms": ["Editor"],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": ["nunit.framework.dll"],
+  "autoReferenced": false,
+  "defineConstraints": [],
+  "versionDefines": []
+}

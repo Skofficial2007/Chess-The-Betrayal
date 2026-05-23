@@ -1,0 +1,14 @@
+{
+  "name": "ChessTheMasterPiece.Tests.Utilities",
+  "references": [
+    "ChessTheMasterPiece.Core"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": ["nunit.framework.dll"],
+  "autoReferenced": false,
+  "defineConstraints": [],
+  "versionDefines": []
+}
