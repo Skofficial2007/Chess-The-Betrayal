@@ -46,6 +46,12 @@ namespace ChessTheBetrayal.Core.Engine
         public readonly int PreviousCastlingMask;
         public readonly int? PreviousEnPassantFile;
 
+        // Clock snapshot at the moment this move was submitted.
+        // Used by the network layer to validate client submission times against server state.
+        // long.MaxValue indicates no clock was active (e.g., untimed mode or AI).
+        public readonly long WhiteRemainingMsAtMove;
+        public readonly long BlackRemainingMsAtMove;
+
         /// <summary>
         /// Builds a move command from two piece references. We pull the data we need out of them immediately so the command doesn't hold live references.
         /// </summary>
@@ -60,7 +66,9 @@ namespace ChessTheBetrayal.Core.Engine
             Vector2Int? rookEndPosition = null,
             Vector2Int? enPassantCapturePosition = null,
             int previousCastlingMask = 0,
-            int? previousEnPassantFile = null)
+            int? previousEnPassantFile = null,
+            long whiteRemainingMsAtMove = long.MaxValue,
+            long blackRemainingMsAtMove = long.MaxValue)
         {
             StartPosition = startPosition;
             EndPosition = endPosition;
@@ -102,6 +110,8 @@ namespace ChessTheBetrayal.Core.Engine
             EnPassantCapturePosition = enPassantCapturePosition;
             PreviousCastlingMask = previousCastlingMask;
             PreviousEnPassantFile = previousEnPassantFile;
+            WhiteRemainingMsAtMove = whiteRemainingMsAtMove;
+            BlackRemainingMsAtMove = blackRemainingMsAtMove;
         }
 
         #region Factory Methods
@@ -132,6 +142,23 @@ namespace ChessTheBetrayal.Core.Engine
         }
 
         #endregion
+
+        /// <summary>
+        /// Returns a new MoveCommand with clock timestamps applied.
+        /// Factory methods do not accept clock parameters to ensure move generation remains decoupled from time state.
+        /// </summary>
+        public MoveCommand WithClockSnapshot(ClockState clock) =>
+            new MoveCommand(
+                StartPosition, EndPosition,
+                new PieceData(PieceTeam, PieceType, PieceMoveDirection, 0, PieceHadMoved),
+                HasCapture
+                    ? new PieceData(CapturedTeam, CapturedType, CapturedTeam == Team.White ? 1 : -1, 0, CapturedHadMoved)
+                    : default,
+                SpecialMoveType, PromotedTo,
+                RookStartPosition, RookEndPosition, EnPassantCapturePosition,
+                PreviousCastlingMask, PreviousEnPassantFile,
+                clock.WhiteRemainingMs,
+                clock.BlackRemainingMs);
 
         public bool IsCapture => HasCapture;
         public bool IsPromotion => PromotedTo != ChessPieceType.None;
