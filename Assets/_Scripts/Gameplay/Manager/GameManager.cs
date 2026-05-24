@@ -188,12 +188,14 @@ namespace ChessTheBetrayal.Gameplay
             _moveExecutor.OnMoveRejected += OnExecutorMoveRejected;
             _moveExecutor.OnPromotionRequired += OnExecutorPromotionRequired;
 
-            TransitionToPhase(TurnPhase.Normal);
-
+            // FIX: Initialize the clock BEFORE transitioning to normal phase.
+            // This ensures TransitionToPhase() successfully calls _clock.Resume() and starts White's timer immediately.
             InitializeClock();
 
-            // [PHASE 5 WIRING] - We will uncomment this when Phase 5 builds the HUD.
-            // UIManager.Instance?.ConfigureHUDForMode(_selectedMode);
+            // FIX: Boot into Starting phase. Clock remains paused until presentation layer signals ready.
+            TransitionToPhase(TurnPhase.Starting);
+
+            UIManager.Instance?.ConfigureHUDForMode(_selectedMode);
 
             OnGameStarted?.Invoke(LiveBoard);
 
@@ -231,8 +233,7 @@ namespace ChessTheBetrayal.Gameplay
 
             TransitionToPhase(TurnPhase.GameOver);
 
-            // [PHASE 5 WIRING]
-            // UIManager.Instance?.ConfigureHUDForMode(GameModeConfig.Unlimited);
+            UIManager.Instance?.ConfigureHUDForMode(GameModeConfig.Unlimited);
 
             OnGameReset?.Invoke();
 
@@ -261,6 +262,19 @@ namespace ChessTheBetrayal.Gameplay
             }
 
             LiveBoard.ComputeFullZobristHash();
+        }
+
+        /// <summary>
+        /// Called by the presentation layer when all intro animations are finished.
+        /// Unlocks the board, allowing pieces to move and starting the active player's clock.
+        /// </summary>
+        public void StartMatch()
+        {
+            if (CurrentPhase == TurnPhase.Starting)
+            {
+                TransitionToPhase(TurnPhase.Normal);
+                if (logMoves) Debug.Log("[GameManager] Match officially started. Clock running.");
+            }
         }
 
         /// <summary>
@@ -440,7 +454,8 @@ namespace ChessTheBetrayal.Gameplay
             
             CurrentPhase = nextPhase;
 
-            bool shouldPause = nextPhase == TurnPhase.RetributionPending
+            bool shouldPause = nextPhase == TurnPhase.Starting
+                            || nextPhase == TurnPhase.RetributionPending
                             || nextPhase == TurnPhase.ResolutionFailed
                             || nextPhase == TurnPhase.ForcedSave
                             || nextPhase == TurnPhase.GameOver;

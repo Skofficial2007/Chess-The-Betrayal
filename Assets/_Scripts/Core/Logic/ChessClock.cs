@@ -74,20 +74,26 @@ namespace ChessTheBetrayal.Core.Logic
         // ── Move Confirmation ─────────────────────────────────────────────────────
 
         /// <summary>
-        /// Registers a completed move. Applies the Fischer increment to the acting side,
-        /// switches the active timer, and ensures the clock is running.
+        /// Registers a completed move. Applies the Fischer increment to the acting side
+        /// (capped at the base time limit) and switches the active timer.
         /// </summary>
         public void OnMoveMade(Team teamThatMoved)
         {
             if (_config.IsUnlimited) return;
 
             long current = _state.GetRemaining(teamThatMoved);
-            _state.SetRemaining(teamThatMoved, current + _config.IncrementMs);
+            long newTime = current + _config.IncrementMs;
 
+            // Cap the accumulated time at the starting base time to prevent time-hoarding exploits.
+            if (newTime > _config.BaseTimeMs)
+            {
+                newTime = _config.BaseTimeMs;
+            }
+
+            _state.SetRemaining(teamThatMoved, newTime);
+
+            // Switch the active side
             _state.ActiveSide = teamThatMoved == Team.White ? Team.Black : Team.White;
-            
-            // The clock does not strictly start counting down until after the first move completes.
-            _state.IsRunning = true;
         }
 
         // ── Private Helpers ───────────────────────────────────────────────────────
