@@ -6,6 +6,17 @@ namespace ChessTheMasterPiece.Logic
     /// A snapshot of one move — where a piece came from, where it went, what was captured, and any special move type.
     /// Because it's a readonly struct, it's safe to store and pass around without worrying about data being changed underneath you.
     /// </summary>
+    /// <remarks>
+    /// TODO: Current struct size ~88 bytes impacts AI search cache locality at depth 8+.
+    /// Solution: Introduce compact PackedMove : uint (32-bit) for search tree only:
+    ///   - 6 bits from square (0-63)
+    ///   - 6 bits to square (0-63)
+    ///   - 4 bits flags (capture, promotion, castling, en passant)
+    ///   - 4 bits special data (promotion piece, castling direction)
+    /// Keep MoveCommand as full-fidelity type for game execution and network serialization.
+    /// Conversion: PackedMove.Expand(board) → MoveCommand when applying moves.
+    /// Do NOT optimize before AI sprint - multiplayer requires this full representation.
+    /// </remarks>
     public readonly struct MoveCommand
     {
         public readonly Vector2Int StartPosition;

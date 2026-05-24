@@ -338,5 +338,59 @@ namespace ChessTheMasterPiece.Tests.EditMode.Engine
                     $"Hash desync detected after move {i + 1} ({moveNotation})");
             }
         }
+
+        [Test]
+        public void AssertZobristConsistency_AfterSuccessfulCall_DoesNotMutateZobristHash()
+        {
+            // Arrange: Standard position with computed hash
+            BoardState board = TestBoardSetupUtility.CreateStandard();
+            board.ComputeFullZobristHash();
+            ulong hashBeforeCall = board.ZobristHash;
+
+            Assert.That(hashBeforeCall, Is.Not.EqualTo(0UL), "Hash should be non-zero before test");
+
+            // Act: Call AssertZobristConsistency
+            Assert.DoesNotThrow(() => board.AssertZobristConsistency(),
+                "AssertZobristConsistency should not throw on a consistent board");
+
+            // Assert: Hash must not have changed
+            Assert.That(board.ZobristHash, Is.EqualTo(hashBeforeCall),
+                "BUG REGRESSION: AssertZobristConsistency mutated the Zobrist hash. " +
+                "The incremental hash was overwritten instead of being preserved.");
+        }
+
+        [Test]
+        public void ApplyMoveToBoard_PromotionCapture_ZobristHashUpdatedCorrectly()
+        {
+            // Arrange: Position where pawn captures and promotes
+            // This is the most complex hash operation: three XOR operations in sequence
+            // 1. Remove captured piece's hash
+            // 2. Remove pawn hash from promotion square
+            // 3. Add promoted piece (Queen) hash to promotion square
+            BoardState board = TestBoardSetupUtility.CreateEmpty()
+                .WithPiece("e7", Team.White, ChessPieceType.Pawn, hasMoved: true)
+                .WithPiece("f8", Team.Black, ChessPieceType.Rook, hasMoved: false)
+                .WithPiece("a1", Team.White, ChessPieceType.King)
+                .WithPiece("h8", Team.Black, ChessPieceType.King);
+
+            board.ComputeFullZobristHash();
+
+            // Get the capture-promotion move
+            Vector2Int from = TestBoardSetupUtility.AlgebraicToVector("e7");
+            Vector2Int to = TestBoardSetupUtility.AlgebraicToVector("f8");
+            PieceData pawn = board.GetPiece(from);
+            PieceData rook = board.GetPiece(to);
+            MoveCommand move = MoveCommand.CreatePromotionMove(from, to, pawn, ChessPieceType.Queen, rook, board);
+
+            // Act: Apply the capture-promotion move
+            ChessEngine.ApplyMoveToBoard(board, move, recordHistory: false);
+            board.CurrentTurn = Team.Black; // Keep CurrentTurn in sync with hash
+
+            // Assert: Hash consistency check should pass
+            Assert.DoesNotThrow(() => board.AssertZobristConsistency(),
+                "Capture-promotion requires three sequential hash operations: " +
+                "remove captured piece, remove pawn, add promoted piece. " +
+                "Hash consistency failure indicates a bug in the promotion XOR sequence.");
+        }
     }
 }

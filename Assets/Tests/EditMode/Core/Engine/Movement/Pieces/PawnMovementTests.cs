@@ -295,5 +295,62 @@ namespace ChessTheMasterPiece.Tests.EditMode.Movement
             Assert.That(destinations, Contains.Item(TestBoardSetupUtility.AlgebraicToVector("e6")));
             Assert.That(destinations, Contains.Item(TestBoardSetupUtility.AlgebraicToVector("e5")));
         }
+
+        [Test]
+        public void WithPiece_PawnAtMidBoardWithHasMovedFalse_DoesNotGenerateDoublePush()
+        {
+            // Arrange: Place a White pawn at e4 with hasMoved=false (incorrect state that could arise from a bug in piece placement or undo logic)
+            BoardState board = TestBoardSetupUtility.CreateEmpty()
+                .WithPiece("e4", Team.White, ChessPieceType.Pawn, hasMoved: false)
+                .WithPiece("a1", Team.White, ChessPieceType.King);
+
+            Vector2Int pawnPos = TestBoardSetupUtility.AlgebraicToVector("e4");
+            Vector2Int illegalDoublePush = TestBoardSetupUtility.AlgebraicToVector("e6");
+
+            // Act: Get legal moves for the pawn
+            ChessEngine.GetLegalMoves(board, pawnPos, _outputBuffer);
+
+            // Assert: Should NOT contain e6 (double-push from e4)
+            HashSet<Vector2Int> destinations = TestBoardSetupUtility.GetDestinations(_outputBuffer);
+            Assert.That(destinations.Contains(illegalDoublePush), Is.False,
+                "BUG REGRESSION: Pawn at e4 generated illegal double-push to e6. " +
+                "This indicates StartRow was set to current Y position (3) instead of actual starting rank (1).");
+
+            // Verify correct move is present
+            Vector2Int correctSinglePush = TestBoardSetupUtility.AlgebraicToVector("e5");
+            Assert.That(destinations.Contains(correctSinglePush), Is.True,
+                "Pawn should still be able to make the single-push move to e5");
+        }
+
+        [Test]
+        public void GetLegalMoves_EnPassantDiscoveredCheck_PawnCannotCaptureEnPassant()
+        {
+            // Arrange: White King on h5, White Pawn on e5, Black Pawn on d5, Black Rook on a5
+            // If the white pawn captures en passant on d6, it removes TWO pawns from rank 5,
+            // exposing the king to the rook's attack. This must be filtered out as illegal.
+            BoardState board = TestBoardSetupUtility.CreateEmpty()
+                .WithPiece("h5", Team.White, ChessPieceType.King)
+                .WithPiece("e5", Team.White, ChessPieceType.Pawn, hasMoved: true)
+                .WithPiece("d5", Team.Black, ChessPieceType.Pawn, hasMoved: true)
+                .WithPiece("a5", Team.Black, ChessPieceType.Rook)
+                .WithPiece("h8", Team.Black, ChessPieceType.King)
+                .WithEnPassantFile(3); // d-file
+
+            // Act: Get legal moves for the white pawn at e5
+            ChessEngine.GetLegalMoves(board, TestBoardSetupUtility.AlgebraicToVector("e5"), _outputBuffer);
+
+            // Assert: En passant capture should NOT be in the legal moves
+            foreach (var move in _outputBuffer)
+            {
+                Assert.That(move.IsEnPassant, Is.False,
+                    "En passant capture must be filtered out because it exposes the king to check. " +
+                    "This requires correctly handling the case where TWO pawns are removed from the same rank.");
+            }
+
+            // Verify the pawn can still push forward
+            HashSet<Vector2Int> destinations = TestBoardSetupUtility.GetDestinations(_outputBuffer);
+            Assert.That(destinations.Contains(TestBoardSetupUtility.AlgebraicToVector("e6")), Is.True,
+                "Pawn should still be able to push forward to e6");
+        }
     }
 }
