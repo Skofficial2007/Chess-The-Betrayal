@@ -1,6 +1,9 @@
 using System.Collections.Generic;
 using ChessTheMasterPiece.Data;
 using ChessTheMasterPiece.Logic.Movement;
+using System.Runtime.CompilerServices;
+
+[assembly: InternalsVisibleTo("ChessTheMasterPiece.Tests.EditMode")]
 
 namespace ChessTheMasterPiece.Logic
 {
@@ -24,22 +27,31 @@ namespace ChessTheMasterPiece.Logic
         private static List<MoveCommand> _moveGenBuffer;
         private static List<MoveCommand> MoveGenBuffer => _moveGenBuffer ??= new List<MoveCommand>(64);
 
-        [System.ThreadStatic]
-        private static List<PieceData> _pieceListBuffer;
-        private static List<PieceData> PieceListBuffer => _pieceListBuffer ??= new List<PieceData>(16);
-
         #region Legal Move Generation
 
         /// <summary>
         /// Fills <paramref name="output"/> with every legal move the piece at <paramref name="position"/> can make.
         /// Illegal moves (ones that leave your own King in check) are filtered out before returning.
+        /// Uses board.CurrentTurn to determine which team's moves to generate.
         /// </summary>
         public static void GetLegalMoves(BoardState board, Vector2Int position, List<MoveCommand> output)
+        {
+            GetLegalMoves(board, position, output, board.CurrentTurn);
+        }
+
+        /// <summary>
+        /// Fills <paramref name="output"/> with every legal move the piece at <paramref name="position"/> can make.
+        /// Illegal moves (ones that leave your own King in check) are filtered out before returning.
+        /// This overload allows specifying the team explicitly, which is essential for AI move generation
+        /// where board.CurrentTurn may not match the team being evaluated.
+        /// </summary>
+        /// <param name="team">The team whose moves should be generated. Pieces of other teams are ignored.</param>
+        private static void GetLegalMoves(BoardState board, Vector2Int position, List<MoveCommand> output, Team team)
         {
             output.Clear();
             PieceData piece = board.GetPiece(position);
 
-            if (piece.IsEmpty || piece.Team != board.CurrentTurn)
+            if (piece.IsEmpty || piece.Team != team)
             {
                 return;
             }
@@ -97,6 +109,7 @@ namespace ChessTheMasterPiece.Logic
 
         /// <summary>
         /// Fills <paramref name="masterBuffer"/> with every legal move available to a team.
+        /// This method works correctly regardless of board.CurrentTurn, making it safe for AI evaluation.
         /// </summary>
         public static void GetAllLegalMoves(BoardState board, Team team, List<MoveCommand> masterBuffer)
         {
@@ -107,14 +120,16 @@ namespace ChessTheMasterPiece.Logic
                 masterBuffer.Capacity = MaxMovesPerPosition;
             }
 
-            List<int> indices = board.GetPieceIndices(team);
+            // Take a snapshot to avoid collection-modified-during-iteration.
+            // GetLegalMoves internally calls DoesMoveLeaveKingInCheck, which modifies indices via SetPiece.
+            int[] indicesSnapshot = board.GetPieceIndices(team).ToArray();
 
-            for (int i = 0; i < indices.Count; i++)
+            for (int i = 0; i < indicesSnapshot.Length; i++)
             {
-                int idx = indices[i];
+                int idx = indicesSnapshot[i];
                 Vector2Int pos = new Vector2Int(idx % board.TileCountX, idx / board.TileCountX);
 
-                GetLegalMoves(board, pos, MoveGenBuffer);
+                GetLegalMoves(board, pos, MoveGenBuffer, team);
                 masterBuffer.AddRange(MoveGenBuffer);
             }
         }
@@ -151,13 +166,31 @@ namespace ChessTheMasterPiece.Logic
         /// Returns true if any piece on <paramref name="attackerTeam"/> can reach <paramref name="targetSquare"/>.
         /// Uses raw moves (not legal moves) to avoid infinite recursion with check detection.
         /// </summary>
+        /// <remarks>
+        /// PERF-003: Known O(N×M) hotspot. Current implementation generates full move lists for each attacker
+        /// and scans for a matching destination. A Rook might generate 14 moves to check one square.
+        /// 
+        /// OPTIMIZATION PATH (pre-AI sprint):
+        /// Replace with "attack from target" pattern (super-piece detection):
+        /// 1. Place imaginary sliding piece at targetSquare
+        /// 2. Cast rays in 8 directions until hitting piece or edge
+        /// 3. Check if piece found matches the ray type (Rook for orthogonal, Bishop for diagonal, Queen for both)
+        /// 4. Check knight offsets from target for Knights
+        /// 5. Check pawn capture diagonals from target for Pawns
+        /// 6. Check king radius from target for Kings
+        /// 
+        /// This reduces from O(N pieces × M moves/piece) to O(8 rays + 8 knight checks + 2 pawn checks) = O(1) relative to piece count.
+        /// Critical for alpha-beta AI where this is called millions of times per search.
+        /// </remarks>
         public static bool IsSquareUnderAttack(BoardState board, Vector2Int targetSquare, Team attackerTeam)
         {
-            List<int> indices = board.GetPieceIndices(attackerTeam);
+            // Note: GetRawMoves doesn't trigger make/unmake, so no snapshot needed here.
+            // But taking snapshot anyway for consistency and future-proofing.
+            int[] indicesSnapshot = board.GetPieceIndices(attackerTeam).ToArray();
 
-            for (int i = 0; i < indices.Count; i++)
+            for (int i = 0; i < indicesSnapshot.Length; i++)
             {
-                int idx = indices[i];
+                int idx = indicesSnapshot[i];
                 int ax = idx % board.TileCountX;
                 int ay = idx / board.TileCountX;
                 PieceData attacker = board.GetPiece(ax, ay);
@@ -167,6 +200,8 @@ namespace ChessTheMasterPiece.Logic
                 if (strategy == null) continue;
 
                 AttackCheckBuffer.Clear();
+                // PERF-003 HOTSPOT: Generates all moves for this piece even though we only check one destination.
+                // This is the O(M) factor in O(N×M). Replace with targeted ray-casting for 10-100× speedup.
                 strategy.GetRawMoves(board, attacker, attackerPos, AttackCheckBuffer);
 
                 for (int j = 0; j < AttackCheckBuffer.Count; j++)
@@ -199,17 +234,21 @@ namespace ChessTheMasterPiece.Logic
         /// <summary>
         /// Returns true if the given team has at least one legal move available.
         /// Optimized to use O(N) piece list instead of O(64) board scan.
+        /// This method works correctly regardless of board.CurrentTurn, making it safe for AI evaluation.
         /// </summary>
         public static bool HasAnyLegalMoves(BoardState board, Team team)
         {
-            List<int> indices = board.GetPieceIndices(team);
-            for (int i = 0; i < indices.Count; i++)
+            // Take a snapshot to avoid collection-modified-during-iteration.
+            // GetLegalMoves internally calls DoesMoveLeaveKingInCheck, which modifies indices via SetPiece.
+            int[] indicesSnapshot = board.GetPieceIndices(team).ToArray();
+            
+            for (int i = 0; i < indicesSnapshot.Length; i++)
             {
-                int idx = indices[i];
+                int idx = indicesSnapshot[i];
                 Vector2Int pos = new Vector2Int(idx % board.TileCountX, idx / board.TileCountX);
 
                 // We only need to find ONE legal move to prove the game isn't over.
-                GetLegalMoves(board, pos, MoveGenBuffer);
+                GetLegalMoves(board, pos, MoveGenBuffer, team);
                 if (MoveGenBuffer.Count > 0)
                 {
                     return true;
@@ -435,7 +474,10 @@ namespace ChessTheMasterPiece.Logic
         /// Rolls back a move completely, restoring the board to exactly how it was before.
         /// This is how the AI can explore thousands of move sequences without ever copying the board.
         /// </summary>
-        private static void UndoMoveOnBoard(BoardState board, MoveCommand move, bool recordHistory = true)
+        /// <remarks>
+        /// Exposed via [InternalsVisibleTo] — remains encapsulated from external production assemblies.
+        /// </remarks>
+        internal static void UndoMoveOnBoard(BoardState board, MoveCommand move, bool recordHistory = true)
         {
             int currentCastlingMask = board.CastlingRights;
             int? currentEnPassantFile = board.EnPassantFile;
@@ -467,6 +509,20 @@ namespace ChessTheMasterPiece.Logic
             board.SetPiece(PieceData.Empty, move.EndPosition.x, move.EndPosition.y);
             board.SetPiece(primaryPiece.WithHasMoved(move.PieceHadMoved), move.StartPosition.x, move.StartPosition.y);
 
+            // TODO: Graveyard-as-stack pattern is fragile for non-make/unmake paths.
+            // Current assumption: WhiteCaptured/BlackCaptured operates as a strict LIFO stack where every
+            // ApplyMoveToBoard push has a corresponding UndoMoveOnBoard pop. This works for paired make/unmake
+            // in AI search but breaks if any code path calls RemovePiece or SetPiece(Empty) outside of
+            // ApplyMoveToBoard (e.g., BoardState.Clear, future Betrayal mechanic "piece changes sides").
+            //
+            // The fallback creates a synthetic PieceData with StartRow=0, HasMoved=false,
+            // which is incorrect for promoted pieces or pieces that had already moved.
+            //
+            // BEFORE Betrayal implementation we need to: 
+            // Replace graveyard pattern with explicit captured-piece storage in MoveCommand itself.
+            // Add optional `PieceData? CapturedPieceFullState` field to preserve exact
+            // piece state (including StartRow, HasMoved) without relying on graveyard stack coherence.
+            // This enables Betrayal's "convert captured piece to ally" mechanic to access full piece history.
             if (move.HasCapture)
             {
                 List<PieceData> graveyard = move.CapturedTeam == Team.White ? board.WhiteCaptured : board.BlackCaptured;
@@ -478,6 +534,7 @@ namespace ChessTheMasterPiece.Logic
                 }
                 else
                 {
+                    // DESIGN SMELL-002: Synthetic fallback — incorrect for pieces with non-default state
                     int dir = move.CapturedTeam == Team.White ? 1 : -1;
                     resurrectedPiece = new PieceData(move.CapturedTeam, move.CapturedType, dir, 0, false);
                 }
