@@ -1,9 +1,9 @@
 using UnityEngine;
 using Unity.Cinemachine;
-using ChessTheMasterPiece.UI;
-using ChessTheMasterPiece.Data;
+using ChessTheBetrayal.UI;
+using ChessTheBetrayal.Core.Data;
 
-namespace ChessTheMasterPiece.Controllers
+namespace ChessTheBetrayal.UI.Camera
 {
     /// <summary>
     /// Listens to UI events and shifts the Cinemachine priorities to 

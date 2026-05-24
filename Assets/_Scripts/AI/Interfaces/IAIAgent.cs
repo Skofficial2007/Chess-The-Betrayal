@@ -1,9 +1,9 @@
-using ChessTheMasterPiece.Data;
-using ChessTheMasterPiece.Logic;
+using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.Core.Engine;
 using System;
 using System.Threading;
 
-namespace ChessTheMasterPiece.AI
+namespace ChessTheBetrayal.AI
 {
     /// <summary>
     /// Defines what any AI player needs to be able to do. Implement this if you want to add a new AI difficulty or strategy.

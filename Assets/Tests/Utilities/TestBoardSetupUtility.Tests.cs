@@ -1,8 +1,8 @@
 using System;
 using NUnit.Framework;
-using ChessTheMasterPiece.Data;
+using ChessTheBetrayal.Core.Data;
 
-namespace ChessTheMasterPiece.Tests.Utilities
+namespace ChessTheBetrayal.Tests.Utilities
 {
     /// <summary>
     /// Unit tests for TestBoardSetupUtility.

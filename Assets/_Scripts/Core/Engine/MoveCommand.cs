@@ -1,6 +1,6 @@
-using ChessTheMasterPiece.Data;
+using ChessTheBetrayal.Core.Data;
 
-namespace ChessTheMasterPiece.Logic
+namespace ChessTheBetrayal.Core.Engine
 {
     /// <summary>
     /// A snapshot of one move — where a piece came from, where it went, what was captured, and any special move type.

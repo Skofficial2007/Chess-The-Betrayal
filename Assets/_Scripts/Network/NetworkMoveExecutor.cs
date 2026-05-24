@@ -13,11 +13,11 @@
 //
 // using System;
 // using Unity.Netcode;
-// using ChessTheMasterPiece.Data;
-// using ChessTheMasterPiece.Logic;
-// using ChessTheMasterPiece.Controllers;
+// using ChessTheBetrayal.Core.Data;
+// using ChessTheBetrayal.Core.Engine;
+// using ChessTheBetrayal.Gameplay;
 //
-// namespace ChessTheMasterPiece.Network
+// namespace ChessTheBetrayal.Network
 // {
 //     public class NetworkMoveExecutor : NetworkBehaviour, IMoveExecutor
 //     {

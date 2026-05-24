@@ -1,11 +1,12 @@
 using System.Collections.Generic;
-using ChessTheMasterPiece.Data;
-using ChessTheMasterPiece.Logic.Movement;
+using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.Core.Movement;
 using System.Runtime.CompilerServices;
+using MoveCommand = ChessTheBetrayal.Core.Engine.MoveCommand;
 
-[assembly: InternalsVisibleTo("ChessTheMasterPiece.Tests.EditMode")]
+[assembly: InternalsVisibleTo("ChessTheBetrayal.Tests.EditMode")]
 
-namespace ChessTheMasterPiece.Logic
+namespace ChessTheBetrayal.Core.Engine
 {
     /// <summary>
     /// The rules referee. Handles move generation, check detection, and figuring out when the game is over.

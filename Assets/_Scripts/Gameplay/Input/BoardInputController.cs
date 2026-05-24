@@ -1,12 +1,12 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using ChessTheMasterPiece.Data;
-using ChessTheMasterPiece.UI;
-using ChessTheMasterPiece.Logic;
-using ChessTheMasterPiece.View;
+using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.UI;
+using ChessTheBetrayal.Core.Engine;
+using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
-namespace ChessTheMasterPiece.Controllers
+namespace ChessTheBetrayal.Gameplay
 {
     /// <summary>
     /// Reads mouse/touch input and translates it into move requests. This script knows nothing about chess rules — it just figures out which square the player clicked and tells GameManager.
@@ -25,7 +25,7 @@ namespace ChessTheMasterPiece.Controllers
 
         // Drag State
         private bool isDragging;
-        private ChessTheMasterPiece.Data.Vector2Int dragStartGridPos;
+        private Vector2Int dragStartGridPos;
         private Transform draggedPieceTransform;
 
         private void Awake()
@@ -86,7 +86,7 @@ namespace ChessTheMasterPiece.Controllers
 
             // Raycast to find what we're hovering over
             bool hitSomething = Physics.Raycast(ray, out RaycastHit hit, 200f, raycastMask);
-            ChessTheMasterPiece.Data.Vector2Int hoverIndex = ChessTheMasterPiece.Data.Vector2Int.Invalid;
+            Vector2Int hoverIndex = Vector2Int.Invalid;
 
             if (hitSomething && BoardVisuals.Instance != null)
             {
@@ -99,7 +99,7 @@ namespace ChessTheMasterPiece.Controllers
             }
 
             // Handle input actions
-            if (WasPointerPressed() && hitSomething && hoverIndex != ChessTheMasterPiece.Data.Vector2Int.Invalid)
+            if (WasPointerPressed() && hitSomething && hoverIndex != Vector2Int.Invalid)
             {
                 TryStartDrag(hoverIndex);
             }
@@ -116,7 +116,7 @@ namespace ChessTheMasterPiece.Controllers
             }
         }
 
-        private void TryStartDrag(ChessTheMasterPiece.Data.Vector2Int gridPos)
+        private void TryStartDrag(Vector2Int gridPos)
         {
             // Ask GameManager if this piece can be selected
             if (!GameManager.Instance.CanSelectPiece(gridPos))
@@ -140,7 +140,7 @@ namespace ChessTheMasterPiece.Controllers
             }
         }
 
-        private void TryDrop(ChessTheMasterPiece.Data.Vector2Int dropGridPos)
+        private void TryDrop(Vector2Int dropGridPos)
         {
             if (!isDragging) return;
 
@@ -153,7 +153,7 @@ namespace ChessTheMasterPiece.Controllers
             }
 
             // Request the move and let GameManager decide if it's valid. If it's not, the piece will snap back automatically.
-            if (dropGridPos != ChessTheMasterPiece.Data.Vector2Int.Invalid)
+            if (dropGridPos != Vector2Int.Invalid)
             {
                 // Request the move - piece stays where it landed (optimistic)
                 // If illegal, GameManager will fire OnMoveRejected and BoardVisuals will snap it back

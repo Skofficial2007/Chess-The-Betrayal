@@ -1,8 +1,8 @@
 {
-    "name": "ChessTheMasterPiece.Tests.Utilities",
+    "name": "ChessTheBetrayal.Tests.Utilities",
     "rootNamespace": "",
     "references": [
-        "ChessTheMasterPiece.Core"
+        "ChessTheBetrayal.Core"
     ],
     "includePlatforms": [
         "Editor"

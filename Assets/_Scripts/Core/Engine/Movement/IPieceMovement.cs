@@ -1,7 +1,8 @@
 using System.Collections.Generic;
-using ChessTheMasterPiece.Data;
+using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.Core.Engine;
 
-namespace ChessTheMasterPiece.Logic.Movement
+namespace ChessTheBetrayal.Core.Movement
 {
     /// <summary>
     /// The contract every piece's movement logic must follow. If you want to add a custom piece type, implement this interface.

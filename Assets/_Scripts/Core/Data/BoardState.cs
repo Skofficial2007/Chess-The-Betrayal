@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace ChessTheMasterPiece.Data
+namespace ChessTheBetrayal.Core.Data
 {
     /// <summary>
     /// The complete snapshot of a chess game at any moment — the board, whose turn it is, captured pieces, and move history.

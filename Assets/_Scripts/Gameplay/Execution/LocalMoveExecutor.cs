@@ -1,10 +1,11 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
-using ChessTheMasterPiece.Data;
-using ChessTheMasterPiece.Logic;
+using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.Core.Engine;
+using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
-namespace ChessTheMasterPiece.Controllers
+namespace ChessTheBetrayal.Gameplay
 {
     /// <summary>
     /// Handles move validation for local, offline play.
@@ -14,8 +15,8 @@ namespace ChessTheMasterPiece.Controllers
     public class LocalMoveExecutor : IMoveExecutor
     {
         public event Action<MoveCommand> OnMoveConfirmed;
-        public event Action<ChessTheMasterPiece.Data.Vector2Int, ChessTheMasterPiece.Data.Vector2Int> OnMoveRejected;
-        public event Action<ChessTheMasterPiece.Data.Vector2Int, ChessTheMasterPiece.Data.Vector2Int> OnPromotionRequired;
+        public event Action<Vector2Int, Vector2Int> OnMoveRejected;
+        public event Action<Vector2Int, Vector2Int> OnPromotionRequired;
 
         private readonly BoardState _board;
         private readonly List<MoveCommand> _legalMoves = new List<MoveCommand>(32);
@@ -37,7 +38,7 @@ namespace ChessTheMasterPiece.Controllers
         /// <summary>
         /// Validates a move request and either fires OnMoveConfirmed (legal) or OnMoveRejected (illegal). If it's a promotion, we pause and fire OnPromotionRequired instead.
         /// </summary>
-        public void RequestMove(ChessTheMasterPiece.Data.Vector2Int from, ChessTheMasterPiece.Data.Vector2Int to)
+        public void RequestMove(Vector2Int from, Vector2Int to)
         {
             // Block new moves if waiting for a UI decision
             if (_isAwaitingPromotion)
@@ -62,7 +63,7 @@ namespace ChessTheMasterPiece.Controllers
             {
                 // If Rook is at X=7 (Kingside), Target is X=6. If Rook is at X=0 (Queenside), Target is X=2.
                 int castlingX = to.x > from.x ? 6 : 2;
-                to = new ChessTheMasterPiece.Data.Vector2Int(castlingX, from.y);
+                to = new Vector2Int(castlingX, from.y);
             }
 
             _legalMoves.Clear();

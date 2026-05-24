@@ -1,10 +1,10 @@
 using NUnit.Framework;
 using System.Collections.Generic;
-using ChessTheMasterPiece.Data;
-using ChessTheMasterPiece.Logic;
-using ChessTheMasterPiece.Tests.Utilities;
+using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.Core.Engine;
+using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheMasterPiece.Tests.EditMode.Movement
+namespace ChessTheBetrayal.Tests.EditMode.Core.Movement
 {
     [TestFixture]
     public class QueenMovementTests

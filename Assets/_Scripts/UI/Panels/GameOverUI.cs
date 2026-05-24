@@ -2,9 +2,9 @@ using System;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
-using ChessTheMasterPiece.Data;
+using ChessTheBetrayal.Core.Data;
 
-namespace ChessTheMasterPiece.UI
+namespace ChessTheBetrayal.UI
 {
     /// <summary>
     /// Handles the game-over panel UI (winner text, replay and exit actions).

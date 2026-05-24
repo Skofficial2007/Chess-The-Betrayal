@@ -1,7 +1,8 @@
 using System.Collections.Generic;
-using ChessTheMasterPiece.Data;
+using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.Core.Engine;
 
-namespace ChessTheMasterPiece.Logic.Movement
+namespace ChessTheBetrayal.Core.Movement
 {
     /// <summary>
     /// Movement strategy for the Bishop piece.

@@ -1,9 +1,9 @@
 using System;
 using UnityEngine;
 using UnityEngine.UI;
-using ChessTheMasterPiece.Data;
+using ChessTheBetrayal.Core.Data;
 
-namespace ChessTheMasterPiece.UI
+namespace ChessTheBetrayal.UI
 {
     /// <summary>
     /// Lets the player pick a team and emits the choice.
