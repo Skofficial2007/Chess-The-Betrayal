@@ -3,16 +3,17 @@ using System.Collections.Generic;
 using UnityEngine;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
+using ChessTheBetrayal.Core.Logic;
 using ChessTheBetrayal.UI;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
 namespace ChessTheBetrayal.Gameplay
 {
     /// <summary>
-    /// The main conductor of the game. It connects the chess logic (BoardState, ChessEngine) to the Unity world (visuals, UI, input).
-    /// Everything that needs to happen in sequence — a move, a check, game over — flows through here.
+    /// The primary conductor of the game loop. Orchestrates domain logic (BoardState, ChessEngine),
+    /// timing systems (ChessClock), and presentation (UI, Visuals).
     /// </summary>
-    public class GameManager : MonoBehaviour
+    public class GameManager : MonoBehaviour, IClockEventHandler
     {
         #region Singleton
 
@@ -67,6 +68,12 @@ namespace ChessTheBetrayal.Gameplay
         public event Action<Vector2Int, Vector2Int> OnMoveRejected;
         public event Action<Vector2Int, Vector2Int> OnPromotionRequested;
 
+        /// <summary>
+        /// Invoked by the clock system when a player's remaining time drops below the urgency threshold.
+        /// Payload: (Team, RemainingMilliseconds)
+        /// </summary>
+        public event Action<Team, long> OnLowTimeAlert;
+
         #endregion
 
         #region Private Fields
@@ -84,6 +91,12 @@ namespace ChessTheBetrayal.Gameplay
             ChessPieceType.Queen,  ChessPieceType.King,   ChessPieceType.Bishop,
             ChessPieceType.Knight, ChessPieceType.Rook
         };
+
+        // ── Clock System ──────────────────────────────────────────────────────────────
+        private GameModeConfig      _selectedMode = GameModeConfig.Unlimited;
+        private bool                _isAIMode     = false;
+        private ChessClock          _clock;
+        private GameClockController _clockController;
 
         #endregion
 
@@ -113,6 +126,9 @@ namespace ChessTheBetrayal.Gameplay
             UIManager.Instance.OnGameReset += HandleGameReset;
             UIManager.Instance.OnPromotionSelected += HandlePromotionChoice;
 
+            // [PHASE 4 WIRING] - We will uncomment this when Phase 4 updates UIManager.
+            // UIManager.Instance.OnGameModeSelected += HandleGameModeReceived;
+
             if (logMoves)
             {
                 Debug.Log("[GameManager] Initialized and ready.");
@@ -126,14 +142,14 @@ namespace ChessTheBetrayal.Gameplay
                 UIManager.Instance.OnTeamSelected -= HandleTeamSelected;
                 UIManager.Instance.OnGameReset -= HandleGameReset;
                 UIManager.Instance.OnPromotionSelected -= HandlePromotionChoice;
+
+                // [PHASE 4 WIRING]
+                // UIManager.Instance.OnGameModeSelected -= HandleGameModeReceived;
             }
         }
 
         // Named methods (rather than lambdas) so we can unsubscribe cleanly.
-        private void OnExecutorMoveRejected(Vector2Int from, Vector2Int to)
-        {
-            OnMoveRejected?.Invoke(from, to);
-        }
+        private void OnExecutorMoveRejected(Vector2Int from, Vector2Int to) => OnMoveRejected?.Invoke(from, to);
 
         private void OnExecutorPromotionRequired(Vector2Int from, Vector2Int to)
         {
@@ -144,6 +160,11 @@ namespace ChessTheBetrayal.Gameplay
         #endregion
 
         #region Game Flow
+
+        private void HandleGameModeReceived(GameModeConfig config)
+        {
+            _selectedMode = config;
+        }
 
         /// <summary>
         /// Called when the player picks White or Black from the team selection screen.
@@ -173,11 +194,16 @@ namespace ChessTheBetrayal.Gameplay
 
             TransitionToPhase(TurnPhase.Normal);
 
+            InitializeClock();
+
+            // [PHASE 5 WIRING] - We will uncomment this when Phase 5 builds the HUD.
+            // UIManager.Instance?.ConfigureHUDForMode(_selectedMode);
+
             OnGameStarted?.Invoke(LiveBoard);
 
             if (logMoves)
             {
-                Debug.Log($"[GameManager] New game started. Player is {PlayerTeam}. Phase: {CurrentPhase}");
+                Debug.Log($"[GameManager] New game started. Player: {PlayerTeam}. Mode: {_selectedMode.Label}. Phase: {CurrentPhase}");
             }
         }
 
@@ -197,7 +223,20 @@ namespace ChessTheBetrayal.Gameplay
                 _moveExecutor = null;
             }
 
+            if (_clockController != null)
+            {
+                _clockController.Deactivate();
+                _clockController = null;
+            }
+            
+            _clock        = null;
+            _selectedMode = GameModeConfig.Unlimited;
+            _isAIMode     = false;
+
             TransitionToPhase(TurnPhase.GameOver);
+
+            // [PHASE 5 WIRING]
+            // UIManager.Instance?.ConfigureHUDForMode(GameModeConfig.Unlimited);
 
             OnGameReset?.Invoke();
 
@@ -228,6 +267,29 @@ namespace ChessTheBetrayal.Gameplay
             LiveBoard.ComputeFullZobristHash();
         }
 
+        /// <summary>
+        /// Instantiates the pure-C# clock and attaches the MonoBehaviour controller bridge.
+        /// Bypassed entirely during AI sessions to preserve engine search performance.
+        /// </summary>
+        private void InitializeClock()
+        {
+            if (_isAIMode || _selectedMode.IsUnlimited)
+            {
+                _clock           = null;
+                _clockController = null;
+                return;
+            }
+
+            _clock = new ChessClock(_selectedMode, this);
+
+            if (_clockController == null)
+            {
+                _clockController = gameObject.AddComponent<GameClockController>();
+            }
+
+            _clockController.Initialize(_clock);
+        }
+
         #endregion
 
         #region Move Execution
@@ -248,13 +310,7 @@ namespace ChessTheBetrayal.Gameplay
             _moveExecutor?.RequestMove(from, to);
         }
 
-        /// <summary>
-        /// Called by the UI when the player picks a piece to promote to.
-        /// </summary>
-        private void HandlePromotionChoice(ChessPieceType chosenType)
-        {
-            _moveExecutor?.RequestPromotion(chosenType);
-        }
+        private void HandlePromotionChoice(ChessPieceType chosenType) => _moveExecutor?.RequestPromotion(chosenType);
 
         /// <summary>
         /// Applies a validated move to the board and tells everyone who needs to know about it.
@@ -265,6 +321,8 @@ namespace ChessTheBetrayal.Gameplay
             if (logMoves) Debug.Log($"[GameManager] Executing: {move}");
 
             ChessEngine.ApplyMoveToBoard(LiveBoard, move);
+
+            _clock?.OnMoveMade(move.PieceTeam);
 
             OnMoveExecuted?.Invoke(move);
 
@@ -280,7 +338,9 @@ namespace ChessTheBetrayal.Gameplay
         private void CheckForGameEnd()
         {
             Team currentTeam = LiveBoard.CurrentTurn;
-            GameState state = ChessEngine.EvaluateGameState(LiveBoard, currentTeam);
+            ClockState? clockSnapshot = GetCurrentClockSnapshot();
+
+            GameState state = ChessEngine.EvaluateGameState(LiveBoard, currentTeam, clockSnapshot);
 
             switch (state)
             {
@@ -304,8 +364,7 @@ namespace ChessTheBetrayal.Gameplay
                     break;
 
                 case GameState.Timeout:
-                    // Primary resolution path is GameManager.OnClockTimeout() called directly.
-                    // This acts as a safety net for deferred evaluation paths.
+                    // Primary resolution path is GameManager.OnClockTimeout() called directly via interface.
                     break;
             }
 
@@ -324,7 +383,6 @@ namespace ChessTheBetrayal.Gameplay
             LiveBoard.Winner = winner;
 
             TransitionToPhase(TurnPhase.GameOver);
-
             UIManager.Instance?.TriggerGameOver(winner);
 
             if (logMoves) Debug.Log($"[GameManager] Game Over. Winner: {(winner.HasValue ? winner.ToString() : "Draw")}");
@@ -342,45 +400,72 @@ namespace ChessTheBetrayal.Gameplay
         public IReadOnlyList<MoveCommand> GetLegalMovesAt(Vector2Int position)
         {
             _legalMoves.Clear();
-
             if (CurrentPhase == TurnPhase.Normal && !LiveBoard.IsGameOver)
             {
                 ChessEngine.GetLegalMoves(LiveBoard, position, _legalMoves);
             }
-
             return _legalMoves;
         }
 
-        /// <summary>
-        /// Returns true if the piece at this position belongs to the player whose turn it is.
-        /// </summary>
         public bool CanSelectPiece(Vector2Int position)
         {
-            if (CurrentPhase != TurnPhase.Normal || LiveBoard.IsGameOver)
-            {
-                return false;
-            }
-
+            if (CurrentPhase != TurnPhase.Normal || LiveBoard.IsGameOver) return false;
             PieceData piece = LiveBoard.GetPiece(position);
             return !piece.IsEmpty && piece.Team == LiveBoard.CurrentTurn;
+        }
+
+        /// <summary>
+        /// Returns a value-type snapshot of the clock state, or null if untimed/AI mode.
+        /// </summary>
+        public ClockState? GetCurrentClockSnapshot()
+        {
+            return _clockController != null ? (ClockState?)_clockController.CurrentState : null;
+        }
+
+        /// <summary>
+        /// Configures the session for AI participation, enforcing the performance bypass invariant.
+        /// </summary>
+        public void SetAIMode()
+        {
+            _isAIMode     = true;
+            _selectedMode = GameModeConfig.Unlimited;
         }
 
         #endregion
 
         #region State Machine
 
-        /// <summary>
-        /// The only place in the codebase that changes CurrentPhase.
-        /// Keeping all transitions here makes it much easier to trace the game flow — especially
-        /// once the Betrayal sub-phases are added.
-        /// </summary>
         private void TransitionToPhase(TurnPhase nextPhase)
         {
             if (logMoves && CurrentPhase != nextPhase)
             {
                 Debug.Log($"[GameManager] Phase Transition: {CurrentPhase} -> {nextPhase}");
             }
+            
             CurrentPhase = nextPhase;
+
+            bool shouldPause = nextPhase == TurnPhase.RetributionPending
+                            || nextPhase == TurnPhase.ResolutionFailed
+                            || nextPhase == TurnPhase.ForcedSave
+                            || nextPhase == TurnPhase.GameOver;
+
+            if (shouldPause) _clock?.Pause();
+            else             _clock?.Resume();
+        }
+
+        #endregion
+
+        #region IClockEventHandler
+
+        public void OnClockTimeout(Team timedOutTeam)
+        {
+            // Stub implementation for compilation.
+            // Full resolution (including FIDE insufficient material rules) occurs in Phase 6.
+        }
+
+        public void OnLowTimeWarning(Team team, long remainingMs)
+        {
+            OnLowTimeAlert?.Invoke(team, remainingMs);
         }
 
         #endregion
