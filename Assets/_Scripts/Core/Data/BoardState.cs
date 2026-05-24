@@ -161,6 +161,25 @@ namespace ChessTheMasterPiece.Data
             }
         }
 
+        /// <summary>
+        /// DEBUG ONLY: Validates that the incremental hash matches a full recomputation.
+        /// Call this after every move during testing to catch hash drift bugs immediately.
+        /// Throws an exception if the hashes don't match, indicating a Make/Unmake bug.
+        /// </summary>
+        public void AssertZobristConsistency()
+        {
+            ulong incrementalHash = ZobristHash;
+            ComputeFullZobristHash();
+            ulong recomputedHash = ZobristHash;
+
+            if (incrementalHash != recomputedHash)
+            {
+                throw new System.InvalidOperationException(
+                    $"Zobrist hash desync detected! Incremental: {incrementalHash:X16}, Recomputed: {recomputedHash:X16}. " +
+                    "This indicates a bug in ApplyMoveToBoard or UndoMoveOnBoard.");
+            }
+        }
+
         #endregion
 
         // The mathematical grid - holds pure data, not GameObjects
