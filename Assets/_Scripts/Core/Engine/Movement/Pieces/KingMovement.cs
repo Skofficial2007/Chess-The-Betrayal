@@ -7,7 +7,6 @@ namespace ChessTheMasterPiece.Logic.Movement
     /// Movement strategy for the King piece.
     /// Kings move one square in any direction (8 possible moves).
     /// Special move: Castling (with Rook) under specific conditions.
-    /// Most important piece - losing the King ends the game.
     /// </summary>
     public class KingMovement : IPieceMovement
     {
@@ -35,6 +34,7 @@ namespace ChessTheMasterPiece.Logic.Movement
             {
                 Vector2Int target = new Vector2Int(pos.x + Offsets[i, 0], pos.y + Offsets[i, 1]);
 
+                // Skip if target is out of bounds
                 if (!board.IsValidIndex(target)) continue;
 
                 PieceData targetPiece = board.GetPiece(target);
@@ -46,44 +46,27 @@ namespace ChessTheMasterPiece.Logic.Movement
                 }
             }
 
-            // 2. Castling (only if King hasn't moved)
+            // 2. Castling (History and Mask dependent)
             if (!piece.HasMoved)
             {
-                // Queenside Castling (left side)
-                // King at e1 → c1, Rook at a1 → d1
-                EvaluateCastling(
-                    board, buffer, piece, pos,
-                    rookX: 0,
-                    emptyXPaths: QueensideEmptyPaths,
-                    kingTargetX: 2,
-                    rookTargetX: 3
-                );
-
-                // Kingside Castling (right side)
-                // King at e1 → g1, Rook at h1 → f1
-                EvaluateCastling(
-                    board, buffer, piece, pos,
-                    rookX: 7,
-                    emptyXPaths: KingsideEmptyPaths,
-                    kingTargetX: 6,
-                    rookTargetX: 5
-                );
+                if (piece.Team == Team.White)
+                {
+                    // White Queenside (Bit 1 = Value 2)
+                    TryAddCastling(board, buffer, piece, pos, 0, QueensideEmptyPaths, 2, 3, 2);
+                    // White Kingside (Bit 0 = Value 1)
+                    TryAddCastling(board, buffer, piece, pos, 7, KingsideEmptyPaths, 6, 5, 1);
+                }
+                else
+                {
+                    // Black Queenside (Bit 3 = Value 8)
+                    TryAddCastling(board, buffer, piece, pos, 0, QueensideEmptyPaths, 2, 3, 8);
+                    // Black Kingside (Bit 2 = Value 4)
+                    TryAddCastling(board, buffer, piece, pos, 7, KingsideEmptyPaths, 6, 5, 4);
+                }
             }
         }
 
-        /// <summary>
-        /// Checks if the King can castle in a given direction. Verifies the rook is in place, hasn't moved, and the path between them is clear.
-        /// The engine handles the 'can't castle through check' rule separately.
-        /// </summary>
-        /// <param name="board">Current board state</param>
-        /// <param name="moves">List to add the castling move to if valid</param>
-        /// <param name="king">The King piece data</param>
-        /// <param name="kingPos">King's current position</param>
-        /// <param name="rookX">X coordinate of the Rook</param>
-        /// <param name="emptyXPaths">X coordinates that must be empty</param>
-        /// <param name="kingTargetX">Where the King will land</param>
-        /// <param name="rookTargetX">Where the Rook will land</param>
-        private void EvaluateCastling(
+        private void TryAddCastling(
             BoardState board,
             List<MoveCommand> buffer,
             PieceData king,
@@ -91,12 +74,19 @@ namespace ChessTheMasterPiece.Logic.Movement
             int rookX,
             int[] emptyXPaths,
             int kingTargetX,
-            int rookTargetX)
+            int rookTargetX,
+            int requiredCastlingBit)
         {
+            // 1. MUST Validate the Castling Rights Mask BEFORE physical checks
+            if ((board.CastlingRights & requiredCastlingBit) == 0)
+            {
+                return; // Castling right has been revoked in the engine state
+            }
+
             Vector2Int rookPos = new Vector2Int(rookX, kingPos.y);
             PieceData rook = board.GetPiece(rookPos);
 
-            // Validate Rook exists, is correct type, same team, and hasn't moved
+            // 2. Validate physical Rook exists, is correct type, same team, and hasn't moved
             if (rook.IsEmpty ||
                 rook.Type != ChessPieceType.Rook ||
                 rook.Team != king.Team ||
@@ -105,7 +95,7 @@ namespace ChessTheMasterPiece.Logic.Movement
                 return;
             }
 
-            // Check if the path between King and Rook is clear
+            // 3. Check if the path between King and Rook is clear
             foreach (int x in emptyXPaths)
             {
                 Vector2Int checkPos = new Vector2Int(x, kingPos.y);
@@ -115,15 +105,10 @@ namespace ChessTheMasterPiece.Logic.Movement
                 }
             }
 
-            // All physical prerequisites met - generate the castling command
+            // All prerequisites met - generate the raw castling command
             Vector2Int kingTarget = new Vector2Int(kingTargetX, kingPos.y);
             Vector2Int rookTarget = new Vector2Int(rookTargetX, kingPos.y);
 
-            // Note: The ChessEngine will automatically verify that:
-            // 1. King is not currently in check
-            // 2. King doesn't pass through check
-            // 3. King doesn't land in check
-            // This is handled by DoesMoveLeaveKingInCheck() on each move candidate
             buffer.Add(MoveCommand.CreateCastlingMove(kingPos, kingTarget, king, rookPos, rookTarget, board));
         }
     }
