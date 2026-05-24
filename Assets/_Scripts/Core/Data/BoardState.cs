@@ -168,14 +168,15 @@ namespace ChessTheMasterPiece.Data
         /// </summary>
         public void AssertZobristConsistency()
         {
-            ulong incrementalHash = ZobristHash;
+            ulong savedHash = ZobristHash;
             ComputeFullZobristHash();
             ulong recomputedHash = ZobristHash;
+            ZobristHash = savedHash; // RESTORE — non-negotiable
 
-            if (incrementalHash != recomputedHash)
+            if (savedHash != recomputedHash)
             {
                 throw new System.InvalidOperationException(
-                    $"Zobrist hash desync detected! Incremental: {incrementalHash:X16}, Recomputed: {recomputedHash:X16}. " +
+                    $"Zobrist hash desync detected! Incremental: 0x{savedHash:X16}, Recomputed: 0x{recomputedHash:X16}. " +
                     "This indicates a bug in ApplyMoveToBoard or UndoMoveOnBoard.");
             }
         }
@@ -188,11 +189,16 @@ namespace ChessTheMasterPiece.Data
         // For faster piece lookups, we maintain separate lists of occupied squares for each team.
         // The boolean arrays track occupancy for quick checks,
         // while the index lists allow iteration over pieces without scanning the whole board.
+        // Indices are maintained incrementally in SetPiece for optimal AI search performance.
         private readonly bool[] _whiteOccupied = new bool[64];
         private readonly bool[] _blackOccupied = new bool[64];
         private readonly List<int> _whitePieceIndices = new List<int>(16);
         private readonly List<int> _blackPieceIndices = new List<int>(16);
-        private bool _indicesDirty = false;
+
+        // -1 indicates king not yet placed or has been captured (illegal state).
+        // Maintained incrementally in SetPiece alongside piece indices.
+        private int _whiteKingSquare = -1;
+        private int _blackKingSquare = -1;
 
         public Team CurrentTurn { get; set; }
         public int TileCountX { get; private set; }
@@ -228,6 +234,7 @@ namespace ChessTheMasterPiece.Data
 
         /// <summary>
         /// Places a piece on the board at the specified position.
+        /// Maintains piece indices incrementally for optimal AI search performance.
         /// </summary>
         public void SetPiece(PieceData piece, int x, int y)
         {
@@ -236,32 +243,59 @@ namespace ChessTheMasterPiece.Data
             PieceData existing = LogicalBoard[x, y];
             int sq = y * TileCountX + x;
 
+            // Remove old piece from indices
             if (!existing.IsEmpty)
             {
                 if (existing.Team == Team.White)
                 {
                     _whiteOccupied[sq] = false;
+                    _whitePieceIndices.Remove(sq); // O(N) where N ≤ 16
                 }
                 else
                 {
                     _blackOccupied[sq] = false;
+                    _blackPieceIndices.Remove(sq);
                 }
-                _indicesDirty = true;
             }
 
             LogicalBoard[x, y] = piece;
 
+            // Add new piece to indices
             if (!piece.IsEmpty)
             {
                 if (piece.Team == Team.White)
                 {
                     _whiteOccupied[sq] = true;
+                    _whitePieceIndices.Add(sq); // O(1) amortized
+                    // Update king cache
+                    if (piece.Type == ChessPieceType.King)
+                    {
+                        _whiteKingSquare = sq;
+                    }
                 }
                 else
                 {
                     _blackOccupied[sq] = true;
+                    _blackPieceIndices.Add(sq);
+                    // Update king cache
+                    if (piece.Type == ChessPieceType.King)
+                    {
+                        _blackKingSquare = sq;
+                    }
                 }
-                _indicesDirty = true;
+            }
+
+            // Clear king cache if king was removed from this square
+            if (!existing.IsEmpty && existing.Type == ChessPieceType.King)
+            {
+                if (existing.Team == Team.White)
+                {
+                    _whiteKingSquare = -1;
+                }
+                else
+                {
+                    _blackKingSquare = -1;
+                }
             }
         }
 
@@ -390,17 +424,40 @@ namespace ChessTheMasterPiece.Data
             MoveHistory.Clear();
             _whitePieceIndices.Clear();
             _blackPieceIndices.Clear();
-            _indicesDirty = false;
             IsGameOver = false;
             Winner = null;
             CurrentTurn = Team.White;
             ZobristHash = 0;
             CastlingRights = CastlingAllRights; // Reset to all castling available
             EnPassantFile = null;
+            // Clear king cache
+            _whiteKingSquare = -1;
+            _blackKingSquare = -1;
         }
 
+        /// <summary>
+        /// Fallback scan included for safety, though it should never trigger in production.
+        /// </summary>  
         public bool TryFindKing(Team team, out Vector2Int kingPos)
         {
+            int cachedSquare = team == Team.White ? _whiteKingSquare : _blackKingSquare;
+            
+            // Fast path: Use cached position
+            if (cachedSquare >= 0)
+            {
+                int x = cachedSquare % TileCountX;
+                int y = cachedSquare / TileCountX;
+                PieceData piece = LogicalBoard[x, y];
+                
+                // Verify cache coherence (should always be true)
+                if (piece.Type == ChessPieceType.King && piece.Team == team)
+                {
+                    kingPos = new Vector2Int(x, y);
+                    return true;
+                }
+            }
+            
+            // Fallback: Full scan (cache miss or corruption - should never happen)
             List<int> indices = GetPieceIndices(team);
             for (int i = 0; i < indices.Count; i++)
             {
@@ -411,9 +468,19 @@ namespace ChessTheMasterPiece.Data
                 if (piece.Type == ChessPieceType.King)
                 {
                     kingPos = new Vector2Int(x, y);
+                    // Repair cache on fallback
+                    if (team == Team.White)
+                    {
+                        _whiteKingSquare = idx;
+                    }
+                    else
+                    {
+                        _blackKingSquare = idx;
+                    }
                     return true;
                 }
             }
+            
             kingPos = Vector2Int.Invalid;
             return false;
         }
@@ -482,10 +549,14 @@ namespace ChessTheMasterPiece.Data
 
             Array.Copy(this.LogicalBoard, clone.LogicalBoard, this.LogicalBoard.Length);
 
-            // Copy the occupancy arrays and flag the lists for a rebuild
+            // Copy the occupancy arrays and piece index lists
             Array.Copy(this._whiteOccupied, clone._whiteOccupied, 64);
             Array.Copy(this._blackOccupied, clone._blackOccupied, 64);
-            clone._indicesDirty = true;
+            clone._whitePieceIndices.AddRange(this._whitePieceIndices);
+            clone._blackPieceIndices.AddRange(this._blackPieceIndices);
+            // PERF-002: Copy king cache
+            clone._whiteKingSquare = this._whiteKingSquare;
+            clone._blackKingSquare = this._blackKingSquare;
 
             foreach (var piece in WhiteCaptured)
             {
@@ -504,35 +575,13 @@ namespace ChessTheMasterPiece.Data
             return clone;
         }
 
+        /// <summary>
+        /// Returns the list of occupied square indices for the specified team.
+        /// Indices are maintained incrementally, so this is always O(1).
+        /// </summary>
         public List<int> GetPieceIndices(Team team)
         {
-            if (_indicesDirty)
-            {
-                RebuildIndices();
-            }
             return team == Team.White ? _whitePieceIndices : _blackPieceIndices;
-        }
-
-        /// <summary>
-        /// Rebuilds the lists of occupied-square indices for white and black pieces by scanning the flat 64-square
-        /// board arrays.
-        /// </summary>
-        /// <remarks>Clears existing index lists, performs a single linear pass over the 64 squares using
-        /// the _whiteOccupied and _blackOccupied arrays to repopulate _whitePieceIndices and _blackPieceIndices, and
-        /// resets the indices-dirty flag (_indicesDirty = false).</remarks>
-        private void RebuildIndices()
-        {
-            _whitePieceIndices.Clear();
-            _blackPieceIndices.Clear();
-
-            // Single linear pass over the flat 64-square array
-            for (int i = 0; i < 64; i++)
-            {
-                if (_whiteOccupied[i]) _whitePieceIndices.Add(i);
-                if (_blackOccupied[i]) _blackPieceIndices.Add(i);
-            }
-
-            _indicesDirty = false;
         }
     }
 }

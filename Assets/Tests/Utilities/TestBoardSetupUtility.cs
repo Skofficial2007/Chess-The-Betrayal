@@ -60,13 +60,20 @@ namespace ChessTheMasterPiece.Tests.Utilities
         /// Places a single piece at the specified algebraic coordinate and returns the
         /// board. Designed for fluent chaining: CreateEmpty().WithPiece(...).WithPiece(...).
         /// </summary>
-        public static BoardState WithPiece(this BoardState board, string algebraic, Team team, ChessPieceType type, bool hasMoved = false)
+        /// <param name="startRow">The rank where this piece began the game. For pawns, defaults to their standard starting rank (1 for White, 6 for Black). For other pieces, defaults to 0 (unused).</param>
+        public static BoardState WithPiece(this BoardState board, string algebraic, Team team, ChessPieceType type, bool hasMoved = false, int? startRow = null)
         {
             Vector2Int pos = AlgebraicToVector(algebraic);
             int moveDir = team == Team.White ? 1 : -1;
 
-            // We use pos.y as the startRow so pawn double-push tests behave correctly based on where they are initialized.
-            PieceData piece = new PieceData(team, type, moveDir, pos.y, hasMoved);
+            // For pawns: White starts at y=1, Black at y=6.
+            // For all other pieces: StartRow is irrelevant (0).
+            // This ensures pawns placed at non-standard positions won't generate illegal double-pushes.
+            int sr = startRow ?? (type == ChessPieceType.Pawn
+                ? (team == Team.White ? 1 : 6)
+                : 0);
+
+            PieceData piece = new PieceData(team, type, moveDir, sr, hasMoved);
 
             // Unpack Vector2Int to x,y since SetPiece doesn't have a Vector2Int overload
             board.SetPiece(piece, pos.x, pos.y);
