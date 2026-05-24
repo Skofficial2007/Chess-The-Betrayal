@@ -302,6 +302,11 @@ namespace ChessTheBetrayal.Gameplay
                 case GameState.Normal:
                     OnTurnChanged?.Invoke();
                     break;
+
+                case GameState.Timeout:
+                    // Primary resolution path is GameManager.OnClockTimeout() called directly.
+                    // This acts as a safety net for deferred evaluation paths.
+                    break;
             }
 
             // --- BETRAYAL MECHANIC HOOKS ---
