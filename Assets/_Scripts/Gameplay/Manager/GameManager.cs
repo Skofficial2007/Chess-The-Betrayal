@@ -125,9 +125,7 @@ namespace ChessTheBetrayal.Gameplay
             UIManager.Instance.OnTeamSelected += HandleTeamSelected;
             UIManager.Instance.OnGameReset += HandleGameReset;
             UIManager.Instance.OnPromotionSelected += HandlePromotionChoice;
-
-            // [PHASE 4 WIRING] - We will uncomment this when Phase 4 updates UIManager.
-            // UIManager.Instance.OnGameModeSelected += HandleGameModeReceived;
+            UIManager.Instance.OnGameModeSelected += HandleGameModeReceived;
 
             if (logMoves)
             {
@@ -142,9 +140,7 @@ namespace ChessTheBetrayal.Gameplay
                 UIManager.Instance.OnTeamSelected -= HandleTeamSelected;
                 UIManager.Instance.OnGameReset -= HandleGameReset;
                 UIManager.Instance.OnPromotionSelected -= HandlePromotionChoice;
-
-                // [PHASE 4 WIRING]
-                // UIManager.Instance.OnGameModeSelected -= HandleGameModeReceived;
+                UIManager.Instance.OnGameModeSelected -= HandleGameModeReceived;
             }
         }
 
