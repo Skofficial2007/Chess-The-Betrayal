@@ -313,8 +313,7 @@ namespace ChessTheBetrayal.UI
 
         public void ConfigureHUDForMode(GameModeConfig config)
         {
-            // We will hook this into GameHUD in Phase 5
-            // gameHUD?.ConfigureForMode(config);
+            gameHUD?.ConfigureForMode(config);
         }
 
         #endregion

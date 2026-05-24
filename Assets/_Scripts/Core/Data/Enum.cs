@@ -31,6 +31,7 @@ namespace ChessTheBetrayal.Core.Data
     // If you're adding a new phase, make sure GameManager's TransitionToPhase() handles it.
     public enum TurnPhase
     {
+        Starting,             // Board setup complete, waiting for presentation layer to finish animations
         Normal,               // Standard chess movement
         RetributionPending,   // Player chose Betrayal, must capture Betrayer
         ResolutionFailed,     // Betrayer defected — resolve check if needed
