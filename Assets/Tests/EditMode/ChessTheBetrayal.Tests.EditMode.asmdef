@@ -1,8 +1,8 @@
 {
-  "name": "ChessTheMasterPiece.Tests.EditMode",
+  "name": "ChessTheBetrayal.Tests.EditMode",
   "references": [
-    "ChessTheMasterPiece.Core",
-    "ChessTheMasterPiece.Tests.Utilities"
+    "ChessTheBetrayal.Core",
+    "ChessTheBetrayal.Tests.Utilities"
   ],
   "includePlatforms": ["Editor"],
   "excludePlatforms": [],

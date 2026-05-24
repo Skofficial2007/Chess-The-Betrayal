@@ -1,6 +1,6 @@
 using System.Runtime.CompilerServices;
 
-namespace ChessTheMasterPiece.Data
+namespace ChessTheBetrayal.Core.Data
 {
     public readonly struct PieceData
     {

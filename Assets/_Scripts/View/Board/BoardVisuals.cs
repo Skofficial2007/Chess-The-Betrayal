@@ -1,10 +1,11 @@
 using System.Collections.Generic;
 using UnityEngine;
-using ChessTheMasterPiece.Data;
-using ChessTheMasterPiece.Logic;
-using ChessTheMasterPiece.Controllers;
+using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.Core.Engine;
+using ChessTheBetrayal.Gameplay;
+using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
-namespace ChessTheMasterPiece.View
+namespace ChessTheBetrayal.UI
 {
     /// <summary>
     /// The eyes of the game. Spawns and moves piece GameObjects, highlights tiles, and plays animations.
@@ -46,22 +47,22 @@ namespace ChessTheMasterPiece.View
         #region Private Fields
 
         // Maps logical grid coordinates to visual GameObjects
-        private Dictionary<ChessTheMasterPiece.Data.Vector2Int, ChessPiece> _piecesByPosition = new Dictionary<ChessTheMasterPiece.Data.Vector2Int, ChessPiece>();
+        private Dictionary<Vector2Int, ChessPiece> _piecesByPosition = new Dictionary<Vector2Int, ChessPiece>();
 
         // Tile meshes and lookup for raycasting
         private GameObject[,] tiles;
-        private Dictionary<Transform, ChessTheMasterPiece.Data.Vector2Int> _tileByTransform = new Dictionary<Transform, ChessTheMasterPiece.Data.Vector2Int>();
+        private Dictionary<Transform, Vector2Int> _tileByTransform = new Dictionary<Transform, Vector2Int>();
 
         // Death piles
         private List<ChessPiece> deadWhitePieces = new List<ChessPiece>();
         private List<ChessPiece> deadBlackPieces = new List<ChessPiece>();
 
         // Highlighting state
-        private ChessTheMasterPiece.Data.Vector2Int hoverIndex = ChessTheMasterPiece.Data.Vector2Int.Invalid;
-        private readonly List<ChessTheMasterPiece.Data.Vector2Int> _highlightedSquares = new List<ChessTheMasterPiece.Data.Vector2Int>(32);
+        private Vector2Int hoverIndex = Vector2Int.Invalid;
+        private readonly List<Vector2Int> _highlightedSquares = new List<Vector2Int>(32);
 
         // Mirror of the list above, used for fast "is this square highlighted?" checks.
-        private readonly HashSet<ChessTheMasterPiece.Data.Vector2Int> _highlightedSquaresLookup = new HashSet<ChessTheMasterPiece.Data.Vector2Int>(32);
+        private readonly HashSet<Vector2Int> _highlightedSquaresLookup = new HashSet<Vector2Int>(32);
         private readonly List<ChessPiece> _destroyQueue = new List<ChessPiece>(32);
 
         // Cached values
@@ -200,7 +201,7 @@ namespace ChessTheMasterPiece.View
 
                     // Store references
                     tiles[x, y] = tileGO;
-                    _tileByTransform[tileGO.transform] = new ChessTheMasterPiece.Data.Vector2Int(x, y);
+                    _tileByTransform[tileGO.transform] = new Vector2Int(x, y);
                 }
             }
         }
@@ -217,7 +218,7 @@ namespace ChessTheMasterPiece.View
                     PieceData data = board.GetPiece(x, y);
                     if (!data.IsEmpty)
                     {
-                        SpawnSinglePiece(data, new ChessTheMasterPiece.Data.Vector2Int(x, y));
+                        SpawnSinglePiece(data, new Vector2Int(x, y));
                     }
                 }
             }
@@ -226,7 +227,7 @@ namespace ChessTheMasterPiece.View
         /// <summary>
         /// Instantiates a single piece GameObject at the specified position.
         /// </summary>
-        private void SpawnSinglePiece(PieceData data, ChessTheMasterPiece.Data.Vector2Int pos)
+        private void SpawnSinglePiece(PieceData data, Vector2Int pos)
         {
             // Select prefab array and parent based on team
             GameObject[] prefabs = data.Team == Team.White ? whiteTeamPrefabs : blackTeamPrefabs;
@@ -323,7 +324,7 @@ namespace ChessTheMasterPiece.View
             // 1. Handle Captures
             if (move.IsCapture)
             {
-                ChessTheMasterPiece.Data.Vector2Int capturePos = move.IsEnPassant && move.EnPassantCapturePosition.HasValue
+                Vector2Int capturePos = move.IsEnPassant && move.EnPassantCapturePosition.HasValue
                     ? move.EnPassantCapturePosition.Value
                     : move.EndPosition;
 
@@ -425,7 +426,7 @@ namespace ChessTheMasterPiece.View
         /// <summary>
         /// Snaps a piece back to its grid position (used when illegal move is attempted).
         /// </summary>
-        public void SnapPieceBack(ChessTheMasterPiece.Data.Vector2Int gridPos)
+        public void SnapPieceBack(Vector2Int gridPos)
         {
             if (_piecesByPosition.TryGetValue(gridPos, out ChessPiece piece))
             {
@@ -440,7 +441,7 @@ namespace ChessTheMasterPiece.View
         /// Called when a move is validated as illegal - snaps the piece back to its original position.
         /// This enables optimistic prediction for future networking.
         /// </summary>
-        private void HandleMoveRejected(ChessTheMasterPiece.Data.Vector2Int from, ChessTheMasterPiece.Data.Vector2Int to)
+        private void HandleMoveRejected(Vector2Int from, Vector2Int to)
         {
             SnapPieceBack(from);
         }
@@ -450,7 +451,7 @@ namespace ChessTheMasterPiece.View
         /// while the UI waits for the player's choice.
         /// Uses an O(1) dictionary lookup based on the piece's starting position.
         /// </summary>
-        private void HandlePromotionOptimisticSnap(ChessTheMasterPiece.Data.Vector2Int from, ChessTheMasterPiece.Data.Vector2Int to)
+        private void HandlePromotionOptimisticSnap(Vector2Int from, Vector2Int to)
         {
             if (_piecesByPosition.TryGetValue(from, out ChessPiece piece))
             {
@@ -468,28 +469,28 @@ namespace ChessTheMasterPiece.View
         /// Converts a raycast hit transform into a grid coordinate.
         /// Walks up the hierarchy to find the tile.
         /// </summary>
-        public ChessTheMasterPiece.Data.Vector2Int GetTileIndexFromTransform(Transform t)
+        public Vector2Int GetTileIndexFromTransform(Transform t)
         {
             Transform cur = t;
             int safety = 0;
 
             while (cur != null && safety++ < 16)
             {
-                if (_tileByTransform.TryGetValue(cur, out ChessTheMasterPiece.Data.Vector2Int idx))
+                if (_tileByTransform.TryGetValue(cur, out Vector2Int idx))
                 {
                     return idx;
                 }
                 cur = cur.parent;
             }
 
-            return ChessTheMasterPiece.Data.Vector2Int.Invalid;
+            return Vector2Int.Invalid;
         }
 
         /// <summary>
         /// Returns the Transform of the piece at the given grid position.
         /// Used by input controller for dragging.
         /// </summary>
-        public Transform GetPieceTransformAt(ChessTheMasterPiece.Data.Vector2Int gridPos)
+        public Transform GetPieceTransformAt(Vector2Int gridPos)
         {
             if (_piecesByPosition.TryGetValue(gridPos, out ChessPiece piece))
             {
@@ -517,19 +518,19 @@ namespace ChessTheMasterPiece.View
         /// <summary>
         /// Updates the hover highlight on a tile.
         /// </summary>
-        public void UpdateHoverHighlight(ChessTheMasterPiece.Data.Vector2Int idx)
+        public void UpdateHoverHighlight(Vector2Int idx)
         {
             if (hoverIndex == idx) return;
 
             // Clear old hover
-            if (hoverIndex != ChessTheMasterPiece.Data.Vector2Int.Invalid)
+            if (hoverIndex != Vector2Int.Invalid)
             {
                 SetTileLayer(hoverIndex, isHover: false);
             }
 
             // Set new hover
             hoverIndex = idx;
-            if (hoverIndex != ChessTheMasterPiece.Data.Vector2Int.Invalid)
+            if (hoverIndex != Vector2Int.Invalid)
             {
                 SetTileLayer(hoverIndex, isHover: true);
             }
@@ -540,7 +541,7 @@ namespace ChessTheMasterPiece.View
         /// </summary>
         public void ClearHoverHighlight()
         {
-            UpdateHoverHighlight(ChessTheMasterPiece.Data.Vector2Int.Invalid);
+            UpdateHoverHighlight(Vector2Int.Invalid);
         }
 
         /// <summary>
@@ -567,7 +568,7 @@ namespace ChessTheMasterPiece.View
         {
             for (int i = 0; i < _highlightedSquares.Count; i++)
             {
-                ChessTheMasterPiece.Data.Vector2Int pos = _highlightedSquares[i];
+                Vector2Int pos = _highlightedSquares[i];
                 if (pos.x >= 0 && pos.x < tileCountX && pos.y >= 0 && pos.y < tileCountY && tiles[pos.x, pos.y] != null)
                 {
                     tiles[pos.x, pos.y].layer = tileLayer;
@@ -579,7 +580,7 @@ namespace ChessTheMasterPiece.View
             _highlightedSquaresLookup.Clear();
 
             // Restore hover if active
-            if (hoverIndex != ChessTheMasterPiece.Data.Vector2Int.Invalid)
+            if (hoverIndex != Vector2Int.Invalid)
             {
                 SetTileLayer(hoverIndex, isHover: true);
             }
@@ -588,7 +589,7 @@ namespace ChessTheMasterPiece.View
         /// <summary>
         /// Sets the appropriate layer for a tile based on its state.
         /// </summary>
-        private void SetTileLayer(ChessTheMasterPiece.Data.Vector2Int pos, bool isHover)
+        private void SetTileLayer(Vector2Int pos, bool isHover)
         {
             if (pos.x < 0 || pos.x >= tileCountX || pos.y < 0 || pos.y >= tileCountY) return;
 

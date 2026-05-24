@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using ChessTheMasterPiece.Data;
-using ChessTheMasterPiece.Logic;
+using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.Core.Engine;
 
-namespace ChessTheMasterPiece.Tests.Utilities
+namespace ChessTheBetrayal.Tests.Utilities
 {
     public static class TestBoardSetupUtility
     {

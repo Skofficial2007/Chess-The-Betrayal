@@ -1,9 +1,9 @@
 using NUnit.Framework;
-using ChessTheMasterPiece.Data;
-using ChessTheMasterPiece.Logic;
-using ChessTheMasterPiece.Tests.Utilities;
+using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.Core.Engine;
+using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheMasterPiece.Tests.EditMode.Data
+namespace ChessTheBetrayal.Tests.EditMode.Core.Data
 {
     [TestFixture]
     public class BoardStateTests

@@ -1,11 +1,12 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
-using ChessTheMasterPiece.Data;
-using ChessTheMasterPiece.Logic;
-using ChessTheMasterPiece.UI;
+using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.Core.Engine;
+using ChessTheBetrayal.UI;
+using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
-namespace ChessTheMasterPiece.Controllers
+namespace ChessTheBetrayal.Gameplay
 {
     /// <summary>
     /// The main conductor of the game. It connects the chess logic (BoardState, ChessEngine) to the Unity world (visuals, UI, input).
@@ -63,8 +64,8 @@ namespace ChessTheMasterPiece.Controllers
         public event Action<Team> OnCheck;
         public event Action OnGameReset;
 
-        public event Action<ChessTheMasterPiece.Data.Vector2Int, ChessTheMasterPiece.Data.Vector2Int> OnMoveRejected;
-        public event Action<ChessTheMasterPiece.Data.Vector2Int, ChessTheMasterPiece.Data.Vector2Int> OnPromotionRequested;
+        public event Action<Vector2Int, Vector2Int> OnMoveRejected;
+        public event Action<Vector2Int, Vector2Int> OnPromotionRequested;
 
         #endregion
 
@@ -129,12 +130,12 @@ namespace ChessTheMasterPiece.Controllers
         }
 
         // Named methods (rather than lambdas) so we can unsubscribe cleanly.
-        private void OnExecutorMoveRejected(ChessTheMasterPiece.Data.Vector2Int from, ChessTheMasterPiece.Data.Vector2Int to)
+        private void OnExecutorMoveRejected(Vector2Int from, Vector2Int to)
         {
             OnMoveRejected?.Invoke(from, to);
         }
 
-        private void OnExecutorPromotionRequired(ChessTheMasterPiece.Data.Vector2Int from, ChessTheMasterPiece.Data.Vector2Int to)
+        private void OnExecutorPromotionRequired(Vector2Int from, Vector2Int to)
         {
             OnPromotionRequested?.Invoke(from, to);
             UIManager.Instance?.ShowPromotionUI();
@@ -235,7 +236,7 @@ namespace ChessTheMasterPiece.Controllers
         /// Sends a move request to the executor. The result comes back through events —
         /// either OnMoveExecuted (if legal) or OnMoveRejected (if not).
         /// </summary>
-        public void RequestMove(ChessTheMasterPiece.Data.Vector2Int from, ChessTheMasterPiece.Data.Vector2Int to)
+        public void RequestMove(Vector2Int from, Vector2Int to)
         {
             // Only accept moves during normal play.
             if (CurrentPhase != TurnPhase.Normal || LiveBoard.IsGameOver)
@@ -333,7 +334,7 @@ namespace ChessTheMasterPiece.Controllers
         /// BoardInputController calls this to know which squares to highlight.
         /// Returns an empty list if it's not that team's turn or the game isn't active.
         /// </summary>
-        public IReadOnlyList<MoveCommand> GetLegalMovesAt(ChessTheMasterPiece.Data.Vector2Int position)
+        public IReadOnlyList<MoveCommand> GetLegalMovesAt(Vector2Int position)
         {
             _legalMoves.Clear();
 
@@ -348,7 +349,7 @@ namespace ChessTheMasterPiece.Controllers
         /// <summary>
         /// Returns true if the piece at this position belongs to the player whose turn it is.
         /// </summary>
-        public bool CanSelectPiece(ChessTheMasterPiece.Data.Vector2Int position)
+        public bool CanSelectPiece(Vector2Int position)
         {
             if (CurrentPhase != TurnPhase.Normal || LiveBoard.IsGameOver)
             {

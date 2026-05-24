@@ -2,7 +2,7 @@ using System;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace ChessTheMasterPiece.UI
+namespace ChessTheBetrayal.UI
 {
     /// <summary>
     /// Simple HUD controller exposing gameplay HUD controls (exit).

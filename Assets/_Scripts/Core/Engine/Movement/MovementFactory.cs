@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
-using ChessTheMasterPiece.Data;
+using ChessTheBetrayal.Core.Data;
 
-namespace ChessTheMasterPiece.Logic.Movement
+namespace ChessTheBetrayal.Core.Movement
 {
     /// <summary>
     /// Hands out the right movement rules for any piece type. Because each AI thread needs its own copy to work safely in parallel, we use [ThreadStatic] to give every thread its own private set.

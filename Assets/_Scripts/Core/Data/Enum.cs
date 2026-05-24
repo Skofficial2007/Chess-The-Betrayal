@@ -1,4 +1,4 @@
-namespace ChessTheMasterPiece.Data
+namespace ChessTheBetrayal.Core.Data
 {
     public enum ChessPieceType
     {

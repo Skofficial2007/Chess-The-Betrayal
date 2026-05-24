@@ -1,8 +1,8 @@
 using System;
 using UnityEngine;
-using ChessTheMasterPiece.Data;
+using ChessTheBetrayal.Core.Data;
 
-namespace ChessTheMasterPiece.UI
+namespace ChessTheBetrayal.UI
 {
     /// <summary>
     /// The traffic controller for all UI panels. It knows which panels should be open at any given time and listens to UI events to pass player choices (team selection, promotions) up to GameManager.

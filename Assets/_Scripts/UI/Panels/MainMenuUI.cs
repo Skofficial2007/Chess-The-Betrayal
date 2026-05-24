@@ -2,7 +2,7 @@ using System;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace ChessTheMasterPiece.UI
+namespace ChessTheBetrayal.UI
 {
     /// <summary>
     /// Main menu controller exposing Play and Exit events.

@@ -1,4 +1,4 @@
-namespace ChessTheMasterPiece.Data
+namespace ChessTheBetrayal.Core.Data
 {
     /// <summary>
     /// A simple X/Y position on the board. We define our own instead of using Unity's so this code can run outside of Unity (for AI threads, tests, etc.).

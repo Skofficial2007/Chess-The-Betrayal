@@ -1,10 +1,10 @@
 using NUnit.Framework;
 using System.Collections.Generic;
-using ChessTheMasterPiece.Data;
-using ChessTheMasterPiece.Logic;
-using ChessTheMasterPiece.Tests.Utilities;
+using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.Core.Engine;
+using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheMasterPiece.Tests.EditMode.Engine
+namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
 {
     /// <summary>
     /// Perft (performance test) suite for validating move generation completeness.

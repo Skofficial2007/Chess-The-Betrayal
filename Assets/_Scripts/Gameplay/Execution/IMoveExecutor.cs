@@ -1,8 +1,8 @@
 using System;
-using ChessTheMasterPiece.Data;
-using ChessTheMasterPiece.Logic;
+using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.Core.Engine;
 
-namespace ChessTheMasterPiece.Controllers
+namespace ChessTheBetrayal.Gameplay
 {
     /// <summary>
     /// Defines how a move request travels from the player's input to the game board.

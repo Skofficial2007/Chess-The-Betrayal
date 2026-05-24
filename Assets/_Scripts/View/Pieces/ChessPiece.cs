@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using UnityEngine;
-using ChessTheMasterPiece.Data;
+using ChessTheBetrayal.Core.Data;
 
-namespace ChessTheMasterPiece.View
+namespace ChessTheBetrayal.UI
 {
     /// <summary>
     /// Purely visual component attached to piece prefabs.
