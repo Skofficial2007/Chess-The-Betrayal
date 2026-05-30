@@ -12,6 +12,7 @@ namespace ChessTheBetrayal.UI
         public static UIManager Instance { get; private set; }
 
         [Header("Panel References")]
+        [SerializeField] private GameModeSelectorUI gameModeSelectionUI;
         [SerializeField] private TeamSelectionUI teamSelectionUI;
         [SerializeField] private PromotionUI promotionUI;
         [SerializeField] private GameOverUI gameOverUI;
@@ -19,9 +20,14 @@ namespace ChessTheBetrayal.UI
         [SerializeField] private GameHUD gameHUD;
 
         // Events
+        public event Action<GameModeConfig> OnGameModeSelected;
+        public event Action OnTeamRollRequested;
+        public event Action OnTeamAnimationComplete;
         public event Action<Team> OnTeamSelected;
         public event Action<ChessPieceType> OnPromotionSelected;
         public event Action OnGameReset;
+
+        private Team _assignedTeam;
 
         private void Awake()
         {
@@ -37,6 +43,11 @@ namespace ChessTheBetrayal.UI
 
         private void Start()
         {
+            if (gameModeSelectionUI != null)
+            {
+                gameModeSelectionUI.SetActive(false);
+            }
+
             if (teamSelectionUI != null)
             {
                 teamSelectionUI.SetActive(false);
@@ -50,11 +61,6 @@ namespace ChessTheBetrayal.UI
             if (gameOverUI != null)
             {
                 gameOverUI.SetActive(false);
-            }
-
-            if (mainMenuUI != null)
-            {
-                mainMenuUI.SetActive(false);
             }
 
             if (gameHUD != null)
@@ -77,9 +83,15 @@ namespace ChessTheBetrayal.UI
 
         private void RegisterPanelEvents()
         {
+            if (gameModeSelectionUI != null)
+            {
+                gameModeSelectionUI.OnModeSelected += HandleGameModeSelected;
+            }
+
             if (teamSelectionUI != null)
             {
-                teamSelectionUI.OnTeamSelected += HandleTeamSelected;
+                teamSelectionUI.OnRollRequested += () => OnTeamRollRequested?.Invoke();
+                teamSelectionUI.OnRouletteComplete += HandleRouletteComplete;
             }
 
             if (promotionUI != null)
@@ -107,9 +119,15 @@ namespace ChessTheBetrayal.UI
 
         private void UnregisterPanelEvents()
         {
+            if (gameModeSelectionUI != null)
+            {
+                gameModeSelectionUI.OnModeSelected -= HandleGameModeSelected;
+            }
+
             if (teamSelectionUI != null)
             {
-                teamSelectionUI.OnTeamSelected -= HandleTeamSelected;
+                teamSelectionUI.OnRollRequested -= () => OnTeamRollRequested?.Invoke();
+                teamSelectionUI.OnRouletteComplete -= HandleRouletteComplete;
             }
 
             if (promotionUI != null)
@@ -141,6 +159,11 @@ namespace ChessTheBetrayal.UI
 
         public bool IsUIBlocking()
         {
+            if (gameModeSelectionUI != null && gameModeSelectionUI.gameObject.activeSelf)
+            {
+                return true;
+            }
+
             if (teamSelectionUI != null && teamSelectionUI.gameObject.activeSelf)
             {
                 return true;
@@ -175,7 +198,44 @@ namespace ChessTheBetrayal.UI
                 mainMenuUI.SetActive(true);
             }
 
-            // Ensure other panels are closed
+            if (gameModeSelectionUI != null)
+            {
+                gameModeSelectionUI.SetActive(false);
+            }
+
+            if (teamSelectionUI != null)
+            {
+                teamSelectionUI.SetActive(false);
+            }
+
+            if (gameHUD != null)
+            {
+                gameHUD.SetActive(false);
+            }
+
+            if (gameOverUI != null)
+            {
+                gameOverUI.SetActive(false);
+            }
+
+            if (promotionUI != null)
+            {
+                promotionUI.SetActive(false);
+            }
+        }
+
+        public void ShowGameModeSelection()
+        {
+            if (gameModeSelectionUI != null)
+            {
+                gameModeSelectionUI.SetActive(true);
+            }
+
+            if (mainMenuUI != null)
+            {
+                mainMenuUI.SetActive(false);
+            }
+
             if (teamSelectionUI != null)
             {
                 teamSelectionUI.SetActive(false);
@@ -202,6 +262,11 @@ namespace ChessTheBetrayal.UI
             if (teamSelectionUI != null)
             {
                 teamSelectionUI.SetActive(true);
+            }
+
+            if (gameModeSelectionUI != null)
+            {
+                gameModeSelectionUI.SetActive(false);
             }
 
             if (mainMenuUI != null)
@@ -238,11 +303,11 @@ namespace ChessTheBetrayal.UI
             }
         }
 
-        public void TriggerGameOver(Team? winningTeam)
+        public void TriggerGameOver(Team? winningTeam, bool byTimeout = false)
         {
             if (gameOverUI != null)
             {
-                gameOverUI.SetWinnerText(winningTeam);
+                gameOverUI.SetWinnerText(winningTeam, byTimeout);
                 gameOverUI.SetActive(true);
             }
 
@@ -252,13 +317,28 @@ namespace ChessTheBetrayal.UI
             }
         }
 
+        public void ConfigureHUDForMode(GameModeConfig config)
+        {
+            gameHUD?.ConfigureForMode(config);
+        }
+
+        public void TriggerTeamRoulette(Team assignedTeam)
+        {
+            _assignedTeam = assignedTeam;
+            
+            if (teamSelectionUI != null)
+            {
+                teamSelectionUI.PlayRoulette(assignedTeam);
+            }
+        }
+
         #endregion
 
         #region Internal Handlers
 
         private void HandlePlayGame()
         {
-            ShowTeamSelection();
+            ShowGameModeSelection();
         }
 
         private void HandleExitGame()
@@ -270,20 +350,18 @@ namespace ChessTheBetrayal.UI
 #endif
         }
 
-        private void HandleTeamSelected(Team team)
+        private void HandleGameModeSelected(GameModeConfig config)
         {
-            if (teamSelectionUI != null)
+            if (gameModeSelectionUI != null)
             {
-                teamSelectionUI.SetActive(false);
+                gameModeSelectionUI.SetActive(false);
             }
-
-            if (gameHUD != null)
-            {
-                gameHUD.SetActive(true);
-            }
-
-            OnTeamSelected?.Invoke(team);
+            
+            OnGameModeSelected?.Invoke(config);
+            ShowTeamSelection();
         }
+
+
 
         private void HandlePromotionSelected(ChessPieceType type)
         {
@@ -297,17 +375,32 @@ namespace ChessTheBetrayal.UI
 
         private void HandleGameExit()
         {
-            // Notify Chessboard to clear pieces
             OnGameReset?.Invoke();
-
-            // Return to Main Menu
             ShowMainMenu();
         }
 
         private void HandleReplay()
         {
             OnGameReset?.Invoke();
+            // Replay uses the previously selected mode, so we skip straight to Team Selection
             ShowTeamSelection();
+        }
+
+        private void HandleRouletteComplete()
+        {
+            // Hide team selection, show game HUD
+            if (teamSelectionUI != null)
+            {
+                teamSelectionUI.SetActive(false);
+            }
+
+            if (gameHUD != null)
+            {
+                gameHUD.SetActive(true);
+            }
+
+            OnTeamSelected?.Invoke(_assignedTeam);
+            OnTeamAnimationComplete?.Invoke();
         }
 
         #endregion

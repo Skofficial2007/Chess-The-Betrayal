@@ -259,10 +259,15 @@ namespace ChessTheBetrayal.Core.Engine
         }
 
         /// <summary>
-        /// Checks the board and tells you whether the given team is in checkmate, stalemate, check, or playing normally.
+        /// Checks the board and tells you whether the given team is in checkmate, stalemate, check, timeout, or playing normally.
         /// </summary>
-        public static GameState EvaluateGameState(BoardState board, Team team)
+        public static GameState EvaluateGameState(BoardState board, Team team, ClockState? clock = null)
         {
+            if (clock.HasValue && clock.Value.IsExpired && clock.Value.ActiveSide == team)
+            {
+                return GameState.Timeout;
+            }
+
             bool hasLegalMoves = HasAnyLegalMoves(board, team);
 
             if (hasLegalMoves) // Removed the '!' - this block runs if the game is still going
@@ -654,6 +659,7 @@ namespace ChessTheBetrayal.Core.Engine
         Normal,     // Nothing special — game continues.
         Check,      // King is in check but has at least one escape.
         Checkmate,  // King is in check with no legal moves — game over.
-        Stalemate   // No legal moves, but not in check — draw.
+        Stalemate,  // No legal moves, but not in check — draw.
+        Timeout     // A player's clock reached zero.
     }
 }

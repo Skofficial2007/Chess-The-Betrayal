@@ -1,7 +1,9 @@
+using System.Collections;
 using UnityEngine;
 using Unity.Cinemachine;
 using ChessTheBetrayal.UI;
 using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.Gameplay;
 
 namespace ChessTheBetrayal.UI.Camera
 {
@@ -15,6 +17,10 @@ namespace ChessTheBetrayal.UI.Camera
         [SerializeField] private CinemachineCamera menuCam;
         [SerializeField] private CinemachineCamera whiteTeamCam;
         [SerializeField] private CinemachineCamera blackTeamCam;
+
+        [Header("Settings")]
+        [Tooltip("How long the game waits for the camera to pan before starting the clock.")]
+        [SerializeField] private float introBlendTime = 2f;
 
         private void Start()
         {
@@ -51,6 +57,19 @@ namespace ChessTheBetrayal.UI.Camera
             else
             {
                 ActivateCamera(blackTeamCam);
+            }
+
+            // Start the delay timer
+            StartCoroutine(WaitAndStartMatch());
+        }
+
+        private IEnumerator WaitAndStartMatch()
+        {
+            yield return new WaitForSeconds(introBlendTime);
+            
+            if (GameManager.Instance != null)
+            {
+                GameManager.Instance.StartMatch();
             }
         }
 
