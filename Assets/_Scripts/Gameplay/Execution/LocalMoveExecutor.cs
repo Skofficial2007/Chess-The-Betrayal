@@ -112,9 +112,16 @@ namespace ChessTheBetrayal.Gameplay
 
             MoveCommand validMove = _movesToTarget[0];
             
+            // Capture the current clock state to stamp the move for network and replay validation.
+            // GetCurrentClockSnapshot returns null when no clock is active (e.g., untimed or AI mode).
+            ClockState? clockSnapshot = GameManager.Instance?.GetCurrentClockSnapshot();
+            if (clockSnapshot.HasValue)
+            {
+                validMove = validMove.WithClockSnapshot(clockSnapshot.Value);
+            }
+            
             if (_logMoves) Debug.Log($"[LocalMoveExecutor] Move confirmed: {validMove.StartPosition} -> {validMove.EndPosition}");
             
-            // Fire the confirmation event - GameManager will execute it
             OnMoveConfirmed?.Invoke(validMove);
         }
 
@@ -143,6 +150,13 @@ namespace ChessTheBetrayal.Gameplay
                     found = true;
                     
                     if (_logMoves) Debug.Log($"[LocalMoveExecutor] Promotion confirmed: {type}");
+
+                    // Stamp the promotion move with the current clock state.
+                    ClockState? clockSnapshot = GameManager.Instance?.GetCurrentClockSnapshot();
+                    if (clockSnapshot.HasValue)
+                    {
+                        cmd = cmd.WithClockSnapshot(clockSnapshot.Value);
+                    }
                     
                     OnMoveConfirmed?.Invoke(cmd);
                     break;

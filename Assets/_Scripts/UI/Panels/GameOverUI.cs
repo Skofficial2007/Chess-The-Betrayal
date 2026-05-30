@@ -37,23 +37,18 @@ namespace ChessTheBetrayal.UI
             gameObject.SetActive(active);
         }
 
-        public void SetWinnerText(Team? winnerTeam)
+        public void SetWinnerText(Team? winnerTeam, bool byTimeout = false)
         {
-            if (winnerText != null)
+            if (winnerText == null) return;
+
+            string prefix = byTimeout ? "Time Out — " : string.Empty;
+
+            winnerText.text = winnerTeam switch
             {
-                if (winnerTeam == Team.White)
-                {
-                    winnerText.text = "White Team Won!";
-                }
-                else if (winnerTeam == Team.Black)
-                {
-                    winnerText.text = "Black Team Won!";
-                }
-                else
-                {
-                    winnerText.text = "Stalemate! Draw.";
-                }
-            }
+                Team.White => $"{prefix}White Team Won!",
+                Team.Black => $"{prefix}Black Team Won!",
+                _          => byTimeout ? "Time Out — Draw (Insufficient Material)" : "Stalemate! Draw."
+            };
         }
     }
 }

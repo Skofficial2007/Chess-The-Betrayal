@@ -1,16 +1,21 @@
 using System;
 using UnityEngine;
 using UnityEngine.UI;
+using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.Gameplay;
 
 namespace ChessTheBetrayal.UI
 {
     /// <summary>
-    /// Simple HUD controller exposing gameplay HUD controls (exit).
+    /// Manages the in-game heads-up display, including clock visibility and exit controls.
     /// </summary>
     public class GameHUD : MonoBehaviour
     {
         [Header("UI References")]
         [SerializeField] private Button exitButton;
+
+        [Header("Clock")]
+        [SerializeField] private ClockDisplayWidget _clockWidget;
 
         public event Action OnExitToMenu;
 
@@ -22,9 +27,42 @@ namespace ChessTheBetrayal.UI
             }
         }
 
+        private void Start()
+        {
+            if (GameManager.Instance != null)
+            {
+                GameManager.Instance.OnLowTimeAlert += HandleLowTimeWarning;
+            }
+        }
+
+        private void OnDestroy()
+        {
+            if (GameManager.Instance != null)
+            {
+                GameManager.Instance.OnLowTimeAlert -= HandleLowTimeWarning;
+            }
+        }
+
         public void SetActive(bool active)
         {
             gameObject.SetActive(active);
+        }
+
+        /// <summary>
+        /// Configures the HUD display elements based on the active game mode.
+        /// </summary>
+        public void ConfigureForMode(GameModeConfig config)
+        {
+            if (_clockWidget != null)
+            {
+                _clockWidget.gameObject.SetActive(!config.IsUnlimited);
+            }
+        }
+
+        private void HandleLowTimeWarning(Team team, long remainingMs)
+        {
+            // v1: The ClockDisplayWidget handles color changes internally based on state.
+            // This event hook is reserved for future audio cues or HUD screen-shake polish.
         }
     }
 }
