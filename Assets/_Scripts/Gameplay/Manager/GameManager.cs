@@ -387,15 +387,18 @@ namespace ChessTheBetrayal.Gameplay
             // See TurnPhase in Enum.cs for the full state machine map.
         }
 
-        private void EndGame(Team? winner)
+        private void EndGame(Team? winner, bool byTimeout = false)
         {
             LiveBoard.IsGameOver = true;
             LiveBoard.Winner = winner;
 
             TransitionToPhase(TurnPhase.GameOver);
-            UIManager.Instance?.TriggerGameOver(winner);
+            UIManager.Instance?.TriggerGameOver(winner, byTimeout);
 
-            if (logMoves) Debug.Log($"[GameManager] Game Over. Winner: {(winner.HasValue ? winner.ToString() : "Draw")}");
+            if (logMoves) 
+            {
+                Debug.Log($"[GameManager] Game Over. Winner: {(winner.HasValue ? winner.ToString() : "Draw")}. Timeout: {byTimeout}");
+            }
         }
 
         #endregion
@@ -422,6 +425,28 @@ namespace ChessTheBetrayal.Gameplay
             if (CurrentPhase != TurnPhase.Normal || LiveBoard.IsGameOver) return false;
             PieceData piece = LiveBoard.GetPiece(position);
             return !piece.IsEmpty && piece.Team == LiveBoard.CurrentTurn;
+        }
+
+        /// <summary>
+        /// Evaluates if a team has sufficient material to force a checkmate.
+        /// v1 implementation: a team can force mate if they have any piece beyond the King.
+        /// Uses GetPieceIndices for O(N) traversal to maintain high performance.
+        /// </summary>
+        private static bool CanForceMate(BoardState board, Team team)
+        {
+            var indices = board.GetPieceIndices(team);
+            for (int i = 0; i < indices.Count; i++)
+            {
+                int idx = indices[i];
+                PieceData p = board.GetPiece(idx % board.TileCountX, idx / board.TileCountX);
+                
+                // PieceData is a readonly struct — use !p.IsEmpty.
+                if (!p.IsEmpty && p.Type != ChessPieceType.King)
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         /// <summary>
@@ -454,10 +479,8 @@ namespace ChessTheBetrayal.Gameplay
             
             CurrentPhase = nextPhase;
 
+            // FIX: Betrayal sub-phases removed. The clock keeps running to maintain pressure!
             bool shouldPause = nextPhase == TurnPhase.Starting
-                            || nextPhase == TurnPhase.RetributionPending
-                            || nextPhase == TurnPhase.ResolutionFailed
-                            || nextPhase == TurnPhase.ForcedSave
                             || nextPhase == TurnPhase.GameOver;
 
             if (shouldPause) _clock?.Pause();
@@ -470,8 +493,19 @@ namespace ChessTheBetrayal.Gameplay
 
         public void OnClockTimeout(Team timedOutTeam)
         {
-            // Stub implementation for compilation.
-            // Full resolution (including FIDE insufficient material rules) occurs in Phase 6.
+            // If the opponent cannot force checkmate by any legal sequence,
+            // the result is a draw even if the losing player's time reaches zero.
+            Team opponent = timedOutTeam == Team.White ? Team.Black : Team.White;
+            bool opponentCanMate = CanForceMate(LiveBoard, opponent);
+
+            if (opponentCanMate)
+            {
+                EndGame(opponent, byTimeout: true);
+            }
+            else
+            {
+                EndGame(null, byTimeout: true); // Insufficient material draw
+            }
         }
 
         public void OnLowTimeWarning(Team team, long remainingMs)
