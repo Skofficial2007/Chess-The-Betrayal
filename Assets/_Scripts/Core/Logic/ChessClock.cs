@@ -17,7 +17,13 @@ namespace ChessTheBetrayal.Core.Logic
 
         private const long LowTimeThresholdMs = 10_000L;
 
-        public ChessClock(GameModeConfig config, IClockEventHandler handler)
+        /// <summary>
+        /// Constructs a new chess clock with the specified game mode configuration and event handler.
+        /// </summary>
+        /// <param name="config">The time control configuration (base time, increment, etc.).</param>
+        /// <param name="handler">The callback handler for clock events.</param>
+        /// <param name="initialActiveSide">The team whose clock should start ticking first (determined by the betrayer random logic).</param>
+        public ChessClock(GameModeConfig config, IClockEventHandler handler, Team initialActiveSide)
         {
             _config  = config;
             _handler = handler;
@@ -26,7 +32,7 @@ namespace ChessTheBetrayal.Core.Logic
             {
                 WhiteRemainingMs = config.BaseTimeMs,
                 BlackRemainingMs = config.BaseTimeMs,
-                ActiveSide       = Team.White,
+                ActiveSide       = initialActiveSide,
                 IsRunning        = false,
                 IsExpired        = false
             };
