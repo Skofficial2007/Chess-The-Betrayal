@@ -309,7 +309,7 @@ namespace ChessTheBetrayal.Gameplay
                 return;
             }
 
-            _clock = new ChessClock(_selectedMode, this);
+            _clock = new ChessClock(_selectedMode, this, LiveBoard.CurrentTurn);
 
             if (_clockController == null)
             {
