@@ -297,11 +297,11 @@ namespace ChessTheBetrayal.UI
             }
         }
 
-        public void TriggerGameOver(Team? winningTeam)
+        public void TriggerGameOver(Team? winningTeam, bool byTimeout = false)
         {
             if (gameOverUI != null)
             {
-                gameOverUI.SetWinnerText(winningTeam);
+                gameOverUI.SetWinnerText(winningTeam, byTimeout);
                 gameOverUI.SetActive(true);
             }
 

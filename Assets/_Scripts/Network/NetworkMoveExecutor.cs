@@ -11,6 +11,25 @@
 //
 // TODO (Betrayal + Network): The Retribution sub-phase must be fully validated server-side. The client should never be trusted to report whether a Retribution succeeded or failed.
 //
+// ── CLOCK SYNCHRONISATION POLICY (MASTERPLAN-003) ──────────────────────────
+//
+// Authority: The server maintains the sole authoritative ChessClock.
+//   The server drives ChessClock.Tick(deltaMs) using its own time source.
+//   Client clocks are display-only and are never trusted for game outcome.
+//
+// Move stamping: Every MoveCommand carries WhiteRemainingMsAtMove and
+//   BlackRemainingMsAtMove. The server validates that the submitting 
+//   client's timestamp is within a lag-compensation window (±500 ms) 
+//   of the server-side value. Any move submitted after server-side clock 
+//   expiry is rejected unconditionally.
+//
+// Betrayal sub-phases: The clock DOES NOT PAUSE during Betrayal phases.
+//   To maintain high pressure, the active player's clock continues to tick
+//   while they decide how to execute retribution. If they flag, they lose.
+//
+// Increments: Handled strictly via ChessClock.OnMoveMade() AFTER the turn
+//   officially transitions. Betrayal initiation does not grant an increment.
+//
 // using System;
 // using Unity.Netcode;
 // using ChessTheBetrayal.Core.Data;
