@@ -122,7 +122,8 @@ namespace ChessTheBetrayal.Gameplay
                 return;
             }
 
-            UIManager.Instance.OnTeamSelected += HandleTeamSelected;
+            UIManager.Instance.OnTeamRollRequested += HandleTeamRollRequested;
+            UIManager.Instance.OnTeamAnimationComplete += HandleTeamAnimationComplete;
             UIManager.Instance.OnGameReset += HandleGameReset;
             UIManager.Instance.OnPromotionSelected += HandlePromotionChoice;
             UIManager.Instance.OnGameModeSelected += HandleGameModeReceived;
@@ -137,7 +138,8 @@ namespace ChessTheBetrayal.Gameplay
         {
             if (UIManager.Instance != null)
             {
-                UIManager.Instance.OnTeamSelected -= HandleTeamSelected;
+                UIManager.Instance.OnTeamRollRequested -= HandleTeamRollRequested;
+                UIManager.Instance.OnTeamAnimationComplete -= HandleTeamAnimationComplete;
                 UIManager.Instance.OnGameReset -= HandleGameReset;
                 UIManager.Instance.OnPromotionSelected -= HandlePromotionChoice;
                 UIManager.Instance.OnGameModeSelected -= HandleGameModeReceived;
@@ -163,14 +165,31 @@ namespace ChessTheBetrayal.Gameplay
         }
 
         /// <summary>
-        /// Called when the player picks White or Black from the team selection screen.
-        /// Clears the board, places all the pieces, and starts the game.
+        /// UI requested a team. We do the domain math and tell the UI what to animate.
         /// </summary>
-        private void HandleTeamSelected(Team selectedTeam)
+        private void HandleTeamRollRequested()
         {
-            PlayerTeam = selectedTeam;
-            LiveBoard.Clear();
+            // 1. Core Logic dictates the random assignments
+            PlayerTeam = UnityEngine.Random.value > 0.5f ? Team.White : Team.Black;
+            
+            // Fulfill the Pitch Doc Rule: First mover is also completely random, forcing players out of book.
+            LiveBoard.CurrentTurn = UnityEngine.Random.value > 0.5f ? Team.White : Team.Black;
 
+            if (logMoves) 
+            {
+                Debug.Log($"[GameManager] Roll Decided -> Player Team: {PlayerTeam} | First Mover: {LiveBoard.CurrentTurn}");
+            }
+
+            // 2. Pass the decision back to the View to play the blind roulette animation
+            UIManager.Instance.TriggerTeamRoulette(PlayerTeam);
+        }
+
+        /// <summary>
+        /// The View finished its 4-second animation. Now we actually build the game state.
+        /// </summary>
+        private void HandleTeamAnimationComplete()
+        {
+            LiveBoard.Clear();
             SetupStandardPieces();
 
             // Tear down the previous executor if one exists (e.g. the player hit Replay).

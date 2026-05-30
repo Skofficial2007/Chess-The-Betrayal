@@ -21,9 +21,13 @@ namespace ChessTheBetrayal.UI
 
         // Events
         public event Action<GameModeConfig> OnGameModeSelected;
+        public event Action OnTeamRollRequested;
+        public event Action OnTeamAnimationComplete;
         public event Action<Team> OnTeamSelected;
         public event Action<ChessPieceType> OnPromotionSelected;
         public event Action OnGameReset;
+
+        private Team _assignedTeam;
 
         private void Awake()
         {
@@ -86,7 +90,8 @@ namespace ChessTheBetrayal.UI
 
             if (teamSelectionUI != null)
             {
-                teamSelectionUI.OnTeamSelected += HandleTeamSelected;
+                teamSelectionUI.OnRollRequested += () => OnTeamRollRequested?.Invoke();
+                teamSelectionUI.OnRouletteComplete += HandleRouletteComplete;
             }
 
             if (promotionUI != null)
@@ -121,7 +126,8 @@ namespace ChessTheBetrayal.UI
 
             if (teamSelectionUI != null)
             {
-                teamSelectionUI.OnTeamSelected -= HandleTeamSelected;
+                teamSelectionUI.OnRollRequested -= () => OnTeamRollRequested?.Invoke();
+                teamSelectionUI.OnRouletteComplete -= HandleRouletteComplete;
             }
 
             if (promotionUI != null)
@@ -316,6 +322,16 @@ namespace ChessTheBetrayal.UI
             gameHUD?.ConfigureForMode(config);
         }
 
+        public void TriggerTeamRoulette(Team assignedTeam)
+        {
+            _assignedTeam = assignedTeam;
+            
+            if (teamSelectionUI != null)
+            {
+                teamSelectionUI.PlayRoulette(assignedTeam);
+            }
+        }
+
         #endregion
 
         #region Internal Handlers
@@ -345,20 +361,7 @@ namespace ChessTheBetrayal.UI
             ShowTeamSelection();
         }
 
-        private void HandleTeamSelected(Team team)
-        {
-            if (teamSelectionUI != null)
-            {
-                teamSelectionUI.SetActive(false);
-            }
 
-            if (gameHUD != null)
-            {
-                gameHUD.SetActive(true);
-            }
-
-            OnTeamSelected?.Invoke(team);
-        }
 
         private void HandlePromotionSelected(ChessPieceType type)
         {
@@ -381,6 +384,23 @@ namespace ChessTheBetrayal.UI
             OnGameReset?.Invoke();
             // Replay uses the previously selected mode, so we skip straight to Team Selection
             ShowTeamSelection();
+        }
+
+        private void HandleRouletteComplete()
+        {
+            // Hide team selection, show game HUD
+            if (teamSelectionUI != null)
+            {
+                teamSelectionUI.SetActive(false);
+            }
+
+            if (gameHUD != null)
+            {
+                gameHUD.SetActive(true);
+            }
+
+            OnTeamSelected?.Invoke(_assignedTeam);
+            OnTeamAnimationComplete?.Invoke();
         }
 
         #endregion
