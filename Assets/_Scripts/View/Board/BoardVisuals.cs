@@ -104,18 +104,11 @@ namespace ChessTheBetrayal.UI
                 Debug.LogError("[BoardVisuals] GameManager.Instance is null!");
                 return;
             }
-
-            // Subscribe to GameManager events
-            GameManager.Instance.OnGameReset += ClearAllVisuals;
         }
 
         private void OnDestroy()
         {
-            // Unsubscribe from events
-            if (GameManager.Instance != null)
-            {
-                GameManager.Instance.OnGameReset -= ClearAllVisuals;
-            }
+            // Cleanup if needed
         }
 
         #endregion
@@ -270,7 +263,7 @@ namespace ChessTheBetrayal.UI
         /// <summary>
         /// Destroys all piece GameObjects and resets all visual state.
         /// </summary>
-        private void ClearAllVisuals()
+        public void ClearAllVisuals()
         {
             _destroyQueue.Clear();
 

@@ -77,7 +77,6 @@ namespace ChessTheBetrayal.Gameplay
         #region Events
 
         // Other systems (BoardVisuals, BoardInputController, UIManager) subscribe to these.
-        public event Action OnGameReset;
 
         /// <summary>
         /// Invoked by the clock system when a player's remaining time drops below the urgency threshold.
@@ -293,7 +292,7 @@ namespace ChessTheBetrayal.Gameplay
             UIManager.Instance?.ConfigureHUDForMode(GameModeConfig.Unlimited);
 
             _sharedBoardState?.Clear();
-            OnGameReset?.Invoke();
+            _gameResetChannel?.Raise();
 
             if (logMoves)
             {
