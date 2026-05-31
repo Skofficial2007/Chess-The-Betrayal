@@ -1,0 +1,78 @@
+namespace ChessTheBetrayal.Core.Diagnostics
+{
+    /// <summary>
+    /// Contract for all diagnostic output from domain classes.
+    /// Implementations should reside in the presentation or server layers to maintain strict domain decoupling.
+    /// </summary>
+    public interface IDomainLogger
+    {
+        /// <summary>
+        /// Indicates whether verbose logging is enabled. 
+        /// Used to guard string allocation and formatting on performance-critical hot paths.
+        /// </summary>
+        bool IsVerbose { get; }
+
+        void LogInfo(DomainLogEvent evt);
+        void LogWarning(DomainLogEvent evt);
+        void LogError(DomainLogEvent evt);
+    }
+
+    /// <summary>
+    /// A fully value-typed log payload. Declared as a readonly struct to guarantee
+    /// stack allocation and prevent garbage collection pressure on call sites.
+    /// </summary>
+    public readonly struct DomainLogEvent
+    {
+        public readonly DomainEventCode Code;
+
+        /// <summary>
+        /// Optional human-readable detail. To prevent allocation overhead, 
+        /// strings should only be passed when guarded by verbosity checks.
+        /// </summary>
+        public readonly string Message;
+
+        /// <summary>
+        /// Optional integer payload for supplementary data (e.g., board square index, ply depth, move count).
+        /// </summary>
+        public readonly int AuxInt;
+
+        public DomainLogEvent(DomainEventCode code, string message = null, int auxInt = 0)
+        {
+            Code = code;
+            Message = message;
+            AuxInt = auxInt;
+        }
+
+        public override string ToString() =>
+            Message != null ? $"[{Code}] {Message}" : $"[{Code}]";
+    }
+
+    /// <summary>
+    /// Stable, versioned event codes for structured telemetry and diagnostics.
+    /// </summary>
+    public enum DomainEventCode
+    {
+        // ── Engine / Move Execution ───────────────────────────────────────────
+        Engine_PromotionPieceNotFound   = 1001,
+        Engine_KingNotFound             = 1002,
+        Engine_IllegalMoveRequested     = 1003,
+        Engine_MoveHistoryUnderflow     = 1004,
+
+        // ── Board State ───────────────────────────────────────────────────────
+        Board_PieceSetOutOfBounds       = 2001,
+        Board_ZobristDesync             = 2002,
+
+        // ── Special Mechanics ─────────────────────────────────────────────────
+        Betrayal_RightAlreadyConsumed   = 3001,
+        Betrayal_KingTargetedAsVictim   = 3002,
+        Betrayal_KingTargetedAsBetrayer = 3003,
+        Betrayal_RetributionPieceNone   = 3004,
+        Betrayal_DefectionResolved      = 3005,
+        Betrayal_ForcedSaveRequired     = 3006,
+
+        // ── AI Search ─────────────────────────────────────────────────────────
+        AI_TranspositionHashCollision   = 4001,
+        AI_SearchDepthExceeded          = 4002,
+        AI_BetrayalBranchExpansion      = 4003,
+    }
+}
