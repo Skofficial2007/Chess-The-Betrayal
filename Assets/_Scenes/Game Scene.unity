@@ -132,6 +132,7 @@ GameObject:
   - component: {fileID: 12944028}
   - component: {fileID: 12944027}
   - component: {fileID: 12944031}
+  - component: {fileID: 12944032}
   m_Layer: 5
   m_Name: Canvas
   m_TagString: Untagged
@@ -245,6 +246,34 @@ MonoBehaviour:
   gameOverUI: {fileID: 401340255}
   mainMenuUI: {fileID: 1103511511}
   gameHUD: {fileID: 360390062}
+--- !u!114 &12944032
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 12944026}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 666a51446e251c84eb39c69bbdf5810d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Events.PromotionRequiredEventListener
+  _channel: {fileID: 11400000, guid: 79c9467366ac5eb44acb92c5c3c1253e, type: 2}
+  _onEventRaised:
+    m_PersistentCalls:
+      m_Calls:
+      - m_Target: {fileID: 12944031}
+        m_TargetAssemblyTypeName: ChessTheBetrayal.UI.UIManager, Assembly-CSharp
+        m_MethodName: ShowPromotionUI
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
 --- !u!1 &95939180
 GameObject:
   m_ObjectHideFlags: 0
@@ -1606,8 +1635,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 330585543}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.29883623, y: -0.64085644, z: 0.29883623, w: 0.64085644}
-  m_LocalPosition: {x: 16, y: 21, z: 0}
+  m_LocalRotation: {x: 0.5591929, y: 0, z: 0, w: 0.8290376}
+  m_LocalPosition: {x: -0.2, y: 19, z: -7.5}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -3220,6 +3249,7 @@ GameObject:
   - component: {fileID: 608628696}
   - component: {fileID: 608628697}
   - component: {fileID: 608628698}
+  - component: {fileID: 608628699}
   m_Layer: 0
   m_Name: Chessboard
   m_TagString: Untagged
@@ -3405,6 +3435,34 @@ MonoBehaviour:
       - m_Target: {fileID: 608628694}
         m_TargetAssemblyTypeName: ChessTheBetrayal.UI.BoardVisuals, Assembly-CSharp
         m_MethodName: HandleMoveRejected
+        m_Mode: 0
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
+--- !u!114 &608628699
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 608628690}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 666a51446e251c84eb39c69bbdf5810d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Events.PromotionRequiredEventListener
+  _channel: {fileID: 11400000, guid: 79c9467366ac5eb44acb92c5c3c1253e, type: 2}
+  _onEventRaised:
+    m_PersistentCalls:
+      m_Calls:
+      - m_Target: {fileID: 608628694}
+        m_TargetAssemblyTypeName: ChessTheBetrayal.UI.BoardVisuals, Assembly-CSharp
+        m_MethodName: HandlePromotionOptimisticSnap
         m_Mode: 0
         m_Arguments:
           m_ObjectArgument: {fileID: 0}

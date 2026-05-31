@@ -81,8 +81,6 @@ namespace ChessTheBetrayal.Gameplay
         public event Action<Team> OnCheck;
         public event Action OnGameReset;
 
-        public event Action<Vector2Int, Vector2Int> OnPromotionRequested;
-
         /// <summary>
         /// Invoked by the clock system when a player's remaining time drops below the urgency threshold.
         /// Payload: (Team, RemainingMilliseconds)
@@ -192,8 +190,7 @@ namespace ChessTheBetrayal.Gameplay
 
         private void OnExecutorPromotionRequired(Vector2Int from, Vector2Int to)
         {
-            OnPromotionRequested?.Invoke(from, to);
-            UIManager.Instance?.ShowPromotionUI();
+            _promotionRequiredChannel?.Raise(new ChessTheBetrayal.Events.Payloads.PromotionRequiredPayload(from, to));
         }
 
         #endregion
