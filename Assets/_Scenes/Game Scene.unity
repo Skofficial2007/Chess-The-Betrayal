@@ -134,6 +134,7 @@ GameObject:
   - component: {fileID: 12944031}
   - component: {fileID: 12944032}
   - component: {fileID: 12944033}
+  - component: {fileID: 12944034}
   m_Layer: 5
   m_Name: Canvas
   m_TagString: Untagged
@@ -294,6 +295,34 @@ MonoBehaviour:
       - m_Target: {fileID: 12944031}
         m_TargetAssemblyTypeName: ChessTheBetrayal.UI.UIManager, Assembly-CSharp
         m_MethodName: HandleGameOver
+        m_Mode: 0
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
+--- !u!114 &12944034
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 12944026}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ce0ab7ed055e10f48bea487d45bcc25c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Events.GameModeConfiguredEventListener
+  _channel: {fileID: 11400000, guid: bc9d12738316f624e9a562b42b23223c, type: 2}
+  _onEventRaised:
+    m_PersistentCalls:
+      m_Calls:
+      - m_Target: {fileID: 12944031}
+        m_TargetAssemblyTypeName: ChessTheBetrayal.UI.UIManager, Assembly-CSharp
+        m_MethodName: ConfigureHUDForMode
         m_Mode: 0
         m_Arguments:
           m_ObjectArgument: {fileID: 0}

@@ -237,7 +237,7 @@ namespace ChessTheBetrayal.Gameplay
             // FIX: Boot into Starting phase. Clock remains paused until presentation layer signals ready.
             TransitionToPhase(TurnPhase.Starting);
 
-            UIManager.Instance?.ConfigureHUDForMode(_selectedMode);
+            _gameModeConfiguredChannel?.Raise(_selectedMode);
 
             // Write the live board reference to the shared bridge BEFORE raising the event.
             _sharedBoardState?.Set(LiveBoard);
@@ -277,7 +277,7 @@ namespace ChessTheBetrayal.Gameplay
 
             TransitionToPhase(TurnPhase.GameOver);
 
-            UIManager.Instance?.ConfigureHUDForMode(GameModeConfig.Unlimited);
+            _gameModeConfiguredChannel?.Raise(GameModeConfig.Unlimited);
 
             _sharedBoardState?.Clear();
             _gameResetChannel?.Raise();
