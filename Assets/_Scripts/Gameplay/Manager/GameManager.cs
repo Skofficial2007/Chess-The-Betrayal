@@ -6,6 +6,7 @@ using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Core.Logic;
 using ChessTheBetrayal.UI;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
+using ChessTheBetrayal.Core.Diagnostics;
 
 namespace ChessTheBetrayal.Gameplay
 {
@@ -98,6 +99,8 @@ namespace ChessTheBetrayal.Gameplay
         private ChessClock          _clock;
         private GameClockController _clockController;
 
+        private UnityDomainLogger _domainLogger;
+
         #endregion
 
         #region Unity Lifecycle
@@ -112,6 +115,17 @@ namespace ChessTheBetrayal.Gameplay
             Instance = this;
 
             LiveBoard = new BoardState(boardSizeX, boardSizeY);
+
+            // Construct and inject the domain logger before any engine method fires.
+            _domainLogger = new UnityDomainLogger(
+                verbose: logMoves,
+                onFatalError: evt =>
+                {
+                    // Reserved: Route fatal domain errors to a UI toast in a future sprint.
+                    // UIManager.Instance?.ShowDomainErrorToast(evt.Code.ToString());
+                });
+            
+            ChessEngine.Initialize(_domainLogger);
         }
 
         private void Start()
@@ -144,6 +158,16 @@ namespace ChessTheBetrayal.Gameplay
                 UIManager.Instance.OnPromotionSelected -= HandlePromotionChoice;
                 UIManager.Instance.OnGameModeSelected -= HandleGameModeReceived;
             }
+
+            // Reset the static engine logger to the safe default to prevent scene-reload issues.
+            ChessEngine.Initialize(NullDomainLogger.Instance);
+        }
+
+        private void Update()
+        {
+            // Drain any errors enqueued by the AI background thread onto the main thread.
+            // This is a no-op (empty queue check) during all non-AI phases.
+            _domainLogger?.FlushToUnityConsole();
         }
 
         // Named methods (rather than lambdas) so we can unsubscribe cleanly.
@@ -343,13 +367,31 @@ namespace ChessTheBetrayal.Gameplay
 
         /// <summary>
         /// Applies a validated move to the board and tells everyone who needs to know about it.
-        /// BoardVisuals will animate the move; then we check if the game is over.
+        /// Wraps execution in exception boundaries to safely catch domain invariant violations.
         /// </summary>
         private void PlayMove(MoveCommand move)
         {
             if (logMoves) Debug.Log($"[GameManager] Executing: {move}");
 
-            ChessEngine.ApplyMoveToBoard(LiveBoard, move);
+            try
+            {
+                ChessEngine.ApplyMoveToBoard(LiveBoard, move);
+            }
+            catch (BetrayalRuleViolationException ex)
+            {
+                // A Betrayal rule was violated — this is a bug at the call site.
+                // Log it, reject the move visually, and recover gracefully.
+                Debug.LogException(ex);
+                OnMoveRejected?.Invoke(move.StartPosition, move.EndPosition);
+                return;
+            }
+            catch (DomainException ex)
+            {
+                // Any other hard domain invariant violation.
+                Debug.LogException(ex);
+                return;
+            }
+            // Note: DO NOT catch (Exception) here. Genuine CLR crashes must surface.
 
             _clock?.OnMoveMade(move.PieceTeam);
 
