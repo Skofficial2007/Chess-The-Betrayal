@@ -29,18 +29,12 @@ namespace ChessTheBetrayal.UI
 
         private void Start()
         {
-            if (GameManager.Instance != null)
-            {
-                GameManager.Instance.OnLowTimeAlert += HandleLowTimeWarning;
-            }
+            // No direct GameManager subscriptions - all events come through the Inspector-wired channels
         }
 
         private void OnDestroy()
         {
-            if (GameManager.Instance != null)
-            {
-                GameManager.Instance.OnLowTimeAlert -= HandleLowTimeWarning;
-            }
+            // Cleanup if needed
         }
 
         public void SetActive(bool active)
@@ -59,10 +53,34 @@ namespace ChessTheBetrayal.UI
             }
         }
 
-        private void HandleLowTimeWarning(Team team, long remainingMs)
+        /// <summary>
+        /// Called when a player's clock time drops below the urgency threshold.
+        /// </summary>
+        public void HandleLowTimeWarning(ChessTheBetrayal.Events.Payloads.LowTimeAlertPayload payload)
         {
             // v1: The ClockDisplayWidget handles color changes internally based on state.
             // This event hook is reserved for future audio cues or HUD screen-shake polish.
+            // E.g., if (payload.AffectedTeam == PlayerTeam) { PlayUrgencySound(); }
+        }
+
+        /// <summary>
+        /// Called when the turn changes. Update turn indicators or any per-turn UI elements here.
+        /// </summary>
+        public void HandleTurnChanged(ChessTheBetrayal.Events.Payloads.TurnChangedPayload payload)
+        {
+            // Update your UI text or indicators here based on payload.CurrentTeam
+            // Example: turnIndicatorText.text = $"{payload.CurrentTeam}'s Turn";
+            Debug.Log($"[HUD] Turn changed to {payload.CurrentTeam}");
+        }
+
+        /// <summary>
+        /// Called when a check is detected. Trigger visual feedback like screen flash or animation.
+        /// </summary>
+        public void HandleCheckDetected()
+        {
+            // Trigger your check flash animation or particle effect here
+            // Example: _animator.SetTrigger("PlayCheckFlash");
+            Debug.Log("[HUD] CHECK detected! Flashing screen...");
         }
     }
 }

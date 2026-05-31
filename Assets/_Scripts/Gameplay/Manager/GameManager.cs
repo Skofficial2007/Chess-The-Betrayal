@@ -31,6 +31,23 @@ namespace ChessTheBetrayal.Gameplay
         [Header("Debug")]
         [SerializeField] private bool logMoves = true;
 
+        [Header("Shared State")]
+        [SerializeField] private ChessTheBetrayal.Events.SharedBoardStateSO _sharedBoardState;
+        [SerializeField] private ChessTheBetrayal.Events.SharedClockStateSO _sharedClockState;
+
+        [Header("Event Channels")]
+        [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _gameStartedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _gameResetChannel;
+        [SerializeField] private ChessTheBetrayal.Events.GameOverEventChannel _gameOverChannel;
+        [SerializeField] private ChessTheBetrayal.Events.TurnChangedEventChannel _turnChangedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.MoveExecutedEventChannel _moveExecutedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.MoveRejectedEventChannel _moveRejectedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.PromotionRequiredEventChannel _promotionRequiredChannel;
+        [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _checkDetectedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.LowTimeAlertEventChannel _lowTimeAlertChannel;
+        [SerializeField] private ChessTheBetrayal.Events.GameModeConfiguredEventChannel _gameModeConfiguredChannel;
+        [SerializeField] private ChessTheBetrayal.Events.BetrayalEventChannel _betrayalChannel;
+
         #endregion
 
         #region Public Properties
@@ -54,26 +71,6 @@ namespace ChessTheBetrayal.Gameplay
         /// True if a game is in progress. Used by UI and input scripts to know whether to respond to player actions.
         /// </summary>
         public bool IsGameActive => CurrentPhase != TurnPhase.GameOver;
-
-        #endregion
-
-        #region Events
-
-        // Other systems (BoardVisuals, BoardInputController, UIManager) subscribe to these.
-        public event Action<BoardState> OnGameStarted;
-        public event Action<MoveCommand> OnMoveExecuted;
-        public event Action OnTurnChanged;
-        public event Action<Team> OnCheck;
-        public event Action OnGameReset;
-
-        public event Action<Vector2Int, Vector2Int> OnMoveRejected;
-        public event Action<Vector2Int, Vector2Int> OnPromotionRequested;
-
-        /// <summary>
-        /// Invoked by the clock system when a player's remaining time drops below the urgency threshold.
-        /// Payload: (Team, RemainingMilliseconds)
-        /// </summary>
-        public event Action<Team, long> OnLowTimeAlert;
 
         #endregion
 
@@ -165,18 +162,20 @@ namespace ChessTheBetrayal.Gameplay
 
         private void Update()
         {
-            // Drain any errors enqueued by the AI background thread onto the main thread.
-            // This is a no-op (empty queue check) during all non-AI phases.
+            // NON-NEGOTIABLE: Logger flush must remain first.
             _domainLogger?.FlushToUnityConsole();
+            
+            // Write the latest clock state to the shared bridge every frame.
+            _sharedClockState?.Set(GetCurrentClockSnapshot());
         }
 
         // Named methods (rather than lambdas) so we can unsubscribe cleanly.
-        private void OnExecutorMoveRejected(Vector2Int from, Vector2Int to) => OnMoveRejected?.Invoke(from, to);
+        private void OnExecutorMoveRejected(Vector2Int from, Vector2Int to) => 
+            _moveRejectedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveRejectedPayload(from, to));
 
         private void OnExecutorPromotionRequired(Vector2Int from, Vector2Int to)
         {
-            OnPromotionRequested?.Invoke(from, to);
-            UIManager.Instance?.ShowPromotionUI();
+            _promotionRequiredChannel?.Raise(new ChessTheBetrayal.Events.Payloads.PromotionRequiredPayload(from, to));
         }
 
         #endregion
@@ -238,9 +237,11 @@ namespace ChessTheBetrayal.Gameplay
             // FIX: Boot into Starting phase. Clock remains paused until presentation layer signals ready.
             TransitionToPhase(TurnPhase.Starting);
 
-            UIManager.Instance?.ConfigureHUDForMode(_selectedMode);
+            _gameModeConfiguredChannel?.Raise(_selectedMode);
 
-            OnGameStarted?.Invoke(LiveBoard);
+            // Write the live board reference to the shared bridge BEFORE raising the event.
+            _sharedBoardState?.Set(LiveBoard);
+            _gameStartedChannel?.Raise();
 
             if (logMoves)
             {
@@ -276,9 +277,10 @@ namespace ChessTheBetrayal.Gameplay
 
             TransitionToPhase(TurnPhase.GameOver);
 
-            UIManager.Instance?.ConfigureHUDForMode(GameModeConfig.Unlimited);
+            _gameModeConfiguredChannel?.Raise(GameModeConfig.Unlimited);
 
-            OnGameReset?.Invoke();
+            _sharedBoardState?.Clear();
+            _gameResetChannel?.Raise();
 
             if (logMoves)
             {
@@ -356,7 +358,7 @@ namespace ChessTheBetrayal.Gameplay
             // Only accept moves during normal play.
             if (CurrentPhase != TurnPhase.Normal || LiveBoard.IsGameOver)
             {
-                OnMoveRejected?.Invoke(from, to);
+                _moveRejectedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveRejectedPayload(from, to));
                 return;
             }
 
@@ -382,7 +384,7 @@ namespace ChessTheBetrayal.Gameplay
                 // A Betrayal rule was violated — this is a bug at the call site.
                 // Log it, reject the move visually, and recover gracefully.
                 Debug.LogException(ex);
-                OnMoveRejected?.Invoke(move.StartPosition, move.EndPosition);
+                _moveRejectedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveRejectedPayload(move.StartPosition, move.EndPosition));
                 return;
             }
             catch (DomainException ex)
@@ -395,7 +397,15 @@ namespace ChessTheBetrayal.Gameplay
 
             _clock?.OnMoveMade(move.PieceTeam);
 
-            OnMoveExecuted?.Invoke(move);
+            // We need to calculate if this move resulted in a check so the UI can flash the HUD.
+            bool isCheck = ChessEngine.IsKingInCheck(LiveBoard, LiveBoard.CurrentTurn);
+            
+            // LiveBoard.MoveHistory.Count / 2 gives us the full turn number (e.g., Turn 1 is 1w and 1b)
+            _moveExecutedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveExecutedPayload(
+                move, 
+                LiveBoard.MoveHistory.Count / 2, 
+                isCheck
+            ));
 
             LiveBoard.NextTurn();
 
@@ -426,12 +436,20 @@ namespace ChessTheBetrayal.Gameplay
                     break;
 
                 case GameState.Check:
-                    OnCheck?.Invoke(currentTeam);
-                    OnTurnChanged?.Invoke();
+                    _checkDetectedChannel?.Raise();
+                    _turnChangedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.TurnChangedPayload(
+                        LiveBoard.CurrentTurn, 
+                        LiveBoard.MoveHistory.Count / 2, 
+                        ChessTheBetrayal.Events.Payloads.TurnSource.HumanLocal
+                    ));
                     break;
 
                 case GameState.Normal:
-                    OnTurnChanged?.Invoke();
+                    _turnChangedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.TurnChangedPayload(
+                        LiveBoard.CurrentTurn, 
+                        LiveBoard.MoveHistory.Count / 2, 
+                        ChessTheBetrayal.Events.Payloads.TurnSource.HumanLocal
+                    ));
                     break;
 
                 case GameState.Timeout:
@@ -454,7 +472,11 @@ namespace ChessTheBetrayal.Gameplay
             LiveBoard.Winner = winner;
 
             TransitionToPhase(TurnPhase.GameOver);
-            UIManager.Instance?.TriggerGameOver(winner, byTimeout);
+            
+            var reason = winner.HasValue ? ChessTheBetrayal.Events.Payloads.GameEndReason.Checkmate : ChessTheBetrayal.Events.Payloads.GameEndReason.Stalemate;
+            if (byTimeout) reason = ChessTheBetrayal.Events.Payloads.GameEndReason.Timeout;
+            
+            _gameOverChannel?.Raise(new ChessTheBetrayal.Events.Payloads.GameOverPayload(winner, reason, byTimeout));
 
             if (logMoves) 
             {
@@ -571,7 +593,7 @@ namespace ChessTheBetrayal.Gameplay
 
         public void OnLowTimeWarning(Team team, long remainingMs)
         {
-            OnLowTimeAlert?.Invoke(team, remainingMs);
+            _lowTimeAlertChannel?.Raise(new ChessTheBetrayal.Events.Payloads.LowTimeAlertPayload(team, remainingMs));
         }
 
         #endregion
