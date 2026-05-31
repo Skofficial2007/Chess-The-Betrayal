@@ -42,6 +42,9 @@ namespace ChessTheBetrayal.UI
         [SerializeField] private Transform whitePiecesParent;
         [SerializeField] private Transform blackPiecesParent;
 
+        [Header("Data Source")]
+        [SerializeField] private ChessTheBetrayal.Events.SharedBoardStateSO _sharedBoardState;
+
         #endregion
 
         #region Private Fields
@@ -101,26 +104,11 @@ namespace ChessTheBetrayal.UI
                 Debug.LogError("[BoardVisuals] GameManager.Instance is null!");
                 return;
             }
-
-            // Subscribe to GameManager events
-            GameManager.Instance.OnGameStarted += HandleGameStarted;
-            GameManager.Instance.OnMoveExecuted += AnimateMove;
-            GameManager.Instance.OnMoveRejected += HandleMoveRejected;
-            GameManager.Instance.OnPromotionRequested += HandlePromotionOptimisticSnap;
-            GameManager.Instance.OnGameReset += ClearAllVisuals;
         }
 
         private void OnDestroy()
         {
-            // Unsubscribe from events
-            if (GameManager.Instance != null)
-            {
-                GameManager.Instance.OnGameStarted -= HandleGameStarted;
-                GameManager.Instance.OnMoveExecuted -= AnimateMove;
-                GameManager.Instance.OnMoveRejected -= HandleMoveRejected;
-                GameManager.Instance.OnPromotionRequested -= HandlePromotionOptimisticSnap;
-                GameManager.Instance.OnGameReset -= ClearAllVisuals;
-            }
+            // Cleanup if needed
         }
 
         #endregion
@@ -130,8 +118,11 @@ namespace ChessTheBetrayal.UI
         /// <summary>
         /// Called when a new game starts. Sets up the board and spawns pieces.
         /// </summary>
-        private void HandleGameStarted(BoardState initialBoard)
+        public void HandleGameStarted()
         {
+            var initialBoard = _sharedBoardState?.Value;
+            if (initialBoard == null) return;
+
             ClearAllVisuals();
 
             tileCountX = initialBoard.TileCountX;
@@ -272,7 +263,7 @@ namespace ChessTheBetrayal.UI
         /// <summary>
         /// Destroys all piece GameObjects and resets all visual state.
         /// </summary>
-        private void ClearAllVisuals()
+        public void ClearAllVisuals()
         {
             _destroyQueue.Clear();
 
@@ -316,8 +307,11 @@ namespace ChessTheBetrayal.UI
         /// <summary>
         /// Reads a completed MoveCommand and triggers all the necessary animations — moving pieces, handling captures, castling, and promotion.
         /// </summary>
-        private void AnimateMove(MoveCommand move)
+        public void AnimateMove(ChessTheBetrayal.Events.Payloads.MoveExecutedPayload payload)
         {
+            // Extract the MoveCommand from the payload so the rest of the method works exactly as before.
+            MoveCommand move = payload.Move;
+
             // Safety check for invalid commands
             if (move.PieceType == ChessPieceType.None) return;
 
@@ -441,9 +435,10 @@ namespace ChessTheBetrayal.UI
         /// Called when a move is validated as illegal - snaps the piece back to its original position.
         /// This enables optimistic prediction for future networking.
         /// </summary>
-        private void HandleMoveRejected(Vector2Int from, Vector2Int to)
+        public void HandleMoveRejected(ChessTheBetrayal.Events.Payloads.MoveRejectedPayload payload)
         {
-            SnapPieceBack(from);
+            // Extract the original coordinate and snap it back
+            SnapPieceBack(payload.FromPosition);
         }
 
         /// <summary>
@@ -451,11 +446,11 @@ namespace ChessTheBetrayal.UI
         /// while the UI waits for the player's choice.
         /// Uses an O(1) dictionary lookup based on the piece's starting position.
         /// </summary>
-        private void HandlePromotionOptimisticSnap(Vector2Int from, Vector2Int to)
+        public void HandlePromotionOptimisticSnap(ChessTheBetrayal.Events.Payloads.PromotionRequiredPayload payload)
         {
-            if (_piecesByPosition.TryGetValue(from, out ChessPiece piece))
+            if (_piecesByPosition.TryGetValue(payload.FromPosition, out ChessPiece piece))
             {
-                Vector3 snapPos = GetTileCenter(to.x, to.y);
+                Vector3 snapPos = GetTileCenter(payload.ToPosition.x, payload.ToPosition.y);
                 snapPos.y += pieceYOffset;
                 piece.SetPosition(snapPos, force: true);
             }
