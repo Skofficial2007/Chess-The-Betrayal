@@ -19,6 +19,9 @@ namespace ChessTheBetrayal.UI
         [SerializeField] private MainMenuUI mainMenuUI;
         [SerializeField] private GameHUD gameHUD;
 
+        [Header("Event Channels")]
+        [SerializeField] private ChessTheBetrayal.Events.TeamSelectedEventChannel _teamSelectedChannel;
+
         // Events
         public event Action<GameModeConfig> OnGameModeSelected;
         public event Action OnTeamRollRequested;
@@ -409,6 +412,7 @@ namespace ChessTheBetrayal.UI
             }
 
             OnTeamSelected?.Invoke(_assignedTeam);
+            _teamSelectedChannel?.Raise(_assignedTeam);
             OnTeamAnimationComplete?.Invoke();
         }
 
