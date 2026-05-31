@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ChessTheBetrayal.Core.Diagnostics;
 
 namespace ChessTheBetrayal.Core.Data
 {
@@ -164,20 +165,24 @@ namespace ChessTheBetrayal.Core.Data
         /// <summary>
         /// DEBUG ONLY: Validates that the incremental hash matches a full recomputation.
         /// Call this after every move during testing to catch hash drift bugs immediately.
-        /// Throws an exception if the hashes don't match, indicating a Make/Unmake bug.
+        /// Throws a DomainException if the hashes don't match, indicating a Make/Unmake bug.
         /// </summary>
         public void AssertZobristConsistency()
         {
             ulong savedHash = ZobristHash;
             ComputeFullZobristHash();
             ulong recomputedHash = ZobristHash;
-            ZobristHash = savedHash; // RESTORE — non-negotiable
+            
+            // RESTORE — non-negotiable invariant. The hash must be perfectly reverted
+            // after the assertion check to prevent silent transposition table corruption.
+            ZobristHash = savedHash;
 
             if (savedHash != recomputedHash)
             {
-                throw new System.InvalidOperationException(
-                    $"Zobrist hash desync detected! Incremental: 0x{savedHash:X16}, Recomputed: 0x{recomputedHash:X16}. " +
-                    "This indicates a bug in ApplyMoveToBoard or UndoMoveOnBoard.");
+                throw new DomainException(
+                    DomainEventCode.Board_ZobristDesync,
+                    $"Incremental=0x{savedHash:X16} Full=0x{recomputedHash:X16}. " +
+                    "A Make/Unmake operation failed to XOR the correct hash key.");
             }
         }
 
