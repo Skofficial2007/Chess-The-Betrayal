@@ -41,13 +41,13 @@ namespace ChessTheBetrayal.UI
         {
             if (winnerText == null) return;
 
-            string prefix = byTimeout ? "Time Out — " : string.Empty;
+            string prefix = byTimeout ? "Time Out!\n" : string.Empty;
 
             winnerText.text = winnerTeam switch
             {
                 Team.White => $"{prefix}White Team Won!",
                 Team.Black => $"{prefix}Black Team Won!",
-                _          => byTimeout ? "Time Out — Draw (Insufficient Material)" : "Stalemate! Draw."
+                _          => byTimeout ? "Time Out!\nDraw (Insufficient Material)" : "Stalemate! Draw."
             };
         }
     }
