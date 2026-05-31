@@ -317,6 +317,15 @@ namespace ChessTheBetrayal.UI
             }
         }
 
+        /// <summary>
+        /// Called when the game ends via the event bus. Unpacks the payload and triggers the game over UI.
+        /// </summary>
+        public void HandleGameOver(ChessTheBetrayal.Events.Payloads.GameOverPayload payload)
+        {
+            // Unpack the struct and pass it to your existing method
+            TriggerGameOver(payload.WinningTeam, payload.IsTimeout);
+        }
+
         public void ConfigureHUDForMode(GameModeConfig config)
         {
             gameHUD?.ConfigureForMode(config);

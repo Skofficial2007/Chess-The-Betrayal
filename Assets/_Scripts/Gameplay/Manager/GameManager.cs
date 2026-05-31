@@ -472,7 +472,11 @@ namespace ChessTheBetrayal.Gameplay
             LiveBoard.Winner = winner;
 
             TransitionToPhase(TurnPhase.GameOver);
-            UIManager.Instance?.TriggerGameOver(winner, byTimeout);
+            
+            var reason = winner.HasValue ? ChessTheBetrayal.Events.Payloads.GameEndReason.Checkmate : ChessTheBetrayal.Events.Payloads.GameEndReason.Stalemate;
+            if (byTimeout) reason = ChessTheBetrayal.Events.Payloads.GameEndReason.Timeout;
+            
+            _gameOverChannel?.Raise(new ChessTheBetrayal.Events.Payloads.GameOverPayload(winner, reason, byTimeout));
 
             if (logMoves) 
             {
