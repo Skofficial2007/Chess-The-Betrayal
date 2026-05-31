@@ -106,7 +106,6 @@ namespace ChessTheBetrayal.UI
             }
 
             // Subscribe to GameManager events
-            GameManager.Instance.OnPromotionRequested += HandlePromotionOptimisticSnap;
             GameManager.Instance.OnGameReset += ClearAllVisuals;
         }
 
@@ -115,7 +114,6 @@ namespace ChessTheBetrayal.UI
             // Unsubscribe from events
             if (GameManager.Instance != null)
             {
-                GameManager.Instance.OnPromotionRequested -= HandlePromotionOptimisticSnap;
                 GameManager.Instance.OnGameReset -= ClearAllVisuals;
             }
         }
@@ -455,11 +453,11 @@ namespace ChessTheBetrayal.UI
         /// while the UI waits for the player's choice.
         /// Uses an O(1) dictionary lookup based on the piece's starting position.
         /// </summary>
-        private void HandlePromotionOptimisticSnap(Vector2Int from, Vector2Int to)
+        public void HandlePromotionOptimisticSnap(ChessTheBetrayal.Events.Payloads.PromotionRequiredPayload payload)
         {
-            if (_piecesByPosition.TryGetValue(from, out ChessPiece piece))
+            if (_piecesByPosition.TryGetValue(payload.FromPosition, out ChessPiece piece))
             {
-                Vector3 snapPos = GetTileCenter(to.x, to.y);
+                Vector3 snapPos = GetTileCenter(payload.ToPosition.x, payload.ToPosition.y);
                 snapPos.y += pieceYOffset;
                 piece.SetPosition(snapPos, force: true);
             }
