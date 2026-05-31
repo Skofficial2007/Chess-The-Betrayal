@@ -81,7 +81,6 @@ namespace ChessTheBetrayal.Gameplay
         public event Action<Team> OnCheck;
         public event Action OnGameReset;
 
-        public event Action<Vector2Int, Vector2Int> OnMoveRejected;
         public event Action<Vector2Int, Vector2Int> OnPromotionRequested;
 
         /// <summary>
@@ -188,7 +187,8 @@ namespace ChessTheBetrayal.Gameplay
         }
 
         // Named methods (rather than lambdas) so we can unsubscribe cleanly.
-        private void OnExecutorMoveRejected(Vector2Int from, Vector2Int to) => OnMoveRejected?.Invoke(from, to);
+        private void OnExecutorMoveRejected(Vector2Int from, Vector2Int to) => 
+            _moveRejectedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveRejectedPayload(from, to));
 
         private void OnExecutorPromotionRequired(Vector2Int from, Vector2Int to)
         {
@@ -376,7 +376,7 @@ namespace ChessTheBetrayal.Gameplay
             // Only accept moves during normal play.
             if (CurrentPhase != TurnPhase.Normal || LiveBoard.IsGameOver)
             {
-                OnMoveRejected?.Invoke(from, to);
+                _moveRejectedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveRejectedPayload(from, to));
                 return;
             }
 
@@ -402,7 +402,7 @@ namespace ChessTheBetrayal.Gameplay
                 // A Betrayal rule was violated — this is a bug at the call site.
                 // Log it, reject the move visually, and recover gracefully.
                 Debug.LogException(ex);
-                OnMoveRejected?.Invoke(move.StartPosition, move.EndPosition);
+                _moveRejectedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveRejectedPayload(move.StartPosition, move.EndPosition));
                 return;
             }
             catch (DomainException ex)
