@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Movement;
 using System.Runtime.CompilerServices;
+using ChessTheBetrayal.Core.Diagnostics;
 using MoveCommand = ChessTheBetrayal.Core.Engine.MoveCommand;
 
 [assembly: InternalsVisibleTo("ChessTheBetrayal.Tests.EditMode")]
@@ -14,6 +15,18 @@ namespace ChessTheBetrayal.Core.Engine
     /// </summary>
     public static class ChessEngine
     {
+        // Safe default: NullDomainLogger silently discards events, preserving testability.
+        private static IDomainLogger _logger = NullDomainLogger.Instance;
+
+        /// <summary>
+        /// Binds the engine to a presentation-layer logger.
+        /// Must be called by the game manager at startup.
+        /// </summary>
+        public static void Initialize(IDomainLogger logger)
+        {
+            _logger = logger ?? NullDomainLogger.Instance;
+        }
+
         /// <summary>
         /// The theoretical maximum number of legal moves available to a single player in any valid chess position.
         /// </summary>
@@ -467,7 +480,9 @@ namespace ChessTheBetrayal.Core.Engine
                 }
                 else
                 {
-                    UnityEngine.Debug.LogError($"[ChessEngine] Promotion failed: No piece found at {move.EndPosition}");
+                    _logger.LogError(new DomainLogEvent(
+                        DomainEventCode.Engine_PromotionPieceNotFound,
+                        auxInt: move.EndPosition.y * board.TileCountX + move.EndPosition.x));
                 }
             }
 

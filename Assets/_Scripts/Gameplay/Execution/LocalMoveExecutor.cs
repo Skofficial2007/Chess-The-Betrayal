@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
+using ChessTheBetrayal.Core.Diagnostics;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
 namespace ChessTheBetrayal.Gameplay
@@ -67,7 +68,22 @@ namespace ChessTheBetrayal.Gameplay
             }
 
             _legalMoves.Clear();
-            ChessEngine.GetLegalMoves(_board, from, _legalMoves);
+            try
+            {
+                ChessEngine.GetLegalMoves(_board, from, _legalMoves);
+            }
+            catch (BetrayalRuleViolationException ex)
+            {
+                if (_logMoves) Debug.LogException(ex);
+                OnMoveRejected?.Invoke(from, to);
+                return;
+            }
+            catch (DomainException ex)
+            {
+                if (_logMoves) Debug.LogException(ex);
+                OnMoveRejected?.Invoke(from, to);
+                return;
+            }
 
             _movesToTarget.Clear();
             for (int i = 0; i < _legalMoves.Count; i++)
@@ -138,7 +154,22 @@ namespace ChessTheBetrayal.Gameplay
 
             // Re-validate to prevent memory injection / desyncs
             _legalMoves.Clear();
-            ChessEngine.GetLegalMoves(_board, _pendingPromotionMove.StartPosition, _legalMoves);
+            try
+            {
+                ChessEngine.GetLegalMoves(_board, _pendingPromotionMove.StartPosition, _legalMoves);
+            }
+            catch (BetrayalRuleViolationException ex)
+            {
+                if (_logMoves) Debug.LogException(ex);
+                OnMoveRejected?.Invoke(_pendingPromotionMove.StartPosition, _pendingPromotionMove.EndPosition);
+                return;
+            }
+            catch (DomainException ex)
+            {
+                if (_logMoves) Debug.LogException(ex);
+                OnMoveRejected?.Invoke(_pendingPromotionMove.StartPosition, _pendingPromotionMove.EndPosition);
+                return;
+            }
 
             bool found = false;
             for (int i = 0; i < _legalMoves.Count; i++)
