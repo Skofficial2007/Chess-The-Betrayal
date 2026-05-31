@@ -29,18 +29,12 @@ namespace ChessTheBetrayal.UI
 
         private void Start()
         {
-            if (GameManager.Instance != null)
-            {
-                GameManager.Instance.OnLowTimeAlert += HandleLowTimeWarning;
-            }
+            // No direct GameManager subscriptions - all events come through the Inspector-wired channels
         }
 
         private void OnDestroy()
         {
-            if (GameManager.Instance != null)
-            {
-                GameManager.Instance.OnLowTimeAlert -= HandleLowTimeWarning;
-            }
+            // Cleanup if needed
         }
 
         public void SetActive(bool active)
@@ -59,10 +53,14 @@ namespace ChessTheBetrayal.UI
             }
         }
 
-        private void HandleLowTimeWarning(Team team, long remainingMs)
+        /// <summary>
+        /// Called when a player's clock time drops below the urgency threshold.
+        /// </summary>
+        public void HandleLowTimeWarning(ChessTheBetrayal.Events.Payloads.LowTimeAlertPayload payload)
         {
             // v1: The ClockDisplayWidget handles color changes internally based on state.
             // This event hook is reserved for future audio cues or HUD screen-shake polish.
+            // E.g., if (payload.AffectedTeam == PlayerTeam) { PlayUrgencySound(); }
         }
 
         /// <summary>

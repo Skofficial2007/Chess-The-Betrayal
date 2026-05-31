@@ -74,18 +74,6 @@ namespace ChessTheBetrayal.Gameplay
 
         #endregion
 
-        #region Events
-
-        // Other systems (BoardVisuals, BoardInputController, UIManager) subscribe to these.
-
-        /// <summary>
-        /// Invoked by the clock system when a player's remaining time drops below the urgency threshold.
-        /// Payload: (Team, RemainingMilliseconds)
-        /// </summary>
-        public event Action<Team, long> OnLowTimeAlert;
-
-        #endregion
-
         #region Private Fields
 
         // Handles move validation. Swap this out for NetworkMoveExecutor to go online.
@@ -601,7 +589,7 @@ namespace ChessTheBetrayal.Gameplay
 
         public void OnLowTimeWarning(Team team, long remainingMs)
         {
-            OnLowTimeAlert?.Invoke(team, remainingMs);
+            _lowTimeAlertChannel?.Raise(new ChessTheBetrayal.Events.Payloads.LowTimeAlertPayload(team, remainingMs));
         }
 
         #endregion
