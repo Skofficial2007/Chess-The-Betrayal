@@ -1606,8 +1606,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 330585543}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0.8290376, z: -0.5591929, w: 0}
-  m_LocalPosition: {x: 0.2, y: 19, z: 7.5}
+  m_LocalRotation: {x: 0.29883623, y: -0.64085644, z: 0.29883623, w: 0.64085644}
+  m_LocalPosition: {x: 16, y: 21, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -3217,6 +3217,7 @@ GameObject:
   - component: {fileID: 608628693}
   - component: {fileID: 608628695}
   - component: {fileID: 608628694}
+  - component: {fileID: 608628696}
   m_Layer: 0
   m_Name: Chessboard
   m_TagString: Untagged
@@ -3308,6 +3309,7 @@ MonoBehaviour:
   tilesParent: {fileID: 608628692}
   whitePiecesParent: {fileID: 224791463}
   blackPiecesParent: {fileID: 1194650739}
+  _sharedBoardState: {fileID: 11400000, guid: cc4e3a68a6697c6428481427dfafe407, type: 2}
 --- !u!114 &608628695
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3326,6 +3328,34 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 448
   showDebugRays: 0
+--- !u!114 &608628696
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 608628690}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 395195732e2e6d541817b9afd977ddac, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Events.GameEventListener
+  _channel: {fileID: 11400000, guid: 9c2753d30b1a82a4c8811ae2dc13fed6, type: 2}
+  _onEventRaised:
+    m_PersistentCalls:
+      m_Calls:
+      - m_Target: {fileID: 608628694}
+        m_TargetAssemblyTypeName: ChessTheBetrayal.UI.BoardVisuals, Assembly-CSharp
+        m_MethodName: HandleGameStarted
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
 --- !u!1 &608773226
 GameObject:
   m_ObjectHideFlags: 0
