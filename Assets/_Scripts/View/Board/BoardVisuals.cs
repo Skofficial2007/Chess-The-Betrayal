@@ -106,7 +106,6 @@ namespace ChessTheBetrayal.UI
             }
 
             // Subscribe to GameManager events
-            GameManager.Instance.OnMoveRejected += HandleMoveRejected;
             GameManager.Instance.OnPromotionRequested += HandlePromotionOptimisticSnap;
             GameManager.Instance.OnGameReset += ClearAllVisuals;
         }
@@ -116,7 +115,6 @@ namespace ChessTheBetrayal.UI
             // Unsubscribe from events
             if (GameManager.Instance != null)
             {
-                GameManager.Instance.OnMoveRejected -= HandleMoveRejected;
                 GameManager.Instance.OnPromotionRequested -= HandlePromotionOptimisticSnap;
                 GameManager.Instance.OnGameReset -= ClearAllVisuals;
             }
@@ -446,9 +444,10 @@ namespace ChessTheBetrayal.UI
         /// Called when a move is validated as illegal - snaps the piece back to its original position.
         /// This enables optimistic prediction for future networking.
         /// </summary>
-        private void HandleMoveRejected(Vector2Int from, Vector2Int to)
+        public void HandleMoveRejected(ChessTheBetrayal.Events.Payloads.MoveRejectedPayload payload)
         {
-            SnapPieceBack(from);
+            // Extract the original coordinate and snap it back
+            SnapPieceBack(payload.FromPosition);
         }
 
         /// <summary>
