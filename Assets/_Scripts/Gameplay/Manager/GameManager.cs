@@ -77,8 +77,6 @@ namespace ChessTheBetrayal.Gameplay
         #region Events
 
         // Other systems (BoardVisuals, BoardInputController, UIManager) subscribe to these.
-        public event Action OnTurnChanged;
-        public event Action<Team> OnCheck;
         public event Action OnGameReset;
 
         /// <summary>
@@ -451,12 +449,20 @@ namespace ChessTheBetrayal.Gameplay
                     break;
 
                 case GameState.Check:
-                    OnCheck?.Invoke(currentTeam);
-                    OnTurnChanged?.Invoke();
+                    _checkDetectedChannel?.Raise();
+                    _turnChangedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.TurnChangedPayload(
+                        LiveBoard.CurrentTurn, 
+                        LiveBoard.MoveHistory.Count / 2, 
+                        ChessTheBetrayal.Events.Payloads.TurnSource.HumanLocal
+                    ));
                     break;
 
                 case GameState.Normal:
-                    OnTurnChanged?.Invoke();
+                    _turnChangedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.TurnChangedPayload(
+                        LiveBoard.CurrentTurn, 
+                        LiveBoard.MoveHistory.Count / 2, 
+                        ChessTheBetrayal.Events.Payloads.TurnSource.HumanLocal
+                    ));
                     break;
 
                 case GameState.Timeout:

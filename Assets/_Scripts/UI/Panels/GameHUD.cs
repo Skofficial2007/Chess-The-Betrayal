@@ -64,5 +64,25 @@ namespace ChessTheBetrayal.UI
             // v1: The ClockDisplayWidget handles color changes internally based on state.
             // This event hook is reserved for future audio cues or HUD screen-shake polish.
         }
+
+        /// <summary>
+        /// Called when the turn changes. Update turn indicators or any per-turn UI elements here.
+        /// </summary>
+        public void HandleTurnChanged(ChessTheBetrayal.Events.Payloads.TurnChangedPayload payload)
+        {
+            // Update your UI text or indicators here based on payload.CurrentTeam
+            // Example: turnIndicatorText.text = $"{payload.CurrentTeam}'s Turn";
+            Debug.Log($"[HUD] Turn changed to {payload.CurrentTeam}");
+        }
+
+        /// <summary>
+        /// Called when a check is detected. Trigger visual feedback like screen flash or animation.
+        /// </summary>
+        public void HandleCheckDetected()
+        {
+            // Trigger your check flash animation or particle effect here
+            // Example: _animator.SetTrigger("PlayCheckFlash");
+            Debug.Log("[HUD] CHECK detected! Flashing screen...");
+        }
     }
 }
