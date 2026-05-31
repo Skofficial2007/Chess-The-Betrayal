@@ -42,6 +42,9 @@ namespace ChessTheBetrayal.UI
         [SerializeField] private Transform whitePiecesParent;
         [SerializeField] private Transform blackPiecesParent;
 
+        [Header("Data Source")]
+        [SerializeField] private ChessTheBetrayal.Events.SharedBoardStateSO _sharedBoardState;
+
         #endregion
 
         #region Private Fields
@@ -103,7 +106,6 @@ namespace ChessTheBetrayal.UI
             }
 
             // Subscribe to GameManager events
-            GameManager.Instance.OnGameStarted += HandleGameStarted;
             GameManager.Instance.OnMoveExecuted += AnimateMove;
             GameManager.Instance.OnMoveRejected += HandleMoveRejected;
             GameManager.Instance.OnPromotionRequested += HandlePromotionOptimisticSnap;
@@ -115,7 +117,6 @@ namespace ChessTheBetrayal.UI
             // Unsubscribe from events
             if (GameManager.Instance != null)
             {
-                GameManager.Instance.OnGameStarted -= HandleGameStarted;
                 GameManager.Instance.OnMoveExecuted -= AnimateMove;
                 GameManager.Instance.OnMoveRejected -= HandleMoveRejected;
                 GameManager.Instance.OnPromotionRequested -= HandlePromotionOptimisticSnap;
@@ -130,8 +131,11 @@ namespace ChessTheBetrayal.UI
         /// <summary>
         /// Called when a new game starts. Sets up the board and spawns pieces.
         /// </summary>
-        private void HandleGameStarted(BoardState initialBoard)
+        public void HandleGameStarted()
         {
+            var initialBoard = _sharedBoardState?.Value;
+            if (initialBoard == null) return;
+
             ClearAllVisuals();
 
             tileCountX = initialBoard.TileCountX;

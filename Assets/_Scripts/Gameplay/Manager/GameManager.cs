@@ -77,7 +77,6 @@ namespace ChessTheBetrayal.Gameplay
         #region Events
 
         // Other systems (BoardVisuals, BoardInputController, UIManager) subscribe to these.
-        public event Action<BoardState> OnGameStarted;
         public event Action<MoveCommand> OnMoveExecuted;
         public event Action OnTurnChanged;
         public event Action<Team> OnCheck;
@@ -259,8 +258,9 @@ namespace ChessTheBetrayal.Gameplay
 
             UIManager.Instance?.ConfigureHUDForMode(_selectedMode);
 
+            // Write the live board reference to the shared bridge BEFORE raising the event.
             _sharedBoardState?.Set(LiveBoard);
-            OnGameStarted?.Invoke(LiveBoard);
+            _gameStartedChannel?.Raise();
 
             if (logMoves)
             {
