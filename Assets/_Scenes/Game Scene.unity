@@ -1606,8 +1606,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 330585543}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.5591929, y: 0, z: 0, w: 0.8290376}
-  m_LocalPosition: {x: -0.2, y: 19, z: -7.5}
+  m_LocalRotation: {x: 0.29883623, y: -0.64085644, z: 0.29883623, w: 0.64085644}
+  m_LocalPosition: {x: 16, y: 21, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -3258,6 +3258,8 @@ MonoBehaviour:
   boardSizeX: 8
   boardSizeY: 8
   logMoves: 1
+  _sharedBoardState: {fileID: 11400000, guid: cc4e3a68a6697c6428481427dfafe407, type: 2}
+  _sharedClockState: {fileID: 11400000, guid: e7401b2d5b71cdc43960c7148a7091c3, type: 2}
 --- !u!114 &608628694
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3348,6 +3350,7 @@ MonoBehaviour:
   _normalColor: {r: 0.3137255, g: 0.3137255, b: 0.3137255, a: 1}
   _lowTimeColor: {r: 1, g: 0.23137255, b: 0.23137255, a: 1}
   _lowTimeFlashThresholdMs: 10000
+  _sharedClockState: {fileID: 11400000, guid: e7401b2d5b71cdc43960c7148a7091c3, type: 2}
 --- !u!224 &608773228
 RectTransform:
   m_ObjectHideFlags: 0

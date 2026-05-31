@@ -31,6 +31,10 @@ namespace ChessTheBetrayal.Gameplay
         [Header("Debug")]
         [SerializeField] private bool logMoves = true;
 
+        [Header("Shared State")]
+        [SerializeField] private ChessTheBetrayal.Events.SharedBoardStateSO _sharedBoardState;
+        [SerializeField] private ChessTheBetrayal.Events.SharedClockStateSO _sharedClockState;
+
         #endregion
 
         #region Public Properties
@@ -165,9 +169,11 @@ namespace ChessTheBetrayal.Gameplay
 
         private void Update()
         {
-            // Drain any errors enqueued by the AI background thread onto the main thread.
-            // This is a no-op (empty queue check) during all non-AI phases.
+            // NON-NEGOTIABLE: Logger flush must remain first.
             _domainLogger?.FlushToUnityConsole();
+            
+            // Write the latest clock state to the shared bridge every frame.
+            _sharedClockState?.Set(GetCurrentClockSnapshot());
         }
 
         // Named methods (rather than lambdas) so we can unsubscribe cleanly.
@@ -240,6 +246,7 @@ namespace ChessTheBetrayal.Gameplay
 
             UIManager.Instance?.ConfigureHUDForMode(_selectedMode);
 
+            _sharedBoardState?.Set(LiveBoard);
             OnGameStarted?.Invoke(LiveBoard);
 
             if (logMoves)
@@ -278,6 +285,7 @@ namespace ChessTheBetrayal.Gameplay
 
             UIManager.Instance?.ConfigureHUDForMode(GameModeConfig.Unlimited);
 
+            _sharedBoardState?.Clear();
             OnGameReset?.Invoke();
 
             if (logMoves)

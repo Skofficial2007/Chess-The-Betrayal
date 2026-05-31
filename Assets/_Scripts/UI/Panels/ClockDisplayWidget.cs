@@ -3,7 +3,6 @@ using UnityEngine;
 using TMPro;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Logic;
-using ChessTheBetrayal.Gameplay;
 
 namespace ChessTheBetrayal.UI
 {
@@ -23,6 +22,9 @@ namespace ChessTheBetrayal.UI
         [SerializeField] private Color _lowTimeColor = Color.red;
         [SerializeField] private long _lowTimeFlashThresholdMs = 10_000L;
 
+        [Header("Data Source")]
+        [SerializeField] private ChessTheBetrayal.Events.SharedClockStateSO _sharedClockState;
+
         // Pre-allocated buffer to prevent string instantiation during per-frame UI updates.
         private readonly StringBuilder _sb = new StringBuilder(8);
 
@@ -32,7 +34,8 @@ namespace ChessTheBetrayal.UI
 
         private void Update()
         {
-            ClockState? snapshot = GameManager.Instance?.GetCurrentClockSnapshot();
+            // Read directly from the shared data bridge
+            ClockState? snapshot = _sharedClockState?.Value;
             if (!snapshot.HasValue)
             {
                 return;
