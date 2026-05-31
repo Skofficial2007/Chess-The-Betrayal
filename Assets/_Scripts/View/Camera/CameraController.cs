@@ -22,33 +22,21 @@ namespace ChessTheBetrayal.UI.Camera
         [Tooltip("How long the game waits for the camera to pan before starting the clock.")]
         [SerializeField] private float introBlendTime = 2f;
 
+        [Header("Event Channels")]
+        [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _matchStartRequestedChannel;
+
         private void Start()
         {
-            if (UIManager.Instance == null)
-            {
-                Debug.LogError("[CameraController] UIManager is missing!");
-                return;
-            }
-
-            // Subscribe to the existing UI events you already built
-            UIManager.Instance.OnTeamSelected += HandleTeamSelected;
-            UIManager.Instance.OnGameReset += HandleGameReset;
-
             // Set initial state to the Menu profile shot
             ActivateCamera(menuCam);
         }
 
         private void OnDestroy()
         {
-            // Unsubscribe to prevent memory leaks
-            if (UIManager.Instance != null)
-            {
-                UIManager.Instance.OnTeamSelected -= HandleTeamSelected;
-                UIManager.Instance.OnGameReset -= HandleGameReset;
-            }
+            // Cleanup if needed
         }
 
-        private void HandleTeamSelected(Team selectedTeam)
+        public void HandleTeamSelected(Team selectedTeam)
         {
             if (selectedTeam == Team.White)
             {
@@ -67,13 +55,10 @@ namespace ChessTheBetrayal.UI.Camera
         {
             yield return new WaitForSeconds(introBlendTime);
             
-            if (GameManager.Instance != null)
-            {
-                GameManager.Instance.StartMatch();
-            }
+            _matchStartRequestedChannel?.Raise();
         }
 
-        private void HandleGameReset()
+        public void HandleGameReset()
         {
             // Return to the cinematic side view when exiting to menu
             ActivateCamera(menuCam);

@@ -248,6 +248,7 @@ MonoBehaviour:
   gameOverUI: {fileID: 401340255}
   mainMenuUI: {fileID: 1103511511}
   gameHUD: {fileID: 360390062}
+  _teamSelectedChannel: {fileID: 11400000, guid: acd4e37e1a191d14e8870caeaaf0757b, type: 2}
 --- !u!114 &12944032
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3396,6 +3397,7 @@ GameObject:
   - component: {fileID: 608628698}
   - component: {fileID: 608628699}
   - component: {fileID: 608628700}
+  - component: {fileID: 608628701}
   m_Layer: 0
   m_Name: Chessboard
   m_TagString: Untagged
@@ -3637,6 +3639,34 @@ MonoBehaviour:
       - m_Target: {fileID: 608628694}
         m_TargetAssemblyTypeName: ChessTheBetrayal.UI.BoardVisuals, Assembly-CSharp
         m_MethodName: ClearAllVisuals
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
+--- !u!114 &608628701
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 608628690}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 395195732e2e6d541817b9afd977ddac, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Events.GameEventListener
+  _channel: {fileID: 11400000, guid: fa430ed6fc8fccc4ea1ccc5638a81929, type: 2}
+  _onEventRaised:
+    m_PersistentCalls:
+      m_Calls:
+      - m_Target: {fileID: 608628693}
+        m_TargetAssemblyTypeName: ChessTheBetrayal.Gameplay.GameManager, Assembly-CSharp
+        m_MethodName: StartMatch
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -5346,6 +5376,8 @@ GameObject:
   m_Component:
   - component: {fileID: 931333779}
   - component: {fileID: 931333778}
+  - component: {fileID: 931333780}
+  - component: {fileID: 931333781}
   m_Layer: 0
   m_Name: CameraController
   m_TagString: Untagged
@@ -5369,6 +5401,7 @@ MonoBehaviour:
   whiteTeamCam: {fileID: 431398000}
   blackTeamCam: {fileID: 176898962}
   introBlendTime: 2
+  _matchStartRequestedChannel: {fileID: 11400000, guid: fa430ed6fc8fccc4ea1ccc5638a81929, type: 2}
 --- !u!4 &931333779
 Transform:
   m_ObjectHideFlags: 0
@@ -5387,6 +5420,62 @@ Transform:
   - {fileID: 176898963}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &931333780
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 931333777}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2fe37f747fd85c841aecfb10bedfbae6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Events.TeamSelectedEventListener
+  _channel: {fileID: 11400000, guid: acd4e37e1a191d14e8870caeaaf0757b, type: 2}
+  _onEventRaised:
+    m_PersistentCalls:
+      m_Calls:
+      - m_Target: {fileID: 931333778}
+        m_TargetAssemblyTypeName: ChessTheBetrayal.UI.Camera.CameraController, Assembly-CSharp
+        m_MethodName: HandleTeamSelected
+        m_Mode: 0
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
+--- !u!114 &931333781
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 931333777}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 395195732e2e6d541817b9afd977ddac, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Events.GameEventListener
+  _channel: {fileID: 11400000, guid: ed78152f3286a5242ae689ab254de072, type: 2}
+  _onEventRaised:
+    m_PersistentCalls:
+      m_Calls:
+      - m_Target: {fileID: 931333778}
+        m_TargetAssemblyTypeName: ChessTheBetrayal.UI.Camera.CameraController, Assembly-CSharp
+        m_MethodName: HandleGameReset
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
 --- !u!1 &975597800
 GameObject:
   m_ObjectHideFlags: 0
