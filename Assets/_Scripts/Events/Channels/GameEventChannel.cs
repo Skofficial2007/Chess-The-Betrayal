@@ -49,7 +49,7 @@ namespace ChessTheBetrayal.Events
             string entry = $"{System.DateTime.Now:HH:mm:ss.fff} | Listeners: {_listeners.Count}";
             if (_debugLog.Count >= 8) _debugLog.RemoveAt(0);
             _debugLog.Add(entry);
-            Debug.Log($"[EventChannel] {name} raised. {entry}", this);
+            UnityEngine.Debug.Log($"[EventChannel] {name} raised. {entry}", this);
         }
 
         public void ClearDebugLog() => _debugLog.Clear();
@@ -59,7 +59,7 @@ namespace ChessTheBetrayal.Events
         {
             if (!Application.isPlaying)
             {
-                Debug.LogWarning("[EventChannel] Cannot raise outside Play Mode.");
+                UnityEngine.Debug.LogWarning("[EventChannel] Cannot raise outside Play Mode.");
                 return;
             }
             Raise();
@@ -110,7 +110,7 @@ namespace ChessTheBetrayal.Events
             string entry = $"{System.DateTime.Now:HH:mm:ss.fff} | {payload} | Listeners: {_listeners.Count}";
             if (_debugLog.Count >= 8) _debugLog.RemoveAt(0);
             _debugLog.Add(entry);
-            Debug.Log($"[EventChannel<{typeof(T).Name}>] {name} raised. Payload: {payload}", this);
+            UnityEngine.Debug.Log($"[EventChannel<{typeof(T).Name}>] {name} raised. Payload: {payload}", this);
         }
 
         public void ClearDebugLog() => _debugLog.Clear();
