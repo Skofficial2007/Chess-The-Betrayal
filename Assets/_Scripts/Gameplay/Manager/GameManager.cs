@@ -35,6 +35,19 @@ namespace ChessTheBetrayal.Gameplay
         [SerializeField] private ChessTheBetrayal.Events.SharedBoardStateSO _sharedBoardState;
         [SerializeField] private ChessTheBetrayal.Events.SharedClockStateSO _sharedClockState;
 
+        [Header("Event Channels")]
+        [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _gameStartedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _gameResetChannel;
+        [SerializeField] private ChessTheBetrayal.Events.GameOverEventChannel _gameOverChannel;
+        [SerializeField] private ChessTheBetrayal.Events.TurnChangedEventChannel _turnChangedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.MoveExecutedEventChannel _moveExecutedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.MoveRejectedEventChannel _moveRejectedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.PromotionRequiredEventChannel _promotionRequiredChannel;
+        [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _checkDetectedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.LowTimeAlertEventChannel _lowTimeAlertChannel;
+        [SerializeField] private ChessTheBetrayal.Events.GameModeConfiguredEventChannel _gameModeConfiguredChannel;
+        [SerializeField] private ChessTheBetrayal.Events.BetrayalEventChannel _betrayalChannel;
+
         #endregion
 
         #region Public Properties
