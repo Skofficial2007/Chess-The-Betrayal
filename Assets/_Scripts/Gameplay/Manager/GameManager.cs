@@ -77,7 +77,6 @@ namespace ChessTheBetrayal.Gameplay
         #region Events
 
         // Other systems (BoardVisuals, BoardInputController, UIManager) subscribe to these.
-        public event Action<MoveCommand> OnMoveExecuted;
         public event Action OnTurnChanged;
         public event Action<Team> OnCheck;
         public event Action OnGameReset;
@@ -416,7 +415,15 @@ namespace ChessTheBetrayal.Gameplay
 
             _clock?.OnMoveMade(move.PieceTeam);
 
-            OnMoveExecuted?.Invoke(move);
+            // We need to calculate if this move resulted in a check so the UI can flash the HUD.
+            bool isCheck = ChessEngine.IsKingInCheck(LiveBoard, LiveBoard.CurrentTurn);
+            
+            // LiveBoard.MoveHistory.Count / 2 gives us the full turn number (e.g., Turn 1 is 1w and 1b)
+            _moveExecutedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveExecutedPayload(
+                move, 
+                LiveBoard.MoveHistory.Count / 2, 
+                isCheck
+            ));
 
             LiveBoard.NextTurn();
 

@@ -106,7 +106,6 @@ namespace ChessTheBetrayal.UI
             }
 
             // Subscribe to GameManager events
-            GameManager.Instance.OnMoveExecuted += AnimateMove;
             GameManager.Instance.OnMoveRejected += HandleMoveRejected;
             GameManager.Instance.OnPromotionRequested += HandlePromotionOptimisticSnap;
             GameManager.Instance.OnGameReset += ClearAllVisuals;
@@ -117,7 +116,6 @@ namespace ChessTheBetrayal.UI
             // Unsubscribe from events
             if (GameManager.Instance != null)
             {
-                GameManager.Instance.OnMoveExecuted -= AnimateMove;
                 GameManager.Instance.OnMoveRejected -= HandleMoveRejected;
                 GameManager.Instance.OnPromotionRequested -= HandlePromotionOptimisticSnap;
                 GameManager.Instance.OnGameReset -= ClearAllVisuals;
@@ -320,8 +318,11 @@ namespace ChessTheBetrayal.UI
         /// <summary>
         /// Reads a completed MoveCommand and triggers all the necessary animations — moving pieces, handling captures, castling, and promotion.
         /// </summary>
-        private void AnimateMove(MoveCommand move)
+        public void AnimateMove(ChessTheBetrayal.Events.Payloads.MoveExecutedPayload payload)
         {
+            // Extract the MoveCommand from the payload so the rest of the method works exactly as before.
+            MoveCommand move = payload.Move;
+
             // Safety check for invalid commands
             if (move.PieceType == ChessPieceType.None) return;
 
