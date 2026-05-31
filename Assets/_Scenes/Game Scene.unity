@@ -1728,6 +1728,8 @@ GameObject:
   m_Component:
   - component: {fileID: 360390061}
   - component: {fileID: 360390062}
+  - component: {fileID: 360390064}
+  - component: {fileID: 360390063}
   m_Layer: 5
   m_Name: HUD
   m_TagString: Untagged
@@ -1770,6 +1772,62 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ChessTheMasterPiece.UI.GameHUD
   exitButton: {fileID: 975597802}
   _clockWidget: {fileID: 608773227}
+--- !u!114 &360390063
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 360390060}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 395195732e2e6d541817b9afd977ddac, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Events.GameEventListener
+  _channel: {fileID: 11400000, guid: fc2667c976636e841acfedf81916cd80, type: 2}
+  _onEventRaised:
+    m_PersistentCalls:
+      m_Calls:
+      - m_Target: {fileID: 360390062}
+        m_TargetAssemblyTypeName: ChessTheBetrayal.UI.GameHUD, Assembly-CSharp
+        m_MethodName: HandleCheckDetected
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
+--- !u!114 &360390064
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 360390060}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0d5236a3dd418bb4a977d434bad8df4a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Events.TurnChangedEventListener
+  _channel: {fileID: 11400000, guid: 91d0a40adba451c4e9c42eff45a49b0e, type: 2}
+  _onEventRaised:
+    m_PersistentCalls:
+      m_Calls:
+      - m_Target: {fileID: 360390062}
+        m_TargetAssemblyTypeName: ChessTheBetrayal.UI.GameHUD, Assembly-CSharp
+        m_MethodName: HandleTurnChanged
+        m_Mode: 0
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
 --- !u!1 &368695943
 GameObject:
   m_ObjectHideFlags: 0
