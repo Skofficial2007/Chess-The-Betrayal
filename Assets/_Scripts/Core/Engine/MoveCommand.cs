@@ -3,6 +3,17 @@ using ChessTheBetrayal.Core.Data;
 namespace ChessTheBetrayal.Core.Engine
 {
     /// <summary>
+    /// Defines which phase of the Betrayal sequence a move command belongs to.
+    /// </summary>
+    public enum BetrayalStage
+    {
+        None,
+        Act,
+        Retribution,
+        DefensiveSave
+    }
+
+    /// <summary>
     /// A snapshot of one move — where a piece came from, where it went, what was captured, and any special move type.
     /// Because it's a readonly struct, it's safe to store and pass around without worrying about data being changed underneath you.
     /// </summary>
@@ -37,6 +48,9 @@ namespace ChessTheBetrayal.Core.Engine
         public readonly SpecialMove SpecialMoveType;
         public readonly ChessPieceType PromotedTo;
 
+        // Identifies whether this move constitutes a specific phase of the Betrayal Mechanic
+        public readonly BetrayalStage Stage;
+
         // Additional metadata for special moves
         public readonly Vector2Int? RookStartPosition;
         public readonly Vector2Int? RookEndPosition;
@@ -68,7 +82,8 @@ namespace ChessTheBetrayal.Core.Engine
             int previousCastlingMask = 0,
             int? previousEnPassantFile = null,
             long whiteRemainingMsAtMove = long.MaxValue,
-            long blackRemainingMsAtMove = long.MaxValue)
+            long blackRemainingMsAtMove = long.MaxValue,
+            BetrayalStage stage = BetrayalStage.None)
         {
             StartPosition = startPosition;
             EndPosition = endPosition;
@@ -112,6 +127,7 @@ namespace ChessTheBetrayal.Core.Engine
             PreviousEnPassantFile = previousEnPassantFile;
             WhiteRemainingMsAtMove = whiteRemainingMsAtMove;
             BlackRemainingMsAtMove = blackRemainingMsAtMove;
+            Stage = stage;
         }
 
         #region Factory Methods
@@ -158,7 +174,25 @@ namespace ChessTheBetrayal.Core.Engine
                 RookStartPosition, RookEndPosition, EnPassantCapturePosition,
                 PreviousCastlingMask, PreviousEnPassantFile,
                 clock.WhiteRemainingMs,
-                clock.BlackRemainingMs);
+                clock.BlackRemainingMs,
+                Stage);
+
+        /// <summary>
+        /// Returns a new MoveCommand with the specified BetrayalStage applied.
+        /// </summary>
+        public MoveCommand WithStage(BetrayalStage stage) =>
+            new MoveCommand(
+                StartPosition, EndPosition,
+                new PieceData(PieceTeam, PieceType, PieceMoveDirection, 0, PieceHadMoved),
+                HasCapture
+                    ? new PieceData(CapturedTeam, CapturedType, CapturedTeam == Team.White ? 1 : -1, 0, CapturedHadMoved)
+                    : default,
+                SpecialMoveType, PromotedTo,
+                RookStartPosition, RookEndPosition, EnPassantCapturePosition,
+                PreviousCastlingMask, PreviousEnPassantFile,
+                WhiteRemainingMsAtMove,
+                BlackRemainingMsAtMove,
+                stage);
 
         public bool IsCapture => HasCapture;
         public bool IsPromotion => PromotedTo != ChessPieceType.None;
@@ -178,6 +212,9 @@ namespace ChessTheBetrayal.Core.Engine
 
             if (PromotedTo != ChessPieceType.None)
                 baseString += $" (Promoted to {PromotedTo})";
+
+            if (Stage != BetrayalStage.None)
+                baseString += $" [BetrayalStage: {Stage}]";
 
             return baseString;
         }

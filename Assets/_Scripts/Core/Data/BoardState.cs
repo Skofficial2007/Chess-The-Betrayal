@@ -160,6 +160,12 @@ namespace ChessTheBetrayal.Core.Data
             {
                 ToggleEnPassantHash(EnPassantFile.Value);
             }
+
+            // Include Betrayal phase flag
+            if (!BetrayalRightAvailable)
+            {
+                ToggleBetrayalHash();
+            }
         }
 
         /// <summary>
@@ -223,6 +229,22 @@ namespace ChessTheBetrayal.Core.Data
         /// </summary>
         public bool IsGameOver { get; set; }
         public Team? Winner { get; set; } // null if stalemate
+
+        /// <summary>
+        /// Global, shared, once-per-match resource for the Betrayal mechanic.
+        /// Defaults to true and is permanently consumed the instant Phase 1 succeeds.
+        /// </summary>
+        public bool BetrayalRightAvailable { get; set; } = true;
+
+        /// <summary>
+        /// Tracks the square of the piece that initiated Betrayal, serving as the mandatory target for Phase 2.
+        /// </summary>
+        public Vector2Int? PendingBetrayerSquare { get; set; }
+
+        /// <summary>
+        /// Tracks which team initiated the Betrayal sequence, since CurrentTurn does not change mid-sequence.
+        /// </summary>
+        public Team? BetrayalInitiator { get; set; }
 
         public BoardState(int sizeX = 8, int sizeY = 8)
         {
@@ -435,9 +457,15 @@ namespace ChessTheBetrayal.Core.Data
             ZobristHash = 0;
             CastlingRights = CastlingAllRights; // Reset to all castling available
             EnPassantFile = null;
+
             // Clear king cache
             _whiteKingSquare = -1;
             _blackKingSquare = -1;
+
+            // Clear Betrayal states
+            BetrayalRightAvailable = true;
+            PendingBetrayerSquare = null;
+            BetrayalInitiator = null;
         }
 
         /// <summary>
@@ -551,6 +579,11 @@ namespace ChessTheBetrayal.Core.Data
             clone.ZobristHash = this.ZobristHash;
             clone.CastlingRights = this.CastlingRights;
             clone.EnPassantFile = this.EnPassantFile;
+
+            // Betrayal States
+            clone.BetrayalRightAvailable = this.BetrayalRightAvailable;
+            clone.PendingBetrayerSquare = this.PendingBetrayerSquare;
+            clone.BetrayalInitiator = this.BetrayalInitiator;
 
             Array.Copy(this.LogicalBoard, clone.LogicalBoard, this.LogicalBoard.Length);
 

@@ -13,6 +13,14 @@ namespace ChessTheBetrayal.Gameplay
     /// <summary>
     /// The primary conductor of the game loop. Orchestrates domain logic (BoardState, ChessEngine),
     /// timing systems (ChessClock), and presentation (UI, Visuals).
+    /// 
+    /// Betrayal Phase Contract:
+    /// Domain `TurnPhase`    | Presentation `BetrayalPhase` Raised
+    /// ----------------------|------------------------------------
+    /// RetributionPending    | Initiated, then RetributionPending
+    /// Normal (post-success) | Resolved
+    /// ResolutionFailed      | DefectionOccurred
+    /// ForcedSave            | ForcedSaveActive
     /// </summary>
     public class GameManager : MonoBehaviour, IClockEventHandler
     {
