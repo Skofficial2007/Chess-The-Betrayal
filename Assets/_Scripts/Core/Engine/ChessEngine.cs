@@ -47,10 +47,15 @@ namespace ChessTheBetrayal.Core.Engine
         /// Fills <paramref name="output"/> with every legal move the piece at <paramref name="position"/> can make.
         /// Illegal moves (ones that leave your own King in check) are filtered out before returning.
         /// Uses board.CurrentTurn to determine which team's moves to generate.
+        /// Also appends Betrayal targets if the global right is available.
         /// </summary>
         public static void GetLegalMoves(BoardState board, Vector2Int position, List<MoveCommand> output)
         {
             GetLegalMoves(board, position, output, board.CurrentTurn);
+
+            // Append friendly-fire targets (Phase 1)
+            // GetBetrayalTargets already internally checks board.BetrayalRightAvailable.
+            GetBetrayalTargets(board, position, output);
         }
 
         /// <summary>
@@ -145,6 +150,72 @@ namespace ChessTheBetrayal.Core.Engine
 
                 GetLegalMoves(board, pos, MoveGenBuffer, team);
                 masterBuffer.AddRange(MoveGenBuffer);
+            }
+        }
+
+        /// <summary>
+        /// Generates legal "friendly-fire" moves for the Betrayal Act (Phase 1).
+        /// Reuses standard movement geometry but targets friendly squares instead of enemy/empty squares.
+        /// </summary>
+        public static void GetBetrayalTargets(BoardState board, Vector2Int betrayerPos, List<MoveCommand> output)
+        {
+            PieceData piece = board.GetPiece(betrayerPos);
+
+            // Rule: The King cannot be a Betrayer. Global limit must be available.
+            if (piece.Type == ChessPieceType.King || !board.BetrayalRightAvailable || board.CurrentTurn != piece.Team)
+            {
+                return;
+            }
+
+            IPieceMovement strategy = MovementFactory.GetStrategy(piece.Type);
+            if (strategy == null) return;
+
+            // Use the attack check buffer as our scratch space to avoid allocations.
+            AttackCheckBuffer.Clear();
+
+            // Enumerate every friendly piece.
+            List<int> friendlyIndices = board.GetPieceIndices(piece.Team);
+            for (int i = 0; i < friendlyIndices.Count; i++)
+            {
+                int idx = friendlyIndices[i];
+                Vector2Int candidateTargetPos = new Vector2Int(idx % board.TileCountX, idx / board.TileCountX);
+
+                PieceData candidateVictim = board.GetPiece(candidateTargetPos);
+
+                // Rule: The King cannot be a Victim. 
+                // Also, a piece cannot betray itself.
+                if (candidateVictim.Type == ChessPieceType.King || candidateTargetPos == betrayerPos)
+                {
+                    continue;
+                }
+
+                // Check if the candidate square is geometrically reachable by the piece's raw movement.
+                // We clear the buffer on each pass, generate the raw moves, and check if the target is in them.
+                AttackCheckBuffer.Clear();
+                strategy.GetRawMoves(board, piece, betrayerPos, AttackCheckBuffer);
+
+                bool isReachable = false;
+                for (int j = 0; j < AttackCheckBuffer.Count; j++)
+                {
+                    if (AttackCheckBuffer[j].EndPosition == candidateTargetPos)
+                    {
+                        isReachable = true;
+                        break;
+                    }
+                }
+
+                if (isReachable)
+                {
+                    // Construct the Act move.
+                    MoveCommand actMove = MoveCommand.CreateStandardMove(betrayerPos, candidateTargetPos, piece, candidateVictim, board)
+                                                     .WithStage(BetrayalStage.Act);
+
+                    // Rule: Cannot expose own King to check (enforces Discovered Check block and Check Priority).
+                    if (!DoesMoveLeaveKingInCheck(board, actMove))
+                    {
+                        output.Add(actMove);
+                    }
+                }
             }
         }
 

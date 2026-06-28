@@ -67,6 +67,24 @@ namespace ChessTheBetrayal.Gameplay
                 to = new Vector2Int(castlingX, from.y);
             }
 
+            // Explicit exception gating for Betrayal rules on explicit requests.
+            if (!targetPiece.IsEmpty && targetPiece.Team == piece.Team)
+            {
+                // The King cannot be a Betrayer.
+                if (piece.Type == ChessPieceType.King && targetPiece.Type != ChessPieceType.Rook) // Allow castling attempt to pass through
+                {
+                    OnMoveRejected?.Invoke(from, to);
+                    throw new BetrayalRuleViolationException(DomainEventCode.Betrayal_KingTargetedAsBetrayer, "The King cannot initiate a Betrayal.");
+                }
+
+                // The King cannot be a Victim.
+                if (targetPiece.Type == ChessPieceType.King)
+                {
+                    OnMoveRejected?.Invoke(from, to);
+                    throw new BetrayalRuleViolationException(DomainEventCode.Betrayal_KingTargetedAsVictim, "The King cannot be targeted for Betrayal.");
+                }
+            }
+
             _legalMoves.Clear();
             try
             {
