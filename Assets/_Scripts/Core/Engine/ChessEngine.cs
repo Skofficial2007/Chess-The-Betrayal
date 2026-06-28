@@ -219,6 +219,38 @@ namespace ChessTheBetrayal.Core.Engine
             }
         }
 
+        /// <summary>
+        /// Generates legal moves for the Retribution sub-phase (Phase 2).
+        /// Only moves that capture the Betrayer are permitted. 
+        /// Because it reuses GetLegalMoves internally, the Pinned Executioner rule is enforced automatically.
+        /// </summary>
+        public static void GetRetributionMoves(BoardState board, Team executionerTeam, Vector2Int betrayerSquare, List<MoveCommand> output)
+        {
+            output.Clear();
+
+            // Enumerate every friendly piece (King included, asymmetry with Phase 1 is intentional).
+            List<int> friendlyIndices = board.GetPieceIndices(executionerTeam);
+            for (int i = 0; i < friendlyIndices.Count; i++)
+            {
+                int idx = friendlyIndices[i];
+                Vector2Int pos = new Vector2Int(idx % board.TileCountX, idx / board.TileCountX);
+
+                MoveGenBuffer.Clear();
+
+                // Get full legal moves for this piece (already filtered against self-check).
+                GetLegalMoves(board, pos, MoveGenBuffer, executionerTeam);
+
+                for (int j = 0; j < MoveGenBuffer.Count; j++)
+                {
+                    // Filter down to ONLY moves that capture the specific pending Betrayer.
+                    if (MoveGenBuffer[j].EndPosition == betrayerSquare)
+                    {
+                        output.Add(MoveGenBuffer[j].WithStage(BetrayalStage.Retribution));
+                    }
+                }
+            }
+        }
+
         #endregion
 
         #region Check Detection

@@ -22,7 +22,9 @@ namespace ChessTheBetrayal.Gameplay
         private readonly BoardState _board;
         private readonly List<MoveCommand> _legalMoves = new List<MoveCommand>(32);
         private readonly List<MoveCommand> _movesToTarget = new List<MoveCommand>(4);
-        
+
+        private readonly Func<TurnPhase> _phaseProvider;
+
         private MoveCommand _pendingPromotionMove;
         private bool _isAwaitingPromotion;
         private bool _logMoves;
@@ -30,9 +32,10 @@ namespace ChessTheBetrayal.Gameplay
         /// <summary>
         /// Note: We take a direct reference to the live board here. A network executor must NOT do this — it should validate against a server snapshot, not the client's version.
         /// </summary>
-        public LocalMoveExecutor(BoardState board, bool logMoves = true)
+        public LocalMoveExecutor(BoardState board, Func<TurnPhase> phaseProvider, bool logMoves = true)
         {
             _board = board;
+            _phaseProvider = phaseProvider;
             _logMoves = logMoves;
         }
 
@@ -46,6 +49,58 @@ namespace ChessTheBetrayal.Gameplay
             {
                 if (_logMoves) Debug.Log($"[LocalMoveExecutor] Move rejected: awaiting promotion choice");
                 OnMoveRejected?.Invoke(from, to);
+                return;
+            }
+
+            if (_phaseProvider != null && _phaseProvider() == TurnPhase.RetributionPending)
+            {
+                if (!_board.PendingBetrayerSquare.HasValue || to != _board.PendingBetrayerSquare.Value)
+                {
+                    if (_logMoves) Debug.Log($"[LocalMoveExecutor] Move rejected: Phase 2 requires targeting the Betrayer at {_board.PendingBetrayerSquare}");
+                    OnMoveRejected?.Invoke(from, to);
+                    return;
+                }
+
+                _legalMoves.Clear();
+                ChessEngine.GetRetributionMoves(_board, _board.CurrentTurn, _board.PendingBetrayerSquare.Value, _legalMoves);
+
+                _movesToTarget.Clear();
+                for (int i = 0; i < _legalMoves.Count; i++)
+                {
+                    if (_legalMoves[i].StartPosition == from && _legalMoves[i].EndPosition == to)
+                    {
+                        _movesToTarget.Add(_legalMoves[i]);
+                    }
+                }
+
+                if (_movesToTarget.Count == 0)
+                {
+                    if (_logMoves) Debug.Log($"[LocalMoveExecutor] Move rejected: piece at {from} cannot legally execute the Betrayer");
+                    OnMoveRejected?.Invoke(from, to);
+                    return;
+                }
+
+                // Handle standard promotion flow for Retribution (e.g., Pawn captures Betrayer on the 8th rank)
+                bool isRetributionPromotion = false;
+                for (int i = 0; i < _movesToTarget.Count; i++)
+                {
+                    if (_movesToTarget[i].IsPromotion) { isRetributionPromotion = true; break; }
+                }
+
+                if (isRetributionPromotion)
+                {
+                    _pendingPromotionMove = _movesToTarget[0];
+                    _isAwaitingPromotion = true;
+                    OnPromotionRequired?.Invoke(_pendingPromotionMove.StartPosition, to);
+                    return;
+                }
+
+                MoveCommand validRetribution = _movesToTarget[0];
+                ClockState? clockSnap = GameManager.Instance?.GetCurrentClockSnapshot();
+                if (clockSnap.HasValue) validRetribution = validRetribution.WithClockSnapshot(clockSnap.Value);
+
+                if (_logMoves) Debug.Log($"[LocalMoveExecutor] Retribution confirmed: {validRetribution}");
+                OnMoveConfirmed?.Invoke(validRetribution);
                 return;
             }
 

@@ -232,7 +232,7 @@ namespace ChessTheBetrayal.Gameplay
                 _moveExecutor = null;
             }
 
-            _moveExecutor = new LocalMoveExecutor(LiveBoard, logMoves);
+            _moveExecutor = new LocalMoveExecutor(LiveBoard, () => CurrentPhase, logMoves);
 
             _moveExecutor.OnMoveConfirmed += PlayMove;
             _moveExecutor.OnMoveRejected += OnExecutorMoveRejected;
@@ -420,7 +420,39 @@ namespace ChessTheBetrayal.Gameplay
                 // because Edge Case C dictates Discovered Checks on Opponent wait until the sequence resolves.
                 _moveExecutedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveExecutedPayload(move, LiveBoard.MoveHistory.Count / 2, false));
 
+                // Speculatively check if a Retribution move is even possible.
+                _legalMoves.Clear();
+                ChessEngine.GetRetributionMoves(LiveBoard, move.PieceTeam, move.EndPosition, _legalMoves);
+
+                if (_legalMoves.Count == 0)
+                {
+                    // Defection Triggered: The only geometrically capable pieces are pinned, or no pieces can reach.
+                    // Fire immediately without waiting for player input.
+                    _domainLogger?.LogWarning(new DomainLogEvent(DomainEventCode.Betrayal_RetributionPieceNone, message: "No legal Retribution move exists. Triggering Defection path."));
+
+                    // TODO (BETRAYER-06): Fully execute Resolution B (DefectPiece -> Evaluate Self-Check -> Forced Save).
+                    // For this branch, we leave the state machine in RetributionPending so the test suite can safely assert it.
+                }
+
                 // Early return. The turn does NOT end. The clock does NOT get an increment yet.
+                return;
+            }
+
+            // --- BETRAYAL MECHANIC: Phase 2 (Retribution Success) ---
+            if (move.Stage == BetrayalStage.Retribution)
+            {
+                // Resolution A: Success.
+                LiveBoard.PendingBetrayerSquare = null;
+                LiveBoard.BetrayalInitiator = null;
+                TransitionToPhase(TurnPhase.Normal);
+
+                _betrayalChannel?.Raise(new ChessTheBetrayal.Events.Payloads.BetrayalPayload(move.PieceTeam, move.EndPosition, ChessTheBetrayal.Events.Payloads.BetrayalPhase.Resolved));
+
+                // ApplyTimeBounty(move.PieceTeam); // TODO (BETRAYER-06): Dynamically scaled time bounty
+
+                _clock?.OnMoveMade(move.PieceTeam); // Standard Fischer increment now applies
+                LiveBoard.NextTurn();
+                CheckForGameEnd(); // Discovered checks against the opponent evaluate here for the first time
                 return;
             }
 
@@ -525,16 +557,29 @@ namespace ChessTheBetrayal.Gameplay
         public IReadOnlyList<MoveCommand> GetLegalMovesAt(Vector2Int position)
         {
             _legalMoves.Clear();
-            if (CurrentPhase == TurnPhase.Normal && !LiveBoard.IsGameOver)
+            if (LiveBoard.IsGameOver) return _legalMoves;
+
+            if (CurrentPhase == TurnPhase.Normal)
             {
                 ChessEngine.GetLegalMoves(LiveBoard, position, _legalMoves);
+            }
+            else if (CurrentPhase == TurnPhase.RetributionPending && LiveBoard.PendingBetrayerSquare.HasValue)
+            {
+                ChessEngine.GetRetributionMoves(LiveBoard, LiveBoard.CurrentTurn, LiveBoard.PendingBetrayerSquare.Value, _legalMoves);
+
+                // Filter down to only moves originating from the requested UI square
+                for (int i = _legalMoves.Count - 1; i >= 0; i--)
+                {
+                    if (_legalMoves[i].StartPosition != position)
+                        _legalMoves.RemoveAt(i);
+                }
             }
             return _legalMoves;
         }
 
         public bool CanSelectPiece(Vector2Int position)
         {
-            if (CurrentPhase != TurnPhase.Normal || LiveBoard.IsGameOver) return false;
+            if ((CurrentPhase != TurnPhase.Normal && CurrentPhase != TurnPhase.RetributionPending) || LiveBoard.IsGameOver) return false;
             PieceData piece = LiveBoard.GetPiece(position);
             return !piece.IsEmpty && piece.Team == LiveBoard.CurrentTurn;
         }
