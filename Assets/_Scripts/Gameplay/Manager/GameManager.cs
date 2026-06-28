@@ -403,15 +403,36 @@ namespace ChessTheBetrayal.Gameplay
             }
             // Note: DO NOT catch (Exception) here. Genuine CLR crashes must surface.
 
+            // --- BETRAYAL MECHANIC: Phase 1 (The Act) ---
+            if (move.Stage == BetrayalStage.Act)
+            {
+                // Consume the right permanently.
+                LiveBoard.BetrayalRightAvailable = false;
+                LiveBoard.PendingBetrayerSquare = move.EndPosition;
+                LiveBoard.BetrayalInitiator = move.PieceTeam;
+
+                TransitionToPhase(TurnPhase.RetributionPending);
+
+                _betrayalChannel?.Raise(new ChessTheBetrayal.Events.Payloads.BetrayalPayload(move.PieceTeam, move.EndPosition, ChessTheBetrayal.Events.Payloads.BetrayalPhase.Initiated));
+                _betrayalChannel?.Raise(new ChessTheBetrayal.Events.Payloads.BetrayalPayload(move.PieceTeam, move.EndPosition, ChessTheBetrayal.Events.Payloads.BetrayalPhase.RetributionPending));
+
+                // Fire the standard move event so visuals update, but pass isCheck=false 
+                // because Edge Case C dictates Discovered Checks on Opponent wait until the sequence resolves.
+                _moveExecutedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveExecutedPayload(move, LiveBoard.MoveHistory.Count / 2, false));
+
+                // Early return. The turn does NOT end. The clock does NOT get an increment yet.
+                return;
+            }
+
             _clock?.OnMoveMade(move.PieceTeam);
 
             // We need to calculate if this move resulted in a check so the UI can flash the HUD.
             bool isCheck = ChessEngine.IsKingInCheck(LiveBoard, LiveBoard.CurrentTurn);
-            
+
             // LiveBoard.MoveHistory.Count / 2 gives us the full turn number (e.g., Turn 1 is 1w and 1b)
             _moveExecutedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveExecutedPayload(
-                move, 
-                LiveBoard.MoveHistory.Count / 2, 
+                move,
+                LiveBoard.MoveHistory.Count / 2,
                 isCheck
             ));
 
