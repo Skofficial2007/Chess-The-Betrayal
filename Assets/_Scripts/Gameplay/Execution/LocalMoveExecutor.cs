@@ -104,6 +104,53 @@ namespace ChessTheBetrayal.Gameplay
                 return;
             }
 
+            // --- BETRAYAL MECHANIC: Phase 3 Forced Save Override ---
+            if (_phaseProvider != null && _phaseProvider() == TurnPhase.ForcedSave)
+            {
+                _legalMoves.Clear();
+                ChessEngine.GetForcedSaveMoves(_board, _board.CurrentTurn, _legalMoves);
+
+                _movesToTarget.Clear();
+                for (int i = 0; i < _legalMoves.Count; i++)
+                {
+                    if (_legalMoves[i].StartPosition == from && _legalMoves[i].EndPosition == to)
+                    {
+                        _movesToTarget.Add(_legalMoves[i]);
+                    }
+                }
+
+                if (_movesToTarget.Count == 0)
+                {
+                    if (_logMoves) Debug.Log($"[LocalMoveExecutor] Move rejected: piece at {from} cannot legally resolve the forced save check");
+                    OnMoveRejected?.Invoke(from, to);
+                    return;
+                }
+
+                // Handle standard promotion flow for Forced Save
+                bool isSavePromotion = false;
+                for (int i = 0; i < _movesToTarget.Count; i++)
+                {
+                    if (_movesToTarget[i].IsPromotion) { isSavePromotion = true; break; }
+                }
+
+                if (isSavePromotion)
+                {
+                    _pendingPromotionMove = _movesToTarget[0];
+                    _isAwaitingPromotion = true;
+                    OnPromotionRequired?.Invoke(_pendingPromotionMove.StartPosition, to);
+                    return;
+                }
+
+                MoveCommand validSave = _movesToTarget[0];
+                ClockState? clockSnap = GameManager.Instance?.GetCurrentClockSnapshot();
+                if (clockSnap.HasValue) validSave = validSave.WithClockSnapshot(clockSnap.Value);
+
+                if (_logMoves) Debug.Log($"[LocalMoveExecutor] Forced Save confirmed: {validSave}");
+                OnMoveConfirmed?.Invoke(validSave);
+                return;
+            }
+            // --- END Phase 3 Forced Save Override ---
+
             // Validate piece ownership
             PieceData piece = _board.GetPiece(from);
             if (piece.IsEmpty || piece.Team != _board.CurrentTurn)

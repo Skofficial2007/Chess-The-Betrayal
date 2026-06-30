@@ -492,6 +492,19 @@ namespace ChessTheBetrayal.Gameplay
                 return;
             }
 
+            // --- BETRAYAL MECHANIC: Phase 3 (Defensive Save Success) ---
+            if (move.Stage == BetrayalStage.DefensiveSave)
+            {
+                LiveBoard.PendingBetrayerSquare = null;
+                LiveBoard.BetrayalInitiator = null; // Sequence fully closed, regardless of outcome
+                TransitionToPhase(TurnPhase.Normal);
+
+                _clock?.OnMoveMade(move.PieceTeam); // The Save move IS the final action of this turn — standard increment applies
+                LiveBoard.NextTurn();
+                CheckForGameEnd(); // Discovered checks against the opponent evaluate here
+                return;
+            }
+
             _clock?.OnMoveMade(move.PieceTeam);
 
             // We need to calculate if this move resulted in a check so the UI can flash the HUD.
@@ -603,7 +616,16 @@ namespace ChessTheBetrayal.Gameplay
             {
                 ChessEngine.GetRetributionMoves(LiveBoard, LiveBoard.CurrentTurn, LiveBoard.PendingBetrayerSquare.Value, _legalMoves);
 
-                // Filter down to only moves originating from the requested UI square
+                for (int i = _legalMoves.Count - 1; i >= 0; i--)
+                {
+                    if (_legalMoves[i].StartPosition != position)
+                        _legalMoves.RemoveAt(i);
+                }
+            }
+            else if (CurrentPhase == TurnPhase.ForcedSave)
+            {
+                ChessEngine.GetForcedSaveMoves(LiveBoard, LiveBoard.CurrentTurn, _legalMoves);
+
                 for (int i = _legalMoves.Count - 1; i >= 0; i--)
                 {
                     if (_legalMoves[i].StartPosition != position)
@@ -615,7 +637,7 @@ namespace ChessTheBetrayal.Gameplay
 
         public bool CanSelectPiece(Vector2Int position)
         {
-            if ((CurrentPhase != TurnPhase.Normal && CurrentPhase != TurnPhase.RetributionPending) || LiveBoard.IsGameOver) return false;
+            if ((CurrentPhase != TurnPhase.Normal && CurrentPhase != TurnPhase.RetributionPending && CurrentPhase != TurnPhase.ForcedSave) || LiveBoard.IsGameOver) return false;
             PieceData piece = LiveBoard.GetPiece(position);
             return !piece.IsEmpty && piece.Team == LiveBoard.CurrentTurn;
         }
