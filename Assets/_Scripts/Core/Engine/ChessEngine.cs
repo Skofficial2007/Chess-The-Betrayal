@@ -474,7 +474,12 @@ namespace ChessTheBetrayal.Core.Engine
         private static void ApplyZobristMove(BoardState board, MoveCommand move, int previousCastlingMask, int? previousEnPassantFile)
         {
             // 1. Toggle whose turn it is.
-            board.ToggleTurnHash();
+            // Only toggle the turn hash if this move actually hands over the turn.
+            // The Act phase is a mid-turn sequence, so we bypass the turn toggle.
+            if (move.Stage != BetrayalStage.Act)
+            {
+                board.ToggleTurnHash();
+            }
 
             // 2. Move the primary piece: remove it from the start square, add it to the end square.
             board.TogglePieceHash(move.PieceTeam, move.PieceType, move.StartPosition.x, move.StartPosition.y);
