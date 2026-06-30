@@ -251,6 +251,25 @@ namespace ChessTheBetrayal.Core.Engine
             }
         }
 
+        /// <summary>
+        /// Generates legal moves for a Forced Save phase (Betrayal Phase 3 Defensive Override).
+        /// Reuses GetAllLegalMoves, which inherently filters out any move that does not resolve the check.
+        /// </summary>
+        public static void GetForcedSaveMoves(BoardState board, Team team, List<MoveCommand> output)
+        {
+            output.Clear();
+
+            // GetAllLegalMoves on a board where 'team' is in check *only* returns 
+            // moves that resolve that check (moving King, blocking, or capturing).
+            GetAllLegalMoves(board, team, output);
+
+            // Tag all resulting moves with DefensiveSave stage
+            for (int i = 0; i < output.Count; i++)
+            {
+                output[i] = output[i].WithStage(BetrayalStage.DefensiveSave);
+            }
+        }
+
         #endregion
 
         #region Check Detection
