@@ -353,6 +353,23 @@ namespace ChessTheBetrayal.Gameplay
             _clockController.Initialize(_clock);
         }
 
+        private long GetBetrayalBountyMs()
+        {
+            if (_selectedMode.IsUnlimited) return 0L;
+
+            long baseMs = _selectedMode.BaseTimeMs;
+            if (baseMs <= GameModePresets.Bullet2_1.BaseTimeMs) return 3_000L;  // Bullet tier: +3s
+            if (baseMs <= GameModePresets.Blitz5_5.BaseTimeMs) return 12_000L; // Blitz tier: +12s
+            return 30_000L; // Rapid tier and above: +30s
+        }
+
+        private void ApplyTimeBounty(Team team)
+        {
+            long bonus = GetBetrayalBountyMs();
+            if (bonus <= 0L || _clock == null) return;
+            _clock.ApplyBetrayalBounty(team, bonus);
+        }
+
         #endregion
 
         #region Move Execution
@@ -430,8 +447,27 @@ namespace ChessTheBetrayal.Gameplay
                     // Fire immediately without waiting for player input.
                     _domainLogger?.LogWarning(new DomainLogEvent(DomainEventCode.Betrayal_RetributionPieceNone, message: "No legal Retribution move exists. Triggering Defection path."));
 
-                    // TODO (BETRAYER-06): Fully execute Resolution B (DefectPiece -> Evaluate Self-Check -> Forced Save).
-                    // For this branch, we leave the state machine in RetributionPending so the test suite can safely assert it.
+                    var outcome = ChessEngine.ResolveFailedRetribution(LiveBoard);
+                    _domainLogger?.LogInfo(new DomainLogEvent(DomainEventCode.Betrayal_DefectionResolved, auxInt: outcome.DefectedSquare.y * LiveBoard.TileCountX + outcome.DefectedSquare.x));
+
+                    _betrayalChannel?.Raise(new ChessTheBetrayal.Events.Payloads.BetrayalPayload(LiveBoard.BetrayalInitiator.Value, outcome.DefectedSquare, ChessTheBetrayal.Events.Payloads.BetrayalPhase.DefectionOccurred));
+
+                    if (outcome.RequiresForcedSave)
+                    {
+                        TransitionToPhase(TurnPhase.ForcedSave);
+                        _domainLogger?.LogWarning(new DomainLogEvent(DomainEventCode.Betrayal_ForcedSaveRequired));
+                        _betrayalChannel?.Raise(new ChessTheBetrayal.Events.Payloads.BetrayalPayload(LiveBoard.BetrayalInitiator.Value, outcome.DefectedSquare, ChessTheBetrayal.Events.Payloads.BetrayalPhase.ForcedSaveActive));
+                        // No NextTurn() yet — BETRAYER-07 handles the forced Save move and final turn advancement.
+                    }
+                    else
+                    {
+                        TransitionToPhase(TurnPhase.Normal);
+                        LiveBoard.PendingBetrayerSquare = null;
+                        LiveBoard.BetrayalInitiator = null;
+                        // No time bounty — Resolution B grants nothing, per design doc.
+                        LiveBoard.NextTurn();
+                        CheckForGameEnd(); // the opponent's newly-acquired piece may itself deliver check/checkmate — evaluated here for the first time.
+                    }
                 }
 
                 // Early return. The turn does NOT end. The clock does NOT get an increment yet.
@@ -448,7 +484,7 @@ namespace ChessTheBetrayal.Gameplay
 
                 _betrayalChannel?.Raise(new ChessTheBetrayal.Events.Payloads.BetrayalPayload(move.PieceTeam, move.EndPosition, ChessTheBetrayal.Events.Payloads.BetrayalPhase.Resolved));
 
-                // ApplyTimeBounty(move.PieceTeam); // TODO (BETRAYER-06): Dynamically scaled time bounty
+                ApplyTimeBounty(move.PieceTeam);
 
                 _clock?.OnMoveMade(move.PieceTeam); // Standard Fischer increment now applies
                 LiveBoard.NextTurn();
