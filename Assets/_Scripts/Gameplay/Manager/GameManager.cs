@@ -380,8 +380,9 @@ namespace ChessTheBetrayal.Gameplay
         /// </summary>
         public void RequestMove(Vector2Int from, Vector2Int to)
         {
-            // Only accept moves during normal play.
-            if (CurrentPhase != TurnPhase.Normal || LiveBoard.IsGameOver)
+            // --- BETRAYAL MECHANIC FIX ---
+            // Allow inputs during standard play, Retribution, and Forced Save phases.
+            if ((CurrentPhase != TurnPhase.Normal && CurrentPhase != TurnPhase.RetributionPending && CurrentPhase != TurnPhase.ForcedSave) || LiveBoard.IsGameOver)
             {
                 _moveRejectedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveRejectedPayload(from, to));
                 return;
@@ -486,6 +487,11 @@ namespace ChessTheBetrayal.Gameplay
 
                 ApplyTimeBounty(move.PieceTeam);
 
+                // --- UI FIX: Tell BoardVisuals to play the capture animation ---
+                bool isCheckAfterRetribution = ChessEngine.IsKingInCheck(LiveBoard, LiveBoard.CurrentTurn);
+                _moveExecutedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveExecutedPayload(move, LiveBoard.MoveHistory.Count / 2, isCheckAfterRetribution));
+                // ---------------------------------------------------------------
+
                 _clock?.OnMoveMade(move.PieceTeam); // Standard Fischer increment now applies
                 LiveBoard.NextTurn();
                 CheckForGameEnd(); // Discovered checks against the opponent evaluate here for the first time
@@ -498,6 +504,11 @@ namespace ChessTheBetrayal.Gameplay
                 LiveBoard.PendingBetrayerSquare = null;
                 LiveBoard.BetrayalInitiator = null; // Sequence fully closed, regardless of outcome
                 TransitionToPhase(TurnPhase.Normal);
+
+                // --- UI FIX: Tell BoardVisuals to play the save animation ---
+                bool isCheckAfterSave = ChessEngine.IsKingInCheck(LiveBoard, LiveBoard.CurrentTurn);
+                _moveExecutedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveExecutedPayload(move, LiveBoard.MoveHistory.Count / 2, isCheckAfterSave));
+                // ------------------------------------------------------------
 
                 _clock?.OnMoveMade(move.PieceTeam); // The Save move IS the final action of this turn — standard increment applies
                 LiveBoard.NextTurn();

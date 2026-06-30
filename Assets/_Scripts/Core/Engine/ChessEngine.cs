@@ -161,59 +161,50 @@ namespace ChessTheBetrayal.Core.Engine
         {
             PieceData piece = board.GetPiece(betrayerPos);
 
-            // Rule: The King cannot be a Betrayer. Global limit must be available.
-            if (piece.Type == ChessPieceType.King || !board.BetrayalRightAvailable || board.CurrentTurn != piece.Team)
-            {
-                return;
-            }
+            if (piece.Type == ChessPieceType.King || !board.BetrayalRightAvailable || board.CurrentTurn != piece.Team) return;
 
             IPieceMovement strategy = MovementFactory.GetStrategy(piece.Type);
             if (strategy == null) return;
 
-            // Use the attack check buffer as our scratch space to avoid allocations.
-            AttackCheckBuffer.Clear();
+            Team enemyTeam = piece.Team == Team.White ? Team.Black : Team.White;
+            int[] friendlyIndices = board.GetPieceIndices(piece.Team).ToArray();
 
-            // Enumerate every friendly piece.
-            List<int> friendlyIndices = board.GetPieceIndices(piece.Team);
-            for (int i = 0; i < friendlyIndices.Count; i++)
+            // Isolate buffer to prevent InvalidOperationException from nested buffer clearing in IsSquareUnderAttack
+            List<MoveCommand> localBuffer = new List<MoveCommand>(32);
+
+            for (int i = 0; i < friendlyIndices.Length; i++)
             {
                 int idx = friendlyIndices[i];
                 Vector2Int candidateTargetPos = new Vector2Int(idx % board.TileCountX, idx / board.TileCountX);
-
                 PieceData candidateVictim = board.GetPiece(candidateTargetPos);
 
-                // Rule: The King cannot be a Victim. 
-                // Also, a piece cannot betray itself.
-                if (candidateVictim.Type == ChessPieceType.King || candidateTargetPos == betrayerPos)
-                {
-                    continue;
-                }
+                if (candidateVictim.Type == ChessPieceType.King || candidateTargetPos == betrayerPos) continue;
 
-                // Check if the candidate square is geometrically reachable by the piece's raw movement.
-                // We clear the buffer on each pass, generate the raw moves, and check if the target is in them.
-                AttackCheckBuffer.Clear();
-                strategy.GetRawMoves(board, piece, betrayerPos, AttackCheckBuffer);
+                // --- DISGUISE TRICK ---
+                // We MUST use SetPiece so the engine's internal occupancy arrays (_whiteOccupied, etc)
+                // update. Otherwise, sliding pieces (Queens/Bishops) will think they are still blocked.
+                board.SetPiece(candidateVictim.WithTeam(enemyTeam), candidateTargetPos.x, candidateTargetPos.y);
 
-                bool isReachable = false;
-                for (int j = 0; j < AttackCheckBuffer.Count; j++)
+                localBuffer.Clear();
+                strategy.GetRawMoves(board, piece, betrayerPos, localBuffer);
+
+                board.SetPiece(candidateVictim, candidateTargetPos.x, candidateTargetPos.y);
+                // ----------------------
+
+                // Copy to array to completely decouple from any list enumeration exceptions
+                MoveCommand[] rawMoves = localBuffer.ToArray();
+
+                for (int j = 0; j < rawMoves.Length; j++)
                 {
-                    if (AttackCheckBuffer[j].EndPosition == candidateTargetPos)
+                    if (rawMoves[j].EndPosition == candidateTargetPos)
                     {
-                        isReachable = true;
-                        break;
-                    }
-                }
+                        MoveCommand actMove = MoveCommand.CreateStandardMove(betrayerPos, candidateTargetPos, piece, candidateVictim, board)
+                                                         .WithStage(BetrayalStage.Act);
 
-                if (isReachable)
-                {
-                    // Construct the Act move.
-                    MoveCommand actMove = MoveCommand.CreateStandardMove(betrayerPos, candidateTargetPos, piece, candidateVictim, board)
-                                                     .WithStage(BetrayalStage.Act);
-
-                    // Rule: Cannot expose own King to check (enforces Discovered Check block and Check Priority).
-                    if (!DoesMoveLeaveKingInCheck(board, actMove))
-                    {
-                        output.Add(actMove);
+                        if (!DoesMoveLeaveKingInCheck(board, actMove))
+                        {
+                            output.Add(actMove);
+                        }
                     }
                 }
             }
@@ -227,25 +218,51 @@ namespace ChessTheBetrayal.Core.Engine
         public static void GetRetributionMoves(BoardState board, Team executionerTeam, Vector2Int betrayerSquare, List<MoveCommand> output)
         {
             output.Clear();
+            PieceData betrayer = board.GetPiece(betrayerSquare);
+            if (betrayer.IsEmpty) return;
 
-            // Enumerate every friendly piece (King included, asymmetry with Phase 1 is intentional).
-            List<int> friendlyIndices = board.GetPieceIndices(executionerTeam);
-            for (int i = 0; i < friendlyIndices.Count; i++)
+            Team enemyTeam = executionerTeam == Team.White ? Team.Black : Team.White;
+            int[] friendlyIndices = board.GetPieceIndices(executionerTeam).ToArray();
+
+            // Isolate buffer to prevent InvalidOperationException
+            List<MoveCommand> localBuffer = new List<MoveCommand>(32);
+
+            for (int i = 0; i < friendlyIndices.Length; i++)
             {
                 int idx = friendlyIndices[i];
                 Vector2Int pos = new Vector2Int(idx % board.TileCountX, idx / board.TileCountX);
 
-                MoveGenBuffer.Clear();
+                // CRITICAL FIX: A piece cannot execute itself! This prevents SetPiece from 
+                // scrambling the indices array during the disguise trick.
+                if (pos == betrayerSquare) continue;
 
-                // Get full legal moves for this piece (already filtered against self-check).
-                GetLegalMoves(board, pos, MoveGenBuffer, executionerTeam);
+                PieceData executioner = board.GetPiece(pos);
 
-                for (int j = 0; j < MoveGenBuffer.Count; j++)
+                IPieceMovement strategy = MovementFactory.GetStrategy(executioner.Type);
+                if (strategy == null) continue;
+
+                // --- DISGUISE TRICK ---
+                board.SetPiece(betrayer.WithTeam(enemyTeam), betrayerSquare.x, betrayerSquare.y);
+
+                localBuffer.Clear();
+                strategy.GetRawMoves(board, executioner, pos, localBuffer);
+
+                board.SetPiece(betrayer, betrayerSquare.x, betrayerSquare.y);
+                // ----------------------
+
+                MoveCommand[] rawMoves = localBuffer.ToArray();
+
+                for (int j = 0; j < rawMoves.Length; j++)
                 {
-                    // Filter down to ONLY moves that capture the specific pending Betrayer.
-                    if (MoveGenBuffer[j].EndPosition == betrayerSquare)
+                    if (rawMoves[j].EndPosition == betrayerSquare)
                     {
-                        output.Add(MoveGenBuffer[j].WithStage(BetrayalStage.Retribution));
+                        MoveCommand retMove = MoveCommand.CreateStandardMove(pos, betrayerSquare, executioner, betrayer, board)
+                                                         .WithStage(BetrayalStage.Retribution);
+
+                        if (!DoesMoveLeaveKingInCheck(board, retMove))
+                        {
+                            output.Add(retMove);
+                        }
                     }
                 }
             }
