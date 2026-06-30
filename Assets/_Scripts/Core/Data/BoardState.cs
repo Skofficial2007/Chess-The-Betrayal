@@ -428,6 +428,24 @@ namespace ChessTheBetrayal.Core.Data
         }
 
         /// <summary>
+        /// Atomically flips a piece to the opposing team (Resolution B).
+        /// Removes it from the old team's hash/indices and adds it to the new team's.
+        /// </summary>
+        public void DefectPiece(Vector2Int square)
+        {
+            PieceData piece = GetPiece(square);
+            if (piece.IsEmpty) return;
+
+            // Remove from old team's hash & indices, flip team, re-add to new team's hash & indices.
+            TogglePieceHash(piece.Team, piece.Type, square.x, square.y);
+
+            PieceData defected = piece.WithTeam(piece.Team == Team.White ? Team.Black : Team.White);
+            SetPiece(defected, square.x, square.y);
+
+            TogglePieceHash(defected.Team, defected.Type, square.x, square.y);
+        }
+
+        /// <summary>
         /// Clears all pieces from the board.
         /// </summary>
         public void Clear()

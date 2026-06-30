@@ -404,6 +404,34 @@ namespace ChessTheBetrayal.Core.Engine
         #region Move Execution
 
         /// <summary>
+        /// Resolves a failed Retribution phase by defecting the Betrayer and evaluating Edge Case B (Self-Check).
+        /// </summary>
+        public static DefectionOutcome ResolveFailedRetribution(BoardState board)
+        {
+            Vector2Int betrayerSquare = board.PendingBetrayerSquare.Value;
+            Team initiator = board.BetrayalInitiator.Value;
+
+            board.DefectPiece(betrayerSquare);
+
+            bool selfCheckAfterDefection = IsKingInCheck(board, initiator);
+            return new DefectionOutcome(selfCheckAfterDefection, betrayerSquare);
+        }
+
+        /// <summary>
+        /// Symmetrical inverse of DefectPiece, used exclusively by the AI search tree to Unmake a defection sequence.
+        /// </summary>
+        internal static void UndoDefection(BoardState board, Vector2Int square, Team originalTeam)
+        {
+            PieceData current = board.GetPiece(square);
+            board.TogglePieceHash(current.Team, current.Type, square.x, square.y);
+
+            PieceData restored = current.WithTeam(originalTeam);
+            board.SetPiece(restored, square.x, square.y);
+
+            board.TogglePieceHash(restored.Team, restored.Type, square.x, square.y);
+        }
+
+        /// <summary>
         /// Updates the Zobrist hash to reflect a move. Because XOR is self-cancelling, calling this
         /// on the same move twice perfectly undoes the change — which is how move undo works.
         /// </summary>
@@ -767,6 +795,21 @@ namespace ChessTheBetrayal.Core.Engine
         }
 
         #endregion
+    }
+
+    /// <summary>
+    /// Describes the board state immediately following a Defection (Resolution B).
+    /// </summary>
+    public readonly struct DefectionOutcome
+    {
+        public readonly bool RequiresForcedSave;
+        public readonly Vector2Int DefectedSquare;
+
+        public DefectionOutcome(bool requiresForcedSave, Vector2Int defectedSquare)
+        {
+            RequiresForcedSave = requiresForcedSave;
+            DefectedSquare = defectedSquare;
+        }
     }
 
     /// <summary>
