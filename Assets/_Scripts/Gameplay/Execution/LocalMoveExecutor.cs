@@ -276,7 +276,18 @@ namespace ChessTheBetrayal.Gameplay
             _legalMoves.Clear();
             try
             {
-                ChessEngine.GetLegalMoves(_board, _pendingPromotionMove.StartPosition, _legalMoves);
+                if (_phaseProvider != null && _phaseProvider() == TurnPhase.RetributionPending)
+                {
+                    ChessEngine.GetRetributionMoves(_board, _board.CurrentTurn, _board.PendingBetrayerSquare.Value, _legalMoves);
+                }
+                else if (_phaseProvider != null && _phaseProvider() == TurnPhase.ForcedSave)
+                {
+                    ChessEngine.GetForcedSaveMoves(_board, _board.CurrentTurn, _legalMoves);
+                }
+                else
+                {
+                    ChessEngine.GetLegalMoves(_board, _pendingPromotionMove.StartPosition, _legalMoves);
+                }
             }
             catch (BetrayalRuleViolationException ex)
             {

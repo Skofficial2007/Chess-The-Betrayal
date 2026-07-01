@@ -39,6 +39,14 @@ namespace ChessTheBetrayal.Gameplay
         [Header("Debug")]
         [SerializeField] private bool logMoves = true;
 
+        [Header("Betrayal Time Bounty (milliseconds)")]
+        [SerializeField] private long _betrayalBountyBulletMs = 3_000L;   // Bullet 1|0: +3s
+        [SerializeField] private long _betrayalBountyBullet2Ms = 5_000L;   // Bullet 2|1: +5s
+        [SerializeField] private long _betrayalBountyBlitzMs = 8_000L;   // Blitz 3|0: +8s
+        [SerializeField] private long _betrayalBountyBlitz5Ms = 12_000L;  // Blitz 5|5: +12s
+        [SerializeField] private long _betrayalBountyRapidMs = 20_000L;  // Rapid 10|0: +20s
+        [SerializeField] private long _betrayalBountyRapid15Ms = 30_000L;  // Rapid 15|10: +30s
+
         [Header("Shared State")]
         [SerializeField] private ChessTheBetrayal.Events.SharedBoardStateSO _sharedBoardState;
         [SerializeField] private ChessTheBetrayal.Events.SharedClockStateSO _sharedClockState;
@@ -358,13 +366,19 @@ namespace ChessTheBetrayal.Gameplay
             if (_selectedMode.IsUnlimited) return 0L;
 
             long baseMs = _selectedMode.BaseTimeMs;
-            if (baseMs <= GameModePresets.Bullet2_1.BaseTimeMs) return 3_000L;  // Bullet tier: +3s
-            if (baseMs <= GameModePresets.Blitz5_5.BaseTimeMs) return 12_000L; // Blitz tier: +12s
-            return 30_000L; // Rapid tier and above: +30s
+            if (baseMs <= 60_000L) return _betrayalBountyBulletMs;         // Bullet 1|0
+            if (baseMs <= 120_000L) return _betrayalBountyBullet2Ms;       // Bullet 2|1
+            if (baseMs <= 180_000L) return _betrayalBountyBlitzMs;         // Blitz 3|0
+            if (baseMs <= 300_000L) return _betrayalBountyBlitz5Ms;        // Blitz 5|5
+            if (baseMs <= 600_000L) return _betrayalBountyRapidMs;         // Rapid 10|0
+            return _betrayalBountyRapid15Ms;                               // Rapid 15|10+
         }
 
         private void ApplyTimeBounty(Team team)
         {
+            // DESIGN RULE: No bounty in Unlimited mode. Explicit check.
+            if (_selectedMode.IsUnlimited) return;
+
             long bonus = GetBetrayalBountyMs();
             if (bonus <= 0L || _clock == null) return;
             _clock.ApplyBetrayalBounty(team, bonus);

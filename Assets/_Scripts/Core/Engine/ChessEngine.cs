@@ -213,6 +213,10 @@ namespace ChessTheBetrayal.Core.Engine
                 {
                     if (rawMoves[j].EndPosition == candidateTargetPos)
                     {
+                        // DESIGN RULE: Promotion is suppressed for Betrayal Acts regardless of pawn position.
+                        // A pawn that betrays a friendly piece on the back rank does not receive promotion —
+                        // the piece becomes the Betrayer and the game enters RetributionPending immediately.
+                        // Always use CreateStandardMove() here, never CreatePromotionMove().
                         MoveCommand actMove = MoveCommand.CreateStandardMove(betrayerPos, candidateTargetPos, piece, candidateVictim, board)
                                                          .WithStage(BetrayalStage.Act);
 
@@ -220,6 +224,9 @@ namespace ChessTheBetrayal.Core.Engine
                         {
                             output.Add(actMove);
                         }
+
+                        // Prevent 4 duplicate candidate generation if rawMoves contained 4 promotion variants
+                        break;
                     }
                 }
             }
@@ -271,8 +278,18 @@ namespace ChessTheBetrayal.Core.Engine
                 {
                     if (rawMoves[j].EndPosition == betrayerSquare)
                     {
-                        MoveCommand retMove = MoveCommand.CreateStandardMove(pos, betrayerSquare, executioner, betrayer, board)
-                                                         .WithStage(BetrayalStage.Retribution);
+                        // DESIGN RULE: Castling cannot be used to execute the Betrayer during Retribution.
+                        // This is enforced automatically because castling always lands the King on g1/c1 (White)
+                        // or g8/c8 (Black), never on the Betrayer's arbitrary square. The EndPosition == betrayerSquare
+                        // filter below therefore naturally excludes all castling moves without any special-case code.
+                        MoveCommand retMove = new MoveCommand(
+                            pos, betrayerSquare, executioner, betrayer,
+                            rawMoves[j].SpecialMoveType, rawMoves[j].PromotedTo,
+                            null, null, null,
+                            board.CastlingRights, board.EnPassantFile,
+                            long.MaxValue, long.MaxValue,
+                            BetrayalStage.Retribution
+                        );
 
                         if (!DoesMoveLeaveKingInCheck(board, retMove))
                         {
