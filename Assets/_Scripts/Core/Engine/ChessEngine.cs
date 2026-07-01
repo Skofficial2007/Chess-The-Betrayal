@@ -702,40 +702,23 @@ namespace ChessTheBetrayal.Core.Engine
             board.SetPiece(PieceData.Empty, move.EndPosition.x, move.EndPosition.y);
             board.SetPiece(primaryPiece.WithHasMoved(move.PieceHadMoved), move.StartPosition.x, move.StartPosition.y);
 
-            // TODO: Graveyard-as-stack pattern is fragile for non-make/unmake paths.
-            // Current assumption: WhiteCaptured/BlackCaptured operates as a strict LIFO stack where every
-            // ApplyMoveToBoard push has a corresponding UndoMoveOnBoard pop. This works for paired make/unmake
-            // in AI search but breaks if any code path calls RemovePiece or SetPiece(Empty) outside of
-            // ApplyMoveToBoard (e.g., BoardState.Clear, future Betrayal mechanic "piece changes sides").
-            //
-            // The fallback creates a synthetic PieceData with StartRow=0, HasMoved=false,
-            // which is incorrect for promoted pieces or pieces that had already moved.
-            //
-            // BEFORE Betrayal implementation we need to: 
-            // Replace graveyard pattern with explicit captured-piece storage in MoveCommand itself.
-            // Add optional `PieceData? CapturedPieceFullState` field to preserve exact
-            // piece state (including StartRow, HasMoved) without relying on graveyard stack coherence.
-            // This enables Betrayal's "convert captured piece to ally" mechanic to access full piece history.
             if (move.HasCapture)
             {
+                // We MUST maintain the visual graveyard arrays for the UI (so BoardVisuals can accurately count captured pieces),
+                // but we no longer pop from them to recreate the piece. We use the immutable snapshot.
                 List<PieceData> graveyard = move.CapturedTeam == Team.White ? board.WhiteCaptured : board.BlackCaptured;
-                PieceData resurrectedPiece;
                 if (graveyard.Count > 0)
                 {
-                    resurrectedPiece = graveyard[graveyard.Count - 1];
                     graveyard.RemoveAt(graveyard.Count - 1);
                 }
-                else
-                {
-                    // DESIGN SMELL-002: Synthetic fallback — incorrect for pieces with non-default state
-                    int dir = move.CapturedTeam == Team.White ? 1 : -1;
-                    resurrectedPiece = new PieceData(move.CapturedTeam, move.CapturedType, dir, 0, false);
-                }
-                resurrectedPiece = resurrectedPiece.WithHasMoved(move.CapturedHadMoved);
+
+                // Resurrect the exact piece using the immutable snapshot captured at the moment of the move.
+                PieceData resurrectedPiece = move.CapturedPieceFullState;
 
                 Vector2Int capturePos = move.IsEnPassant && move.EnPassantCapturePosition.HasValue
                     ? move.EnPassantCapturePosition.Value
                     : move.EndPosition;
+
                 board.SetPiece(resurrectedPiece, capturePos.x, capturePos.y);
             }
 

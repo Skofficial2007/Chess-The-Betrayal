@@ -45,6 +45,10 @@ namespace ChessTheBetrayal.Core.Engine
         public readonly ChessPieceType CapturedType;
         public readonly bool CapturedHadMoved;
 
+        // Complete immutable snapshot of the captured piece. 
+        // Essential for AI unmake/remake paths where piece history (StartRow, etc) must survive defection/resurrection.
+        public readonly PieceData CapturedPieceFullState;
+
         public readonly SpecialMove SpecialMoveType;
         public readonly ChessPieceType PromotedTo;
 
@@ -109,6 +113,7 @@ namespace ChessTheBetrayal.Core.Engine
                 CapturedTeam = pieceCaptured.Team;
                 CapturedType = pieceCaptured.Type;
                 CapturedHadMoved = pieceCaptured.HasMoved;
+                CapturedPieceFullState = pieceCaptured; // Full snapshot secured
             }
             else
             {
@@ -116,6 +121,7 @@ namespace ChessTheBetrayal.Core.Engine
                 CapturedTeam = Team.White;
                 CapturedType = ChessPieceType.None;
                 CapturedHadMoved = false;
+                CapturedPieceFullState = PieceData.Empty;
             }
 
             SpecialMoveType = specialMoveType;
@@ -167,9 +173,7 @@ namespace ChessTheBetrayal.Core.Engine
             new MoveCommand(
                 StartPosition, EndPosition,
                 new PieceData(PieceTeam, PieceType, PieceMoveDirection, 0, PieceHadMoved),
-                HasCapture
-                    ? new PieceData(CapturedTeam, CapturedType, CapturedTeam == Team.White ? 1 : -1, 0, CapturedHadMoved)
-                    : default,
+                CapturedPieceFullState,
                 SpecialMoveType, PromotedTo,
                 RookStartPosition, RookEndPosition, EnPassantCapturePosition,
                 PreviousCastlingMask, PreviousEnPassantFile,
@@ -184,9 +188,7 @@ namespace ChessTheBetrayal.Core.Engine
             new MoveCommand(
                 StartPosition, EndPosition,
                 new PieceData(PieceTeam, PieceType, PieceMoveDirection, 0, PieceHadMoved),
-                HasCapture
-                    ? new PieceData(CapturedTeam, CapturedType, CapturedTeam == Team.White ? 1 : -1, 0, CapturedHadMoved)
-                    : default,
+                CapturedPieceFullState,
                 SpecialMoveType, PromotedTo,
                 RookStartPosition, RookEndPosition, EnPassantCapturePosition,
                 PreviousCastlingMask, PreviousEnPassantFile,
