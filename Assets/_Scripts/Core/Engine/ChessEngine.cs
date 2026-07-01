@@ -134,6 +134,21 @@ namespace ChessTheBetrayal.Core.Engine
         {
             masterBuffer.Clear();
 
+            // If the board is mid-sequence (Retribution Phase), normal rules are suspended.
+            // We deduce Phase 2 vs Phase 3 by checking if the betrayer has flipped teams yet.
+            if (board.PendingBetrayerSquare.HasValue && board.BetrayalInitiator.HasValue)
+            {
+                PieceData betrayer = board.GetPiece(board.PendingBetrayerSquare.Value);
+
+                // If the betrayer is still on the initiator's team, we are in Phase 2 (Retribution).
+                // If it has changed teams, we are in Phase 3 (Forced Save) and MUST use normal move generation to find escapes.
+                if (betrayer.Team == board.BetrayalInitiator.Value)
+                {
+                    GetRetributionMoves(board, team, board.PendingBetrayerSquare.Value, masterBuffer);
+                    return;
+                }
+            }
+
             if (masterBuffer.Capacity < MaxMovesPerPosition)
             {
                 masterBuffer.Capacity = MaxMovesPerPosition;
@@ -420,16 +435,24 @@ namespace ChessTheBetrayal.Core.Engine
                 return GameState.Timeout;
             }
 
+            // The game cannot end in standard checkmate/stalemate during Phase 2.
+            // A lack of retribution moves means Defection, not Game Over. 
+            if (board.PendingBetrayerSquare.HasValue && board.BetrayalInitiator.HasValue)
+            {
+                PieceData betrayer = board.GetPiece(board.PendingBetrayerSquare.Value);
+                if (betrayer.Team == board.BetrayalInitiator.Value)
+                {
+                    return GameState.Normal;
+                }
+            }
+
             bool hasLegalMoves = HasAnyLegalMoves(board, team);
 
-            if (hasLegalMoves) // Removed the '!' - this block runs if the game is still going
+            if (hasLegalMoves) // This block runs if the game is still going
             {
                 // IsKingInCheck is used to satisfy the GameState return type for the GameManager.
                 return IsKingInCheck(board, team) ? GameState.Check : GameState.Normal;
             }
-
-            // TODO (Betrayal): Add GameState.BetrayalInitiated and GameState.RetributionFailed here when
-            // the custom mechanic is implemented. GameManager's CheckForGameEnd() will handle the transitions.
 
             // No legal moves: disambiguate checkmate vs stalemate
             return IsKingInCheck(board, team) ? GameState.Checkmate : GameState.Stalemate;
