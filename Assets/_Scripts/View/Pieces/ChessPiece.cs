@@ -21,10 +21,15 @@ namespace ChessTheBetrayal.UI
         private Vector3 targetPosition;
         private Vector3 targetScale = Vector3.one;
         private Collider _col;
+        private Renderer _renderer;
+        private MaterialPropertyBlock _mpb;
 
         // Smoothing speeds
         private const float PositionLerpSpeed = 12f;
         private const float ScaleLerpSpeed = 12f;
+
+        private static readonly Color BetrayerGlowColor = Color.red * 2f;
+        private static readonly int EmissionColorId = Shader.PropertyToID("_EmissionColor");
 
         private void Awake()
         {
@@ -32,6 +37,7 @@ namespace ChessTheBetrayal.UI
             targetScale = transform.localScale;
 
             _col = GetComponent<Collider>();
+            _renderer = GetComponentInChildren<Renderer>();
         }
 
         private void Update()
@@ -135,6 +141,20 @@ namespace ChessTheBetrayal.UI
             {
                 _col.enabled = false;
             }
+        }
+
+        /// <summary>
+        /// Toggles the temporary "Betrayer" glow via a MaterialPropertyBlock,
+        /// so the shared Chess Material is never instanced per-piece.
+        /// </summary>
+        public void SetBetrayerGlow(bool active)
+        {
+            if (_renderer == null) return;
+
+            _mpb ??= new MaterialPropertyBlock();
+            _renderer.GetPropertyBlock(_mpb);
+            _mpb.SetColor(EmissionColorId, active ? BetrayerGlowColor : Color.black);
+            _renderer.SetPropertyBlock(_mpb);
         }
     }
 }

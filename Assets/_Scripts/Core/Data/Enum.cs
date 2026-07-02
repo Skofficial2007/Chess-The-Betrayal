@@ -26,15 +26,33 @@ namespace ChessTheBetrayal.Core.Data
         Black =  1
     }
 
-    // State Machine Phases for Game Flow
-    // The Betrayal mechanic runs through RetributionPending → ResolutionFailed/ForcedSave.
-    // If you're adding a new phase, make sure GameManager's TransitionToPhase() handles it.
+    /// <summary>
+    /// State Machine Phases for Game Flow. This is the ground truth for the Betrayal
+    /// state machine — if you're adding a phase or a BetrayalStage, update this diagram
+    /// first, then make TurnResolver and GameManager's TransitionToPhase() match it.
+    ///
+    /// <code>
+    /// Normal ──Act──► RetributionPending ──Retribution──► Normal
+    ///                         │
+    ///                    (no legal retribution)
+    ///                         ▼
+    ///                    Defection ──(self-check?)──► ForcedSave ──DefensiveOverride──► Normal
+    ///                         └────────(no check)──────────────────────────────────► Normal
+    /// </code>
+    ///
+    /// Act, Retribution, DefensiveOverride, and Defection are <see cref="ChessTheBetrayal.Core.Engine.BetrayalStage"/>
+    /// values tagged on the MoveCommand that drives each transition — they are not TurnPhase
+    /// values themselves. Defection is resolved synchronously inside TurnResolver.Advance
+    /// (via ChessEngine.ResolveFailedRetribution) in the same call that detects "no legal
+    /// retribution," so it is never an observable resting TurnPhase; ResolutionFailed was
+    /// removed for exactly this reason — it never described anything the state machine
+    /// actually paused in.
+    /// </summary>
     public enum TurnPhase
     {
         Starting,             // Board setup complete, waiting for presentation layer to finish animations
         Normal,               // Standard chess movement
         RetributionPending,   // Player chose Betrayal, must capture Betrayer
-        ResolutionFailed,     // Betrayer defected — resolve check if needed
         ForcedSave,           // Player's King is in check after defection
         GameOver              // Game is inactive/finished
     }

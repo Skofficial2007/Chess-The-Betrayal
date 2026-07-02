@@ -102,6 +102,20 @@ namespace ChessTheBetrayal.Core.Logic
             _state.ActiveSide = teamThatMoved == Team.White ? Team.Black : Team.White;
         }
 
+        /// <summary>
+        /// Applies a time bounty for a successful Betrayal Retribution (Resolution A).
+        /// Unlike OnMoveMade, this is explicitly NOT capped at the base time limit, serving as a true reward.
+        /// </summary>
+        public void ApplyBetrayalBounty(Team team, long bonusMs)
+        {
+            if (_config.IsUnlimited || bonusMs <= 0L) return;
+
+            long current = _state.GetRemaining(team);
+            long newTime = current + bonusMs;
+
+            _state.SetRemaining(team, newTime);
+        }
+
         // ── Private Helpers ───────────────────────────────────────────────────────
 
         private void CheckLowTimeWarning(Team team, long remaining)

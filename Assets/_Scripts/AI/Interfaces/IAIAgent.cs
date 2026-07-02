@@ -14,6 +14,9 @@ namespace ChessTheBetrayal.AI
         /// Starts an async best-move search. Pass a CancellationToken so the
         /// search can be aborted on game reset or scene change.
         /// Result fires via OnMoveDecided on the main thread.
+        /// TODO (AI turn integration): implementations that search on a background thread
+        /// must marshal OnMoveDecided back to the main thread themselves — callers (e.g.
+        /// GameManager.PlayMove) are not thread-safe and touch Unity objects.
         /// </summary>
         void RequestBestMove(BoardState board, Team team, CancellationToken cancellation = default);
 

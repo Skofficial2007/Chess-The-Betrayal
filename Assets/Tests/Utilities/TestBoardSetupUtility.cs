@@ -21,6 +21,7 @@ namespace ChessTheBetrayal.Tests.Utilities
             board.CastlingRights = 0;
             board.CurrentTurn = Team.White;
             board.EnPassantFile = null;
+            board.BetrayalRightAvailable = false; // Isolate standard tests from Betrayal logic
             return board;
         }
 
@@ -52,6 +53,7 @@ namespace ChessTheBetrayal.Tests.Utilities
                 board.SetPiece(new PieceData(Team.Black, backRank[x], -1, 7), x, 7);
             }
 
+            board.BetrayalRightAvailable = false; // Isolate standard tests from Betrayal logic
             board.ComputeFullZobristHash();
             return board;
         }
@@ -143,6 +145,25 @@ namespace ChessTheBetrayal.Tests.Utilities
         public static BoardState WithTurn(this BoardState board, Team team)
         {
             board.CurrentTurn = team;
+            return board;
+        }
+
+        /// <summary>
+        /// Toggles the global Betrayal right for the current match.
+        /// </summary>
+        public static BoardState WithBetrayalRight(this BoardState board, bool available)
+        {
+            board.BetrayalRightAvailable = available;
+            return board;
+        }
+
+        /// <summary>
+        /// Sets the pending betrayer target and initiator to simulate mid-sequence states.
+        /// </summary>
+        public static BoardState WithPendingBetrayer(this BoardState board, string algebraic, Team initiator)
+        {
+            board.PendingBetrayerSquare = AlgebraicToVector(algebraic);
+            board.BetrayalInitiator = initiator;
             return board;
         }
 
