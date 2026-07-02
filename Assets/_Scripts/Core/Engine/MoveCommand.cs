@@ -10,7 +10,8 @@ namespace ChessTheBetrayal.Core.Engine
         None,
         Act,
         Retribution,
-        DefensiveSave
+        DefensiveSave,
+        Defection
     }
 
     /// <summary>
@@ -213,6 +214,19 @@ namespace ChessTheBetrayal.Core.Engine
             return new MoveCommand(from, to, pawn, captured, SpecialMove.Promotion, promotedTo, null, null, null,
                 board?.CastlingRights ?? 0, board?.EnPassantFile,
                 board?.BetrayalRightAvailable ?? true, board?.PendingBetrayerSquare, board?.BetrayalInitiator);
+        }
+
+        /// <summary>
+        /// A Defection is a zero-displacement "move" (start == end) that flips the Betrayer's team.
+        /// Routing it through the normal MoveCommand/ApplyMoveToBoard/UndoMoveOnBoard path gives the
+        /// AI search a symmetric make/unmake for the failed-retribution resolution.
+        /// </summary>
+        public static MoveCommand CreateDefectionMove(Vector2Int square, PieceData betrayer, BoardState board = null)
+        {
+            return new MoveCommand(square, square, betrayer, default, SpecialMove.None, ChessPieceType.None, null, null, null,
+                board?.CastlingRights ?? 0, board?.EnPassantFile,
+                board?.BetrayalRightAvailable ?? true, board?.PendingBetrayerSquare, board?.BetrayalInitiator,
+                stage: BetrayalStage.Defection);
         }
 
         #endregion

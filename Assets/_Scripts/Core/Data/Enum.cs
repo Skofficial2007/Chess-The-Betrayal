@@ -27,14 +27,15 @@ namespace ChessTheBetrayal.Core.Data
     }
 
     // State Machine Phases for Game Flow
-    // The Betrayal mechanic runs through RetributionPending → ResolutionFailed/ForcedSave.
-    // If you're adding a new phase, make sure GameManager's TransitionToPhase() handles it.
+    // The Betrayal mechanic runs through RetributionPending → Normal/ForcedSave.
+    // ResolutionFailed was removed: it was never a resting state — TurnResolver.Advance
+    // always lands on Normal or ForcedSave in the same call that resolves a failed Retribution.
+    // If you're adding a new phase, make sure TurnResolver and GameManager's TransitionToPhase() handle it.
     public enum TurnPhase
     {
         Starting,             // Board setup complete, waiting for presentation layer to finish animations
         Normal,               // Standard chess movement
         RetributionPending,   // Player chose Betrayal, must capture Betrayer
-        ResolutionFailed,     // Betrayer defected — resolve check if needed
         ForcedSave,           // Player's King is in check after defection
         GameOver              // Game is inactive/finished
     }
