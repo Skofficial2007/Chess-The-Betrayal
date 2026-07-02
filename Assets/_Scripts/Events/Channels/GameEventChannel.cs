@@ -19,6 +19,21 @@ namespace ChessTheBetrayal.Events
 
         private readonly List<System.Action> _listeners = new List<System.Action>(4);
 
+        // ScriptableObjects persist across play sessions when Domain Reload is disabled.
+        // We MUST wipe the listener lists on enable/disable to purge "zombie" delegates 
+        // from objects that failed to unregister correctly during teardown.
+
+        protected virtual void OnEnable()
+        {
+            _listeners.Clear();
+            _debugLog.Clear();
+        }
+
+        protected virtual void OnDisable()
+        {
+            _listeners.Clear();
+        }
+
         /// <summary>
         /// Fires the event. Iterates backwards so listeners can safely
         /// unregister themselves during the callback without invalidating the loop.
@@ -81,6 +96,17 @@ namespace ChessTheBetrayal.Events
         private List<string> _debugLog = new List<string>(8);
 
         private readonly List<System.Action<T>> _listeners = new List<System.Action<T>>(4);
+
+        protected virtual void OnEnable()
+        {
+            _listeners.Clear();
+            _debugLog.Clear();
+        }
+
+        protected virtual void OnDisable()
+        {
+            _listeners.Clear();
+        }
 
         /// <summary>
         /// Raises the event, distributing a copy of the payload to each listener.

@@ -182,7 +182,11 @@ namespace ChessTheBetrayal.Gameplay
             _domainLogger?.FlushToUnityConsole();
             
             // Write the latest clock state to the shared bridge every frame.
-            _sharedClockState?.Set(GetCurrentClockSnapshot());
+            // Skipped in unlimited/AI mode, where there's no controller and nothing to report.
+            if (_clockController != null)
+            {
+                _sharedClockState?.Set(GetCurrentClockSnapshot());
+            }
         }
 
         // Named methods (rather than lambdas) so we can unsubscribe cleanly.
@@ -410,6 +414,10 @@ namespace ChessTheBetrayal.Gameplay
         /// <summary>
         /// Applies a validated move to the board and tells everyone who needs to know about it.
         /// Wraps execution in exception boundaries to safely catch domain invariant violations.
+        /// NOT thread-safe: raises event channels that touch Unity objects. When an IAIAgent's
+        /// OnMoveDecided fires from a background search thread, marshal the move back to the
+        /// main thread (e.g. via a SynchronizationContext/dispatcher queue drained in Update())
+        /// before it reaches this method.
         /// </summary>
         private void PlayMove(MoveCommand move)
         {
@@ -445,7 +453,7 @@ namespace ChessTheBetrayal.Gameplay
 
                 // Fire the standard move event so visuals update, but pass isCheck=false 
                 // because Edge Case C dictates Discovered Checks on Opponent wait until the sequence resolves.
-                _moveExecutedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveExecutedPayload(move, LiveBoard.MoveHistory.Count / 2, false));
+                _moveExecutedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveExecutedPayload(move, LiveBoard.FullMoveNumber, false));
 
                 // Speculatively check if a Retribution move is even possible.
                 _legalMoves.Clear();
@@ -494,7 +502,7 @@ namespace ChessTheBetrayal.Gameplay
 
                 // --- UI FIX: Tell BoardVisuals to play the capture animation ---
                 bool isCheckAfterRetribution = ChessEngine.IsKingInCheck(LiveBoard, LiveBoard.CurrentTurn);
-                _moveExecutedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveExecutedPayload(move, LiveBoard.MoveHistory.Count / 2, isCheckAfterRetribution));
+                _moveExecutedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveExecutedPayload(move, LiveBoard.FullMoveNumber, isCheckAfterRetribution));
                 // ---------------------------------------------------------------
 
                 _clock?.OnMoveMade(move.PieceTeam); // Standard Fischer increment now applies
@@ -510,7 +518,7 @@ namespace ChessTheBetrayal.Gameplay
 
                 // --- UI FIX: Tell BoardVisuals to play the save animation ---
                 bool isCheckAfterSave = ChessEngine.IsKingInCheck(LiveBoard, LiveBoard.CurrentTurn);
-                _moveExecutedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveExecutedPayload(move, LiveBoard.MoveHistory.Count / 2, isCheckAfterSave));
+                _moveExecutedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveExecutedPayload(move, LiveBoard.FullMoveNumber, isCheckAfterSave));
                 // ------------------------------------------------------------
 
                 _clock?.OnMoveMade(move.PieceTeam); // The Save move IS the final action of this turn — standard increment applies
@@ -524,10 +532,9 @@ namespace ChessTheBetrayal.Gameplay
             // We need to calculate if this move resulted in a check so the UI can flash the HUD.
             bool isCheck = ChessEngine.IsKingInCheck(LiveBoard, LiveBoard.CurrentTurn);
 
-            // LiveBoard.MoveHistory.Count / 2 gives us the full turn number (e.g., Turn 1 is 1w and 1b)
             _moveExecutedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveExecutedPayload(
                 move,
-                LiveBoard.MoveHistory.Count / 2,
+                LiveBoard.FullMoveNumber,
                 isCheck
             ));
 
@@ -563,7 +570,7 @@ namespace ChessTheBetrayal.Gameplay
                     _checkDetectedChannel?.Raise();
                     _turnChangedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.TurnChangedPayload(
                         LiveBoard.CurrentTurn, 
-                        LiveBoard.MoveHistory.Count / 2, 
+                        LiveBoard.FullMoveNumber,
                         ChessTheBetrayal.Events.Payloads.TurnSource.HumanLocal
                     ));
                     break;
@@ -571,7 +578,7 @@ namespace ChessTheBetrayal.Gameplay
                 case GameState.Normal:
                     _turnChangedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.TurnChangedPayload(
                         LiveBoard.CurrentTurn, 
-                        LiveBoard.MoveHistory.Count / 2, 
+                        LiveBoard.FullMoveNumber,
                         ChessTheBetrayal.Events.Payloads.TurnSource.HumanLocal
                     ));
                     break;
@@ -580,14 +587,6 @@ namespace ChessTheBetrayal.Gameplay
                     // Primary resolution path is GameManager.OnClockTimeout() called directly via interface.
                     break;
             }
-
-            // --- BETRAYAL MECHANIC HOOKS ---
-            // When you implement The Betrayal, this is where the phase transitions live.
-            // After a normal move resolves, check if the Betrayal was triggered and call:
-            //   TransitionToPhase(TurnPhase.RetributionPending)
-            // If Retribution fails (no valid executioner), call:
-            //   TransitionToPhase(TurnPhase.ResolutionFailed)
-            // See TurnPhase in Enum.cs for the full state machine map.
         }
 
         private void EndGame(Team? winner, bool byTimeout = false)
