@@ -32,6 +32,41 @@ namespace ChessTheBetrayal.Core.Engine
         private static List<MoveCommand> _moveGenBuffer;
         private static List<MoveCommand> MoveGenBuffer => _moveGenBuffer ??= new List<MoveCommand>(64);
 
+        [System.ThreadStatic]
+        private static List<MoveCommand> _betrayalLocalBuffer;
+        private static List<MoveCommand> BetrayalLocalBuffer => _betrayalLocalBuffer ??= new List<MoveCommand>(32);
+
+        [System.ThreadStatic]
+        private static int[] _indexScratchBuffer;
+
+        [System.ThreadStatic]
+        private static int[] _attackCheckIndexBuffer;
+
+        [System.ThreadStatic]
+        private static int[] _betrayalIndexBuffer;
+
+        /// <summary>
+        /// Copies a piece-index list into the given reusable thread-static buffer (creating/growing it as needed)
+        /// so callers that mutate the board mid-iteration (e.g. the betrayal disguise trick, or nested attack
+        /// checks) can iterate a stable snapshot without heap-allocating. Each call site must use its own
+        /// dedicated buffer slot to avoid clobbering an outer snapshot that's still being iterated.
+        /// </summary>
+        private static int[] SnapshotIndices(List<int> source, ref int[] buffer, out int count)
+        {
+            if (buffer == null || buffer.Length < source.Count)
+            {
+                buffer = new int[System.Math.Max(64, source.Count)];
+            }
+
+            for (int i = 0; i < source.Count; i++)
+            {
+                buffer[i] = source[i];
+            }
+
+            count = source.Count;
+            return buffer;
+        }
+
         #region Legal Move Generation
 
         public static void GetLegalMoves(BoardState board, Vector2Int position, List<MoveCommand> output)
@@ -114,9 +149,9 @@ namespace ChessTheBetrayal.Core.Engine
                 masterBuffer.Capacity = MaxMovesPerPosition;
             }
 
-            int[] indicesSnapshot = board.GetPieceIndices(team).ToArray();
+            int[] indicesSnapshot = SnapshotIndices(board.GetPieceIndices(team), ref _indexScratchBuffer, out int indexCount);
 
-            for (int i = 0; i < indicesSnapshot.Length; i++)
+            for (int i = 0; i < indexCount; i++)
             {
                 int idx = indicesSnapshot[i];
                 Vector2Int pos = new Vector2Int(idx % board.TileCountX, idx / board.TileCountX);
@@ -136,11 +171,11 @@ namespace ChessTheBetrayal.Core.Engine
             if (strategy == null) return;
 
             Team enemyTeam = piece.Team == Team.White ? Team.Black : Team.White;
-            int[] friendlyIndices = board.GetPieceIndices(piece.Team).ToArray();
+            int[] friendlyIndices = SnapshotIndices(board.GetPieceIndices(piece.Team), ref _betrayalIndexBuffer, out int friendlyCount);
 
-            List<MoveCommand> localBuffer = new List<MoveCommand>(32);
+            List<MoveCommand> localBuffer = BetrayalLocalBuffer;
 
-            for (int i = 0; i < friendlyIndices.Length; i++)
+            for (int i = 0; i < friendlyCount; i++)
             {
                 int idx = friendlyIndices[i];
                 Vector2Int candidateTargetPos = new Vector2Int(idx % board.TileCountX, idx / board.TileCountX);
@@ -155,11 +190,9 @@ namespace ChessTheBetrayal.Core.Engine
 
                 board.SetPiece(candidateVictim, candidateTargetPos.x, candidateTargetPos.y);
 
-                MoveCommand[] rawMoves = localBuffer.ToArray();
-
-                for (int j = 0; j < rawMoves.Length; j++)
+                for (int j = 0; j < localBuffer.Count; j++)
                 {
-                    if (rawMoves[j].EndPosition == candidateTargetPos)
+                    if (localBuffer[j].EndPosition == candidateTargetPos)
                     {
                         MoveCommand actMove = MoveCommand.CreateStandardMove(betrayerPos, candidateTargetPos, piece, candidateVictim, board)
                                                          .WithStage(BetrayalStage.Act);
@@ -182,11 +215,11 @@ namespace ChessTheBetrayal.Core.Engine
             if (betrayer.IsEmpty) return;
 
             Team enemyTeam = executionerTeam == Team.White ? Team.Black : Team.White;
-            int[] friendlyIndices = board.GetPieceIndices(executionerTeam).ToArray();
+            int[] friendlyIndices = SnapshotIndices(board.GetPieceIndices(executionerTeam), ref _betrayalIndexBuffer, out int friendlyCount);
 
-            List<MoveCommand> localBuffer = new List<MoveCommand>(32);
+            List<MoveCommand> localBuffer = BetrayalLocalBuffer;
 
-            for (int i = 0; i < friendlyIndices.Length; i++)
+            for (int i = 0; i < friendlyCount; i++)
             {
                 int idx = friendlyIndices[i];
                 Vector2Int pos = new Vector2Int(idx % board.TileCountX, idx / board.TileCountX);
@@ -205,15 +238,13 @@ namespace ChessTheBetrayal.Core.Engine
 
                 board.SetPiece(betrayer, betrayerSquare.x, betrayerSquare.y);
 
-                MoveCommand[] rawMoves = localBuffer.ToArray();
-
-                for (int j = 0; j < rawMoves.Length; j++)
+                for (int j = 0; j < localBuffer.Count; j++)
                 {
-                    if (rawMoves[j].EndPosition == betrayerSquare)
+                    if (localBuffer[j].EndPosition == betrayerSquare)
                     {
                         MoveCommand retMove = new MoveCommand(
                             pos, betrayerSquare, executioner, betrayer,
-                            rawMoves[j].SpecialMoveType, rawMoves[j].PromotedTo,
+                            localBuffer[j].SpecialMoveType, localBuffer[j].PromotedTo,
                             null, null, null,
                             board.CastlingRights, board.EnPassantFile,
                             board.BetrayalRightAvailable, board.PendingBetrayerSquare, board.BetrayalInitiator,
@@ -232,6 +263,23 @@ namespace ChessTheBetrayal.Core.Engine
 
         public static void GetForcedSaveMoves(BoardState board, Team team, List<MoveCommand> output)
         {
+            // ForcedSave only makes sense once the Betrayer has already defected (changed teams).
+            // GetAllLegalMoves() falls through to plain legal-move generation for exactly this
+            // reason, but that fallthrough is an implicit side effect of the team-flip check —
+            // assert the invariant explicitly here so a stale PendingBetrayerSquare/BetrayalInitiator
+            // can never silently reroute this call into GetRetributionMoves instead.
+            if (board.PendingBetrayerSquare.HasValue && board.BetrayalInitiator.HasValue)
+            {
+                PieceData betrayer = board.GetPiece(board.PendingBetrayerSquare.Value);
+                if (betrayer.Team == board.BetrayalInitiator.Value)
+                {
+                    throw new DomainException(
+                        DomainEventCode.Betrayal_ForcedSaveInvariantViolated,
+                        "GetForcedSaveMoves was called while the Betrayer still belongs to the initiator's team. " +
+                        "ForcedSave requires the Betrayer to have already defected.");
+                }
+            }
+
             output.Clear();
             GetAllLegalMoves(board, team, output);
 
@@ -267,9 +315,9 @@ namespace ChessTheBetrayal.Core.Engine
 
         public static bool IsSquareUnderAttack(BoardState board, Vector2Int targetSquare, Team attackerTeam)
         {
-            int[] indicesSnapshot = board.GetPieceIndices(attackerTeam).ToArray();
+            int[] indicesSnapshot = SnapshotIndices(board.GetPieceIndices(attackerTeam), ref _attackCheckIndexBuffer, out int indexCount);
 
-            for (int i = 0; i < indicesSnapshot.Length; i++)
+            for (int i = 0; i < indexCount; i++)
             {
                 int idx = indicesSnapshot[i];
                 int ax = idx % board.TileCountX;
@@ -309,9 +357,9 @@ namespace ChessTheBetrayal.Core.Engine
 
         public static bool HasAnyLegalMoves(BoardState board, Team team)
         {
-            int[] indicesSnapshot = board.GetPieceIndices(team).ToArray();
+            int[] indicesSnapshot = SnapshotIndices(board.GetPieceIndices(team), ref _indexScratchBuffer, out int indexCount);
 
-            for (int i = 0; i < indicesSnapshot.Length; i++)
+            for (int i = 0; i < indexCount; i++)
             {
                 int idx = indicesSnapshot[i];
                 Vector2Int pos = new Vector2Int(idx % board.TileCountX, idx / board.TileCountX);
@@ -703,12 +751,12 @@ namespace ChessTheBetrayal.Core.Engine
         {
             return type switch
             {
-                ChessPieceType.Pawn   => 1,
+                ChessPieceType.Pawn => 1,
                 ChessPieceType.Knight => 3,
                 ChessPieceType.Bishop => 3,
-                ChessPieceType.Rook   => 5,
-                ChessPieceType.Queen  => 9,
-                ChessPieceType.King   => 0,
+                ChessPieceType.Rook => 5,
+                ChessPieceType.Queen => 9,
+                ChessPieceType.King => 0,
                 _ => 0
             };
         }

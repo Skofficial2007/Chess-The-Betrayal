@@ -219,6 +219,13 @@ namespace ChessTheBetrayal.Core.Data
         public List<Vector2Int> MoveHistory { get; private set; }
 
         /// <summary>
+        /// The full move number (e.g. Turn 1 covers both White's and Black's 1st moves).
+        /// Single source of truth for turn-number derivation — used by move-executed events,
+        /// PGN-style logging, and network replay.
+        /// </summary>
+        public int FullMoveNumber => MoveHistory.Count / 2;
+
+        /// <summary>
         /// Tracks captured pieces for each team.
         /// </summary>
         public List<PieceData> WhiteCaptured { get; private set; }
@@ -287,6 +294,19 @@ namespace ChessTheBetrayal.Core.Data
 
             LogicalBoard[x, y] = piece;
 
+            // Clear king cache if king was removed from this square
+            if (!existing.IsEmpty && existing.Type == ChessPieceType.King)
+            {
+                if (existing.Team == Team.White)
+                {
+                    _whiteKingSquare = -1;
+                }
+                else
+                {
+                    _blackKingSquare = -1;
+                }
+            }
+
             // Add new piece to indices
             if (!piece.IsEmpty)
             {
@@ -309,19 +329,6 @@ namespace ChessTheBetrayal.Core.Data
                     {
                         _blackKingSquare = sq;
                     }
-                }
-            }
-
-            // Clear king cache if king was removed from this square
-            if (!existing.IsEmpty && existing.Type == ChessPieceType.King)
-            {
-                if (existing.Team == Team.White)
-                {
-                    _whiteKingSquare = -1;
-                }
-                else
-                {
-                    _blackKingSquare = -1;
                 }
             }
         }
