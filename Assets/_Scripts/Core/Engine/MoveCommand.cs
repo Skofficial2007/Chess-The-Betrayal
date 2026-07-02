@@ -45,8 +45,8 @@ namespace ChessTheBetrayal.Core.Engine
         public readonly ChessPieceType CapturedType;
         public readonly bool CapturedHadMoved;
 
-        // Complete immutable snapshot of the captured piece. 
-        // Essential for AI unmake/remake paths where piece history (StartRow, etc) must survive defection/resurrection.
+        // Complete immutable snapshot of the captured piece.
+        // Essential for AI unmake/remake paths where piece history must survive defection/resurrection.
         public readonly PieceData CapturedPieceFullState;
 
         public readonly SpecialMove SpecialMoveType;
@@ -60,18 +60,58 @@ namespace ChessTheBetrayal.Core.Engine
         public readonly Vector2Int? RookEndPosition;
         public readonly Vector2Int? EnPassantCapturePosition;
 
-        // Snapshots of board special states BEFORE this move (for perfect Make/Unmake)
+        // Snapshots of board special states BEFORE this move (for perfect Make/Unmake logic)
         public readonly int PreviousCastlingMask;
         public readonly int? PreviousEnPassantFile;
+        public readonly bool PreviousBetrayalRightAvailable;
+        public readonly Vector2Int? PreviousPendingBetrayerSquare;
+        public readonly Team? PreviousBetrayalInitiator;
 
         // Clock snapshot at the moment this move was submitted.
-        // Used by the network layer to validate client submission times against server state.
-        // long.MaxValue indicates no clock was active (e.g., untimed mode or AI).
         public readonly long WhiteRemainingMsAtMove;
         public readonly long BlackRemainingMsAtMove;
 
         /// <summary>
-        /// Builds a move command from two piece references. We pull the data we need out of them immediately so the command doesn't hold live references.
+        /// Compatibility overload for older call sites that only passed the classic clock and stage arguments.
+        /// </summary>
+        public MoveCommand(
+            Vector2Int startPosition,
+            Vector2Int endPosition,
+            PieceData pieceMoved,
+            PieceData pieceCaptured,
+            SpecialMove specialMoveType,
+            ChessPieceType promotedTo,
+            Vector2Int? rookStartPosition,
+            Vector2Int? rookEndPosition,
+            Vector2Int? enPassantCapturePosition,
+            int previousCastlingMask,
+            int? previousEnPassantFile,
+            long whiteRemainingMsAtMove,
+            long blackRemainingMsAtMove,
+            BetrayalStage stage)
+            : this(
+                startPosition,
+                endPosition,
+                pieceMoved,
+                pieceCaptured,
+                specialMoveType,
+                promotedTo,
+                rookStartPosition,
+                rookEndPosition,
+                enPassantCapturePosition,
+                previousCastlingMask,
+                previousEnPassantFile,
+                true,
+                null,
+                null,
+                whiteRemainingMsAtMove,
+                blackRemainingMsAtMove,
+                stage)
+        {
+        }
+
+        /// <summary>
+        /// Builds a move command from two piece references, capturing all board state required for a perfect unmake.
         /// </summary>
         public MoveCommand(
             Vector2Int startPosition,
@@ -85,6 +125,9 @@ namespace ChessTheBetrayal.Core.Engine
             Vector2Int? enPassantCapturePosition = null,
             int previousCastlingMask = 0,
             int? previousEnPassantFile = null,
+            bool previousBetrayalRightAvailable = true,
+            Vector2Int? previousPendingBetrayerSquare = null,
+            Team? previousBetrayalInitiator = null,
             long whiteRemainingMsAtMove = long.MaxValue,
             long blackRemainingMsAtMove = long.MaxValue,
             BetrayalStage stage = BetrayalStage.None)
@@ -113,7 +156,7 @@ namespace ChessTheBetrayal.Core.Engine
                 CapturedTeam = pieceCaptured.Team;
                 CapturedType = pieceCaptured.Type;
                 CapturedHadMoved = pieceCaptured.HasMoved;
-                CapturedPieceFullState = pieceCaptured; // Full snapshot secured
+                CapturedPieceFullState = pieceCaptured;
             }
             else
             {
@@ -131,6 +174,9 @@ namespace ChessTheBetrayal.Core.Engine
             EnPassantCapturePosition = enPassantCapturePosition;
             PreviousCastlingMask = previousCastlingMask;
             PreviousEnPassantFile = previousEnPassantFile;
+            PreviousBetrayalRightAvailable = previousBetrayalRightAvailable;
+            PreviousPendingBetrayerSquare = previousPendingBetrayerSquare;
+            PreviousBetrayalInitiator = previousBetrayalInitiator;
             WhiteRemainingMsAtMove = whiteRemainingMsAtMove;
             BlackRemainingMsAtMove = blackRemainingMsAtMove;
             Stage = stage;
@@ -142,32 +188,37 @@ namespace ChessTheBetrayal.Core.Engine
         {
             return new MoveCommand(from, to, piece, captured,
                 previousCastlingMask: board?.CastlingRights ?? 0,
-                previousEnPassantFile: board?.EnPassantFile);
+                previousEnPassantFile: board?.EnPassantFile,
+                previousBetrayalRightAvailable: board?.BetrayalRightAvailable ?? true,
+                previousPendingBetrayerSquare: board?.PendingBetrayerSquare,
+                previousBetrayalInitiator: board?.BetrayalInitiator);
         }
 
         public static MoveCommand CreateCastlingMove(Vector2Int kingFrom, Vector2Int kingTo, PieceData king, Vector2Int rookFrom, Vector2Int rookTo, BoardState board = null)
         {
             return new MoveCommand(kingFrom, kingTo, king, default, SpecialMove.Castling, ChessPieceType.None, rookFrom, rookTo, null,
-                board?.CastlingRights ?? 0, board?.EnPassantFile);
+                board?.CastlingRights ?? 0, board?.EnPassantFile,
+                board?.BetrayalRightAvailable ?? true, board?.PendingBetrayerSquare, board?.BetrayalInitiator);
         }
 
         public static MoveCommand CreateEnPassantMove(Vector2Int from, Vector2Int to, PieceData pawn, PieceData capturedPawn, Vector2Int capturePosition, BoardState board = null)
         {
             return new MoveCommand(from, to, pawn, capturedPawn, SpecialMove.EnPassant, ChessPieceType.None, null, null, capturePosition,
-                board?.CastlingRights ?? 0, board?.EnPassantFile);
+                board?.CastlingRights ?? 0, board?.EnPassantFile,
+                board?.BetrayalRightAvailable ?? true, board?.PendingBetrayerSquare, board?.BetrayalInitiator);
         }
 
         public static MoveCommand CreatePromotionMove(Vector2Int from, Vector2Int to, PieceData pawn, ChessPieceType promotedTo, PieceData captured = default, BoardState board = null)
         {
             return new MoveCommand(from, to, pawn, captured, SpecialMove.Promotion, promotedTo, null, null, null,
-                board?.CastlingRights ?? 0, board?.EnPassantFile);
+                board?.CastlingRights ?? 0, board?.EnPassantFile,
+                board?.BetrayalRightAvailable ?? true, board?.PendingBetrayerSquare, board?.BetrayalInitiator);
         }
 
         #endregion
 
         /// <summary>
         /// Returns a new MoveCommand with clock timestamps applied.
-        /// Factory methods do not accept clock parameters to ensure move generation remains decoupled from time state.
         /// </summary>
         public MoveCommand WithClockSnapshot(ClockState clock) =>
             new MoveCommand(
@@ -177,6 +228,7 @@ namespace ChessTheBetrayal.Core.Engine
                 SpecialMoveType, PromotedTo,
                 RookStartPosition, RookEndPosition, EnPassantCapturePosition,
                 PreviousCastlingMask, PreviousEnPassantFile,
+                PreviousBetrayalRightAvailable, PreviousPendingBetrayerSquare, PreviousBetrayalInitiator,
                 clock.WhiteRemainingMs,
                 clock.BlackRemainingMs,
                 Stage);
@@ -192,6 +244,7 @@ namespace ChessTheBetrayal.Core.Engine
                 SpecialMoveType, PromotedTo,
                 RookStartPosition, RookEndPosition, EnPassantCapturePosition,
                 PreviousCastlingMask, PreviousEnPassantFile,
+                PreviousBetrayalRightAvailable, PreviousPendingBetrayerSquare, PreviousBetrayalInitiator,
                 WhiteRemainingMsAtMove,
                 BlackRemainingMsAtMove,
                 stage);
