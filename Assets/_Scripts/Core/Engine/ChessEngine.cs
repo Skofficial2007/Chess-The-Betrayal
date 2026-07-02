@@ -486,6 +486,16 @@ namespace ChessTheBetrayal.Core.Engine
             if (move.Stage == BetrayalStage.Act)
             {
                 board.ToggleBetrayalHash();
+                board.ToggleBetrayalSubStateHash(move.EndPosition, move.PieceTeam);
+            }
+            else if (move.Stage == BetrayalStage.Retribution || move.Stage == BetrayalStage.DefensiveSave)
+            {
+                // Closes out the sub-sequence opened by Act — toggle out using the square/initiator
+                // that were pending going into this move (Defection deliberately left them untouched).
+                if (move.PreviousPendingBetrayerSquare.HasValue && move.PreviousBetrayalInitiator.HasValue)
+                {
+                    board.ToggleBetrayalSubStateHash(move.PreviousPendingBetrayerSquare.Value, move.PreviousBetrayalInitiator.Value);
+                }
             }
         }
 

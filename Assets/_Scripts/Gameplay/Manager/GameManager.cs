@@ -23,7 +23,7 @@ namespace ChessTheBetrayal.Gameplay
     /// Normal/ForcedSave (result.DidDefect) | DefectionOccurred
     /// ForcedSave            | ForcedSaveActive
     /// </summary>
-    public class GameManager : MonoBehaviour, IClockEventHandler
+    public class GameManager : MonoBehaviour, IClockEventHandler, IClockSnapshotSource
     {
         #region Singleton
 
@@ -96,9 +96,12 @@ namespace ChessTheBetrayal.Gameplay
         // Handles move validation. Swap this out for NetworkMoveExecutor to go online.
         private IMoveExecutor _moveExecutor;
 
-        // Pure-domain Betrayal state machine. GameManager only translates its result into
-        // presentation concerns (event channels, clock, logging) — it never decides phases itself.
-        private readonly ITurnResolver _turnResolver = new TurnResolver();
+        // Instance-scoped rules engine (move generation, check detection, the Betrayal state
+        // machine). GameManager depends on this interface, not the static ChessEngine class,
+        // so the exact same seam can be handed to a server or an AI without a Unity singleton.
+        // GameManager only translates its result into presentation concerns (event channels,
+        // clock, logging) — it never decides phases itself.
+        private readonly IChessEngine _engine = new ChessEngineAdapter();
 
         // Reused across calls so we're not allocating a new list every time someone hovers over a piece.
         private readonly List<MoveCommand> _legalMoves = new List<MoveCommand>(32);
@@ -249,7 +252,7 @@ namespace ChessTheBetrayal.Gameplay
                 _moveExecutor = null;
             }
 
-            _moveExecutor = new LocalMoveExecutor(LiveBoard, () => CurrentPhase, logMoves);
+            _moveExecutor = new LocalMoveExecutor(LiveBoard, _engine, () => CurrentPhase, this, logMoves);
 
             _moveExecutor.OnMoveConfirmed += PlayMove;
             _moveExecutor.OnMoveRejected += OnExecutorMoveRejected;
@@ -431,7 +434,7 @@ namespace ChessTheBetrayal.Gameplay
             TurnAdvanceResult result;
             try
             {
-                result = _turnResolver.Advance(LiveBoard, move);
+                result = _engine.Advance(LiveBoard, move);
             }
             catch (BetrayalRuleViolationException ex)
             {
@@ -495,7 +498,7 @@ namespace ChessTheBetrayal.Gameplay
                 ApplyTimeBounty(move.PieceTeam);
 
                 // --- UI FIX: Tell BoardVisuals to play the capture animation ---
-                bool isCheckAfterRetribution = ChessEngine.IsKingInCheck(LiveBoard, LiveBoard.CurrentTurn);
+                bool isCheckAfterRetribution = _engine.IsKingInCheck(LiveBoard, LiveBoard.CurrentTurn);
                 _moveExecutedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveExecutedPayload(move, LiveBoard.FullMoveNumber, isCheckAfterRetribution));
                 // ---------------------------------------------------------------
 
@@ -508,7 +511,7 @@ namespace ChessTheBetrayal.Gameplay
             if (move.Stage == BetrayalStage.DefensiveSave)
             {
                 // --- UI FIX: Tell BoardVisuals to play the save animation ---
-                bool isCheckAfterSave = ChessEngine.IsKingInCheck(LiveBoard, LiveBoard.CurrentTurn);
+                bool isCheckAfterSave = _engine.IsKingInCheck(LiveBoard, LiveBoard.CurrentTurn);
                 _moveExecutedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveExecutedPayload(move, LiveBoard.FullMoveNumber, isCheckAfterSave));
                 // ------------------------------------------------------------
 
@@ -520,7 +523,7 @@ namespace ChessTheBetrayal.Gameplay
             _clock?.OnMoveMade(move.PieceTeam);
 
             // We need to calculate if this move resulted in a check so the UI can flash the HUD.
-            bool isCheck = ChessEngine.IsKingInCheck(LiveBoard, LiveBoard.CurrentTurn);
+            bool isCheck = _engine.IsKingInCheck(LiveBoard, LiveBoard.CurrentTurn);
 
             _moveExecutedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveExecutedPayload(
                 move,
@@ -540,7 +543,7 @@ namespace ChessTheBetrayal.Gameplay
             Team currentTeam = LiveBoard.CurrentTurn;
             ClockState? clockSnapshot = GetCurrentClockSnapshot();
 
-            GameState state = ChessEngine.EvaluateGameState(LiveBoard, currentTeam, clockSnapshot);
+            GameState state = _engine.EvaluateGameState(LiveBoard, currentTeam, clockSnapshot);
 
             switch (state)
             {
@@ -611,11 +614,11 @@ namespace ChessTheBetrayal.Gameplay
 
             if (CurrentPhase == TurnPhase.Normal)
             {
-                ChessEngine.GetLegalMoves(LiveBoard, position, _legalMoves);
+                _engine.GetLegalMoves(LiveBoard, position, _legalMoves);
             }
             else if (CurrentPhase == TurnPhase.RetributionPending && LiveBoard.PendingBetrayerSquare.HasValue)
             {
-                ChessEngine.GetRetributionMoves(LiveBoard, LiveBoard.CurrentTurn, LiveBoard.PendingBetrayerSquare.Value, _legalMoves);
+                _engine.GetRetributionMoves(LiveBoard, LiveBoard.CurrentTurn, LiveBoard.PendingBetrayerSquare.Value, _legalMoves);
 
                 for (int i = _legalMoves.Count - 1; i >= 0; i--)
                 {
@@ -625,7 +628,7 @@ namespace ChessTheBetrayal.Gameplay
             }
             else if (CurrentPhase == TurnPhase.ForcedSave)
             {
-                ChessEngine.GetForcedSaveMoves(LiveBoard, LiveBoard.CurrentTurn, _legalMoves);
+                _engine.GetForcedSaveMoves(LiveBoard, LiveBoard.CurrentTurn, _legalMoves);
 
                 for (int i = _legalMoves.Count - 1; i >= 0; i--)
                 {
@@ -672,6 +675,12 @@ namespace ChessTheBetrayal.Gameplay
         {
             return _clockController != null ? (ClockState?)_clockController.CurrentState : null;
         }
+
+        /// <summary>
+        /// IClockSnapshotSource implementation. LocalMoveExecutor is handed `this` instead of
+        /// reaching into GameManager.Instance, so it never depends on the singleton directly.
+        /// </summary>
+        ClockState? IClockSnapshotSource.Current => GetCurrentClockSnapshot();
 
         /// <summary>
         /// Configures the session for AI participation, enforcing the performance bypass invariant.

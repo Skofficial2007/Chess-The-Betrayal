@@ -108,6 +108,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
 
             // FIX: Natively applied by the engine. Removed manual toggles.
             ChessEngine.ApplyMoveToBoard(board, actMove);
+            Assert.DoesNotThrow(() => board.AssertZobristConsistency(), "Hash must remain consistent after Phase 1 Act.");
 
             // ---------------------------------------------------------
             // 3. PHASE 2: RETRIBUTION (Fails due to Pin)
@@ -118,6 +119,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
             DefectionOutcome outcome = ChessEngine.ResolveFailedRetribution(board);
             Assert.That(outcome.RequiresForcedSave, Is.True, "Defected Knight on d3 is now attacking the White King on e1. Forced Save required.");
             Assert.That(board.GetPiece(outcome.DefectedSquare).Team, Is.EqualTo(Team.Black), "Knight successfully defected to Black.");
+            Assert.DoesNotThrow(() => board.AssertZobristConsistency(), "Hash must remain consistent after Phase 2 Defection.");
 
             // ---------------------------------------------------------
             // 4. PHASE 3: DEFENSIVE OVERRIDE (Forced Save)
@@ -128,6 +130,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
 
             ChessEngine.ApplyMoveToBoard(board, saveMove);
             board.NextTurn(); // GameManager natively ends the turn after Defensive Save
+            Assert.DoesNotThrow(() => board.AssertZobristConsistency(), "Hash must remain consistent after Phase 3 Defensive Save.");
 
             // ---------------------------------------------------------
             // 5. FINAL ASSERTIONS
