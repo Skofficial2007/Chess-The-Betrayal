@@ -40,22 +40,26 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
         }
 
         [Test]
-        public void DefectPiece_ThenUndoDefection_RestoresExactOriginalState()
+        public void ResolveFailedRetribution_ThenUndoMoveOnBoard_RestoresExactOriginalState()
         {
-            // Arrange
+            // Arrange: a pending Betrayer with no legal executioner, so ResolveFailedRetribution
+            // produces a real Defection MoveCommand — the only production-correct way to make and
+            // then unmake a Defection is ApplyMoveToBoard/UndoMoveOnBoard driven by that move.
             BoardState board = TestBoardSetupUtility.CreateEmpty()
-                .WithPiece("e4", Team.White, ChessPieceType.Knight);
+                .WithPiece("e1", Team.White, ChessPieceType.King)
+                .WithPiece("e4", Team.White, ChessPieceType.Knight)
+                .WithPendingBetrayer("e4", Team.White);
             board.ComputeFullZobristHash();
             ulong originalHash = board.ZobristHash;
 
             // Act
-            board.DefectPiece(TestBoardSetupUtility.AlgebraicToVector("e4"));
-            ChessEngine.UndoDefection(board, TestBoardSetupUtility.AlgebraicToVector("e4"), Team.White);
+            DefectionOutcome outcome = ChessEngine.ResolveFailedRetribution(board);
+            ChessEngine.UndoMoveOnBoard(board, outcome.DefectionMove, recordHistory: false);
 
             // Assert
             Assert.That(board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("e4")).Team, Is.EqualTo(Team.White));
-            Assert.That(board.GetPieceIndices(Team.White).Count, Is.EqualTo(1));
-            Assert.That(board.ZobristHash, Is.EqualTo(originalHash), "UndoDefection must restore exact Zobrist state.");
+            Assert.That(board.GetPieceIndices(Team.White).Count, Is.EqualTo(2)); // King + Knight
+            Assert.That(board.ZobristHash, Is.EqualTo(originalHash), "UndoMoveOnBoard must restore exact Zobrist state after a Defection.");
         }
 
         [Test]
