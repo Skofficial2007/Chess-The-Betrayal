@@ -3415,6 +3415,7 @@ GameObject:
   - component: {fileID: 608628699}
   - component: {fileID: 608628700}
   - component: {fileID: 608628701}
+  - component: {fileID: 608628702}
   m_Layer: 0
   m_Name: Chessboard
   m_TagString: Untagged
@@ -3691,6 +3692,34 @@ MonoBehaviour:
         m_TargetAssemblyTypeName: ChessTheBetrayal.Gameplay.GameManager, Assembly-CSharp
         m_MethodName: StartMatch
         m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
+--- !u!114 &608628702
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 608628690}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b2de40fd96c642d449404b820324fd9f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Events.BetrayalEventListener
+  _channel: {fileID: 11400000, guid: 1c8afe13a2243ca43b04b34b3581f608, type: 2}
+  _onEventRaised:
+    m_PersistentCalls:
+      m_Calls:
+      - m_Target: {fileID: 608628694}
+        m_TargetAssemblyTypeName: ChessTheBetrayal.UI.BoardVisuals, Assembly-CSharp
+        m_MethodName: HandleBetrayalPhaseChanged
+        m_Mode: 0
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
           m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
