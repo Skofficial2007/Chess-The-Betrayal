@@ -35,7 +35,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
             foreach (var move in _moveBuffer)
             {
                 if (move.EndPosition == TestBoardSetupUtility.AlgebraicToVector("e4")) foundCapture = true;
-                Assert.That(move.Stage, Is.EqualTo(BetrayalStage.DefensiveSave), "Moves must be correctly tagged.");
+                Assert.That(move.Stage, Is.EqualTo(BetrayalStage.DefensiveOverride), "Moves must be correctly tagged.");
             }
             Assert.That(foundCapture, Is.True, "Capturing the defected piece is a valid save.");
         }

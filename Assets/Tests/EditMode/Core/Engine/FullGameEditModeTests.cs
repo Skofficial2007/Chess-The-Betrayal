@@ -128,7 +128,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
             _engine.GetForcedSaveMoves(board, board.CurrentTurn, _moveBuffer);
             Assert.That(_moveBuffer.Count, Is.GreaterThan(0), "King must have a legal escape from the Defection check.");
             MoveCommand saveMove = _moveBuffer[0];
-            Assert.That(saveMove.Stage, Is.EqualTo(BetrayalStage.DefensiveSave));
+            Assert.That(saveMove.Stage, Is.EqualTo(BetrayalStage.DefensiveOverride));
 
             TurnAdvanceResult afterSave = _engine.Advance(board, saveMove);
 

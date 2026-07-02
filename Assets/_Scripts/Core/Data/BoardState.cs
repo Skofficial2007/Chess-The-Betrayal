@@ -147,7 +147,7 @@ namespace ChessTheBetrayal.Core.Data
         /// <summary>
         /// XORs the pending-Betrayer square and initiator side into or out of the hash.
         /// Call once when a Retribution sequence opens (Act) and again with the same
-        /// square/initiator when it closes (Retribution/DefensiveSave) — Defection deliberately
+        /// square/initiator when it closes (Retribution/DefensiveOverride) — Defection deliberately
         /// leaves the sub-state (and this hash contribution) untouched, since PendingBetrayerSquare
         /// and BetrayalInitiator stay set until the terminal move.
         /// </summary>
@@ -198,7 +198,7 @@ namespace ChessTheBetrayal.Core.Data
             }
 
             // Include the pending Betrayer's square + initiator, if a Retribution sequence is open
-            // (covers Act through Defection — cleared only once Retribution/DefensiveSave resolves it).
+            // (covers Act through Defection — cleared only once Retribution/DefensiveOverride resolves it).
             if (PendingBetrayerSquare.HasValue && BetrayalInitiator.HasValue)
             {
                 ToggleBetrayalSubStateHash(PendingBetrayerSquare.Value, BetrayalInitiator.Value);

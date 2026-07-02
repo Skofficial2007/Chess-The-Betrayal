@@ -3,14 +3,18 @@ using ChessTheBetrayal.Core.Data;
 namespace ChessTheBetrayal.Core.Engine
 {
     /// <summary>
-    /// Defines which phase of the Betrayal sequence a move command belongs to.
+    /// Defines which phase of the Betrayal sequence a move command belongs to. Names match the
+    /// pitch doc's shared vocabulary: Act (the betrayal itself), Retribution (an ally executes
+    /// the Betrayer), Defection (the Betrayer permanently switches sides when no Retribution is
+    /// possible), and Defensive Override (the initiator's forced King move when Defection leaves
+    /// them in check).
     /// </summary>
     public enum BetrayalStage
     {
         None,
         Act,
         Retribution,
-        DefensiveSave,
+        DefensiveOverride,
         Defection
     }
 

@@ -285,7 +285,7 @@ namespace ChessTheBetrayal.Core.Engine
 
             for (int i = 0; i < output.Count; i++)
             {
-                output[i] = output[i].WithStage(BetrayalStage.DefensiveSave);
+                output[i] = output[i].WithStage(BetrayalStage.DefensiveOverride);
             }
         }
 
@@ -479,7 +479,7 @@ namespace ChessTheBetrayal.Core.Engine
                 board.ToggleBetrayalHash();
                 board.ToggleBetrayalSubStateHash(move.EndPosition, move.PieceTeam);
             }
-            else if (move.Stage == BetrayalStage.Retribution || move.Stage == BetrayalStage.DefensiveSave)
+            else if (move.Stage == BetrayalStage.Retribution || move.Stage == BetrayalStage.DefensiveOverride)
             {
                 // Closes out the sub-sequence opened by Act — toggle out using the square/initiator
                 // that were pending going into this move (Defection deliberately left them untouched).
@@ -564,11 +564,11 @@ namespace ChessTheBetrayal.Core.Engine
                 board.PendingBetrayerSquare = move.EndPosition;
                 board.BetrayalInitiator = move.PieceTeam;
             }
-            else if (move.Stage == BetrayalStage.Retribution || move.Stage == BetrayalStage.DefensiveSave)
+            else if (move.Stage == BetrayalStage.Retribution || move.Stage == BetrayalStage.DefensiveOverride)
             {
                 // Defection deliberately does NOT clear these: GetForcedSaveMoves (and the
                 // ForcedSave UI/AI path) needs PendingBetrayerSquare/BetrayalInitiator to still
-                // identify the defected piece until the terminal Retribution/DefensiveSave move
+                // identify the defected piece until the terminal Retribution/DefensiveOverride move
                 // finally closes out the Betrayal sequence.
                 board.PendingBetrayerSquare = null;
                 board.BetrayalInitiator = null;
