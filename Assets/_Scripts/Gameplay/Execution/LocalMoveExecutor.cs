@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
+using ChessTheBetrayal.Core.Logic;
 using ChessTheBetrayal.Core.Diagnostics;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
@@ -20,6 +21,8 @@ namespace ChessTheBetrayal.Gameplay
         public event Action<Vector2Int, Vector2Int> OnPromotionRequired;
 
         private readonly BoardState _board;
+        private readonly IChessEngine _engine;
+        private readonly IClockSnapshotSource _clockSource;
         private readonly List<MoveCommand> _legalMoves = new List<MoveCommand>(32);
         private readonly List<MoveCommand> _movesToTarget = new List<MoveCommand>(4);
 
@@ -31,11 +34,14 @@ namespace ChessTheBetrayal.Gameplay
 
         /// <summary>
         /// Note: We take a direct reference to the live board here. A network executor must NOT do this — it should validate against a server snapshot, not the client's version.
+        /// clockSource may be null, in which case moves are never stamped with a clock snapshot (untimed/AI mode).
         /// </summary>
-        public LocalMoveExecutor(BoardState board, Func<TurnPhase> phaseProvider, bool logMoves = true)
+        public LocalMoveExecutor(BoardState board, IChessEngine engine, Func<TurnPhase> phaseProvider, IClockSnapshotSource clockSource = null, bool logMoves = true)
         {
             _board = board;
+            _engine = engine;
             _phaseProvider = phaseProvider;
+            _clockSource = clockSource;
             _logMoves = logMoves;
         }
 
@@ -62,7 +68,7 @@ namespace ChessTheBetrayal.Gameplay
                 }
 
                 _legalMoves.Clear();
-                ChessEngine.GetRetributionMoves(_board, _board.CurrentTurn, _board.PendingBetrayerSquare.Value, _legalMoves);
+                _engine.GetRetributionMoves(_board, _board.CurrentTurn, _board.PendingBetrayerSquare.Value, _legalMoves);
 
                 _movesToTarget.Clear();
                 for (int i = 0; i < _legalMoves.Count; i++)
@@ -96,7 +102,7 @@ namespace ChessTheBetrayal.Gameplay
                 }
 
                 MoveCommand validRetribution = _movesToTarget[0];
-                ClockState? clockSnap = GameManager.Instance?.GetCurrentClockSnapshot();
+                ClockState? clockSnap = _clockSource?.Current;
                 if (clockSnap.HasValue) validRetribution = validRetribution.WithClockSnapshot(clockSnap.Value);
 
                 if (_logMoves) Debug.Log($"[LocalMoveExecutor] Retribution confirmed: {validRetribution}");
@@ -108,7 +114,7 @@ namespace ChessTheBetrayal.Gameplay
             if (_phaseProvider != null && _phaseProvider() == TurnPhase.ForcedSave)
             {
                 _legalMoves.Clear();
-                ChessEngine.GetForcedSaveMoves(_board, _board.CurrentTurn, _legalMoves);
+                _engine.GetForcedSaveMoves(_board, _board.CurrentTurn, _legalMoves);
 
                 _movesToTarget.Clear();
                 for (int i = 0; i < _legalMoves.Count; i++)
@@ -142,7 +148,7 @@ namespace ChessTheBetrayal.Gameplay
                 }
 
                 MoveCommand validSave = _movesToTarget[0];
-                ClockState? clockSnap = GameManager.Instance?.GetCurrentClockSnapshot();
+                ClockState? clockSnap = _clockSource?.Current;
                 if (clockSnap.HasValue) validSave = validSave.WithClockSnapshot(clockSnap.Value);
 
                 if (_logMoves) Debug.Log($"[LocalMoveExecutor] Forced Save confirmed: {validSave}");
@@ -190,7 +196,7 @@ namespace ChessTheBetrayal.Gameplay
             _legalMoves.Clear();
             try
             {
-                ChessEngine.GetLegalMoves(_board, from, _legalMoves);
+                _engine.GetLegalMoves(_board, from, _legalMoves);
             }
             catch (BetrayalRuleViolationException ex)
             {
@@ -250,7 +256,7 @@ namespace ChessTheBetrayal.Gameplay
             
             // Capture the current clock state to stamp the move for network and replay validation.
             // GetCurrentClockSnapshot returns null when no clock is active (e.g., untimed or AI mode).
-            ClockState? clockSnapshot = GameManager.Instance?.GetCurrentClockSnapshot();
+            ClockState? clockSnapshot = _clockSource?.Current;
             if (clockSnapshot.HasValue)
             {
                 validMove = validMove.WithClockSnapshot(clockSnapshot.Value);
@@ -278,15 +284,15 @@ namespace ChessTheBetrayal.Gameplay
             {
                 if (_phaseProvider != null && _phaseProvider() == TurnPhase.RetributionPending)
                 {
-                    ChessEngine.GetRetributionMoves(_board, _board.CurrentTurn, _board.PendingBetrayerSquare.Value, _legalMoves);
+                    _engine.GetRetributionMoves(_board, _board.CurrentTurn, _board.PendingBetrayerSquare.Value, _legalMoves);
                 }
                 else if (_phaseProvider != null && _phaseProvider() == TurnPhase.ForcedSave)
                 {
-                    ChessEngine.GetForcedSaveMoves(_board, _board.CurrentTurn, _legalMoves);
+                    _engine.GetForcedSaveMoves(_board, _board.CurrentTurn, _legalMoves);
                 }
                 else
                 {
-                    ChessEngine.GetLegalMoves(_board, _pendingPromotionMove.StartPosition, _legalMoves);
+                    _engine.GetLegalMoves(_board, _pendingPromotionMove.StartPosition, _legalMoves);
                 }
             }
             catch (BetrayalRuleViolationException ex)
@@ -314,7 +320,7 @@ namespace ChessTheBetrayal.Gameplay
                     if (_logMoves) Debug.Log($"[LocalMoveExecutor] Promotion confirmed: {type}");
 
                     // Stamp the promotion move with the current clock state.
-                    ClockState? clockSnapshot = GameManager.Instance?.GetCurrentClockSnapshot();
+                    ClockState? clockSnapshot = _clockSource?.Current;
                     if (clockSnapshot.HasValue)
                     {
                         cmd = cmd.WithClockSnapshot(clockSnapshot.Value);

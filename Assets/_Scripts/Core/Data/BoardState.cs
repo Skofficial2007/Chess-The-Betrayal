@@ -20,6 +20,12 @@ namespace ChessTheBetrayal.Core.Data
         private static readonly ulong[] EnPassantKeys;
         // Future Custom Mechanic Support
         private static readonly ulong BetrayalPhaseKey;
+        // Betrayal sub-state: which square holds the pending Betrayer, and which side initiated.
+        // Without these, two mid-sequence positions that are identical in piece placement but
+        // differ in which piece is the pending Betrayer would hash identically — transposition-table
+        // poisoning during exactly the high-branching Act/Retribution sub-phase.
+        private static readonly ulong[] PendingBetrayerSquareKeys; // [64]
+        private static readonly ulong BetrayalInitiatorIsBlackKey;
 
         /// <summary>
         /// Incrementally updated hash for transposition table lookups.
@@ -82,8 +88,14 @@ namespace ChessTheBetrayal.Core.Data
             }
 
             BlackToMoveKey = NextUlong();
-            // TODO (Betrayal): Toggle this in the hash whenever the BetrayalRight is consumed for the match.
             BetrayalPhaseKey = NextUlong();
+
+            PendingBetrayerSquareKeys = new ulong[64];
+            for (int i = 0; i < 64; i++)
+            {
+                PendingBetrayerSquareKeys[i] = NextUlong();
+            }
+            BetrayalInitiatorIsBlackKey = NextUlong();
         }
 
         /// <summary>
@@ -133,6 +145,24 @@ namespace ChessTheBetrayal.Core.Data
         }
 
         /// <summary>
+        /// XORs the pending-Betrayer square and initiator side into or out of the hash.
+        /// Call once when a Retribution sequence opens (Act) and again with the same
+        /// square/initiator when it closes (Retribution/DefensiveSave) — Defection deliberately
+        /// leaves the sub-state (and this hash contribution) untouched, since PendingBetrayerSquare
+        /// and BetrayalInitiator stay set until the terminal move.
+        /// </summary>
+        public void ToggleBetrayalSubStateHash(Vector2Int square, Team initiator)
+        {
+            int squareIndex = (square.y * TileCountX) + square.x;
+            ZobristHash ^= PendingBetrayerSquareKeys[squareIndex];
+
+            if (initiator == Team.Black)
+            {
+                ZobristHash ^= BetrayalInitiatorIsBlackKey;
+            }
+        }
+
+        /// <summary>
         /// Builds the hash from scratch by reading every piece on the board. Call this once at game start, then keep it up to date incrementally as moves happen.
         /// </summary>
         public void ComputeFullZobristHash()
@@ -165,6 +195,13 @@ namespace ChessTheBetrayal.Core.Data
             if (!BetrayalRightAvailable)
             {
                 ToggleBetrayalHash();
+            }
+
+            // Include the pending Betrayer's square + initiator, if a Retribution sequence is open
+            // (covers Act through Defection — cleared only once Retribution/DefensiveSave resolves it).
+            if (PendingBetrayerSquare.HasValue && BetrayalInitiator.HasValue)
+            {
+                ToggleBetrayalSubStateHash(PendingBetrayerSquare.Value, BetrayalInitiator.Value);
             }
         }
 

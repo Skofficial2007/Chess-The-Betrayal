@@ -74,12 +74,16 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
             PieceData pawn = board.GetPiece(from);
             PieceData betrayer = board.GetPiece(to);
 
-            // Manually construct the promotion retribution move
+            // Manually construct the promotion retribution move. Must snapshot the board's actual
+            // pending-betrayer/initiator state (not the legacy compatibility overload, which
+            // silently defaults them to true/null/null) — ApplyMoveToBoard needs the real
+            // "previous" values to correctly close out the Betrayal sub-state Zobrist keys.
             MoveCommand promoMove = new MoveCommand(
                 from, to, pawn, betrayer,
                 SpecialMove.None, ChessPieceType.Queen,
                 null, null, null,
                 board.CastlingRights, board.EnPassantFile,
+                board.BetrayalRightAvailable, board.PendingBetrayerSquare, board.BetrayalInitiator,
                 long.MaxValue, long.MaxValue,
                 BetrayalStage.Retribution
             );
