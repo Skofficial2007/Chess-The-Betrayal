@@ -84,7 +84,7 @@ namespace ChessTheBetrayal.Core.Engine
 
             if (retributionMoves.Count > 0)
             {
-                // Waiting on the opponent (or AI child search) to pick a Retribution/DefensiveSave move.
+                // Waiting on the opponent (or AI child search) to pick a Retribution/DefensiveOverride move.
                 return new TurnAdvanceResult(TurnPhase.RetributionPending, false, false, false, null, null);
             }
 

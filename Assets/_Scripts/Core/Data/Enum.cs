@@ -36,11 +36,11 @@ namespace ChessTheBetrayal.Core.Data
     ///                         │
     ///                    (no legal retribution)
     ///                         ▼
-    ///                    Defection ──(self-check?)──► ForcedSave ──DefensiveSave──► Normal
-    ///                         └────────(no check)──────────────────────────────► Normal
+    ///                    Defection ──(self-check?)──► ForcedSave ──DefensiveOverride──► Normal
+    ///                         └────────(no check)──────────────────────────────────► Normal
     /// </code>
     ///
-    /// Act, Retribution, DefensiveSave, and Defection are <see cref="ChessTheBetrayal.Core.Engine.BetrayalStage"/>
+    /// Act, Retribution, DefensiveOverride, and Defection are <see cref="ChessTheBetrayal.Core.Engine.BetrayalStage"/>
     /// values tagged on the MoveCommand that drives each transition — they are not TurnPhase
     /// values themselves. Defection is resolved synchronously inside TurnResolver.Advance
     /// (via ChessEngine.ResolveFailedRetribution) in the same call that detects "no legal
