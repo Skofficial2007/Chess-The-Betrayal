@@ -405,8 +405,10 @@ namespace ChessTheBetrayal.Core.Engine
 
         /// <summary>
         /// Builds and applies the Defection move for a Retribution that has no legal executioner.
-        /// Routed through ApplyMoveToBoard so the resulting MoveCommand can be pushed onto a normal
-        /// undo stack — an Alpha-Beta search exploring a failed Betrayal can unmake it like any other move.
+        /// Routed through ApplyMoveToBoard, so the DefectionOutcome.DefectionMove it returns can be
+        /// unmade with a plain <c>UndoMoveOnBoard(outcome.DefectionMove)</c> — the same seam every
+        /// other move type uses. An Alpha-Beta search exploring a failed Betrayal unmakes it exactly
+        /// like any other move; there is no separate "undo defection" API.
         /// </summary>
         public static DefectionOutcome ResolveFailedRetribution(BoardState board)
         {
@@ -419,17 +421,6 @@ namespace ChessTheBetrayal.Core.Engine
 
             bool selfCheckAfterDefection = IsKingInCheck(board, initiator);
             return new DefectionOutcome(selfCheckAfterDefection, betrayerSquare, defectionMove);
-        }
-
-        /// <summary>
-        /// Inverse of ResolveFailedRetribution. Kept for callers holding a bare square/team
-        /// rather than the MoveCommand this resolver produced; prefer UndoMoveOnBoard(move) when possible.
-        /// </summary>
-        internal static void UndoDefection(BoardState board, Vector2Int square, Team originalTeam)
-        {
-            PieceData current = board.GetPiece(square);
-            MoveCommand defectionMove = MoveCommand.CreateDefectionMove(square, current.WithTeam(originalTeam), board);
-            UndoMoveOnBoard(board, defectionMove, recordHistory: false);
         }
 
         private static void ApplyZobristMove(BoardState board, MoveCommand move, int previousCastlingMask, int? previousEnPassantFile)

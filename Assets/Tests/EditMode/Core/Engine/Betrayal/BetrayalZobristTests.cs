@@ -54,19 +54,21 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
         }
 
         [Test]
-        public void ZobristHash_DefectionThenUndoDefection_RestoresOriginalHash()
+        public void ZobristHash_ResolveFailedRetributionThenUndoMoveOnBoard_RestoresOriginalHash()
         {
-            // Arrange
+            // Arrange: drives Defection through the same ApplyMoveToBoard/UndoMoveOnBoard seam
+            // an AI search uses, rather than the raw BoardState.DefectPiece primitive directly.
             BoardState board = TestBoardSetupUtility.CreateEmpty()
-                .WithPiece("e4", Team.White, ChessPieceType.Knight);
+                .WithPiece("e1", Team.White, ChessPieceType.King)
+                .WithPiece("e4", Team.White, ChessPieceType.Knight)
+                .WithPendingBetrayer("e4", Team.White);
 
             board.ComputeFullZobristHash();
             ulong originalHash = board.ZobristHash;
-            Vector2Int square = TestBoardSetupUtility.AlgebraicToVector("e4");
 
             // Act
-            board.DefectPiece(square);
-            ChessEngine.UndoDefection(board, square, Team.White);
+            DefectionOutcome outcome = ChessEngine.ResolveFailedRetribution(board);
+            ChessEngine.UndoMoveOnBoard(board, outcome.DefectionMove, recordHistory: false);
 
             // Assert
             Assert.That(board.ZobristHash, Is.EqualTo(originalHash));
