@@ -20,6 +20,12 @@ namespace ChessTheBetrayal.Core.Data
         private static readonly ulong[] EnPassantKeys;
         // Future Custom Mechanic Support
         private static readonly ulong BetrayalPhaseKey;
+        // Betrayal sub-state: which square holds the pending Betrayer, and which side initiated.
+        // Without these, two mid-sequence positions that are identical in piece placement but
+        // differ in which piece is the pending Betrayer would hash identically — transposition-table
+        // poisoning during exactly the high-branching Act/Retribution sub-phase.
+        private static readonly ulong[] PendingBetrayerSquareKeys; // [64]
+        private static readonly ulong BetrayalInitiatorIsBlackKey;
 
         /// <summary>
         /// Incrementally updated hash for transposition table lookups.
@@ -82,8 +88,14 @@ namespace ChessTheBetrayal.Core.Data
             }
 
             BlackToMoveKey = NextUlong();
-            // TODO (Betrayal): Toggle this in the hash whenever the BetrayalRight is consumed for the match.
             BetrayalPhaseKey = NextUlong();
+
+            PendingBetrayerSquareKeys = new ulong[64];
+            for (int i = 0; i < 64; i++)
+            {
+                PendingBetrayerSquareKeys[i] = NextUlong();
+            }
+            BetrayalInitiatorIsBlackKey = NextUlong();
         }
 
         /// <summary>
@@ -133,6 +145,24 @@ namespace ChessTheBetrayal.Core.Data
         }
 
         /// <summary>
+        /// XORs the pending-Betrayer square and initiator side into or out of the hash.
+        /// Call once when a Retribution sequence opens (Act) and again with the same
+        /// square/initiator when it closes (Retribution/DefensiveOverride) — Defection deliberately
+        /// leaves the sub-state (and this hash contribution) untouched, since PendingBetrayerSquare
+        /// and BetrayalInitiator stay set until the terminal move.
+        /// </summary>
+        public void ToggleBetrayalSubStateHash(Vector2Int square, Team initiator)
+        {
+            int squareIndex = (square.y * TileCountX) + square.x;
+            ZobristHash ^= PendingBetrayerSquareKeys[squareIndex];
+
+            if (initiator == Team.Black)
+            {
+                ZobristHash ^= BetrayalInitiatorIsBlackKey;
+            }
+        }
+
+        /// <summary>
         /// Builds the hash from scratch by reading every piece on the board. Call this once at game start, then keep it up to date incrementally as moves happen.
         /// </summary>
         public void ComputeFullZobristHash()
@@ -159,6 +189,19 @@ namespace ChessTheBetrayal.Core.Data
             if (EnPassantFile.HasValue)
             {
                 ToggleEnPassantHash(EnPassantFile.Value);
+            }
+
+            // Include Betrayal phase flag
+            if (!BetrayalRightAvailable)
+            {
+                ToggleBetrayalHash();
+            }
+
+            // Include the pending Betrayer's square + initiator, if a Retribution sequence is open
+            // (covers Act through Defection — cleared only once Retribution/DefensiveOverride resolves it).
+            if (PendingBetrayerSquare.HasValue && BetrayalInitiator.HasValue)
+            {
+                ToggleBetrayalSubStateHash(PendingBetrayerSquare.Value, BetrayalInitiator.Value);
             }
         }
 
@@ -213,6 +256,13 @@ namespace ChessTheBetrayal.Core.Data
         public List<Vector2Int> MoveHistory { get; private set; }
 
         /// <summary>
+        /// The full move number (e.g. Turn 1 covers both White's and Black's 1st moves).
+        /// Single source of truth for turn-number derivation — used by move-executed events,
+        /// PGN-style logging, and network replay.
+        /// </summary>
+        public int FullMoveNumber => MoveHistory.Count / 2;
+
+        /// <summary>
         /// Tracks captured pieces for each team.
         /// </summary>
         public List<PieceData> WhiteCaptured { get; private set; }
@@ -223,6 +273,22 @@ namespace ChessTheBetrayal.Core.Data
         /// </summary>
         public bool IsGameOver { get; set; }
         public Team? Winner { get; set; } // null if stalemate
+
+        /// <summary>
+        /// Global, shared, once-per-match resource for the Betrayal mechanic.
+        /// Defaults to true and is permanently consumed the instant Phase 1 succeeds.
+        /// </summary>
+        public bool BetrayalRightAvailable { get; set; } = true;
+
+        /// <summary>
+        /// Tracks the square of the piece that initiated Betrayal, serving as the mandatory target for Phase 2.
+        /// </summary>
+        public Vector2Int? PendingBetrayerSquare { get; set; }
+
+        /// <summary>
+        /// Tracks which team initiated the Betrayal sequence, since CurrentTurn does not change mid-sequence.
+        /// </summary>
+        public Team? BetrayalInitiator { get; set; }
 
         public BoardState(int sizeX = 8, int sizeY = 8)
         {
@@ -265,6 +331,19 @@ namespace ChessTheBetrayal.Core.Data
 
             LogicalBoard[x, y] = piece;
 
+            // Clear king cache if king was removed from this square
+            if (!existing.IsEmpty && existing.Type == ChessPieceType.King)
+            {
+                if (existing.Team == Team.White)
+                {
+                    _whiteKingSquare = -1;
+                }
+                else
+                {
+                    _blackKingSquare = -1;
+                }
+            }
+
             // Add new piece to indices
             if (!piece.IsEmpty)
             {
@@ -287,19 +366,6 @@ namespace ChessTheBetrayal.Core.Data
                     {
                         _blackKingSquare = sq;
                     }
-                }
-            }
-
-            // Clear king cache if king was removed from this square
-            if (!existing.IsEmpty && existing.Type == ChessPieceType.King)
-            {
-                if (existing.Team == Team.White)
-                {
-                    _whiteKingSquare = -1;
-                }
-                else
-                {
-                    _blackKingSquare = -1;
                 }
             }
         }
@@ -406,6 +472,24 @@ namespace ChessTheBetrayal.Core.Data
         }
 
         /// <summary>
+        /// Atomically flips a piece to the opposing team (Resolution B).
+        /// Removes it from the old team's hash/indices and adds it to the new team's.
+        /// </summary>
+        public void DefectPiece(Vector2Int square)
+        {
+            PieceData piece = GetPiece(square);
+            if (piece.IsEmpty) return;
+
+            // Remove from old team's hash & indices, flip team, re-add to new team's hash & indices.
+            TogglePieceHash(piece.Team, piece.Type, square.x, square.y);
+
+            PieceData defected = piece.WithTeam(piece.Team == Team.White ? Team.Black : Team.White);
+            SetPiece(defected, square.x, square.y);
+
+            TogglePieceHash(defected.Team, defected.Type, square.x, square.y);
+        }
+
+        /// <summary>
         /// Clears all pieces from the board.
         /// </summary>
         public void Clear()
@@ -435,9 +519,15 @@ namespace ChessTheBetrayal.Core.Data
             ZobristHash = 0;
             CastlingRights = CastlingAllRights; // Reset to all castling available
             EnPassantFile = null;
+
             // Clear king cache
             _whiteKingSquare = -1;
             _blackKingSquare = -1;
+
+            // Clear Betrayal states
+            BetrayalRightAvailable = true;
+            PendingBetrayerSquare = null;
+            BetrayalInitiator = null;
         }
 
         /// <summary>
@@ -551,6 +641,11 @@ namespace ChessTheBetrayal.Core.Data
             clone.ZobristHash = this.ZobristHash;
             clone.CastlingRights = this.CastlingRights;
             clone.EnPassantFile = this.EnPassantFile;
+
+            // Betrayal States
+            clone.BetrayalRightAvailable = this.BetrayalRightAvailable;
+            clone.PendingBetrayerSquare = this.PendingBetrayerSquare;
+            clone.BetrayalInitiator = this.BetrayalInitiator;
 
             Array.Copy(this.LogicalBoard, clone.LogicalBoard, this.LogicalBoard.Length);
 

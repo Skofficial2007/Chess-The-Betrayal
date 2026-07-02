@@ -15,24 +15,15 @@ namespace ChessTheBetrayal.Core.Engine
     /// </summary>
     public static class ChessEngine
     {
-        // Safe default: NullDomainLogger silently discards events, preserving testability.
         private static IDomainLogger _logger = NullDomainLogger.Instance;
 
-        /// <summary>
-        /// Binds the engine to a presentation-layer logger.
-        /// Must be called by the game manager at startup.
-        /// </summary>
         public static void Initialize(IDomainLogger logger)
         {
             _logger = logger ?? NullDomainLogger.Instance;
         }
 
-        /// <summary>
-        /// The theoretical maximum number of legal moves available to a single player in any valid chess position.
-        /// </summary>
         public const int MaxMovesPerPosition = 218;
 
-        // Each thread gets its own private buffers so parallel AI searches don't step on each other.
         [System.ThreadStatic]
         private static List<MoveCommand> _attackCheckBuffer;
         private static List<MoveCommand> AttackCheckBuffer => _attackCheckBuffer ??= new List<MoveCommand>(64);
@@ -41,25 +32,49 @@ namespace ChessTheBetrayal.Core.Engine
         private static List<MoveCommand> _moveGenBuffer;
         private static List<MoveCommand> MoveGenBuffer => _moveGenBuffer ??= new List<MoveCommand>(64);
 
-        #region Legal Move Generation
+        [System.ThreadStatic]
+        private static List<MoveCommand> _betrayalLocalBuffer;
+        private static List<MoveCommand> BetrayalLocalBuffer => _betrayalLocalBuffer ??= new List<MoveCommand>(32);
+
+        [System.ThreadStatic]
+        private static int[] _indexScratchBuffer;
+
+        [System.ThreadStatic]
+        private static int[] _attackCheckIndexBuffer;
+
+        [System.ThreadStatic]
+        private static int[] _betrayalIndexBuffer;
 
         /// <summary>
-        /// Fills <paramref name="output"/> with every legal move the piece at <paramref name="position"/> can make.
-        /// Illegal moves (ones that leave your own King in check) are filtered out before returning.
-        /// Uses board.CurrentTurn to determine which team's moves to generate.
+        /// Copies a piece-index list into the given reusable thread-static buffer (creating/growing it as needed)
+        /// so callers that mutate the board mid-iteration (e.g. the betrayal disguise trick, or nested attack
+        /// checks) can iterate a stable snapshot without heap-allocating. Each call site must use its own
+        /// dedicated buffer slot to avoid clobbering an outer snapshot that's still being iterated.
         /// </summary>
+        private static int[] SnapshotIndices(List<int> source, ref int[] buffer, out int count)
+        {
+            if (buffer == null || buffer.Length < source.Count)
+            {
+                buffer = new int[System.Math.Max(64, source.Count)];
+            }
+
+            for (int i = 0; i < source.Count; i++)
+            {
+                buffer[i] = source[i];
+            }
+
+            count = source.Count;
+            return buffer;
+        }
+
+        #region Legal Move Generation
+
         public static void GetLegalMoves(BoardState board, Vector2Int position, List<MoveCommand> output)
         {
             GetLegalMoves(board, position, output, board.CurrentTurn);
+            GetBetrayalTargets(board, position, output);
         }
 
-        /// <summary>
-        /// Fills <paramref name="output"/> with every legal move the piece at <paramref name="position"/> can make.
-        /// Illegal moves (ones that leave your own King in check) are filtered out before returning.
-        /// This overload allows specifying the team explicitly, which is essential for AI move generation
-        /// where board.CurrentTurn may not match the team being evaluated.
-        /// </summary>
-        /// <param name="team">The team whose moves should be generated. Pieces of other teams are ignored.</param>
         private static void GetLegalMoves(BoardState board, Vector2Int position, List<MoveCommand> output, Team team)
         {
             output.Clear();
@@ -76,7 +91,6 @@ namespace ChessTheBetrayal.Core.Engine
                 return;
             }
 
-            // Step 1: Ask the piece for every square it could physically reach, ignoring check rules.
             strategy.GetRawMoves(board, piece, position, output);
 
             bool isKing = piece.Type == ChessPieceType.King;
@@ -88,27 +102,21 @@ namespace ChessTheBetrayal.Core.Engine
                 isCurrentlyInCheck = IsSquareUnderAttack(board, position, enemyTeam);
             }
 
-            // Step 2: Walk through the raw moves and throw out any that leave our King in danger.
             int write = 0;
             for (int i = 0; i < output.Count; i++)
             {
                 MoveCommand move = output[i];
 
-                // Castling has extra rules beyond just "does it leave the King in check?"
                 if (move.IsCastling)
                 {
-                    // Rule 1: Cannot castle out of check.
                     if (isCurrentlyInCheck) continue;
 
-                    // Rule 2: Cannot pass through an attacked square.
-                    // The King moves 2 steps; the square in between must be safe too.
                     int direction = move.EndPosition.x > move.StartPosition.x ? 1 : -1;
                     Vector2Int passThroughSquare = new Vector2Int(move.StartPosition.x + direction, move.StartPosition.y);
 
                     if (IsSquareUnderAttack(board, passThroughSquare, enemyTeam)) continue;
                 }
 
-                // For all moves, make sure the King isn't sitting in check after it resolves.
                 if (!DoesMoveLeaveKingInCheck(board, move))
                 {
                     output[write++] = move;
@@ -121,24 +129,29 @@ namespace ChessTheBetrayal.Core.Engine
             }
         }
 
-        /// <summary>
-        /// Fills <paramref name="masterBuffer"/> with every legal move available to a team.
-        /// This method works correctly regardless of board.CurrentTurn, making it safe for AI evaluation.
-        /// </summary>
         public static void GetAllLegalMoves(BoardState board, Team team, List<MoveCommand> masterBuffer)
         {
             masterBuffer.Clear();
+
+            if (board.PendingBetrayerSquare.HasValue && board.BetrayalInitiator.HasValue)
+            {
+                PieceData betrayer = board.GetPiece(board.PendingBetrayerSquare.Value);
+
+                if (betrayer.Team == board.BetrayalInitiator.Value)
+                {
+                    GetRetributionMoves(board, team, board.PendingBetrayerSquare.Value, masterBuffer);
+                    return;
+                }
+            }
 
             if (masterBuffer.Capacity < MaxMovesPerPosition)
             {
                 masterBuffer.Capacity = MaxMovesPerPosition;
             }
 
-            // Take a snapshot to avoid collection-modified-during-iteration.
-            // GetLegalMoves internally calls DoesMoveLeaveKingInCheck, which modifies indices via SetPiece.
-            int[] indicesSnapshot = board.GetPieceIndices(team).ToArray();
+            int[] indicesSnapshot = SnapshotIndices(board.GetPieceIndices(team), ref _indexScratchBuffer, out int indexCount);
 
-            for (int i = 0; i < indicesSnapshot.Length; i++)
+            for (int i = 0; i < indexCount; i++)
             {
                 int idx = indicesSnapshot[i];
                 Vector2Int pos = new Vector2Int(idx % board.TileCountX, idx / board.TileCountX);
@@ -148,14 +161,138 @@ namespace ChessTheBetrayal.Core.Engine
             }
         }
 
+        public static void GetBetrayalTargets(BoardState board, Vector2Int betrayerPos, List<MoveCommand> output)
+        {
+            PieceData piece = board.GetPiece(betrayerPos);
+
+            if (piece.Type == ChessPieceType.King || !board.BetrayalRightAvailable || board.CurrentTurn != piece.Team) return;
+
+            IPieceMovement strategy = MovementFactory.GetStrategy(piece.Type);
+            if (strategy == null) return;
+
+            Team enemyTeam = piece.Team == Team.White ? Team.Black : Team.White;
+            int[] friendlyIndices = SnapshotIndices(board.GetPieceIndices(piece.Team), ref _betrayalIndexBuffer, out int friendlyCount);
+
+            List<MoveCommand> localBuffer = BetrayalLocalBuffer;
+
+            for (int i = 0; i < friendlyCount; i++)
+            {
+                int idx = friendlyIndices[i];
+                Vector2Int candidateTargetPos = new Vector2Int(idx % board.TileCountX, idx / board.TileCountX);
+                PieceData candidateVictim = board.GetPiece(candidateTargetPos);
+
+                if (candidateVictim.Type == ChessPieceType.King || candidateTargetPos == betrayerPos) continue;
+
+                board.SetPiece(candidateVictim.WithTeam(enemyTeam), candidateTargetPos.x, candidateTargetPos.y);
+
+                localBuffer.Clear();
+                strategy.GetRawMoves(board, piece, betrayerPos, localBuffer);
+
+                board.SetPiece(candidateVictim, candidateTargetPos.x, candidateTargetPos.y);
+
+                for (int j = 0; j < localBuffer.Count; j++)
+                {
+                    if (localBuffer[j].EndPosition == candidateTargetPos)
+                    {
+                        MoveCommand actMove = MoveCommand.CreateStandardMove(betrayerPos, candidateTargetPos, piece, candidateVictim, board)
+                                                         .WithStage(BetrayalStage.Act);
+
+                        if (!DoesMoveLeaveKingInCheck(board, actMove))
+                        {
+                            output.Add(actMove);
+                        }
+
+                        break;
+                    }
+                }
+            }
+        }
+
+        public static void GetRetributionMoves(BoardState board, Team executionerTeam, Vector2Int betrayerSquare, List<MoveCommand> output)
+        {
+            output.Clear();
+            PieceData betrayer = board.GetPiece(betrayerSquare);
+            if (betrayer.IsEmpty) return;
+
+            Team enemyTeam = executionerTeam == Team.White ? Team.Black : Team.White;
+            int[] friendlyIndices = SnapshotIndices(board.GetPieceIndices(executionerTeam), ref _betrayalIndexBuffer, out int friendlyCount);
+
+            List<MoveCommand> localBuffer = BetrayalLocalBuffer;
+
+            for (int i = 0; i < friendlyCount; i++)
+            {
+                int idx = friendlyIndices[i];
+                Vector2Int pos = new Vector2Int(idx % board.TileCountX, idx / board.TileCountX);
+
+                if (pos == betrayerSquare) continue;
+
+                PieceData executioner = board.GetPiece(pos);
+
+                IPieceMovement strategy = MovementFactory.GetStrategy(executioner.Type);
+                if (strategy == null) continue;
+
+                board.SetPiece(betrayer.WithTeam(enemyTeam), betrayerSquare.x, betrayerSquare.y);
+
+                localBuffer.Clear();
+                strategy.GetRawMoves(board, executioner, pos, localBuffer);
+
+                board.SetPiece(betrayer, betrayerSquare.x, betrayerSquare.y);
+
+                for (int j = 0; j < localBuffer.Count; j++)
+                {
+                    if (localBuffer[j].EndPosition == betrayerSquare)
+                    {
+                        MoveCommand retMove = new MoveCommand(
+                            pos, betrayerSquare, executioner, betrayer,
+                            localBuffer[j].SpecialMoveType, localBuffer[j].PromotedTo,
+                            null, null, null,
+                            board.CastlingRights, board.EnPassantFile,
+                            board.BetrayalRightAvailable, board.PendingBetrayerSquare, board.BetrayalInitiator,
+                            long.MaxValue, long.MaxValue,
+                            BetrayalStage.Retribution
+                        );
+
+                        if (!DoesMoveLeaveKingInCheck(board, retMove))
+                        {
+                            output.Add(retMove);
+                        }
+                    }
+                }
+            }
+        }
+
+        public static void GetForcedSaveMoves(BoardState board, Team team, List<MoveCommand> output)
+        {
+            // ForcedSave only makes sense once the Betrayer has already defected (changed teams).
+            // GetAllLegalMoves() falls through to plain legal-move generation for exactly this
+            // reason, but that fallthrough is an implicit side effect of the team-flip check —
+            // assert the invariant explicitly here so a stale PendingBetrayerSquare/BetrayalInitiator
+            // can never silently reroute this call into GetRetributionMoves instead.
+            if (board.PendingBetrayerSquare.HasValue && board.BetrayalInitiator.HasValue)
+            {
+                PieceData betrayer = board.GetPiece(board.PendingBetrayerSquare.Value);
+                if (betrayer.Team == board.BetrayalInitiator.Value)
+                {
+                    throw new DomainException(
+                        DomainEventCode.Betrayal_ForcedSaveInvariantViolated,
+                        "GetForcedSaveMoves was called while the Betrayer still belongs to the initiator's team. " +
+                        "ForcedSave requires the Betrayer to have already defected.");
+                }
+            }
+
+            output.Clear();
+            GetAllLegalMoves(board, team, output);
+
+            for (int i = 0; i < output.Count; i++)
+            {
+                output[i] = output[i].WithStage(BetrayalStage.DefensiveOverride);
+            }
+        }
+
         #endregion
 
         #region Check Detection
 
-        /// <summary>
-        /// Returns true if making this move would leave the moving player's King in check.
-        /// We apply the move, check the result, then undo it — the board ends up exactly as it started.
-        /// </summary>
         private static bool DoesMoveLeaveKingInCheck(BoardState board, MoveCommand move)
         {
             ApplyMoveToBoard(board, move, recordHistory: false);
@@ -176,33 +313,11 @@ namespace ChessTheBetrayal.Core.Engine
             return inCheck;
         }
 
-        /// <summary>
-        /// Returns true if any piece on <paramref name="attackerTeam"/> can reach <paramref name="targetSquare"/>.
-        /// Uses raw moves (not legal moves) to avoid infinite recursion with check detection.
-        /// </summary>
-        /// <remarks>
-        /// PERF-003: Known O(N×M) hotspot. Current implementation generates full move lists for each attacker
-        /// and scans for a matching destination. A Rook might generate 14 moves to check one square.
-        /// 
-        /// OPTIMIZATION PATH (pre-AI sprint):
-        /// Replace with "attack from target" pattern (super-piece detection):
-        /// 1. Place imaginary sliding piece at targetSquare
-        /// 2. Cast rays in 8 directions until hitting piece or edge
-        /// 3. Check if piece found matches the ray type (Rook for orthogonal, Bishop for diagonal, Queen for both)
-        /// 4. Check knight offsets from target for Knights
-        /// 5. Check pawn capture diagonals from target for Pawns
-        /// 6. Check king radius from target for Kings
-        /// 
-        /// This reduces from O(N pieces × M moves/piece) to O(8 rays + 8 knight checks + 2 pawn checks) = O(1) relative to piece count.
-        /// Critical for alpha-beta AI where this is called millions of times per search.
-        /// </remarks>
         public static bool IsSquareUnderAttack(BoardState board, Vector2Int targetSquare, Team attackerTeam)
         {
-            // Note: GetRawMoves doesn't trigger make/unmake, so no snapshot needed here.
-            // But taking snapshot anyway for consistency and future-proofing.
-            int[] indicesSnapshot = board.GetPieceIndices(attackerTeam).ToArray();
+            int[] indicesSnapshot = SnapshotIndices(board.GetPieceIndices(attackerTeam), ref _attackCheckIndexBuffer, out int indexCount);
 
-            for (int i = 0; i < indicesSnapshot.Length; i++)
+            for (int i = 0; i < indexCount; i++)
             {
                 int idx = indicesSnapshot[i];
                 int ax = idx % board.TileCountX;
@@ -214,8 +329,6 @@ namespace ChessTheBetrayal.Core.Engine
                 if (strategy == null) continue;
 
                 AttackCheckBuffer.Clear();
-                // PERF-003 HOTSPOT: Generates all moves for this piece even though we only check one destination.
-                // This is the O(M) factor in O(N×M). Replace with targeted ray-casting for 10-100× speedup.
                 strategy.GetRawMoves(board, attacker, attackerPos, AttackCheckBuffer);
 
                 for (int j = 0; j < AttackCheckBuffer.Count; j++)
@@ -228,9 +341,6 @@ namespace ChessTheBetrayal.Core.Engine
             return false;
         }
 
-        /// <summary>
-        /// Returns true if the given team's King is currently in check.
-        /// </summary>
         public static bool IsKingInCheck(BoardState board, Team team)
         {
             if (!board.TryFindKing(team, out Vector2Int kingPos))
@@ -245,23 +355,15 @@ namespace ChessTheBetrayal.Core.Engine
 
         #region Game State Evaluation
 
-        /// <summary>
-        /// Returns true if the given team has at least one legal move available.
-        /// Optimized to use O(N) piece list instead of O(64) board scan.
-        /// This method works correctly regardless of board.CurrentTurn, making it safe for AI evaluation.
-        /// </summary>
         public static bool HasAnyLegalMoves(BoardState board, Team team)
         {
-            // Take a snapshot to avoid collection-modified-during-iteration.
-            // GetLegalMoves internally calls DoesMoveLeaveKingInCheck, which modifies indices via SetPiece.
-            int[] indicesSnapshot = board.GetPieceIndices(team).ToArray();
-            
-            for (int i = 0; i < indicesSnapshot.Length; i++)
+            int[] indicesSnapshot = SnapshotIndices(board.GetPieceIndices(team), ref _indexScratchBuffer, out int indexCount);
+
+            for (int i = 0; i < indexCount; i++)
             {
                 int idx = indicesSnapshot[i];
                 Vector2Int pos = new Vector2Int(idx % board.TileCountX, idx / board.TileCountX);
 
-                // We only need to find ONE legal move to prove the game isn't over.
                 GetLegalMoves(board, pos, MoveGenBuffer, team);
                 if (MoveGenBuffer.Count > 0)
                 {
@@ -271,9 +373,6 @@ namespace ChessTheBetrayal.Core.Engine
             return false;
         }
 
-        /// <summary>
-        /// Checks the board and tells you whether the given team is in checkmate, stalemate, check, timeout, or playing normally.
-        /// </summary>
         public static GameState EvaluateGameState(BoardState board, Team team, ClockState? clock = null)
         {
             if (clock.HasValue && clock.Value.IsExpired && clock.Value.ActiveSide == team)
@@ -281,18 +380,22 @@ namespace ChessTheBetrayal.Core.Engine
                 return GameState.Timeout;
             }
 
+            if (board.PendingBetrayerSquare.HasValue && board.BetrayalInitiator.HasValue)
+            {
+                PieceData betrayer = board.GetPiece(board.PendingBetrayerSquare.Value);
+                if (betrayer.Team == board.BetrayalInitiator.Value)
+                {
+                    return GameState.Normal;
+                }
+            }
+
             bool hasLegalMoves = HasAnyLegalMoves(board, team);
 
-            if (hasLegalMoves) // Removed the '!' - this block runs if the game is still going
+            if (hasLegalMoves)
             {
-                // IsKingInCheck is used to satisfy the GameState return type for the GameManager.
                 return IsKingInCheck(board, team) ? GameState.Check : GameState.Normal;
             }
 
-            // TODO (Betrayal): Add GameState.BetrayalInitiated and GameState.RetributionFailed here when
-            // the custom mechanic is implemented. GameManager's CheckForGameEnd() will handle the transitions.
-
-            // No legal moves: disambiguate checkmate vs stalemate
             return IsKingInCheck(board, team) ? GameState.Checkmate : GameState.Stalemate;
         }
 
@@ -301,19 +404,43 @@ namespace ChessTheBetrayal.Core.Engine
         #region Move Execution
 
         /// <summary>
-        /// Updates the Zobrist hash to reflect a move. Because XOR is self-cancelling, calling this
-        /// on the same move twice perfectly undoes the change — which is how move undo works.
+        /// Builds and applies the Defection move for a Retribution that has no legal executioner.
+        /// Routed through ApplyMoveToBoard, so the DefectionOutcome.DefectionMove it returns can be
+        /// unmade with a plain <c>UndoMoveOnBoard(outcome.DefectionMove)</c> — the same seam every
+        /// other move type uses. An Alpha-Beta search exploring a failed Betrayal unmakes it exactly
+        /// like any other move; there is no separate "undo defection" API.
         /// </summary>
+        public static DefectionOutcome ResolveFailedRetribution(BoardState board)
+        {
+            Vector2Int betrayerSquare = board.PendingBetrayerSquare.Value;
+            Team initiator = board.BetrayalInitiator.Value;
+            PieceData betrayer = board.GetPiece(betrayerSquare);
+
+            MoveCommand defectionMove = MoveCommand.CreateDefectionMove(betrayerSquare, betrayer, board);
+            ApplyMoveToBoard(board, defectionMove);
+
+            bool selfCheckAfterDefection = IsKingInCheck(board, initiator);
+            return new DefectionOutcome(selfCheckAfterDefection, betrayerSquare, defectionMove);
+        }
+
         private static void ApplyZobristMove(BoardState board, MoveCommand move, int previousCastlingMask, int? previousEnPassantFile)
         {
-            // 1. Toggle whose turn it is.
-            board.ToggleTurnHash();
+            if (move.Stage == BetrayalStage.Defection)
+            {
+                // BoardState.DefectPiece already toggles the piece out under its old team and back in
+                // under its new one (called by ApplyMoveToBoard just before this). Nothing left to do
+                // here — Defection never flips whose turn it is, so no turn-hash toggle either.
+                return;
+            }
 
-            // 2. Move the primary piece: remove it from the start square, add it to the end square.
+            if (move.Stage != BetrayalStage.Act)
+            {
+                board.ToggleTurnHash();
+            }
+
             board.TogglePieceHash(move.PieceTeam, move.PieceType, move.StartPosition.x, move.StartPosition.y);
             board.TogglePieceHash(move.PieceTeam, move.PieceType, move.EndPosition.x, move.EndPosition.y);
 
-            // 3. Remove the captured piece from its square.
             if (move.HasCapture)
             {
                 Vector2Int capPos = move.IsEnPassant && move.EnPassantCapturePosition.HasValue
@@ -323,25 +450,21 @@ namespace ChessTheBetrayal.Core.Engine
                 board.TogglePieceHash(move.CapturedTeam, move.CapturedType, capPos.x, capPos.y);
             }
 
-            // 4. For promotions: remove the pawn that arrived, add the promoted piece.
             if (move.IsPromotion)
             {
                 board.TogglePieceHash(move.PieceTeam, ChessPieceType.Pawn, move.EndPosition.x, move.EndPosition.y);
                 board.TogglePieceHash(move.PieceTeam, move.PromotedTo, move.EndPosition.x, move.EndPosition.y);
             }
 
-            // 5. For castling: move the Rook.
             if (move.IsCastling && move.RookStartPosition.HasValue && move.RookEndPosition.HasValue)
             {
                 board.TogglePieceHash(move.PieceTeam, ChessPieceType.Rook, move.RookStartPosition.Value.x, move.RookStartPosition.Value.y);
                 board.TogglePieceHash(move.PieceTeam, ChessPieceType.Rook, move.RookEndPosition.Value.x, move.RookEndPosition.Value.y);
             }
 
-            // 6. Swap out the old castling rights for the new ones.
             board.ToggleCastlingHash(previousCastlingMask);
             board.ToggleCastlingHash(board.CastlingRights);
 
-            // 7. Swap out the old en passant file for the new one (if either exists).
             if (previousEnPassantFile.HasValue)
             {
                 board.ToggleEnPassantHash(previousEnPassantFile.Value);
@@ -350,17 +473,27 @@ namespace ChessTheBetrayal.Core.Engine
             {
                 board.ToggleEnPassantHash(board.EnPassantFile.Value);
             }
+
+            if (move.Stage == BetrayalStage.Act)
+            {
+                board.ToggleBetrayalHash();
+                board.ToggleBetrayalSubStateHash(move.EndPosition, move.PieceTeam);
+            }
+            else if (move.Stage == BetrayalStage.Retribution || move.Stage == BetrayalStage.DefensiveOverride)
+            {
+                // Closes out the sub-sequence opened by Act — toggle out using the square/initiator
+                // that were pending going into this move (Defection deliberately left them untouched).
+                if (move.PreviousPendingBetrayerSquare.HasValue && move.PreviousBetrayalInitiator.HasValue)
+                {
+                    board.ToggleBetrayalSubStateHash(move.PreviousPendingBetrayerSquare.Value, move.PreviousBetrayalInitiator.Value);
+                }
+            }
         }
 
-        /// <summary>
-        /// Works out which castling rights should still be available after a move.
-        /// A King moving, a Rook moving, or a Rook being captured all cancel the relevant right.
-        /// </summary>
         private static int ComputeNewCastlingMask(BoardState board, MoveCommand move)
         {
             int mask = board.CastlingRights;
 
-            // If the King moves, both castling options for that team are gone.
             if (move.PieceType == ChessPieceType.King)
             {
                 if (move.PieceTeam == Team.White)
@@ -373,7 +506,6 @@ namespace ChessTheBetrayal.Core.Engine
                 }
             }
 
-            // If a Rook leaves its starting corner, that side's castling right is gone.
             if (move.PieceType == ChessPieceType.Rook && !move.PieceHadMoved)
             {
                 if (move.PieceTeam == Team.White)
@@ -392,7 +524,6 @@ namespace ChessTheBetrayal.Core.Engine
                 }
             }
 
-            // If an enemy Rook is captured on its starting corner, that side's castling right is also gone.
             if (move.HasCapture && move.CapturedType == ChessPieceType.Rook)
             {
                 Vector2Int capPos = move.IsEnPassant && move.EnPassantCapturePosition.HasValue
@@ -412,13 +543,8 @@ namespace ChessTheBetrayal.Core.Engine
             return mask;
         }
 
-        /// <summary>
-        /// Returns the en passant file that should be active after this move, or null if none.
-        /// En passant is only possible in the turn immediately after a pawn moves two squares.
-        /// </summary>
         private static int? ComputeNewEnPassantFile(MoveCommand move)
         {
-            // En passant is only possible after a pawn moves 2 squares
             if (move.PieceType == ChessPieceType.Pawn)
             {
                 int distance = System.Math.Abs(move.EndPosition.y - move.StartPosition.y);
@@ -430,10 +556,25 @@ namespace ChessTheBetrayal.Core.Engine
             return null;
         }
 
-        /// <summary>
-        /// Applies a move to the board, including all the side effects: captures, castling, promotion,
-        /// en passant, updated castling rights, and the Zobrist hash.
-        /// </summary>
+        private static void AdvanceBetrayalState(BoardState board, MoveCommand move)
+        {
+            if (move.Stage == BetrayalStage.Act)
+            {
+                board.BetrayalRightAvailable = false;
+                board.PendingBetrayerSquare = move.EndPosition;
+                board.BetrayalInitiator = move.PieceTeam;
+            }
+            else if (move.Stage == BetrayalStage.Retribution || move.Stage == BetrayalStage.DefensiveOverride)
+            {
+                // Defection deliberately does NOT clear these: GetForcedSaveMoves (and the
+                // ForcedSave UI/AI path) needs PendingBetrayerSquare/BetrayalInitiator to still
+                // identify the defected piece until the terminal Retribution/DefensiveOverride move
+                // finally closes out the Betrayal sequence.
+                board.PendingBetrayerSquare = null;
+                board.BetrayalInitiator = null;
+            }
+        }
+
         public static void ApplyMoveToBoard(BoardState board, MoveCommand move, bool recordHistory = true)
         {
             int previousCastlingMask = board.CastlingRights;
@@ -444,13 +585,21 @@ namespace ChessTheBetrayal.Core.Engine
                 board.RecordMove(move.StartPosition, move.EndPosition);
             }
 
+            if (move.Stage == BetrayalStage.Defection)
+            {
+                board.DefectPiece(move.StartPosition);
+                AdvanceBetrayalState(board, move);
+                ApplyZobristMove(board, move, previousCastlingMask, previousEnPassantFile);
+                return;
+            }
+
             if (move.IsCastling && move.RookStartPosition.HasValue && move.RookEndPosition.HasValue)
             {
                 board.MovePiece(move.StartPosition, move.EndPosition);
                 board.MovePiece(move.RookStartPosition.Value, move.RookEndPosition.Value);
                 board.CastlingRights = ComputeNewCastlingMask(board, move);
                 board.EnPassantFile = ComputeNewEnPassantFile(move);
-
+                AdvanceBetrayalState(board, move);
                 ApplyZobristMove(board, move, previousCastlingMask, previousEnPassantFile);
                 return;
             }
@@ -458,12 +607,10 @@ namespace ChessTheBetrayal.Core.Engine
             if (move.IsEnPassant && move.EnPassantCapturePosition.HasValue)
             {
                 board.MovePiece(move.StartPosition, move.EndPosition);
-
-                // The captured pawn sits on a different square than where we landed.
                 board.RemovePiece(move.EnPassantCapturePosition.Value);
                 board.CastlingRights = ComputeNewCastlingMask(board, move);
                 board.EnPassantFile = ComputeNewEnPassantFile(move);
-
+                AdvanceBetrayalState(board, move);
                 ApplyZobristMove(board, move, previousCastlingMask, previousEnPassantFile);
                 return;
             }
@@ -488,6 +635,7 @@ namespace ChessTheBetrayal.Core.Engine
 
             board.CastlingRights = ComputeNewCastlingMask(board, move);
             board.EnPassantFile = ComputeNewEnPassantFile(move);
+            AdvanceBetrayalState(board, move);
             ApplyZobristMove(board, move, previousCastlingMask, previousEnPassantFile);
         }
 
@@ -503,21 +651,35 @@ namespace ChessTheBetrayal.Core.Engine
             int currentCastlingMask = board.CastlingRights;
             int? currentEnPassantFile = board.EnPassantFile;
 
-            // Restore the castling and en passant state that was recorded on the move itself.
             board.CastlingRights = move.PreviousCastlingMask;
             board.EnPassantFile = move.PreviousEnPassantFile;
+            board.BetrayalRightAvailable = move.PreviousBetrayalRightAvailable;
+            board.PendingBetrayerSquare = move.PreviousPendingBetrayerSquare;
+            board.BetrayalInitiator = move.PreviousBetrayalInitiator;
 
-            // Reverse the hash — XOR is self-inverse, so calling this again undoes it perfectly.
             ApplyZobristMove(board, move, currentCastlingMask, currentEnPassantFile);
 
             if (recordHistory)
             {
-                // Each move records two history entries (start and end), so we remove both.
                 if (board.MoveHistory.Count >= 2)
                 {
                     board.MoveHistory.RemoveAt(board.MoveHistory.Count - 1);
                     board.MoveHistory.RemoveAt(board.MoveHistory.Count - 1);
                 }
+            }
+
+            if (move.Stage == BetrayalStage.Defection)
+            {
+                // Inverse of DefectPiece: toggle the defected piece out and the restored piece back in.
+                // ApplyZobristMove is a no-op for Defection, so this is the only hash update here.
+                PieceData defected = board.GetPiece(move.StartPosition);
+                board.TogglePieceHash(defected.Team, defected.Type, move.StartPosition.x, move.StartPosition.y);
+
+                PieceData restored = defected.WithTeam(move.PieceTeam);
+                board.SetPiece(restored, move.StartPosition.x, move.StartPosition.y);
+
+                board.TogglePieceHash(restored.Team, restored.Type, move.StartPosition.x, move.StartPosition.y);
+                return;
             }
 
             PieceData primaryPiece = board.GetPiece(move.EndPosition);
@@ -530,40 +692,20 @@ namespace ChessTheBetrayal.Core.Engine
             board.SetPiece(PieceData.Empty, move.EndPosition.x, move.EndPosition.y);
             board.SetPiece(primaryPiece.WithHasMoved(move.PieceHadMoved), move.StartPosition.x, move.StartPosition.y);
 
-            // TODO: Graveyard-as-stack pattern is fragile for non-make/unmake paths.
-            // Current assumption: WhiteCaptured/BlackCaptured operates as a strict LIFO stack where every
-            // ApplyMoveToBoard push has a corresponding UndoMoveOnBoard pop. This works for paired make/unmake
-            // in AI search but breaks if any code path calls RemovePiece or SetPiece(Empty) outside of
-            // ApplyMoveToBoard (e.g., BoardState.Clear, future Betrayal mechanic "piece changes sides").
-            //
-            // The fallback creates a synthetic PieceData with StartRow=0, HasMoved=false,
-            // which is incorrect for promoted pieces or pieces that had already moved.
-            //
-            // BEFORE Betrayal implementation we need to: 
-            // Replace graveyard pattern with explicit captured-piece storage in MoveCommand itself.
-            // Add optional `PieceData? CapturedPieceFullState` field to preserve exact
-            // piece state (including StartRow, HasMoved) without relying on graveyard stack coherence.
-            // This enables Betrayal's "convert captured piece to ally" mechanic to access full piece history.
             if (move.HasCapture)
             {
                 List<PieceData> graveyard = move.CapturedTeam == Team.White ? board.WhiteCaptured : board.BlackCaptured;
-                PieceData resurrectedPiece;
                 if (graveyard.Count > 0)
                 {
-                    resurrectedPiece = graveyard[graveyard.Count - 1];
                     graveyard.RemoveAt(graveyard.Count - 1);
                 }
-                else
-                {
-                    // DESIGN SMELL-002: Synthetic fallback — incorrect for pieces with non-default state
-                    int dir = move.CapturedTeam == Team.White ? 1 : -1;
-                    resurrectedPiece = new PieceData(move.CapturedTeam, move.CapturedType, dir, 0, false);
-                }
-                resurrectedPiece = resurrectedPiece.WithHasMoved(move.CapturedHadMoved);
+
+                PieceData resurrectedPiece = move.CapturedPieceFullState;
 
                 Vector2Int capturePos = move.IsEnPassant && move.EnPassantCapturePosition.HasValue
                     ? move.EnPassantCapturePosition.Value
                     : move.EndPosition;
+
                 board.SetPiece(resurrectedPiece, capturePos.x, capturePos.y);
             }
 
@@ -623,7 +765,6 @@ namespace ChessTheBetrayal.Core.Engine
             int whiteValue = 0;
             int blackValue = 0;
 
-            // Calculate White Material
             List<int> whiteIndices = board.GetPieceIndices(Team.White);
 
             for (int i = 0; i < whiteIndices.Count; i++)
@@ -633,7 +774,6 @@ namespace ChessTheBetrayal.Core.Engine
                 whiteValue += GetPieceValue(piece.Type);
             }
 
-            // Calculate Black Material
             List<int> blackIndices = board.GetPieceIndices(Team.Black);
 
             for (int i = 0; i < blackIndices.Count; i++)
@@ -653,12 +793,12 @@ namespace ChessTheBetrayal.Core.Engine
         {
             return type switch
             {
-                ChessPieceType.Pawn   => 1,
+                ChessPieceType.Pawn => 1,
                 ChessPieceType.Knight => 3,
                 ChessPieceType.Bishop => 3,
-                ChessPieceType.Rook   => 5,
-                ChessPieceType.Queen  => 9,
-                ChessPieceType.King   => 0, // Priceless.
+                ChessPieceType.Rook => 5,
+                ChessPieceType.Queen => 9,
+                ChessPieceType.King => 0,
                 _ => 0
             };
         }
@@ -667,14 +807,33 @@ namespace ChessTheBetrayal.Core.Engine
     }
 
     /// <summary>
-    /// What state is the game in right now, from a specific team's point of view?
+    /// Describes the board state immediately following a Defection (Resolution B).
     /// </summary>
+    public readonly struct DefectionOutcome
+    {
+        public readonly bool RequiresForcedSave;
+        public readonly Vector2Int DefectedSquare;
+
+        /// <summary>
+        /// The applied Defection MoveCommand. Push this onto an undo stack to reverse
+        /// the defection via UndoMoveOnBoard, exactly like any other move.
+        /// </summary>
+        public readonly MoveCommand DefectionMove;
+
+        public DefectionOutcome(bool requiresForcedSave, Vector2Int defectedSquare, MoveCommand defectionMove)
+        {
+            RequiresForcedSave = requiresForcedSave;
+            DefectedSquare = defectedSquare;
+            DefectionMove = defectionMove;
+        }
+    }
+
     public enum GameState
     {
-        Normal,     // Nothing special — game continues.
-        Check,      // King is in check but has at least one escape.
-        Checkmate,  // King is in check with no legal moves — game over.
-        Stalemate,  // No legal moves, but not in check — draw.
-        Timeout     // A player's clock reached zero.
+        Normal,
+        Check,
+        Checkmate,
+        Stalemate,
+        Timeout
     }
 }

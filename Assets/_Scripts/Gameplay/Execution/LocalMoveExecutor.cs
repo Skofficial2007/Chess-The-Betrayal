@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
+using ChessTheBetrayal.Core.Logic;
 using ChessTheBetrayal.Core.Diagnostics;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
@@ -20,19 +21,27 @@ namespace ChessTheBetrayal.Gameplay
         public event Action<Vector2Int, Vector2Int> OnPromotionRequired;
 
         private readonly BoardState _board;
+        private readonly IChessEngine _engine;
+        private readonly IClockSnapshotSource _clockSource;
         private readonly List<MoveCommand> _legalMoves = new List<MoveCommand>(32);
         private readonly List<MoveCommand> _movesToTarget = new List<MoveCommand>(4);
-        
+
+        private readonly Func<TurnPhase> _phaseProvider;
+
         private MoveCommand _pendingPromotionMove;
         private bool _isAwaitingPromotion;
         private bool _logMoves;
 
         /// <summary>
         /// Note: We take a direct reference to the live board here. A network executor must NOT do this — it should validate against a server snapshot, not the client's version.
+        /// clockSource may be null, in which case moves are never stamped with a clock snapshot (untimed/AI mode).
         /// </summary>
-        public LocalMoveExecutor(BoardState board, bool logMoves = true)
+        public LocalMoveExecutor(BoardState board, IChessEngine engine, Func<TurnPhase> phaseProvider, IClockSnapshotSource clockSource = null, bool logMoves = true)
         {
             _board = board;
+            _engine = engine;
+            _phaseProvider = phaseProvider;
+            _clockSource = clockSource;
             _logMoves = logMoves;
         }
 
@@ -48,6 +57,105 @@ namespace ChessTheBetrayal.Gameplay
                 OnMoveRejected?.Invoke(from, to);
                 return;
             }
+
+            if (_phaseProvider != null && _phaseProvider() == TurnPhase.RetributionPending)
+            {
+                if (!_board.PendingBetrayerSquare.HasValue || to != _board.PendingBetrayerSquare.Value)
+                {
+                    if (_logMoves) Debug.Log($"[LocalMoveExecutor] Move rejected: Phase 2 requires targeting the Betrayer at {_board.PendingBetrayerSquare}");
+                    OnMoveRejected?.Invoke(from, to);
+                    return;
+                }
+
+                _legalMoves.Clear();
+                _engine.GetRetributionMoves(_board, _board.CurrentTurn, _board.PendingBetrayerSquare.Value, _legalMoves);
+
+                _movesToTarget.Clear();
+                for (int i = 0; i < _legalMoves.Count; i++)
+                {
+                    if (_legalMoves[i].StartPosition == from && _legalMoves[i].EndPosition == to)
+                    {
+                        _movesToTarget.Add(_legalMoves[i]);
+                    }
+                }
+
+                if (_movesToTarget.Count == 0)
+                {
+                    if (_logMoves) Debug.Log($"[LocalMoveExecutor] Move rejected: piece at {from} cannot legally execute the Betrayer");
+                    OnMoveRejected?.Invoke(from, to);
+                    return;
+                }
+
+                // Handle standard promotion flow for Retribution (e.g., Pawn captures Betrayer on the 8th rank)
+                bool isRetributionPromotion = false;
+                for (int i = 0; i < _movesToTarget.Count; i++)
+                {
+                    if (_movesToTarget[i].IsPromotion) { isRetributionPromotion = true; break; }
+                }
+
+                if (isRetributionPromotion)
+                {
+                    _pendingPromotionMove = _movesToTarget[0];
+                    _isAwaitingPromotion = true;
+                    OnPromotionRequired?.Invoke(_pendingPromotionMove.StartPosition, to);
+                    return;
+                }
+
+                MoveCommand validRetribution = _movesToTarget[0];
+                ClockState? clockSnap = _clockSource?.Current;
+                if (clockSnap.HasValue) validRetribution = validRetribution.WithClockSnapshot(clockSnap.Value);
+
+                if (_logMoves) Debug.Log($"[LocalMoveExecutor] Retribution confirmed: {validRetribution}");
+                OnMoveConfirmed?.Invoke(validRetribution);
+                return;
+            }
+
+            // --- BETRAYAL MECHANIC: Phase 3 Forced Save Override ---
+            if (_phaseProvider != null && _phaseProvider() == TurnPhase.ForcedSave)
+            {
+                _legalMoves.Clear();
+                _engine.GetForcedSaveMoves(_board, _board.CurrentTurn, _legalMoves);
+
+                _movesToTarget.Clear();
+                for (int i = 0; i < _legalMoves.Count; i++)
+                {
+                    if (_legalMoves[i].StartPosition == from && _legalMoves[i].EndPosition == to)
+                    {
+                        _movesToTarget.Add(_legalMoves[i]);
+                    }
+                }
+
+                if (_movesToTarget.Count == 0)
+                {
+                    if (_logMoves) Debug.Log($"[LocalMoveExecutor] Move rejected: piece at {from} cannot legally resolve the forced save check");
+                    OnMoveRejected?.Invoke(from, to);
+                    return;
+                }
+
+                // Handle standard promotion flow for Forced Save
+                bool isSavePromotion = false;
+                for (int i = 0; i < _movesToTarget.Count; i++)
+                {
+                    if (_movesToTarget[i].IsPromotion) { isSavePromotion = true; break; }
+                }
+
+                if (isSavePromotion)
+                {
+                    _pendingPromotionMove = _movesToTarget[0];
+                    _isAwaitingPromotion = true;
+                    OnPromotionRequired?.Invoke(_pendingPromotionMove.StartPosition, to);
+                    return;
+                }
+
+                MoveCommand validSave = _movesToTarget[0];
+                ClockState? clockSnap = _clockSource?.Current;
+                if (clockSnap.HasValue) validSave = validSave.WithClockSnapshot(clockSnap.Value);
+
+                if (_logMoves) Debug.Log($"[LocalMoveExecutor] Forced Save confirmed: {validSave}");
+                OnMoveConfirmed?.Invoke(validSave);
+                return;
+            }
+            // --- END Phase 3 Forced Save Override ---
 
             // Validate piece ownership
             PieceData piece = _board.GetPiece(from);
@@ -67,10 +175,28 @@ namespace ChessTheBetrayal.Gameplay
                 to = new Vector2Int(castlingX, from.y);
             }
 
+            // Explicit exception gating for Betrayal rules on explicit requests.
+            if (!targetPiece.IsEmpty && targetPiece.Team == piece.Team)
+            {
+                // The King cannot be a Betrayer.
+                if (piece.Type == ChessPieceType.King && targetPiece.Type != ChessPieceType.Rook) // Allow castling attempt to pass through
+                {
+                    OnMoveRejected?.Invoke(from, to);
+                    throw new BetrayalRuleViolationException(DomainEventCode.Betrayal_KingTargetedAsBetrayer, "The King cannot initiate a Betrayal.");
+                }
+
+                // The King cannot be a Victim.
+                if (targetPiece.Type == ChessPieceType.King)
+                {
+                    OnMoveRejected?.Invoke(from, to);
+                    throw new BetrayalRuleViolationException(DomainEventCode.Betrayal_KingTargetedAsVictim, "The King cannot be targeted for Betrayal.");
+                }
+            }
+
             _legalMoves.Clear();
             try
             {
-                ChessEngine.GetLegalMoves(_board, from, _legalMoves);
+                _engine.GetLegalMoves(_board, from, _legalMoves);
             }
             catch (BetrayalRuleViolationException ex)
             {
@@ -130,7 +256,7 @@ namespace ChessTheBetrayal.Gameplay
             
             // Capture the current clock state to stamp the move for network and replay validation.
             // GetCurrentClockSnapshot returns null when no clock is active (e.g., untimed or AI mode).
-            ClockState? clockSnapshot = GameManager.Instance?.GetCurrentClockSnapshot();
+            ClockState? clockSnapshot = _clockSource?.Current;
             if (clockSnapshot.HasValue)
             {
                 validMove = validMove.WithClockSnapshot(clockSnapshot.Value);
@@ -156,7 +282,18 @@ namespace ChessTheBetrayal.Gameplay
             _legalMoves.Clear();
             try
             {
-                ChessEngine.GetLegalMoves(_board, _pendingPromotionMove.StartPosition, _legalMoves);
+                if (_phaseProvider != null && _phaseProvider() == TurnPhase.RetributionPending)
+                {
+                    _engine.GetRetributionMoves(_board, _board.CurrentTurn, _board.PendingBetrayerSquare.Value, _legalMoves);
+                }
+                else if (_phaseProvider != null && _phaseProvider() == TurnPhase.ForcedSave)
+                {
+                    _engine.GetForcedSaveMoves(_board, _board.CurrentTurn, _legalMoves);
+                }
+                else
+                {
+                    _engine.GetLegalMoves(_board, _pendingPromotionMove.StartPosition, _legalMoves);
+                }
             }
             catch (BetrayalRuleViolationException ex)
             {
@@ -183,7 +320,7 @@ namespace ChessTheBetrayal.Gameplay
                     if (_logMoves) Debug.Log($"[LocalMoveExecutor] Promotion confirmed: {type}");
 
                     // Stamp the promotion move with the current clock state.
-                    ClockState? clockSnapshot = GameManager.Instance?.GetCurrentClockSnapshot();
+                    ClockState? clockSnapshot = _clockSource?.Current;
                     if (clockSnapshot.HasValue)
                     {
                         cmd = cmd.WithClockSnapshot(clockSnapshot.Value);

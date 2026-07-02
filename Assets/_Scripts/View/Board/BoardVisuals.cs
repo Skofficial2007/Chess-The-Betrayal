@@ -356,6 +356,15 @@ namespace ChessTheBetrayal.UI
                     Vector3 targetPos = GetTileCenter(move.EndPosition.x, move.EndPosition.y);
                     targetPos.y += pieceYOffset;
                     movingPiece.SetPosition(targetPos);
+
+                    // A Betrayal Act's MoveExecutedPayload arrives after MatchDriver has already
+                    // raised Initiated/RetributionPending on the BetrayalEventChannel, so the piece
+                    // is still keyed at StartPosition when that handler runs. Glow it here instead,
+                    // once it's guaranteed to be at EndPosition.
+                    if (move.Stage == BetrayalStage.Act)
+                    {
+                        movingPiece.SetBetrayerGlow(true);
+                    }
                 }
             }
 
@@ -454,6 +463,66 @@ namespace ChessTheBetrayal.UI
                 snapPos.y += pieceYOffset;
                 piece.SetPosition(snapPos, force: true);
             }
+        }
+
+        /// <summary>
+        /// Reacts to Betrayal phase transitions: glows the Betrayer while Retribution is
+        /// pending, and swaps its prefab to the opposing team the moment Defection occurs.
+        /// </summary>
+        public void HandleBetrayalPhaseChanged(ChessTheBetrayal.Events.Payloads.BetrayalPayload payload)
+        {
+            switch (payload.Phase)
+            {
+                case ChessTheBetrayal.Events.Payloads.BetrayalPhase.Initiated:
+                case ChessTheBetrayal.Events.Payloads.BetrayalPhase.RetributionPending:
+                    // The Betrayer's glow is applied by AnimateMove instead: these two phases are
+                    // raised by MatchDriver before the corresponding MoveExecutedPayload, so the
+                    // piece is still keyed at its start square in _piecesByPosition at this point.
+                    break;
+
+                case ChessTheBetrayal.Events.Payloads.BetrayalPhase.Resolved:
+                    // Betrayer was already removed by AnimateMove's normal capture path
+                    // (Retribution stage raises a real MoveExecutedPayload) — nothing to do.
+                    break;
+
+                case ChessTheBetrayal.Events.Payloads.BetrayalPhase.DefectionOccurred:
+                    SwapPieceTeam(payload.BetrayerPosition);
+                    break;
+
+                case ChessTheBetrayal.Events.Payloads.BetrayalPhase.ForcedSaveActive:
+                    // The swap already happened on DefectionOccurred above; just make sure
+                    // the glow is off on the now-defected piece before the save move plays.
+                    if (_piecesByPosition.TryGetValue(payload.BetrayerPosition, out ChessPiece saved))
+                    {
+                        saved.SetBetrayerGlow(false);
+                    }
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Destroys the piece at the given position and respawns it as the opposing team's
+        /// prefab in the same square — the same destroy-and-instantiate pattern AnimateMove
+        /// already uses for promotion. Routing the new GameObject through SpawnSinglePiece
+        /// also sets its ChessPiece.team correctly, which is what keeps later graveyard
+        /// routing accurate for pieces that defected.
+        /// </summary>
+        private void SwapPieceTeam(Vector2Int pos)
+        {
+            if (!_piecesByPosition.TryGetValue(pos, out ChessPiece piece)) return;
+
+            Team newTeam = piece.team == Team.White ? Team.Black : Team.White;
+            PieceData flipped = new PieceData(
+                team: newTeam,
+                type: piece.type,
+                moveDirection: newTeam == Team.White ? 1 : -1,
+                startRow: 0,
+                hasMoved: true
+            );
+
+            _piecesByPosition.Remove(pos);
+            Destroy(piece.gameObject);
+            SpawnSinglePiece(flipped, pos);
         }
 
         #endregion
