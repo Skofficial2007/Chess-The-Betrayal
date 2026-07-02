@@ -11,15 +11,16 @@ using ChessTheBetrayal.Core.Diagnostics;
 namespace ChessTheBetrayal.Gameplay
 {
     /// <summary>
-    /// The primary conductor of the game loop. Orchestrates domain logic (BoardState, ChessEngine),
-    /// timing systems (ChessClock), and presentation (UI, Visuals).
-    /// 
+    /// The primary conductor of the game loop. Orchestrates presentation concerns (event channels,
+    /// clock, logging) around the pure-domain Betrayal state machine in <see cref="ITurnResolver"/>.
+    /// GameManager never decides phase transitions itself — it reads them off TurnAdvanceResult.
+    ///
     /// Betrayal Phase Contract:
     /// Domain `TurnPhase`    | Presentation `BetrayalPhase` Raised
     /// ----------------------|------------------------------------
     /// RetributionPending    | Initiated, then RetributionPending
     /// Normal (post-success) | Resolved
-    /// ResolutionFailed      | DefectionOccurred
+    /// Normal/ForcedSave (result.DidDefect) | DefectionOccurred
     /// ForcedSave            | ForcedSaveActive
     /// </summary>
     public class GameManager : MonoBehaviour, IClockEventHandler
@@ -94,6 +95,10 @@ namespace ChessTheBetrayal.Gameplay
 
         // Handles move validation. Swap this out for NetworkMoveExecutor to go online.
         private IMoveExecutor _moveExecutor;
+
+        // Pure-domain Betrayal state machine. GameManager only translates its result into
+        // presentation concerns (event channels, clock, logging) — it never decides phases itself.
+        private readonly ITurnResolver _turnResolver = new TurnResolver();
 
         // Reused across calls so we're not allocating a new list every time someone hovers over a piece.
         private readonly List<MoveCommand> _legalMoves = new List<MoveCommand>(32);
@@ -423,9 +428,10 @@ namespace ChessTheBetrayal.Gameplay
         {
             if (logMoves) Debug.Log($"[GameManager] Executing: {move}");
 
+            TurnAdvanceResult result;
             try
             {
-                ChessEngine.ApplyMoveToBoard(LiveBoard, move);
+                result = _turnResolver.Advance(LiveBoard, move);
             }
             catch (BetrayalRuleViolationException ex)
             {
@@ -443,59 +449,47 @@ namespace ChessTheBetrayal.Gameplay
             }
             // Note: DO NOT catch (Exception) here. Genuine CLR crashes must surface.
 
+            TransitionToPhase(result.NextPhase);
+
             // --- BETRAYAL MECHANIC: Phase 1 (The Act) ---
             if (move.Stage == BetrayalStage.Act)
             {
-                TransitionToPhase(TurnPhase.RetributionPending);
-
                 _betrayalChannel?.Raise(new ChessTheBetrayal.Events.Payloads.BetrayalPayload(move.PieceTeam, move.EndPosition, ChessTheBetrayal.Events.Payloads.BetrayalPhase.Initiated));
                 _betrayalChannel?.Raise(new ChessTheBetrayal.Events.Payloads.BetrayalPayload(move.PieceTeam, move.EndPosition, ChessTheBetrayal.Events.Payloads.BetrayalPhase.RetributionPending));
 
-                // Fire the standard move event so visuals update, but pass isCheck=false 
+                // Fire the standard move event so visuals update, but pass isCheck=false
                 // because Edge Case C dictates Discovered Checks on Opponent wait until the sequence resolves.
                 _moveExecutedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveExecutedPayload(move, LiveBoard.FullMoveNumber, false));
 
-                // Speculatively check if a Retribution move is even possible.
-                _legalMoves.Clear();
-                ChessEngine.GetRetributionMoves(LiveBoard, move.PieceTeam, move.EndPosition, _legalMoves);
-
-                if (_legalMoves.Count == 0)
+                if (result.DidDefect)
                 {
                     // Defection Triggered: The only geometrically capable pieces are pinned, or no pieces can reach.
-                    // Fire immediately without waiting for player input.
                     _domainLogger?.LogWarning(new DomainLogEvent(DomainEventCode.Betrayal_RetributionPieceNone, message: "No legal Retribution move exists. Triggering Defection path."));
+                    _domainLogger?.LogInfo(new DomainLogEvent(DomainEventCode.Betrayal_DefectionResolved, auxInt: result.DefectedSquare.Value.y * LiveBoard.TileCountX + result.DefectedSquare.Value.x));
 
-                    var outcome = ChessEngine.ResolveFailedRetribution(LiveBoard);
-                    _domainLogger?.LogInfo(new DomainLogEvent(DomainEventCode.Betrayal_DefectionResolved, auxInt: outcome.DefectedSquare.y * LiveBoard.TileCountX + outcome.DefectedSquare.x));
+                    _betrayalChannel?.Raise(new ChessTheBetrayal.Events.Payloads.BetrayalPayload(move.PieceTeam, result.DefectedSquare.Value, ChessTheBetrayal.Events.Payloads.BetrayalPhase.DefectionOccurred));
 
-                    _betrayalChannel?.Raise(new ChessTheBetrayal.Events.Payloads.BetrayalPayload(LiveBoard.BetrayalInitiator.Value, outcome.DefectedSquare, ChessTheBetrayal.Events.Payloads.BetrayalPhase.DefectionOccurred));
-
-                    if (outcome.RequiresForcedSave)
+                    if (result.RequiresForcedSave)
                     {
-                        TransitionToPhase(TurnPhase.ForcedSave);
                         _domainLogger?.LogWarning(new DomainLogEvent(DomainEventCode.Betrayal_ForcedSaveRequired));
-                        _betrayalChannel?.Raise(new ChessTheBetrayal.Events.Payloads.BetrayalPayload(LiveBoard.BetrayalInitiator.Value, outcome.DefectedSquare, ChessTheBetrayal.Events.Payloads.BetrayalPhase.ForcedSaveActive));
+                        _betrayalChannel?.Raise(new ChessTheBetrayal.Events.Payloads.BetrayalPayload(move.PieceTeam, result.DefectedSquare.Value, ChessTheBetrayal.Events.Payloads.BetrayalPhase.ForcedSaveActive));
                         // No NextTurn() yet — BETRAYER-07 handles the forced Save move and final turn advancement.
                     }
                     else
                     {
-                        TransitionToPhase(TurnPhase.Normal);
                         // No time bounty — Resolution B grants nothing, per design doc.
-                        LiveBoard.NextTurn();
                         CheckForGameEnd(); // the opponent's newly-acquired piece may itself deliver check/checkmate — evaluated here for the first time.
                     }
                 }
 
-                // Early return. The turn does NOT end. The clock does NOT get an increment yet.
+                // Early return. If Retribution is still pending, the turn does NOT end and the
+                // clock does NOT get an increment yet.
                 return;
             }
 
             // --- BETRAYAL MECHANIC: Phase 2 (Retribution Success) ---
             if (move.Stage == BetrayalStage.Retribution)
             {
-                // Resolution A: Success.
-                TransitionToPhase(TurnPhase.Normal);
-
                 _betrayalChannel?.Raise(new ChessTheBetrayal.Events.Payloads.BetrayalPayload(move.PieceTeam, move.EndPosition, ChessTheBetrayal.Events.Payloads.BetrayalPhase.Resolved));
 
                 ApplyTimeBounty(move.PieceTeam);
@@ -506,7 +500,6 @@ namespace ChessTheBetrayal.Gameplay
                 // ---------------------------------------------------------------
 
                 _clock?.OnMoveMade(move.PieceTeam); // Standard Fischer increment now applies
-                LiveBoard.NextTurn();
                 CheckForGameEnd(); // Discovered checks against the opponent evaluate here for the first time
                 return;
             }
@@ -514,15 +507,12 @@ namespace ChessTheBetrayal.Gameplay
             // --- BETRAYAL MECHANIC: Phase 3 (Defensive Save Success) ---
             if (move.Stage == BetrayalStage.DefensiveSave)
             {
-                TransitionToPhase(TurnPhase.Normal);
-
                 // --- UI FIX: Tell BoardVisuals to play the save animation ---
                 bool isCheckAfterSave = ChessEngine.IsKingInCheck(LiveBoard, LiveBoard.CurrentTurn);
                 _moveExecutedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveExecutedPayload(move, LiveBoard.FullMoveNumber, isCheckAfterSave));
                 // ------------------------------------------------------------
 
                 _clock?.OnMoveMade(move.PieceTeam); // The Save move IS the final action of this turn — standard increment applies
-                LiveBoard.NextTurn();
                 CheckForGameEnd(); // Discovered checks against the opponent evaluate here
                 return;
             }
@@ -537,8 +527,6 @@ namespace ChessTheBetrayal.Gameplay
                 LiveBoard.FullMoveNumber,
                 isCheck
             ));
-
-            LiveBoard.NextTurn();
 
             CheckForGameEnd();
         }

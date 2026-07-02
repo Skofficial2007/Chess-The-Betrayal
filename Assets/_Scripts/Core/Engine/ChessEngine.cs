@@ -403,30 +403,45 @@ namespace ChessTheBetrayal.Core.Engine
 
         #region Move Execution
 
+        /// <summary>
+        /// Builds and applies the Defection move for a Retribution that has no legal executioner.
+        /// Routed through ApplyMoveToBoard so the resulting MoveCommand can be pushed onto a normal
+        /// undo stack — an Alpha-Beta search exploring a failed Betrayal can unmake it like any other move.
+        /// </summary>
         public static DefectionOutcome ResolveFailedRetribution(BoardState board)
         {
             Vector2Int betrayerSquare = board.PendingBetrayerSquare.Value;
             Team initiator = board.BetrayalInitiator.Value;
+            PieceData betrayer = board.GetPiece(betrayerSquare);
 
-            board.DefectPiece(betrayerSquare);
+            MoveCommand defectionMove = MoveCommand.CreateDefectionMove(betrayerSquare, betrayer, board);
+            ApplyMoveToBoard(board, defectionMove);
 
             bool selfCheckAfterDefection = IsKingInCheck(board, initiator);
-            return new DefectionOutcome(selfCheckAfterDefection, betrayerSquare);
+            return new DefectionOutcome(selfCheckAfterDefection, betrayerSquare, defectionMove);
         }
 
+        /// <summary>
+        /// Inverse of ResolveFailedRetribution. Kept for callers holding a bare square/team
+        /// rather than the MoveCommand this resolver produced; prefer UndoMoveOnBoard(move) when possible.
+        /// </summary>
         internal static void UndoDefection(BoardState board, Vector2Int square, Team originalTeam)
         {
             PieceData current = board.GetPiece(square);
-            board.TogglePieceHash(current.Team, current.Type, square.x, square.y);
-
-            PieceData restored = current.WithTeam(originalTeam);
-            board.SetPiece(restored, square.x, square.y);
-
-            board.TogglePieceHash(restored.Team, restored.Type, square.x, square.y);
+            MoveCommand defectionMove = MoveCommand.CreateDefectionMove(square, current.WithTeam(originalTeam), board);
+            UndoMoveOnBoard(board, defectionMove, recordHistory: false);
         }
 
         private static void ApplyZobristMove(BoardState board, MoveCommand move, int previousCastlingMask, int? previousEnPassantFile)
         {
+            if (move.Stage == BetrayalStage.Defection)
+            {
+                // BoardState.DefectPiece already toggles the piece out under its old team and back in
+                // under its new one (called by ApplyMoveToBoard just before this). Nothing left to do
+                // here — Defection never flips whose turn it is, so no turn-hash toggle either.
+                return;
+            }
+
             if (move.Stage != BetrayalStage.Act)
             {
                 board.ToggleTurnHash();
@@ -550,6 +565,10 @@ namespace ChessTheBetrayal.Core.Engine
             }
             else if (move.Stage == BetrayalStage.Retribution || move.Stage == BetrayalStage.DefensiveSave)
             {
+                // Defection deliberately does NOT clear these: GetForcedSaveMoves (and the
+                // ForcedSave UI/AI path) needs PendingBetrayerSquare/BetrayalInitiator to still
+                // identify the defected piece until the terminal Retribution/DefensiveSave move
+                // finally closes out the Betrayal sequence.
                 board.PendingBetrayerSquare = null;
                 board.BetrayalInitiator = null;
             }
@@ -563,6 +582,14 @@ namespace ChessTheBetrayal.Core.Engine
             if (recordHistory)
             {
                 board.RecordMove(move.StartPosition, move.EndPosition);
+            }
+
+            if (move.Stage == BetrayalStage.Defection)
+            {
+                board.DefectPiece(move.StartPosition);
+                AdvanceBetrayalState(board, move);
+                ApplyZobristMove(board, move, previousCastlingMask, previousEnPassantFile);
+                return;
             }
 
             if (move.IsCastling && move.RookStartPosition.HasValue && move.RookEndPosition.HasValue)
@@ -638,6 +665,20 @@ namespace ChessTheBetrayal.Core.Engine
                     board.MoveHistory.RemoveAt(board.MoveHistory.Count - 1);
                     board.MoveHistory.RemoveAt(board.MoveHistory.Count - 1);
                 }
+            }
+
+            if (move.Stage == BetrayalStage.Defection)
+            {
+                // Inverse of DefectPiece: toggle the defected piece out and the restored piece back in.
+                // ApplyZobristMove is a no-op for Defection, so this is the only hash update here.
+                PieceData defected = board.GetPiece(move.StartPosition);
+                board.TogglePieceHash(defected.Team, defected.Type, move.StartPosition.x, move.StartPosition.y);
+
+                PieceData restored = defected.WithTeam(move.PieceTeam);
+                board.SetPiece(restored, move.StartPosition.x, move.StartPosition.y);
+
+                board.TogglePieceHash(restored.Team, restored.Type, move.StartPosition.x, move.StartPosition.y);
+                return;
             }
 
             PieceData primaryPiece = board.GetPiece(move.EndPosition);
@@ -772,10 +813,17 @@ namespace ChessTheBetrayal.Core.Engine
         public readonly bool RequiresForcedSave;
         public readonly Vector2Int DefectedSquare;
 
-        public DefectionOutcome(bool requiresForcedSave, Vector2Int defectedSquare)
+        /// <summary>
+        /// The applied Defection MoveCommand. Push this onto an undo stack to reverse
+        /// the defection via UndoMoveOnBoard, exactly like any other move.
+        /// </summary>
+        public readonly MoveCommand DefectionMove;
+
+        public DefectionOutcome(bool requiresForcedSave, Vector2Int defectedSquare, MoveCommand defectionMove)
         {
             RequiresForcedSave = requiresForcedSave;
             DefectedSquare = defectedSquare;
+            DefectionMove = defectionMove;
         }
     }
 

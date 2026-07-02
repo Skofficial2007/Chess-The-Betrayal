@@ -1694,8 +1694,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 330585543}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.5591929, y: 0, z: 0, w: 0.8290376}
-  m_LocalPosition: {x: -0.2, y: 19, z: -7.5}
+  m_LocalRotation: {x: 0.29883623, y: -0.64085644, z: 0.29883623, w: 0.64085644}
+  m_LocalPosition: {x: 16, y: 21, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -3456,6 +3456,12 @@ MonoBehaviour:
   boardSizeX: 8
   boardSizeY: 8
   logMoves: 1
+  _betrayalBountyBulletMs: 3000
+  _betrayalBountyBullet2Ms: 5000
+  _betrayalBountyBlitzMs: 8000
+  _betrayalBountyBlitz5Ms: 12000
+  _betrayalBountyRapidMs: 20000
+  _betrayalBountyRapid15Ms: 30000
   _sharedBoardState: {fileID: 11400000, guid: cc4e3a68a6697c6428481427dfafe407, type: 2}
   _sharedClockState: {fileID: 11400000, guid: e7401b2d5b71cdc43960c7148a7091c3, type: 2}
   _gameStartedChannel: {fileID: 11400000, guid: 9c2753d30b1a82a4c8811ae2dc13fed6, type: 2}
