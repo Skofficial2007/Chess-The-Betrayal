@@ -438,11 +438,6 @@ namespace ChessTheBetrayal.Gameplay
             // --- BETRAYAL MECHANIC: Phase 1 (The Act) ---
             if (move.Stage == BetrayalStage.Act)
             {
-                // Consume the right permanently.
-                LiveBoard.BetrayalRightAvailable = false;
-                LiveBoard.PendingBetrayerSquare = move.EndPosition;
-                LiveBoard.BetrayalInitiator = move.PieceTeam;
-
                 TransitionToPhase(TurnPhase.RetributionPending);
 
                 _betrayalChannel?.Raise(new ChessTheBetrayal.Events.Payloads.BetrayalPayload(move.PieceTeam, move.EndPosition, ChessTheBetrayal.Events.Payloads.BetrayalPhase.Initiated));
@@ -477,8 +472,6 @@ namespace ChessTheBetrayal.Gameplay
                     else
                     {
                         TransitionToPhase(TurnPhase.Normal);
-                        LiveBoard.PendingBetrayerSquare = null;
-                        LiveBoard.BetrayalInitiator = null;
                         // No time bounty — Resolution B grants nothing, per design doc.
                         LiveBoard.NextTurn();
                         CheckForGameEnd(); // the opponent's newly-acquired piece may itself deliver check/checkmate — evaluated here for the first time.
@@ -493,8 +486,6 @@ namespace ChessTheBetrayal.Gameplay
             if (move.Stage == BetrayalStage.Retribution)
             {
                 // Resolution A: Success.
-                LiveBoard.PendingBetrayerSquare = null;
-                LiveBoard.BetrayalInitiator = null;
                 TransitionToPhase(TurnPhase.Normal);
 
                 _betrayalChannel?.Raise(new ChessTheBetrayal.Events.Payloads.BetrayalPayload(move.PieceTeam, move.EndPosition, ChessTheBetrayal.Events.Payloads.BetrayalPhase.Resolved));
@@ -515,8 +506,6 @@ namespace ChessTheBetrayal.Gameplay
             // --- BETRAYAL MECHANIC: Phase 3 (Defensive Save Success) ---
             if (move.Stage == BetrayalStage.DefensiveSave)
             {
-                LiveBoard.PendingBetrayerSquare = null;
-                LiveBoard.BetrayalInitiator = null; // Sequence fully closed, regardless of outcome
                 TransitionToPhase(TurnPhase.Normal);
 
                 // --- UI FIX: Tell BoardVisuals to play the save animation ---

@@ -50,12 +50,11 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
             Assert.That(_moveBuffer.Count, Is.EqualTo(1), "Knight should be able to target the pawn at a3.");
             MoveCommand actMove = _moveBuffer[0];
 
+            // FIX: The engine natively handles the Betrayal state transition and hash toggle now!
+            // No manual state manipulation needed in the test.
             ChessEngine.ApplyMoveToBoard(board, actMove);
-            board.BetrayalRightAvailable = false;
-            board.ToggleBetrayalHash(); // FIX: Must explicitly toggle the hash when right is consumed
-            board.PendingBetrayerSquare = actMove.EndPosition;
-            board.BetrayalInitiator = actMove.PieceTeam;
 
+            Assert.That(board.BetrayalRightAvailable, Is.False, "Engine should natively consume the betrayal right.");
             Assert.That(board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("a3")).Type, Is.EqualTo(ChessPieceType.Knight), "Knight successfully betrayed the Pawn.");
             Assert.DoesNotThrow(() => board.AssertZobristConsistency(), "Hash must remain consistent after Phase 1 Act.");
 
@@ -67,13 +66,12 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
             MoveCommand retMove = _moveBuffer[0];
 
             ChessEngine.ApplyMoveToBoard(board, retMove);
-            board.PendingBetrayerSquare = null;
-            board.BetrayalInitiator = null;
-            board.NextTurn(); // End the turn (GameManager logic)
+            board.NextTurn(); // GameManager natively ends the turn after Resolution A
 
             // ---------------------------------------------------------
             // 4. FINAL ASSERTIONS
             // ---------------------------------------------------------
+            Assert.That(board.PendingBetrayerSquare, Is.Null, "Engine should natively clear the pending betrayer square upon success.");
             Assert.That(board.CurrentTurn, Is.EqualTo(Team.Black), "Turn economy must successfully pass to Black after Resolution A.");
             Assert.That(board.WhiteCaptured.Count, Is.EqualTo(2), "Both the Victim (Pawn) and the Betrayer (Knight) must end up in the graveyard.");
             Assert.That(board.ZobristHash, Is.Not.EqualTo(initialHash));
@@ -108,11 +106,8 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
                 board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("e3")), board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("d3")), board)
                 .WithStage(BetrayalStage.Act);
 
+            // FIX: Natively applied by the engine. Removed manual toggles.
             ChessEngine.ApplyMoveToBoard(board, actMove);
-            board.BetrayalRightAvailable = false;
-            board.ToggleBetrayalHash(); // FIX: Must explicitly toggle the hash when right is consumed
-            board.PendingBetrayerSquare = actMove.EndPosition;
-            board.BetrayalInitiator = actMove.PieceTeam;
 
             // ---------------------------------------------------------
             // 3. PHASE 2: RETRIBUTION (Fails due to Pin)
@@ -132,13 +127,12 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
             MoveCommand saveMove = _moveBuffer[0]; // Just take the first valid escape
 
             ChessEngine.ApplyMoveToBoard(board, saveMove);
-            board.PendingBetrayerSquare = null;
-            board.BetrayalInitiator = null;
-            board.NextTurn(); // End the turn
+            board.NextTurn(); // GameManager natively ends the turn after Defensive Save
 
             // ---------------------------------------------------------
             // 5. FINAL ASSERTIONS
             // ---------------------------------------------------------
+            Assert.That(board.PendingBetrayerSquare, Is.Null, "Engine should natively clear the pending betrayer square upon forced save completion.");
             Assert.That(board.CurrentTurn, Is.EqualTo(Team.Black), "Turn economy must successfully pass to Black after Resolution B -> Forced Save.");
             Assert.DoesNotThrow(() => board.AssertZobristConsistency(), "Zobrist Hash survived Act + Defection + Forced Save cleanly.");
         }
