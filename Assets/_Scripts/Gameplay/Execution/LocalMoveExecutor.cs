@@ -19,6 +19,7 @@ namespace ChessTheBetrayal.Gameplay
         public event Action<MoveCommand> OnMoveConfirmed;
         public event Action<Vector2Int, Vector2Int> OnMoveRejected;
         public event Action<Vector2Int, Vector2Int> OnPromotionRequired;
+        public event Action OnRetributionSkipConfirmed;
 
         private readonly BoardState _board;
         private readonly IChessEngine _engine;
@@ -255,6 +256,29 @@ namespace ChessTheBetrayal.Gameplay
             if (_logMoves) Debug.Log($"[LocalMoveExecutor] Move confirmed: {validMove.StartPosition} -> {validMove.EndPosition}");
             
             OnMoveConfirmed?.Invoke(validMove);
+        }
+
+        /// <summary>
+        /// Player chose not to execute a legal Retribution move. Only valid while resting in
+        /// RetributionPending — sends intent only, MatchDriver owns the actual resolution
+        /// (ResolveVoluntaryDefection routes through the same code as a forced Defection).
+        /// </summary>
+        public void RequestRetributionSkip()
+        {
+            if (_isAwaitingPromotion)
+            {
+                if (_logMoves) Debug.Log($"[LocalMoveExecutor] Retribution skip rejected: awaiting promotion choice");
+                return;
+            }
+
+            if (_phaseProvider == null || _phaseProvider() != TurnPhase.RetributionPending)
+            {
+                if (_logMoves) Debug.Log($"[LocalMoveExecutor] Retribution skip rejected: not in RetributionPending");
+                return;
+            }
+
+            if (_logMoves) Debug.Log($"[LocalMoveExecutor] Retribution skip confirmed");
+            OnRetributionSkipConfirmed?.Invoke();
         }
 
         /// <summary>

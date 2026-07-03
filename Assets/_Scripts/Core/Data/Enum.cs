@@ -56,4 +56,17 @@ namespace ChessTheBetrayal.Core.Data
         ForcedSave,           // Player's King is in check after defection
         GameOver              // Game is inactive/finished
     }
+
+    /// <summary>
+    /// Why a Defection (Resolution B) happened. Purely descriptive — logging, analytics, and AI
+    /// move-eval read this, but it must never branch ResolveDefection's actual outcome. A
+    /// VoluntarySkip and a NoLegalCapture run through the exact same resolution code, including
+    /// the Defensive Override self-check.
+    /// </summary>
+    public enum DefectionReason
+    {
+        NoLegalCapture,   // No Executioner could reach the Betrayer.
+        PinnedExecutor,   // The only geometrically capable piece(s) were pinned.
+        VoluntarySkip     // Player chose not to execute a legal Retribution.
+    }
 }

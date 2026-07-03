@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.Gameplay;
 
 namespace ChessTheBetrayal.UI
 {
@@ -29,6 +30,7 @@ namespace ChessTheBetrayal.UI
         public event Action<Team> OnTeamSelected;
         public event Action<ChessPieceType> OnPromotionSelected;
         public event Action OnGameReset;
+        public event Action OnRetributionSkipRequested;
 
         private Team _assignedTeam;
 
@@ -111,6 +113,7 @@ namespace ChessTheBetrayal.UI
             if (gameHUD != null)
             {
                 gameHUD.OnExitToMenu += HandleGameExit;
+                gameHUD.OnRetributionSkipClicked += HandleRetributionSkipClicked;
             }
 
             if (gameOverUI != null)
@@ -147,6 +150,7 @@ namespace ChessTheBetrayal.UI
             if (gameHUD != null)
             {
                 gameHUD.OnExitToMenu -= HandleGameExit;
+                gameHUD.OnRetributionSkipClicked -= HandleRetributionSkipClicked;
             }
 
             if (gameOverUI != null)
@@ -393,9 +397,15 @@ namespace ChessTheBetrayal.UI
 
         private void HandleReplay()
         {
-            OnGameReset?.Invoke();
-            // Replay uses the previously selected mode, so we skip straight to Team Selection
-            ShowTeamSelection();
+            // Delegates to GameManager's bound IPostGameAction (BackToModeSelectAction in the
+            // prototype), which tears down the finished match and decides what screen comes next.
+            // UIManager never decides the mode or the destination screen itself.
+            GameManager.Instance?.HandleGameOverAcknowledged();
+        }
+
+        private void HandleRetributionSkipClicked()
+        {
+            OnRetributionSkipRequested?.Invoke();
         }
 
         private void HandleRouletteComplete()
