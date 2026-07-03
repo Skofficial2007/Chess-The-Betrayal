@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using DG.Tweening;
 using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.Core.Diagnostics;
 
 namespace ChessTheBetrayal.UI
 {
@@ -44,10 +45,23 @@ namespace ChessTheBetrayal.UI
         private Tweener _whitePulseTween;
         private Tweener _blackPulseTween;
 
+        private void Awake()
+        {
+            ValidateRequiredFields();
+        }
+
         private void OnEnable()
         {
             ResetVisuals();
             StartCoroutine(AutoStartRoulette());
+        }
+
+        private void ValidateRequiredFields()
+        {
+            InspectorGuard.Require(whiteTeamObject, nameof(whiteTeamObject), this);
+            InspectorGuard.Require(blackTeamObject, nameof(blackTeamObject), this);
+            InspectorGuard.Require(_whiteHighlight, nameof(_whiteHighlight), this);
+            InspectorGuard.Require(_blackHighlight, nameof(_blackHighlight), this);
         }
 
         private void OnDisable()

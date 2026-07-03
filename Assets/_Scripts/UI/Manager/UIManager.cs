@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.Core.Diagnostics;
 using ChessTheBetrayal.Gameplay;
 
 namespace ChessTheBetrayal.UI
@@ -43,7 +44,20 @@ namespace ChessTheBetrayal.UI
             }
 
             Instance = this;
+
+            ValidateRequiredFields();
             RegisterPanelEvents();
+        }
+
+        private void ValidateRequiredFields()
+        {
+            InspectorGuard.Require(gameModeSelectionUI, nameof(gameModeSelectionUI), this);
+            InspectorGuard.Require(teamSelectionUI, nameof(teamSelectionUI), this);
+            InspectorGuard.Require(promotionUI, nameof(promotionUI), this);
+            InspectorGuard.Require(gameOverUI, nameof(gameOverUI), this);
+            InspectorGuard.Require(mainMenuUI, nameof(mainMenuUI), this);
+            InspectorGuard.Require(gameHUD, nameof(gameHUD), this);
+            InspectorGuard.Require(_teamSelectedChannel, nameof(_teamSelectedChannel), this);
         }
 
         private void Start()

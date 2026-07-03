@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.Core.Diagnostics;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Gameplay;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
@@ -94,8 +95,31 @@ namespace ChessTheBetrayal.UI
             }
             Instance = this;
 
+            ValidateRequiredFields();
+
             CacheLayers();
             CreateContainers();
+        }
+
+        /// <summary>
+        /// Loud-fails on any unassigned Inspector reference at Play-mode start. Container
+        /// transforms (tilesParent, whitePiecesParent, blackPiecesParent) are intentionally
+        /// excluded — CreateContainers() auto-populates them when left empty.
+        /// </summary>
+        private void ValidateRequiredFields()
+        {
+            InspectorGuard.Require(tileMaterial, nameof(tileMaterial), this);
+            InspectorGuard.Require(_sharedBoardState, nameof(_sharedBoardState), this);
+
+            if (whiteTeamPrefabs == null || whiteTeamPrefabs.Length == 0)
+            {
+                Debug.LogError($"[{nameof(BoardVisuals)}] Required field '{nameof(whiteTeamPrefabs)}' is empty on '{name}'.", this);
+            }
+
+            if (blackTeamPrefabs == null || blackTeamPrefabs.Length == 0)
+            {
+                Debug.LogError($"[{nameof(BoardVisuals)}] Required field '{nameof(blackTeamPrefabs)}' is empty on '{name}'.", this);
+            }
         }
 
         private void Start()
