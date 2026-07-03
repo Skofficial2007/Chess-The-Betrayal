@@ -36,6 +36,7 @@ namespace ChessTheBetrayal.UI
         [SerializeField] private float pieceScaleMultiplier = 1f;
         [SerializeField] private float deathSize = 0.45f;
         [SerializeField] private float deathSpacing = 0.35f;
+        [SerializeField] private float selectedLiftHeight = 0.3f;
 
         [Header("Hierarchy Containers")]
         [SerializeField] private Transform tilesParent;
@@ -436,6 +437,35 @@ namespace ChessTheBetrayal.UI
                 Vector3 worldPos = GetTileCenter(gridPos.x, gridPos.y);
                 worldPos.y += pieceYOffset;
                 piece.SetPosition(worldPos, force: true);
+            }
+        }
+
+        /// <summary>
+        /// Raises the piece at the given grid position by selectedLiftHeight — the tap-to-select
+        /// "lift" effect. No-op if nothing is there (e.g. a stale event after the piece moved).
+        /// </summary>
+        public void LiftPieceAt(Vector2Int gridPos)
+        {
+            if (_piecesByPosition.TryGetValue(gridPos, out ChessPiece piece))
+            {
+                Vector3 worldPos = GetTileCenter(gridPos.x, gridPos.y);
+                worldPos.y += pieceYOffset + selectedLiftHeight;
+                piece.SetPosition(worldPos);
+            }
+        }
+
+        /// <summary>
+        /// Lowers the piece at the given grid position back to its resting height. Safe to call
+        /// even if the piece already moved away from gridPos (no-op) — SelectionClearedEvent
+        /// doesn't carry a position, so PieceLiftView must remember which tile it lifted.
+        /// </summary>
+        public void LowerPieceAt(Vector2Int gridPos)
+        {
+            if (_piecesByPosition.TryGetValue(gridPos, out ChessPiece piece))
+            {
+                Vector3 worldPos = GetTileCenter(gridPos.x, gridPos.y);
+                worldPos.y += pieceYOffset;
+                piece.SetPosition(worldPos);
             }
         }
 
