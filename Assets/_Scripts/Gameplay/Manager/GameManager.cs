@@ -147,6 +147,8 @@ namespace ChessTheBetrayal.Gameplay
             }
             Instance = this;
 
+            ValidateRequiredFields();
+
             LiveBoard = new BoardState(boardSizeX, boardSizeY);
             _setup = new GameSetup(logMoves);
 
@@ -226,6 +228,27 @@ namespace ChessTheBetrayal.Gameplay
         private void OnGameOverRaised(ChessTheBetrayal.Events.Payloads.GameOverPayload payload)
         {
             _lastMatchResult = new MatchResult(payload.WinningTeam, payload.IsTimeout, _selectedMode);
+        }
+
+        /// <summary>
+        /// Loud-fails on any unassigned Inspector reference at Play-mode start instead of letting
+        /// a missing channel silently no-op later. See InspectorGuard.
+        /// </summary>
+        private void ValidateRequiredFields()
+        {
+            InspectorGuard.Require(_sharedBoardState, nameof(_sharedBoardState), this);
+            InspectorGuard.Require(_sharedClockState, nameof(_sharedClockState), this);
+            InspectorGuard.Require(_gameStartedChannel, nameof(_gameStartedChannel), this);
+            InspectorGuard.Require(_gameResetChannel, nameof(_gameResetChannel), this);
+            InspectorGuard.Require(_gameOverChannel, nameof(_gameOverChannel), this);
+            InspectorGuard.Require(_turnChangedChannel, nameof(_turnChangedChannel), this);
+            InspectorGuard.Require(_moveExecutedChannel, nameof(_moveExecutedChannel), this);
+            InspectorGuard.Require(_moveRejectedChannel, nameof(_moveRejectedChannel), this);
+            InspectorGuard.Require(_promotionRequiredChannel, nameof(_promotionRequiredChannel), this);
+            InspectorGuard.Require(_checkDetectedChannel, nameof(_checkDetectedChannel), this);
+            InspectorGuard.Require(_lowTimeAlertChannel, nameof(_lowTimeAlertChannel), this);
+            InspectorGuard.Require(_gameModeConfiguredChannel, nameof(_gameModeConfiguredChannel), this);
+            InspectorGuard.Require(_betrayalChannel, nameof(_betrayalChannel), this);
         }
 
         private void Update()

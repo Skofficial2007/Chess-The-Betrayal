@@ -2,6 +2,7 @@ using System;
 using UnityEngine;
 using UnityEngine.UI;
 using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.Core.Diagnostics;
 
 namespace ChessTheBetrayal.UI
 {
@@ -35,13 +36,36 @@ namespace ChessTheBetrayal.UI
         [Header("Controls")]
         [SerializeField] private Button _doneButton;
 
+        private void Awake()
+        {
+            ValidateRequiredFields();
+        }
+
         private void Start()
         {
             RegisterToggleListeners();
             _doneButton.onClick.AddListener(HandleStartClicked);
-            
+
             // Force an initial update so the UI starts in the correct visual state
             UpdateVisualStates();
+        }
+
+        private void ValidateRequiredFields()
+        {
+            InspectorGuard.Require(_toggleBullet, nameof(_toggleBullet), this);
+            InspectorGuard.Require(_toggleBlitz, nameof(_toggleBlitz), this);
+            InspectorGuard.Require(_toggleRapid, nameof(_toggleRapid), this);
+            InspectorGuard.Require(_toggleUltimate, nameof(_toggleUltimate), this);
+            InspectorGuard.Require(_cgBulletTimes, nameof(_cgBulletTimes), this);
+            InspectorGuard.Require(_cgBlitzTimes, nameof(_cgBlitzTimes), this);
+            InspectorGuard.Require(_cgRapidTimes, nameof(_cgRapidTimes), this);
+            InspectorGuard.Require(_toggleBullet1_0, nameof(_toggleBullet1_0), this);
+            InspectorGuard.Require(_toggleBullet2_1, nameof(_toggleBullet2_1), this);
+            InspectorGuard.Require(_toggleBlitz3_0, nameof(_toggleBlitz3_0), this);
+            InspectorGuard.Require(_toggleBlitz5_5, nameof(_toggleBlitz5_5), this);
+            InspectorGuard.Require(_toggleRapid10_0, nameof(_toggleRapid10_0), this);
+            InspectorGuard.Require(_toggleRapid15_10, nameof(_toggleRapid15_10), this);
+            InspectorGuard.Require(_doneButton, nameof(_doneButton), this);
         }
 
         private void RegisterToggleListeners()

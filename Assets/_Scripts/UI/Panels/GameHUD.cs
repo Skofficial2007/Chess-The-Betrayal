@@ -3,6 +3,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using DG.Tweening;
 using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.Core.Diagnostics;
 using ChessTheBetrayal.Gameplay;
 using ChessTheBetrayal.Events.Payloads;
 
@@ -40,6 +41,8 @@ namespace ChessTheBetrayal.UI
 
         private void Awake()
         {
+            ValidateRequiredFields();
+
             if (exitButton != null)
             {
                 exitButton.onClick.AddListener(() => OnExitToMenu?.Invoke());
@@ -56,6 +59,15 @@ namespace ChessTheBetrayal.UI
                 skipButtonRoot.localScale = Vector3.one * _skipHiddenScale;
                 skipButtonRoot.gameObject.SetActive(false);
             }
+        }
+
+        private void ValidateRequiredFields()
+        {
+            InspectorGuard.Require(exitButton, nameof(exitButton), this);
+            InspectorGuard.Require(_clockWidget, nameof(_clockWidget), this);
+            InspectorGuard.Require(_betrayalChannel, nameof(_betrayalChannel), this);
+            InspectorGuard.Require(skipButtonRoot, nameof(skipButtonRoot), this);
+            InspectorGuard.Require(skipButton, nameof(skipButton), this);
         }
 
         private void OnEnable()
