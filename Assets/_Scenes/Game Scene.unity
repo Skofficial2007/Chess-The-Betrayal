@@ -3520,9 +3520,9 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 608628692}
-  - component: {fileID: 608628693}
-  - component: {fileID: 608628695}
   - component: {fileID: 608628694}
+  - component: {fileID: 608628704}
+  - component: {fileID: 608628703}
   - component: {fileID: 608628696}
   - component: {fileID: 608628697}
   - component: {fileID: 608628698}
@@ -3530,6 +3530,8 @@ GameObject:
   - component: {fileID: 608628700}
   - component: {fileID: 608628701}
   - component: {fileID: 608628702}
+  - component: {fileID: 608628706}
+  - component: {fileID: 608628705}
   m_Layer: 0
   m_Name: Chessboard
   m_TagString: Untagged
@@ -3550,46 +3552,13 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
+  - {fileID: 1088944649}
   - {fileID: 1578654457}
   - {fileID: 204307616}
   - {fileID: 224791463}
   - {fileID: 1194650739}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &608628693
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 608628690}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f41df7142a73d4b489067ecdf2253996, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::GameManager
-  boardSizeX: 8
-  boardSizeY: 8
-  logMoves: 1
-  _betrayalBountyBulletMs: 3000
-  _betrayalBountyBullet2Ms: 5000
-  _betrayalBountyBlitzMs: 8000
-  _betrayalBountyBlitz5Ms: 12000
-  _betrayalBountyRapidMs: 20000
-  _betrayalBountyRapid15Ms: 30000
-  _sharedBoardState: {fileID: 11400000, guid: cc4e3a68a6697c6428481427dfafe407, type: 2}
-  _sharedClockState: {fileID: 11400000, guid: e7401b2d5b71cdc43960c7148a7091c3, type: 2}
-  _gameStartedChannel: {fileID: 11400000, guid: 9c2753d30b1a82a4c8811ae2dc13fed6, type: 2}
-  _gameResetChannel: {fileID: 11400000, guid: ed78152f3286a5242ae689ab254de072, type: 2}
-  _gameOverChannel: {fileID: 11400000, guid: 5ff66779738245442b2d220c1a11b2f4, type: 2}
-  _turnChangedChannel: {fileID: 11400000, guid: 91d0a40adba451c4e9c42eff45a49b0e, type: 2}
-  _moveExecutedChannel: {fileID: 11400000, guid: 6208cd50b3355dd4e96e80b19dbb45c8, type: 2}
-  _moveRejectedChannel: {fileID: 11400000, guid: 1d62eeb867403064d91fb6eaf1db9180, type: 2}
-  _promotionRequiredChannel: {fileID: 11400000, guid: 79c9467366ac5eb44acb92c5c3c1253e, type: 2}
-  _checkDetectedChannel: {fileID: 11400000, guid: fc2667c976636e841acfedf81916cd80, type: 2}
-  _lowTimeAlertChannel: {fileID: 11400000, guid: 1b265d13474462f499bb922bb74f88a7, type: 2}
-  _gameModeConfiguredChannel: {fileID: 11400000, guid: bc9d12738316f624e9a562b42b23223c, type: 2}
-  _betrayalChannel: {fileID: 11400000, guid: 1c8afe13a2243ca43b04b34b3581f608, type: 2}
 --- !u!114 &608628694
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3624,28 +3593,11 @@ MonoBehaviour:
   pieceScaleMultiplier: 1
   deathSize: 0.5
   deathSpacing: 1.25
+  selectedLiftHeight: 0.3
   tilesParent: {fileID: 608628692}
   whitePiecesParent: {fileID: 224791463}
   blackPiecesParent: {fileID: 1194650739}
   _sharedBoardState: {fileID: 11400000, guid: cc4e3a68a6697c6428481427dfafe407, type: 2}
---- !u!114 &608628695
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 608628690}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 3a272063ba44c884ab4f2fe70675d719, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ChessTheMasterPiece.Controllers.BoardInputController
-  dragHeight: 1
-  boardHeightOffset: 4.25
-  raycastMask:
-    serializedVersion: 2
-    m_Bits: 448
-  showDebugRays: 0
 --- !u!114 &608628696
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3802,7 +3754,7 @@ MonoBehaviour:
   _onEventRaised:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 608628693}
+      - m_Target: {fileID: 1998945582}
         m_TargetAssemblyTypeName: ChessTheBetrayal.Gameplay.GameManager, Assembly-CSharp
         m_MethodName: StartMatch
         m_Mode: 1
@@ -3833,6 +3785,112 @@ MonoBehaviour:
       - m_Target: {fileID: 608628694}
         m_TargetAssemblyTypeName: ChessTheBetrayal.UI.BoardVisuals, Assembly-CSharp
         m_MethodName: HandleBetrayalPhaseChanged
+        m_Mode: 0
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
+--- !u!114 &608628703
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 608628690}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5c1d4ba2c8e303540b0514e6002b183e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.UI.MoveHighlightView
+  boardVisuals: {fileID: 608628694}
+--- !u!114 &608628704
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 608628690}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2158c09d98149494699cd553b3f70447, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.UI.PieceLiftView
+  boardVisuals: {fileID: 608628694}
+--- !u!114 &608628705
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 608628690}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 395195732e2e6d541817b9afd977ddac, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Events.GameEventListener
+  _channel: {fileID: 11400000, guid: ae902c5f3aacc724c9c5421642e2bd53, type: 2}
+  _onEventRaised:
+    m_PersistentCalls:
+      m_Calls:
+      - m_Target: {fileID: 608628704}
+        m_TargetAssemblyTypeName: ChessTheBetrayal.UI.PieceLiftView, Assembly-CSharp
+        m_MethodName: HandleSelectionCleared
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
+      - m_Target: {fileID: 608628703}
+        m_TargetAssemblyTypeName: ChessTheBetrayal.UI.MoveHighlightView, Assembly-CSharp
+        m_MethodName: HandleSelectionCleared
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
+--- !u!114 &608628706
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 608628690}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 53158286165c0b4448cd8ab292593d2e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Events.PieceSelectedEventListener
+  _channel: {fileID: 11400000, guid: 845179b56be5f3f46b0241d577dd2ea3, type: 2}
+  _onEventRaised:
+    m_PersistentCalls:
+      m_Calls:
+      - m_Target: {fileID: 608628704}
+        m_TargetAssemblyTypeName: ChessTheBetrayal.UI.PieceLiftView, Assembly-CSharp
+        m_MethodName: HandlePieceSelected
+        m_Mode: 0
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
+      - m_Target: {fileID: 608628703}
+        m_TargetAssemblyTypeName: ChessTheBetrayal.UI.MoveHighlightView, Assembly-CSharp
+        m_MethodName: HandlePieceSelected
         m_Mode: 0
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -6376,6 +6434,101 @@ MonoBehaviour:
   m_FlexibleWidth: -1
   m_FlexibleHeight: -1
   m_LayoutPriority: 1
+--- !u!1 &1088944648
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1088944649}
+  - component: {fileID: 1088944650}
+  m_Layer: 0
+  m_Name: PointerSelectionObject
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1088944649
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1088944648}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 608628692}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1088944650
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1088944648}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74ed3ddf4b3a2d34eac61f1966d71a24, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Gameplay.PointerSelectionInput
+  raycastMask:
+    serializedVersion: 2
+    m_Bits: 448
+  showDebugRays: 1
+--- !u!1 &1093037577
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1093037579}
+  - component: {fileID: 1093037578}
+  m_Layer: 0
+  m_Name: SelectionController
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1093037578
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1093037577}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 820697ae8fc309446b3f9de87cab68db, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Gameplay.SelectionController
+  selectionInputBehaviour: {fileID: 1088944650}
+  _pieceSelectedChannel: {fileID: 11400000, guid: 845179b56be5f3f46b0241d577dd2ea3, type: 2}
+  _selectionClearedChannel: {fileID: 11400000, guid: ae902c5f3aacc724c9c5421642e2bd53, type: 2}
+--- !u!4 &1093037579
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1093037577}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1103511507
 GameObject:
   m_ObjectHideFlags: 0
@@ -11868,6 +12021,72 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1991672356}
   m_CullTransparentMesh: 1
+--- !u!1 &1998945581
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1998945583}
+  - component: {fileID: 1998945582}
+  m_Layer: 0
+  m_Name: GameManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1998945582
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1998945581}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f41df7142a73d4b489067ecdf2253996, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::GameManager
+  boardSizeX: 8
+  boardSizeY: 8
+  logMoves: 1
+  _betrayalBountyBulletMs: 3000
+  _betrayalBountyBullet2Ms: 5000
+  _betrayalBountyBlitzMs: 8000
+  _betrayalBountyBlitz5Ms: 12000
+  _betrayalBountyRapidMs: 20000
+  _betrayalBountyRapid15Ms: 30000
+  _sharedBoardState: {fileID: 11400000, guid: cc4e3a68a6697c6428481427dfafe407, type: 2}
+  _sharedClockState: {fileID: 11400000, guid: e7401b2d5b71cdc43960c7148a7091c3, type: 2}
+  _gameStartedChannel: {fileID: 11400000, guid: 9c2753d30b1a82a4c8811ae2dc13fed6, type: 2}
+  _gameResetChannel: {fileID: 11400000, guid: ed78152f3286a5242ae689ab254de072, type: 2}
+  _gameOverChannel: {fileID: 11400000, guid: 5ff66779738245442b2d220c1a11b2f4, type: 2}
+  _turnChangedChannel: {fileID: 11400000, guid: 91d0a40adba451c4e9c42eff45a49b0e, type: 2}
+  _moveExecutedChannel: {fileID: 11400000, guid: 6208cd50b3355dd4e96e80b19dbb45c8, type: 2}
+  _moveRejectedChannel: {fileID: 11400000, guid: 1d62eeb867403064d91fb6eaf1db9180, type: 2}
+  _promotionRequiredChannel: {fileID: 11400000, guid: 79c9467366ac5eb44acb92c5c3c1253e, type: 2}
+  _checkDetectedChannel: {fileID: 11400000, guid: fc2667c976636e841acfedf81916cd80, type: 2}
+  _lowTimeAlertChannel: {fileID: 11400000, guid: 1b265d13474462f499bb922bb74f88a7, type: 2}
+  _gameModeConfiguredChannel: {fileID: 11400000, guid: bc9d12738316f624e9a562b42b23223c, type: 2}
+  _betrayalChannel: {fileID: 11400000, guid: 1c8afe13a2243ca43b04b34b3581f608, type: 2}
+--- !u!4 &1998945583
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1998945581}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1998978608
 GameObject:
   m_ObjectHideFlags: 0
@@ -13194,12 +13413,14 @@ SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
   - {fileID: 330585546}
+  - {fileID: 931333779}
   - {fileID: 410087041}
   - {fileID: 832575519}
+  - {fileID: 1998945583}
   - {fileID: 608628692}
-  - {fileID: 368695945}
+  - {fileID: 1093037579}
   - {fileID: 12944030}
+  - {fileID: 368695945}
   - {fileID: 427879105}
   - {fileID: 1536082105}
   - {fileID: 2105957350}
-  - {fileID: 931333779}

@@ -472,7 +472,7 @@ namespace ChessTheBetrayal.Gameplay
 
         /// <summary>
         /// Returns all legal moves for a piece at the given position.
-        /// BoardInputController calls this to know which squares to highlight.
+        /// SelectionController and MoveHighlightView call this to know which squares to highlight.
         /// Returns an empty list if it's not that team's turn or the game isn't active.
         /// </summary>
         public IReadOnlyList<MoveCommand> GetLegalMovesAt(Vector2Int position)
