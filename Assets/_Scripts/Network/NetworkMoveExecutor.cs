@@ -11,6 +11,10 @@
 //
 // TODO (Betrayal + Network): The Retribution sub-phase must be fully validated server-side. The client should never be trusted to report whether a Retribution succeeded or failed.
 //
+// TODO (Retribution Skip): RequestRetributionSkip() is a client request like any other move —
+// the server must independently confirm CurrentPhase == RetributionPending on its own BoardState
+// before calling ResolveVoluntaryDefection, then broadcast the outcome via ClientRpc. No client-trust.
+//
 // ── CLOCK SYNCHRONISATION POLICY (MASTERPLAN-003) ──────────────────────────
 //
 // Authority: The server maintains the sole authoritative ChessClock.
@@ -53,6 +57,11 @@
 //         public void RequestPromotion(ChessPieceType type)
 //         {
 //             // RequestPromotionServerRpc((int)type);
+//         }
+//
+//         public void RequestRetributionSkip()
+//         {
+//             // RequestRetributionSkipServerRpc();
 //         }
 //
 //         [ServerRpc(RequireOwnership = false)]

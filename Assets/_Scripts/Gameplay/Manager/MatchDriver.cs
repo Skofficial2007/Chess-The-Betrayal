@@ -136,23 +136,8 @@ namespace ChessTheBetrayal.Gameplay
 
                 if (result.DidDefect)
                 {
-                    // Defection Triggered: The only geometrically capable pieces are pinned, or no pieces can reach.
                     _domainLogger?.LogWarning(new DomainLogEvent(DomainEventCode.Betrayal_RetributionPieceNone, message: "No legal Retribution move exists. Triggering Defection path."));
-                    _domainLogger?.LogInfo(new DomainLogEvent(DomainEventCode.Betrayal_DefectionResolved, auxInt: result.DefectedSquare.Value.y * _board.TileCountX + result.DefectedSquare.Value.x));
-
-                    _betrayalChannel?.Raise(new ChessTheBetrayal.Events.Payloads.BetrayalPayload(move.PieceTeam, result.DefectedSquare.Value, ChessTheBetrayal.Events.Payloads.BetrayalPhase.DefectionOccurred));
-
-                    if (result.RequiresForcedSave)
-                    {
-                        _domainLogger?.LogWarning(new DomainLogEvent(DomainEventCode.Betrayal_ForcedSaveRequired));
-                        _betrayalChannel?.Raise(new ChessTheBetrayal.Events.Payloads.BetrayalPayload(move.PieceTeam, result.DefectedSquare.Value, ChessTheBetrayal.Events.Payloads.BetrayalPhase.ForcedSaveActive));
-                        // No NextTurn() yet — the pending Defensive Override move and final turn advancement happen next.
-                    }
-                    else
-                    {
-                        // No time bounty — Defection alone grants nothing, per design doc.
-                        CheckForGameEnd(); // the opponent's newly-acquired piece may itself deliver check/checkmate — evaluated here for the first time.
-                    }
+                    HandleDefectionOutcome(move.PieceTeam, result);
                 }
 
                 // Early return. If Retribution is still pending, the turn does NOT end and the
@@ -202,6 +187,54 @@ namespace ChessTheBetrayal.Gameplay
             ));
 
             CheckForGameEnd();
+        }
+
+        /// <summary>
+        /// Player is sitting in RetributionPending with at least one legal Executioner available,
+        /// but chooses not to use it. Routes through the exact same resolution as a forced
+        /// Defection (no legal Retribution existed) — including the Defensive Override self-check
+        /// — the only difference is DefectionOutcome.Reason, which is descriptive-only.
+        /// </summary>
+        public void RequestRetributionSkip()
+        {
+            if (CurrentPhase != TurnPhase.RetributionPending)
+            {
+                if (_logMoves) Debug.Log($"[MatchDriver] Retribution skip rejected: not in RetributionPending (phase={CurrentPhase})");
+                return;
+            }
+
+            Team initiatingTeam = _board.BetrayalInitiator ?? _board.CurrentTurn;
+
+            TurnAdvanceResult result = _engine.ResolveVoluntaryDefection(_board);
+            TransitionToPhase(result.NextPhase);
+
+            _domainLogger?.LogInfo(new DomainLogEvent(DomainEventCode.Betrayal_RetributionSkipped, message: "Player voluntarily skipped Retribution. Triggering Defection path."));
+            HandleDefectionOutcome(initiatingTeam, result);
+        }
+
+        /// <summary>
+        /// Shared tail for both Defection triggers (forced failure inside PlayMove's Act branch,
+        /// and the voluntary RequestRetributionSkip entry point): raises DefectionOccurred, then
+        /// either ForcedSaveActive (rulebook 5B self-check) or evaluates game end. Never branches
+        /// on why Defection happened — only on whether it now requires a forced Save.
+        /// </summary>
+        private void HandleDefectionOutcome(Team initiatingTeam, TurnAdvanceResult result)
+        {
+            _domainLogger?.LogInfo(new DomainLogEvent(DomainEventCode.Betrayal_DefectionResolved, auxInt: result.DefectedSquare.Value.y * _board.TileCountX + result.DefectedSquare.Value.x));
+
+            _betrayalChannel?.Raise(new ChessTheBetrayal.Events.Payloads.BetrayalPayload(initiatingTeam, result.DefectedSquare.Value, ChessTheBetrayal.Events.Payloads.BetrayalPhase.DefectionOccurred));
+
+            if (result.RequiresForcedSave)
+            {
+                _domainLogger?.LogWarning(new DomainLogEvent(DomainEventCode.Betrayal_ForcedSaveRequired));
+                _betrayalChannel?.Raise(new ChessTheBetrayal.Events.Payloads.BetrayalPayload(initiatingTeam, result.DefectedSquare.Value, ChessTheBetrayal.Events.Payloads.BetrayalPhase.ForcedSaveActive));
+                // No NextTurn() yet — the pending Defensive Override move and final turn advancement happen next.
+            }
+            else
+            {
+                // No time bounty — Defection alone grants nothing, per design doc.
+                CheckForGameEnd(); // the opponent's newly-acquired piece may itself deliver check/checkmate — evaluated here for the first time.
+            }
         }
 
         /// <summary>

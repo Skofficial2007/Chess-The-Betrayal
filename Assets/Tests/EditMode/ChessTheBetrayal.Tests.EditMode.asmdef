@@ -2,6 +2,7 @@
   "name": "ChessTheBetrayal.Tests.EditMode",
   "references": [
     "ChessTheBetrayal.Core",
+    "ChessTheBetrayal.Gameplay.Flow",
     "ChessTheBetrayal.Tests.Utilities"
   ],
   "includePlatforms": ["Editor"],
