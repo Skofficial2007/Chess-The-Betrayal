@@ -167,30 +167,20 @@ namespace ChessTheBetrayal.Gameplay
             }
 
             PieceData targetPiece = _board.GetPiece(to);
-            if (piece.Type == ChessPieceType.King && !targetPiece.IsEmpty && 
-                targetPiece.Type == ChessPieceType.Rook && targetPiece.Team == piece.Team)
+
+            MoveIntent intent = MoveClassifier.ClassifyMove(piece, targetPiece, _board.BetrayalRightAvailable);
+
+            if (intent == MoveIntent.Castling)
             {
                 // If Rook is at X=7 (Kingside), Target is X=6. If Rook is at X=0 (Queenside), Target is X=2.
                 int castlingX = to.x > from.x ? 6 : 2;
                 to = new Vector2Int(castlingX, from.y);
             }
-
-            // Explicit exception gating for Betrayal rules on explicit requests.
-            if (!targetPiece.IsEmpty && targetPiece.Team == piece.Team)
+            else if (intent == MoveIntent.Illegal)
             {
-                // The King cannot be a Betrayer.
-                if (piece.Type == ChessPieceType.King && targetPiece.Type != ChessPieceType.Rook) // Allow castling attempt to pass through
-                {
-                    OnMoveRejected?.Invoke(from, to);
-                    throw new BetrayalRuleViolationException(DomainEventCode.Betrayal_KingTargetedAsBetrayer, "The King cannot initiate a Betrayal.");
-                }
-
-                // The King cannot be a Victim.
-                if (targetPiece.Type == ChessPieceType.King)
-                {
-                    OnMoveRejected?.Invoke(from, to);
-                    throw new BetrayalRuleViolationException(DomainEventCode.Betrayal_KingTargetedAsVictim, "The King cannot be targeted for Betrayal.");
-                }
+                if (_logMoves) Debug.Log($"[LocalMoveExecutor] Move rejected: {from} -> {to} is not a legal move or Betrayal");
+                OnMoveRejected?.Invoke(from, to);
+                return;
             }
 
             _legalMoves.Clear();
