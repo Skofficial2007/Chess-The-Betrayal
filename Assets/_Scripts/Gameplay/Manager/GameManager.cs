@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using ChessTheBetrayal.AI;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Core.Logic;
@@ -87,6 +88,14 @@ namespace ChessTheBetrayal.Gameplay
         public Team PlayerTeam { get; private set; } = Team.White;
 
         /// <summary>
+        /// Ordered ply-by-ply record of the current match, including Betrayal sub-phase moves.
+        /// Call MoveLog.DumpToString() to get a paste-ready bug report of every move played —
+        /// this is the authoritative source for "what actually happened," independent of whatever
+        /// scattered Debug.Log lines fired along the way.
+        /// </summary>
+        public ChessTheBetrayal.Core.Match.MatchMoveLog MoveLog => _matchDriver.MoveLog;
+
+        /// <summary>
         /// The current phase of the turn (Normal, Betrayal sub-phases, GameOver, etc.).
         /// Delegated to MatchDriver, which owns the actual state machine.
         /// </summary>
@@ -103,6 +112,13 @@ namespace ChessTheBetrayal.Gameplay
 
         // Handles move validation. Swap this out for NetworkMoveExecutor to go online.
         private IMoveExecutor _moveExecutor;
+
+        // Background-thread search agent. Null until SetAIMode() constructs it — most sessions
+        // (human vs human) never touch this at all. Ticked from Update() so OnMoveDecided always
+        // fires on the main thread (see AsyncAIAgent's class doc for why that's mandatory).
+        // Not yet wired to actually request/play moves — see TryRequestAIMove().
+        private IAIAgent _aiAgent;
+        private Team _aiTeam;
 
         // Instance-scoped rules engine (move generation, check detection, the Betrayal state
         // machine). Shared by GameSetup and MatchDriver so the exact same seam can be handed to
@@ -206,6 +222,8 @@ namespace ChessTheBetrayal.Gameplay
 
         private void OnDestroy()
         {
+            TearDownAIAgent();
+
             if (_uiManager != null)
             {
                 _uiManager.OnTeamRollRequested -= HandleTeamRollRequested;
@@ -261,6 +279,14 @@ namespace ChessTheBetrayal.Gameplay
             {
                 _sharedClockState?.Set(GetCurrentClockSnapshot());
             }
+
+            // Pump the AI agent so a completed background search hands its move back to us on the
+            // main thread. No-op until SetAIMode() constructs _aiAgent and something starts calling
+            // TryRequestAIMove() at the right turn boundary.
+            if (_aiAgent is AsyncAIAgent asyncAgent)
+            {
+                asyncAgent.Tick();
+            }
         }
 
         // Named methods (rather than lambdas) so we can unsubscribe cleanly.
@@ -301,6 +327,7 @@ namespace ChessTheBetrayal.Gameplay
         {
             LiveBoard.Clear();
             _setup.PlaceStandardPieces(LiveBoard, boardSizeX, boardSizeY);
+            _matchDriver.MoveLog.Clear();
 
             // Tear down the previous executor if one exists (e.g. the player hit Replay).
             if (_moveExecutor != null)
@@ -397,6 +424,7 @@ namespace ChessTheBetrayal.Gameplay
         private void TearDownCurrentMatch()
         {
             LiveBoard.Clear();
+            TearDownAIAgent();
 
             if (_moveExecutor != null)
             {
@@ -521,11 +549,53 @@ namespace ChessTheBetrayal.Gameplay
 
         /// <summary>
         /// Configures the session for AI participation, enforcing the performance bypass invariant.
+        /// Constructs the background-thread search agent, but does not start a search — nothing
+        /// calls TryRequestAIMove() yet, so this is safe to call without changing any current
+        /// human-vs-human behavior. Wiring the actual turn-trigger is deliberately deferred until
+        /// the full AI flow is being implemented.
         /// </summary>
-        public void SetAIMode()
+        public void SetAIMode(Team aiTeam = Team.Black, BetrayalUsage betrayalUsage = BetrayalUsage.Full)
         {
             _isAIMode     = true;
             _selectedMode = GameModeConfig.Unlimited;
+            _aiTeam       = aiTeam;
+
+            TearDownAIAgent();
+
+            var agent = new AsyncAIAgent(
+                _engine,
+                new BetrayalAwareEvaluator(),
+                AISearchSettings.Ultimate(betrayalUsage));
+
+            agent.OnMoveDecided += HandleAIMoveDecided;
+            _aiAgent = agent;
+        }
+
+        /// <summary>
+        /// Feeds the AI's chosen move through the exact same seam a human move takes
+        /// (MatchDriver.PlayMove) — the AI never gets a special-cased execution path.
+        /// Runs on the main thread: AsyncAIAgent.Tick() only raises this from Update().
+        /// </summary>
+        private void HandleAIMoveDecided(MoveCommand move) => _matchDriver.PlayMove(move);
+
+        /// <summary>
+        /// Call once it's aiTeam's turn in a live match to kick off a background search. Not
+        /// invoked anywhere yet — this is the seam the full AI-turn flow will call into.
+        /// </summary>
+        private void TryRequestAIMove()
+        {
+            if (_aiAgent == null || LiveBoard.CurrentTurn != _aiTeam || !IsGameActive) return;
+            _aiAgent.RequestBestMove(LiveBoard, _aiTeam);
+        }
+
+        private void TearDownAIAgent()
+        {
+            if (_aiAgent is AsyncAIAgent asyncAgent)
+            {
+                asyncAgent.OnMoveDecided -= HandleAIMoveDecided;
+                asyncAgent.Dispose();
+            }
+            _aiAgent = null;
         }
 
         #endregion
