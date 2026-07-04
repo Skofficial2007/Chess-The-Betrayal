@@ -132,9 +132,6 @@ GameObject:
   - component: {fileID: 12944028}
   - component: {fileID: 12944027}
   - component: {fileID: 12944031}
-  - component: {fileID: 12944032}
-  - component: {fileID: 12944033}
-  - component: {fileID: 12944034}
   m_Layer: 5
   m_Name: Canvas
   m_TagString: Untagged
@@ -249,90 +246,9 @@ MonoBehaviour:
   mainMenuUI: {fileID: 1103511511}
   gameHUD: {fileID: 360390062}
   _teamSelectedChannel: {fileID: 11400000, guid: acd4e37e1a191d14e8870caeaaf0757b, type: 2}
---- !u!114 &12944032
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 12944026}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 666a51446e251c84eb39c69bbdf5810d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Events.PromotionRequiredEventListener
-  _channel: {fileID: 11400000, guid: 79c9467366ac5eb44acb92c5c3c1253e, type: 2}
-  _onEventRaised:
-    m_PersistentCalls:
-      m_Calls:
-      - m_Target: {fileID: 12944031}
-        m_TargetAssemblyTypeName: ChessTheBetrayal.UI.UIManager, Assembly-CSharp
-        m_MethodName: ShowPromotionUI
-        m_Mode: 1
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
---- !u!114 &12944033
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 12944026}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 30ab3150c343851429e77aff3ffdd523, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Events.GameOverEventListener
-  _channel: {fileID: 11400000, guid: 5ff66779738245442b2d220c1a11b2f4, type: 2}
-  _onEventRaised:
-    m_PersistentCalls:
-      m_Calls:
-      - m_Target: {fileID: 12944031}
-        m_TargetAssemblyTypeName: ChessTheBetrayal.UI.UIManager, Assembly-CSharp
-        m_MethodName: HandleGameOver
-        m_Mode: 0
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
---- !u!114 &12944034
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 12944026}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ce0ab7ed055e10f48bea487d45bcc25c, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Events.GameModeConfiguredEventListener
-  _channel: {fileID: 11400000, guid: bc9d12738316f624e9a562b42b23223c, type: 2}
-  _onEventRaised:
-    m_PersistentCalls:
-      m_Calls:
-      - m_Target: {fileID: 12944031}
-        m_TargetAssemblyTypeName: ChessTheBetrayal.UI.UIManager, Assembly-CSharp
-        m_MethodName: ConfigureHUDForMode
-        m_Mode: 0
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
+  _promotionRequiredChannel: {fileID: 11400000, guid: 79c9467366ac5eb44acb92c5c3c1253e, type: 2}
+  _gameOverChannel: {fileID: 11400000, guid: 5ff66779738245442b2d220c1a11b2f4, type: 2}
+  _gameModeConfiguredChannel: {fileID: 11400000, guid: bc9d12738316f624e9a562b42b23223c, type: 2}
 --- !u!1 &95939180
 GameObject:
   m_ObjectHideFlags: 0
@@ -1787,10 +1703,6 @@ GameObject:
   m_Component:
   - component: {fileID: 360390061}
   - component: {fileID: 360390062}
-  - component: {fileID: 360390064}
-  - component: {fileID: 360390063}
-  - component: {fileID: 360390065}
-  - component: {fileID: 360390066}
   m_Layer: 5
   m_Name: HUD
   m_TagString: Untagged
@@ -1811,6 +1723,7 @@ RectTransform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 975597801}
+  - {fileID: 405583040}
   - {fileID: 608773228}
   m_Father: {fileID: 12944030}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -1833,106 +1746,18 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ChessTheMasterPiece.UI.GameHUD
   exitButton: {fileID: 975597802}
   _clockWidget: {fileID: 608773227}
---- !u!114 &360390063
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 360390060}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 395195732e2e6d541817b9afd977ddac, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Events.GameEventListener
-  _channel: {fileID: 11400000, guid: fc2667c976636e841acfedf81916cd80, type: 2}
-  _onEventRaised:
-    m_PersistentCalls:
-      m_Calls:
-      - m_Target: {fileID: 360390062}
-        m_TargetAssemblyTypeName: ChessTheBetrayal.UI.GameHUD, Assembly-CSharp
-        m_MethodName: HandleCheckDetected
-        m_Mode: 1
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
---- !u!114 &360390064
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 360390060}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 0d5236a3dd418bb4a977d434bad8df4a, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Events.TurnChangedEventListener
-  _channel: {fileID: 11400000, guid: 91d0a40adba451c4e9c42eff45a49b0e, type: 2}
-  _onEventRaised:
-    m_PersistentCalls:
-      m_Calls:
-      - m_Target: {fileID: 360390062}
-        m_TargetAssemblyTypeName: ChessTheBetrayal.UI.GameHUD, Assembly-CSharp
-        m_MethodName: HandleTurnChanged
-        m_Mode: 0
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
---- !u!114 &360390065
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 360390060}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b4a84bf03a56f664d9aef69879071fc3, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Events.LowTimeAlertEventListener
-  _channel: {fileID: 11400000, guid: 1b265d13474462f499bb922bb74f88a7, type: 2}
-  _onEventRaised:
-    m_PersistentCalls:
-      m_Calls:
-      - m_Target: {fileID: 360390062}
-        m_TargetAssemblyTypeName: ChessTheBetrayal.UI.GameHUD, Assembly-CSharp
-        m_MethodName: HandleLowTimeWarning
-        m_Mode: 0
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
---- !u!114 &360390066
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 360390060}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b2de40fd96c642d449404b820324fd9f, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Events.BetrayalEventListener
-  _channel: {fileID: 11400000, guid: 1c8afe13a2243ca43b04b34b3581f608, type: 2}
-  _onEventRaised:
-    m_PersistentCalls:
-      m_Calls: []
+  _checkDetectedChannel: {fileID: 11400000, guid: fc2667c976636e841acfedf81916cd80, type: 2}
+  _turnChangedChannel: {fileID: 11400000, guid: 91d0a40adba451c4e9c42eff45a49b0e, type: 2}
+  _lowTimeAlertChannel: {fileID: 11400000, guid: 1b265d13474462f499bb922bb74f88a7, type: 2}
+  _betrayalChannel: {fileID: 11400000, guid: 1c8afe13a2243ca43b04b34b3581f608, type: 2}
+  skipButtonRoot: {fileID: 405583040}
+  skipButton: {fileID: 405583041}
+  _skipShowScale: 1
+  _skipHiddenScale: 0
+  _skipShowDuration: 0.25
+  _skipHideDuration: 0.15
+  _skipShowEase: 27
+  _skipHideEase: 26
 --- !u!1 &368695943
 GameObject:
   m_ObjectHideFlags: 0
@@ -2367,6 +2192,127 @@ MonoBehaviour:
   winnerText: {fileID: 709144548}
   replayButton: {fileID: 1148137392}
   exitButton: {fileID: 1147398239}
+--- !u!1 &405583039
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 405583040}
+  - component: {fileID: 405583043}
+  - component: {fileID: 405583042}
+  - component: {fileID: 405583041}
+  m_Layer: 5
+  m_Name: SkipBtn
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &405583040
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 405583039}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 1004464325}
+  m_Father: {fileID: 360390061}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0, y: 1}
+  m_AnchorMax: {x: 0, y: 1}
+  m_AnchoredPosition: {x: 200, y: -210.00006}
+  m_SizeDelta: {x: 300, y: 100}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &405583041
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 405583039}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Button
+  m_Navigation:
+    m_Mode: 3
+    m_WrapAround: 0
+    m_SelectOnUp: {fileID: 0}
+    m_SelectOnDown: {fileID: 0}
+    m_SelectOnLeft: {fileID: 0}
+    m_SelectOnRight: {fileID: 0}
+  m_Transition: 1
+  m_Colors:
+    m_NormalColor: {r: 1, g: 1, b: 1, a: 1}
+    m_HighlightedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
+    m_PressedColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 1}
+    m_SelectedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
+    m_DisabledColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 0.5019608}
+    m_ColorMultiplier: 1
+    m_FadeDuration: 0.1
+  m_SpriteState:
+    m_HighlightedSprite: {fileID: 0}
+    m_PressedSprite: {fileID: 0}
+    m_SelectedSprite: {fileID: 0}
+    m_DisabledSprite: {fileID: 0}
+  m_AnimationTriggers:
+    m_NormalTrigger: Normal
+    m_HighlightedTrigger: Highlighted
+    m_PressedTrigger: Pressed
+    m_SelectedTrigger: Selected
+    m_DisabledTrigger: Disabled
+  m_Interactable: 1
+  m_TargetGraphic: {fileID: 405583042}
+  m_OnClick:
+    m_PersistentCalls:
+      m_Calls: []
+--- !u!114 &405583042
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 405583039}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 0.9921841, b: 0.6999999, a: 1}
+  m_RaycastTarget: 1
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: 10905, guid: 0000000000000000f000000000000000, type: 0}
+  m_Type: 1
+  m_PreserveAspect: 0
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 1
+--- !u!222 &405583043
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 405583039}
+  m_CullTransparentMesh: 1
 --- !u!1 &410087039
 GameObject:
   m_ObjectHideFlags: 0
@@ -3406,16 +3352,9 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 608628692}
-  - component: {fileID: 608628693}
-  - component: {fileID: 608628695}
   - component: {fileID: 608628694}
-  - component: {fileID: 608628696}
-  - component: {fileID: 608628697}
-  - component: {fileID: 608628698}
-  - component: {fileID: 608628699}
-  - component: {fileID: 608628700}
-  - component: {fileID: 608628701}
-  - component: {fileID: 608628702}
+  - component: {fileID: 608628704}
+  - component: {fileID: 608628703}
   m_Layer: 0
   m_Name: Chessboard
   m_TagString: Untagged
@@ -3436,46 +3375,13 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
+  - {fileID: 1088944649}
   - {fileID: 1578654457}
   - {fileID: 204307616}
   - {fileID: 224791463}
   - {fileID: 1194650739}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &608628693
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 608628690}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f41df7142a73d4b489067ecdf2253996, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::GameManager
-  boardSizeX: 8
-  boardSizeY: 8
-  logMoves: 1
-  _betrayalBountyBulletMs: 3000
-  _betrayalBountyBullet2Ms: 5000
-  _betrayalBountyBlitzMs: 8000
-  _betrayalBountyBlitz5Ms: 12000
-  _betrayalBountyRapidMs: 20000
-  _betrayalBountyRapid15Ms: 30000
-  _sharedBoardState: {fileID: 11400000, guid: cc4e3a68a6697c6428481427dfafe407, type: 2}
-  _sharedClockState: {fileID: 11400000, guid: e7401b2d5b71cdc43960c7148a7091c3, type: 2}
-  _gameStartedChannel: {fileID: 11400000, guid: 9c2753d30b1a82a4c8811ae2dc13fed6, type: 2}
-  _gameResetChannel: {fileID: 11400000, guid: ed78152f3286a5242ae689ab254de072, type: 2}
-  _gameOverChannel: {fileID: 11400000, guid: 5ff66779738245442b2d220c1a11b2f4, type: 2}
-  _turnChangedChannel: {fileID: 11400000, guid: 91d0a40adba451c4e9c42eff45a49b0e, type: 2}
-  _moveExecutedChannel: {fileID: 11400000, guid: 6208cd50b3355dd4e96e80b19dbb45c8, type: 2}
-  _moveRejectedChannel: {fileID: 11400000, guid: 1d62eeb867403064d91fb6eaf1db9180, type: 2}
-  _promotionRequiredChannel: {fileID: 11400000, guid: 79c9467366ac5eb44acb92c5c3c1253e, type: 2}
-  _checkDetectedChannel: {fileID: 11400000, guid: fc2667c976636e841acfedf81916cd80, type: 2}
-  _lowTimeAlertChannel: {fileID: 11400000, guid: 1b265d13474462f499bb922bb74f88a7, type: 2}
-  _gameModeConfiguredChannel: {fileID: 11400000, guid: bc9d12738316f624e9a562b42b23223c, type: 2}
-  _betrayalChannel: {fileID: 11400000, guid: 1c8afe13a2243ca43b04b34b3581f608, type: 2}
 --- !u!114 &608628694
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3510,11 +3416,18 @@ MonoBehaviour:
   pieceScaleMultiplier: 1
   deathSize: 0.5
   deathSpacing: 1.25
+  selectedLiftHeight: 0.3
   tilesParent: {fileID: 608628692}
   whitePiecesParent: {fileID: 224791463}
   blackPiecesParent: {fileID: 1194650739}
   _sharedBoardState: {fileID: 11400000, guid: cc4e3a68a6697c6428481427dfafe407, type: 2}
---- !u!114 &608628695
+  _gameStartedChannel: {fileID: 11400000, guid: 9c2753d30b1a82a4c8811ae2dc13fed6, type: 2}
+  _gameResetChannel: {fileID: 11400000, guid: ed78152f3286a5242ae689ab254de072, type: 2}
+  _moveExecutedChannel: {fileID: 11400000, guid: 6208cd50b3355dd4e96e80b19dbb45c8, type: 2}
+  _moveRejectedChannel: {fileID: 11400000, guid: 1d62eeb867403064d91fb6eaf1db9180, type: 2}
+  _promotionRequiredChannel: {fileID: 11400000, guid: 79c9467366ac5eb44acb92c5c3c1253e, type: 2}
+  _betrayalChannel: {fileID: 11400000, guid: 1c8afe13a2243ca43b04b34b3581f608, type: 2}
+--- !u!114 &608628703
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -3523,16 +3436,13 @@ MonoBehaviour:
   m_GameObject: {fileID: 608628690}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 3a272063ba44c884ab4f2fe70675d719, type: 3}
+  m_Script: {fileID: 11500000, guid: 5c1d4ba2c8e303540b0514e6002b183e, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ChessTheMasterPiece.Controllers.BoardInputController
-  dragHeight: 1
-  boardHeightOffset: 4.25
-  raycastMask:
-    serializedVersion: 2
-    m_Bits: 448
-  showDebugRays: 0
---- !u!114 &608628696
+  m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.UI.MoveHighlightView
+  boardVisuals: {fileID: 608628694}
+  _pieceSelectedChannel: {fileID: 11400000, guid: 845179b56be5f3f46b0241d577dd2ea3, type: 2}
+  _selectionClearedChannel: {fileID: 11400000, guid: ae902c5f3aacc724c9c5421642e2bd53, type: 2}
+--- !u!114 &608628704
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -3541,193 +3451,12 @@ MonoBehaviour:
   m_GameObject: {fileID: 608628690}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 395195732e2e6d541817b9afd977ddac, type: 3}
+  m_Script: {fileID: 11500000, guid: 2158c09d98149494699cd553b3f70447, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Events.GameEventListener
-  _channel: {fileID: 11400000, guid: 9c2753d30b1a82a4c8811ae2dc13fed6, type: 2}
-  _onEventRaised:
-    m_PersistentCalls:
-      m_Calls:
-      - m_Target: {fileID: 608628694}
-        m_TargetAssemblyTypeName: ChessTheBetrayal.UI.BoardVisuals, Assembly-CSharp
-        m_MethodName: HandleGameStarted
-        m_Mode: 1
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
---- !u!114 &608628697
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 608628690}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 60b945d3172f51b4a8665300cf51dd72, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Events.MoveExecutedEventListener
-  _channel: {fileID: 11400000, guid: 6208cd50b3355dd4e96e80b19dbb45c8, type: 2}
-  _onEventRaised:
-    m_PersistentCalls:
-      m_Calls:
-      - m_Target: {fileID: 608628694}
-        m_TargetAssemblyTypeName: ChessTheBetrayal.UI.BoardVisuals, Assembly-CSharp
-        m_MethodName: AnimateMove
-        m_Mode: 0
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
---- !u!114 &608628698
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 608628690}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 614e5241c37b3c3438a13aeb1c1e76db, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Events.MoveRejectedEventListener
-  _channel: {fileID: 11400000, guid: 1d62eeb867403064d91fb6eaf1db9180, type: 2}
-  _onEventRaised:
-    m_PersistentCalls:
-      m_Calls:
-      - m_Target: {fileID: 608628694}
-        m_TargetAssemblyTypeName: ChessTheBetrayal.UI.BoardVisuals, Assembly-CSharp
-        m_MethodName: HandleMoveRejected
-        m_Mode: 0
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
---- !u!114 &608628699
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 608628690}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 666a51446e251c84eb39c69bbdf5810d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Events.PromotionRequiredEventListener
-  _channel: {fileID: 11400000, guid: 79c9467366ac5eb44acb92c5c3c1253e, type: 2}
-  _onEventRaised:
-    m_PersistentCalls:
-      m_Calls:
-      - m_Target: {fileID: 608628694}
-        m_TargetAssemblyTypeName: ChessTheBetrayal.UI.BoardVisuals, Assembly-CSharp
-        m_MethodName: HandlePromotionOptimisticSnap
-        m_Mode: 0
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
---- !u!114 &608628700
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 608628690}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 395195732e2e6d541817b9afd977ddac, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Events.GameEventListener
-  _channel: {fileID: 11400000, guid: ed78152f3286a5242ae689ab254de072, type: 2}
-  _onEventRaised:
-    m_PersistentCalls:
-      m_Calls:
-      - m_Target: {fileID: 608628694}
-        m_TargetAssemblyTypeName: ChessTheBetrayal.UI.BoardVisuals, Assembly-CSharp
-        m_MethodName: ClearAllVisuals
-        m_Mode: 1
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
---- !u!114 &608628701
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 608628690}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 395195732e2e6d541817b9afd977ddac, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Events.GameEventListener
-  _channel: {fileID: 11400000, guid: fa430ed6fc8fccc4ea1ccc5638a81929, type: 2}
-  _onEventRaised:
-    m_PersistentCalls:
-      m_Calls:
-      - m_Target: {fileID: 608628693}
-        m_TargetAssemblyTypeName: ChessTheBetrayal.Gameplay.GameManager, Assembly-CSharp
-        m_MethodName: StartMatch
-        m_Mode: 1
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
---- !u!114 &608628702
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 608628690}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b2de40fd96c642d449404b820324fd9f, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Events.BetrayalEventListener
-  _channel: {fileID: 11400000, guid: 1c8afe13a2243ca43b04b34b3581f608, type: 2}
-  _onEventRaised:
-    m_PersistentCalls:
-      m_Calls:
-      - m_Target: {fileID: 608628694}
-        m_TargetAssemblyTypeName: ChessTheBetrayal.UI.BoardVisuals, Assembly-CSharp
-        m_MethodName: HandleBetrayalPhaseChanged
-        m_Mode: 0
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
+  m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.UI.PieceLiftView
+  boardVisuals: {fileID: 608628694}
+  _pieceSelectedChannel: {fileID: 11400000, guid: 845179b56be5f3f46b0241d577dd2ea3, type: 2}
+  _selectionClearedChannel: {fileID: 11400000, guid: ae902c5f3aacc724c9c5421642e2bd53, type: 2}
 --- !u!1 &608773226
 GameObject:
   m_ObjectHideFlags: 0
@@ -5428,8 +5157,6 @@ GameObject:
   m_Component:
   - component: {fileID: 931333779}
   - component: {fileID: 931333778}
-  - component: {fileID: 931333780}
-  - component: {fileID: 931333781}
   m_Layer: 0
   m_Name: CameraController
   m_TagString: Untagged
@@ -5454,6 +5181,8 @@ MonoBehaviour:
   blackTeamCam: {fileID: 176898962}
   introBlendTime: 2
   _matchStartRequestedChannel: {fileID: 11400000, guid: fa430ed6fc8fccc4ea1ccc5638a81929, type: 2}
+  _teamSelectedChannel: {fileID: 11400000, guid: acd4e37e1a191d14e8870caeaaf0757b, type: 2}
+  _gameResetChannel: {fileID: 11400000, guid: ed78152f3286a5242ae689ab254de072, type: 2}
 --- !u!4 &931333779
 Transform:
   m_ObjectHideFlags: 0
@@ -5472,62 +5201,6 @@ Transform:
   - {fileID: 176898963}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &931333780
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 931333777}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2fe37f747fd85c841aecfb10bedfbae6, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Events.TeamSelectedEventListener
-  _channel: {fileID: 11400000, guid: acd4e37e1a191d14e8870caeaaf0757b, type: 2}
-  _onEventRaised:
-    m_PersistentCalls:
-      m_Calls:
-      - m_Target: {fileID: 931333778}
-        m_TargetAssemblyTypeName: ChessTheBetrayal.UI.Camera.CameraController, Assembly-CSharp
-        m_MethodName: HandleTeamSelected
-        m_Mode: 0
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
---- !u!114 &931333781
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 931333777}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 395195732e2e6d541817b9afd977ddac, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Events.GameEventListener
-  _channel: {fileID: 11400000, guid: ed78152f3286a5242ae689ab254de072, type: 2}
-  _onEventRaised:
-    m_PersistentCalls:
-      m_Calls:
-      - m_Target: {fileID: 931333778}
-        m_TargetAssemblyTypeName: ChessTheBetrayal.UI.Camera.CameraController, Assembly-CSharp
-        m_MethodName: HandleGameReset
-        m_Mode: 1
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
 --- !u!1 &975597800
 GameObject:
   m_ObjectHideFlags: 0
@@ -5564,9 +5237,9 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 50, y: -50}
+  m_AnchoredPosition: {x: 200, y: -100.00006}
   m_SizeDelta: {x: 300, y: 100}
-  m_Pivot: {x: 0, y: 1}
+  m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &975597802
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5861,6 +5534,143 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1000439869}
   m_CullTransparentMesh: 1
+--- !u!1 &1004464324
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1004464325}
+  - component: {fileID: 1004464327}
+  - component: {fileID: 1004464326}
+  m_Layer: 5
+  m_Name: Text (TMP)
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &1004464325
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1004464324}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 405583040}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 1, y: 1}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &1004464326
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1004464324}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f4688fdb7df04437aeb418b961361dc5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.TextMeshPro::TMPro.TextMeshProUGUI
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_RaycastTarget: 1
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_text: Skip
+  m_isRightToLeft: 0
+  m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
+  m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
+  m_fontSharedMaterials: []
+  m_fontMaterial: {fileID: 0}
+  m_fontMaterials: []
+  m_fontColor32:
+    serializedVersion: 2
+    rgba: 4281479730
+  m_fontColor: {r: 0.19607843, g: 0.19607843, b: 0.19607843, a: 1}
+  m_enableVertexGradient: 0
+  m_colorMode: 3
+  m_fontColorGradient:
+    topLeft: {r: 1, g: 1, b: 1, a: 1}
+    topRight: {r: 1, g: 1, b: 1, a: 1}
+    bottomLeft: {r: 1, g: 1, b: 1, a: 1}
+    bottomRight: {r: 1, g: 1, b: 1, a: 1}
+  m_fontColorGradientPreset: {fileID: 0}
+  m_spriteAsset: {fileID: 0}
+  m_tintAllSprites: 0
+  m_StyleSheet: {fileID: 0}
+  m_TextStyleHashCode: -1183493901
+  m_overrideHtmlColors: 0
+  m_faceColor:
+    serializedVersion: 2
+    rgba: 4294967295
+  m_fontSize: 72
+  m_fontSizeBase: 24
+  m_fontWeight: 400
+  m_enableAutoSizing: 1
+  m_fontSizeMin: 18
+  m_fontSizeMax: 72
+  m_fontStyle: 0
+  m_HorizontalAlignment: 2
+  m_VerticalAlignment: 512
+  m_textAlignment: 65535
+  m_characterSpacing: 0
+  m_characterHorizontalScale: 1
+  m_wordSpacing: 0
+  m_lineSpacing: 0
+  m_lineSpacingMax: 0
+  m_paragraphSpacing: 0
+  m_charWidthMaxAdj: 0
+  m_TextWrappingMode: 1
+  m_wordWrappingRatios: 0.4
+  m_overflowMode: 0
+  m_linkedTextComponent: {fileID: 0}
+  parentLinkedComponent: {fileID: 0}
+  m_enableKerning: 0
+  m_ActiveFontFeatures: 6e72656b
+  m_enableExtraPadding: 0
+  checkPaddingRequired: 0
+  m_isRichText: 1
+  m_EmojiFallbackSupport: 1
+  m_parseCtrlCharacters: 1
+  m_isOrthographic: 1
+  m_isCullingEnabled: 0
+  m_horizontalMapping: 0
+  m_verticalMapping: 0
+  m_uvLineOffset: 0
+  m_geometrySortingOrder: 0
+  m_IsTextObjectScaleStatic: 0
+  m_VertexBufferAutoSizeReduction: 0
+  m_useMaxVisibleDescender: 1
+  m_pageToDisplay: 1
+  m_margin: {x: 0, y: 0, z: 0, w: 0}
+  m_isUsingLegacyAnimationComponent: 0
+  m_isVolumetricText: 0
+  m_hasFontAssetChanged: 0
+  m_baseMaterial: {fileID: 0}
+  m_maskOffset: {x: 0, y: 0, z: 0, w: 0}
+--- !u!222 &1004464327
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1004464324}
+  m_CullTransparentMesh: 1
 --- !u!1 &1004990105
 GameObject:
   m_ObjectHideFlags: 0
@@ -6125,6 +5935,101 @@ MonoBehaviour:
   m_FlexibleWidth: -1
   m_FlexibleHeight: -1
   m_LayoutPriority: 1
+--- !u!1 &1088944648
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1088944649}
+  - component: {fileID: 1088944650}
+  m_Layer: 0
+  m_Name: PointerSelectionObject
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1088944649
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1088944648}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 608628692}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1088944650
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1088944648}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74ed3ddf4b3a2d34eac61f1966d71a24, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Gameplay.PointerSelectionInput
+  raycastMask:
+    serializedVersion: 2
+    m_Bits: 448
+  showDebugRays: 1
+--- !u!1 &1093037577
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1093037579}
+  - component: {fileID: 1093037578}
+  m_Layer: 0
+  m_Name: SelectionController
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1093037578
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1093037577}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 820697ae8fc309446b3f9de87cab68db, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Gameplay.SelectionController
+  selectionInputBehaviour: {fileID: 1088944650}
+  _pieceSelectedChannel: {fileID: 11400000, guid: 845179b56be5f3f46b0241d577dd2ea3, type: 2}
+  _selectionClearedChannel: {fileID: 11400000, guid: ae902c5f3aacc724c9c5421642e2bd53, type: 2}
+--- !u!4 &1093037579
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1093037577}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1103511507
 GameObject:
   m_ObjectHideFlags: 0
@@ -11617,6 +11522,86 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1991672356}
   m_CullTransparentMesh: 1
+--- !u!1 &1998945581
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1998945583}
+  - component: {fileID: 1998945582}
+  - component: {fileID: 1998945584}
+  m_Layer: 0
+  m_Name: GameManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1998945582
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1998945581}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f41df7142a73d4b489067ecdf2253996, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::GameManager
+  boardSizeX: 8
+  boardSizeY: 8
+  logMoves: 1
+  _betrayalBountyBulletMs: 3000
+  _betrayalBountyBullet2Ms: 5000
+  _betrayalBountyBlitzMs: 8000
+  _betrayalBountyBlitz5Ms: 12000
+  _betrayalBountyRapidMs: 20000
+  _betrayalBountyRapid15Ms: 30000
+  _sharedBoardState: {fileID: 11400000, guid: cc4e3a68a6697c6428481427dfafe407, type: 2}
+  _sharedClockState: {fileID: 11400000, guid: e7401b2d5b71cdc43960c7148a7091c3, type: 2}
+  _gameStartedChannel: {fileID: 11400000, guid: 9c2753d30b1a82a4c8811ae2dc13fed6, type: 2}
+  _gameResetChannel: {fileID: 11400000, guid: ed78152f3286a5242ae689ab254de072, type: 2}
+  _gameOverChannel: {fileID: 11400000, guid: 5ff66779738245442b2d220c1a11b2f4, type: 2}
+  _turnChangedChannel: {fileID: 11400000, guid: 91d0a40adba451c4e9c42eff45a49b0e, type: 2}
+  _moveExecutedChannel: {fileID: 11400000, guid: 6208cd50b3355dd4e96e80b19dbb45c8, type: 2}
+  _moveRejectedChannel: {fileID: 11400000, guid: 1d62eeb867403064d91fb6eaf1db9180, type: 2}
+  _promotionRequiredChannel: {fileID: 11400000, guid: 79c9467366ac5eb44acb92c5c3c1253e, type: 2}
+  _checkDetectedChannel: {fileID: 11400000, guid: fc2667c976636e841acfedf81916cd80, type: 2}
+  _lowTimeAlertChannel: {fileID: 11400000, guid: 1b265d13474462f499bb922bb74f88a7, type: 2}
+  _gameModeConfiguredChannel: {fileID: 11400000, guid: bc9d12738316f624e9a562b42b23223c, type: 2}
+  _betrayalChannel: {fileID: 11400000, guid: 1c8afe13a2243ca43b04b34b3581f608, type: 2}
+  _matchStartRequestedChannel: {fileID: 11400000, guid: fa430ed6fc8fccc4ea1ccc5638a81929, type: 2}
+--- !u!4 &1998945583
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1998945581}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1998945584
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1998945581}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4cdbe3d4b9c95614cbf6c864892fca04, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Infrastructure.Bootstrap
 --- !u!1 &1998978608
 GameObject:
   m_ObjectHideFlags: 0
@@ -12943,12 +12928,14 @@ SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
   - {fileID: 330585546}
+  - {fileID: 931333779}
   - {fileID: 410087041}
   - {fileID: 832575519}
+  - {fileID: 1998945583}
   - {fileID: 608628692}
-  - {fileID: 368695945}
+  - {fileID: 1093037579}
   - {fileID: 12944030}
+  - {fileID: 368695945}
   - {fileID: 427879105}
   - {fileID: 1536082105}
   - {fileID: 2105957350}
-  - {fileID: 931333779}

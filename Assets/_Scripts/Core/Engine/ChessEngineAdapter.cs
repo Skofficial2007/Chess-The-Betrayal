@@ -15,6 +15,8 @@ namespace ChessTheBetrayal.Core.Engine
 
         public TurnAdvanceResult Advance(BoardState board, MoveCommand move) => _turnResolver.Advance(board, move);
 
+        public TurnAdvanceResult ResolveVoluntaryDefection(BoardState board) => _turnResolver.ResolveVoluntaryDefection(board);
+
         public void GetLegalMoves(BoardState board, Vector2Int position, List<MoveCommand> output) =>
             ChessEngine.GetLegalMoves(board, position, output);
 

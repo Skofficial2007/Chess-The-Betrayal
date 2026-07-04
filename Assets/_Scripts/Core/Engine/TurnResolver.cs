@@ -56,6 +56,16 @@ namespace ChessTheBetrayal.Core.Engine
         /// waiting on further input. Returns what happened; does not raise events or touch clocks.
         /// </summary>
         TurnAdvanceResult Advance(BoardState board, MoveCommand move);
+
+        /// <summary>
+        /// Resolves Defection while already resting in RetributionPending, without a MoveCommand to
+        /// Advance — the player had a legal Executioner available and chose not to use it. Runs the
+        /// identical resolution path as the "no legal Retribution" branch of Advance, including the
+        /// Defensive Override self-check; it is a second trigger into the same resolution, not a
+        /// different outcome. Callers must have already confirmed board.PendingBetrayerSquare and
+        /// board.BetrayalInitiator are set (i.e. CurrentPhase == TurnPhase.RetributionPending).
+        /// </summary>
+        TurnAdvanceResult ResolveVoluntaryDefection(BoardState board);
     }
 
     public sealed class TurnResolver : ITurnResolver
@@ -88,8 +98,23 @@ namespace ChessTheBetrayal.Core.Engine
                 return new TurnAdvanceResult(TurnPhase.RetributionPending, false, false, false, null, null);
             }
 
-            DefectionOutcome outcome = ChessEngine.ResolveFailedRetribution(board);
+            DefectionOutcome outcome = ChessEngine.ResolveDefection(board, DefectionReason.NoLegalCapture);
+            return ResultFromDefectionOutcome(board, outcome);
+        }
 
+        public TurnAdvanceResult ResolveVoluntaryDefection(BoardState board)
+        {
+            DefectionOutcome outcome = ChessEngine.ResolveDefection(board, DefectionReason.VoluntarySkip);
+            return ResultFromDefectionOutcome(board, outcome);
+        }
+
+        /// <summary>
+        /// Shared tail of both Defection triggers (forced failure and voluntary skip): branch into
+        /// the Defensive Override if the defected piece checks the initiator's own King (rulebook
+        /// 5B), otherwise pass the turn. Identical regardless of DefectionOutcome.Reason.
+        /// </summary>
+        private static TurnAdvanceResult ResultFromDefectionOutcome(BoardState board, DefectionOutcome outcome)
+        {
             if (outcome.RequiresForcedSave)
             {
                 // Turn does not pass yet — BETRAYER-07 handles the forced Save move and final turn advancement.

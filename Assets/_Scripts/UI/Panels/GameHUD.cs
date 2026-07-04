@@ -1,13 +1,18 @@
 using System;
 using UnityEngine;
 using UnityEngine.UI;
+using DG.Tweening;
 using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.Core.Diagnostics;
 using ChessTheBetrayal.Gameplay;
+using ChessTheBetrayal.Events.Payloads;
 
 namespace ChessTheBetrayal.UI
 {
     /// <summary>
-    /// Manages the in-game heads-up display, including clock visibility and exit controls.
+    /// Manages the in-game heads-up display, including clock visibility, exit controls, and the
+    /// Retribution Skip button (visible only while the player is sitting in RetributionPending
+    /// with a legal Executioner they're choosing not to use).
     /// </summary>
     public class GameHUD : MonoBehaviour
     {
@@ -17,28 +22,129 @@ namespace ChessTheBetrayal.UI
         [Header("Clock")]
         [SerializeField] private ClockDisplayWidget _clockWidget;
 
+        [Header("Event Channels")]
+        [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _checkDetectedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.TurnChangedEventChannel _turnChangedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.LowTimeAlertEventChannel _lowTimeAlertChannel;
+
+        [Header("Retribution Skip")]
+        [SerializeField] private ChessTheBetrayal.Events.BetrayalEventChannel _betrayalChannel;
+        [SerializeField] private RectTransform skipButtonRoot;
+        [SerializeField] private Button skipButton;
+        [SerializeField] private float _skipShowScale = 1f;
+        [SerializeField] private float _skipHiddenScale = 0f;
+        [SerializeField] private float _skipShowDuration = 0.25f;
+        [SerializeField] private float _skipHideDuration = 0.15f;
+        [SerializeField] private Ease _skipShowEase = Ease.OutBack;
+        [SerializeField] private Ease _skipHideEase = Ease.InBack;
+
         public event Action OnExitToMenu;
+        public event Action OnRetributionSkipClicked;
+
+        private Tweener _skipButtonTween;
+        private bool _skipButtonVisible;
 
         private void Awake()
         {
+            ValidateRequiredFields();
+
             if (exitButton != null)
             {
                 exitButton.onClick.AddListener(() => OnExitToMenu?.Invoke());
             }
+
+            if (skipButton != null)
+            {
+                skipButton.onClick.AddListener(() => OnRetributionSkipClicked?.Invoke());
+            }
+
+            // Start hidden and inert — no flash-of-visible-button before the first BetrayalPhase event.
+            if (skipButtonRoot != null)
+            {
+                skipButtonRoot.localScale = Vector3.one * _skipHiddenScale;
+                skipButtonRoot.gameObject.SetActive(false);
+            }
         }
 
-        private void Start()
+        private void ValidateRequiredFields()
         {
-            // No direct GameManager subscriptions - all events come through the Inspector-wired channels
+            InspectorGuard.Require(exitButton, nameof(exitButton), this);
+            InspectorGuard.Require(_clockWidget, nameof(_clockWidget), this);
+            InspectorGuard.Require(_checkDetectedChannel, nameof(_checkDetectedChannel), this);
+            InspectorGuard.Require(_turnChangedChannel, nameof(_turnChangedChannel), this);
+            InspectorGuard.Require(_lowTimeAlertChannel, nameof(_lowTimeAlertChannel), this);
+            InspectorGuard.Require(_betrayalChannel, nameof(_betrayalChannel), this);
+            InspectorGuard.Require(skipButtonRoot, nameof(skipButtonRoot), this);
+            InspectorGuard.Require(skipButton, nameof(skipButton), this);
         }
 
-        private void OnDestroy()
+        private void OnEnable()
         {
-            // Cleanup if needed
+            _betrayalChannel?.Register(HandleBetrayalPhaseChanged);
+            _checkDetectedChannel?.Register(HandleCheckDetected);
+            _turnChangedChannel?.Register(HandleTurnChanged);
+            _lowTimeAlertChannel?.Register(HandleLowTimeWarning);
+        }
+
+        private void OnDisable()
+        {
+            _betrayalChannel?.Unregister(HandleBetrayalPhaseChanged);
+            _checkDetectedChannel?.Unregister(HandleCheckDetected);
+            _turnChangedChannel?.Unregister(HandleTurnChanged);
+            _lowTimeAlertChannel?.Unregister(HandleLowTimeWarning);
+            _skipButtonTween?.Kill();
+        }
+
+        /// <summary>
+        /// The Skip button is only ever a legal action while resting in RetributionPending — every
+        /// other BetrayalPhase (Resolved, DefectionOccurred, ForcedSaveActive) means the sub-machine
+        /// has already moved on, so it hides. Initiated is the split-second before RetributionPending
+        /// is raised (see MatchDriver.PlayMove's Act branch), so it hides too.
+        /// </summary>
+        private void HandleBetrayalPhaseChanged(BetrayalPayload payload)
+        {
+            SetSkipButtonVisible(payload.Phase == BetrayalPhase.RetributionPending);
+        }
+
+        private void SetSkipButtonVisible(bool visible)
+        {
+            if (skipButtonRoot == null || visible == _skipButtonVisible) return;
+            _skipButtonVisible = visible;
+
+            _skipButtonTween?.Kill();
+
+            if (visible)
+            {
+                skipButtonRoot.gameObject.SetActive(true);
+                skipButtonRoot.localScale = Vector3.one * _skipHiddenScale;
+                _skipButtonTween = skipButtonRoot
+                    .DOScale(_skipShowScale, _skipShowDuration)
+                    .SetEase(_skipShowEase);
+            }
+            else
+            {
+                _skipButtonTween = skipButtonRoot
+                    .DOScale(_skipHiddenScale, _skipHideDuration)
+                    .SetEase(_skipHideEase)
+                    .OnComplete(() => skipButtonRoot.gameObject.SetActive(false));
+            }
         }
 
         public void SetActive(bool active)
         {
+            if (!active)
+            {
+                // Snap the Skip button back to hidden (no animation) so re-activating the HUD for a
+                // fresh match never briefly shows it before the next BetrayalPhase event arrives.
+                _skipButtonTween?.Kill();
+                _skipButtonVisible = false;
+                if (skipButtonRoot != null)
+                {
+                    skipButtonRoot.localScale = Vector3.one * _skipHiddenScale;
+                    skipButtonRoot.gameObject.SetActive(false);
+                }
+            }
+
             gameObject.SetActive(active);
         }
 
