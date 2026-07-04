@@ -23,12 +23,33 @@ namespace ChessTheBetrayal.UI
         private static readonly Ease MoveEase = Ease.OutQuad;
         private static readonly Ease ScaleEase = Ease.OutQuad;
 
+        // Per-style board-move feel. Quiet/Capture are both slightly longer than the legacy flat
+        // MoveDuration so the glide reads as deliberate motion rather than a snap; Knight is a
+        // touch slower still to give the arc room to read. Capture gets a brief landing punch;
+        // Knight arcs over the board via an extra Y-height tween run in parallel with the XZ slide.
+        private const float QuietMoveDuration = 0.22f;
+        private const float CaptureMoveDuration = 0.2f;
+        private const float KnightMoveDuration = 0.26f;
+        private const float PromotionMoveDuration = 0.28f;
+        private static readonly Ease BoardMoveEase = Ease.InOutCubic;
+
+        private const float CapturePunchDuration = 0.12f;
+        private const float CapturePunchScale = 1.12f;
+
+        private const float KnightArcHeight = 0.35f;
+        private static readonly Ease KnightArcEase = Ease.OutQuad;
+
         // Promotion/defection transition timings: "out" is a quick anticipation beat, "in" is the
         // slightly longer payoff so the swap reads as deliberate rather than a glitch.
         private const float SquashOutDuration = 0.12f;
         private const float SquashInDuration = 0.2f;
         private const float SpinOutDuration = 0.15f;
         private const float SpinInDuration = 0.2f;
+
+        // Promotion morph punch: a small extra hop/overshoot layered onto the existing squash-in so
+        // the promoted piece feels like it "pops into existence" rather than just scaling up.
+        private const float PromotionPopHopHeight = 0.12f;
+        private const float PromotionPopHopDuration = 0.22f;
 
         // Scale can't tween to exactly zero (PrimeTween/Unity would treat that as degenerate), so
         // "vanished" is approximated as a small positive scale instead.
@@ -61,6 +82,8 @@ namespace ChessTheBetrayal.UI
         private readonly Func<ChessPieceType> _getType;
 
         private Tween _moveTween;
+        private Tween _arcTween;
+        private Sequence _punchSequence;
         private Tween _scaleTween;
         private Sequence _transitionSequence;
         private MaterialPropertyBlock _mpb;
@@ -82,6 +105,31 @@ namespace ChessTheBetrayal.UI
 
         public void MoveTo(Vector3 worldPos, bool force = false)
         {
+            MoveToInternal(worldPos, MoveDuration, MoveEase, punch: false, arc: false, force);
+        }
+
+        public void MoveTo(Vector3 worldPos, MoveStyle style, bool force = false)
+        {
+            switch (style)
+            {
+                case MoveStyle.Capture:
+                    MoveToInternal(worldPos, CaptureMoveDuration, BoardMoveEase, punch: true, arc: false, force);
+                    break;
+                case MoveStyle.Knight:
+                    MoveToInternal(worldPos, KnightMoveDuration, BoardMoveEase, punch: false, arc: true, force);
+                    break;
+                case MoveStyle.Promotion:
+                    MoveToInternal(worldPos, PromotionMoveDuration, BoardMoveEase, punch: false, arc: false, force);
+                    break;
+                case MoveStyle.Quiet:
+                default:
+                    MoveToInternal(worldPos, QuietMoveDuration, BoardMoveEase, punch: false, arc: false, force);
+                    break;
+            }
+        }
+
+        private void MoveToInternal(Vector3 worldPos, float duration, Ease ease, bool punch, bool arc, bool force)
+        {
             if (!IsFinite(worldPos))
             {
                 Debug.LogWarning($"[{nameof(PrimeTweenPieceAnimator)}] MoveTo given non-finite vector for {_transform.name}. Ignoring.");
@@ -89,6 +137,8 @@ namespace ChessTheBetrayal.UI
             }
 
             _moveTween.Stop();
+            _arcTween.Stop();
+            _punchSequence.Stop();
 
             // A caller driving MoveTo directly (a board move, castling, snap-back) means the piece
             // is no longer conceptually "lifted" — stop any in-flight lift/bob so they can't fight
@@ -109,7 +159,29 @@ namespace ChessTheBetrayal.UI
             // skip it outright rather than let a harmless no-op animation spam the console.
             if (_transform.position == worldPos) return;
 
-            _moveTween = Tween.Position(_transform, worldPos, MoveDuration, MoveEase);
+            float startY = _transform.position.y;
+            _moveTween = Tween.Position(_transform, worldPos, duration, ease);
+
+            if (arc)
+            {
+                // A knight "hops" rather than slides through occupied squares: an extra Y-only
+                // tween running in parallel with the XZ move, up and back down via a Yoyo cycle so
+                // it reads as a single parabolic arc rather than two separate motions.
+                _arcTween = Tween.PositionY(_transform, startY, startY + KnightArcHeight, duration / 2f, KnightArcEase,
+                    cycles: 2, cycleMode: CycleMode.Yoyo);
+            }
+
+            if (punch)
+            {
+                // Land, then a one-frame-reading scale pop — "impact" — timed to finish exactly as
+                // the slide arrives. Chained onto the same sequence as the move itself (rather than
+                // a separate delayed tween) so Stop()-ing _moveTween/_punchTween together can never
+                // leave one half running without the other.
+                Vector3 restScale = _transform.localScale;
+                _punchSequence = Sequence.Create(Tween.Delay(duration))
+                    .Chain(Tween.Scale(_transform, restScale * CapturePunchScale, CapturePunchDuration * 0.5f, Ease.OutQuad))
+                    .Chain(Tween.Scale(_transform, restScale, CapturePunchDuration * 0.5f, Ease.InQuad));
+            }
         }
 
         public void ScaleTo(Vector3 scale, bool force = false)
@@ -168,9 +240,12 @@ namespace ChessTheBetrayal.UI
                     break;
 
                 case PieceTransitionStyle.Squash:
+                case PieceTransitionStyle.PromotionMorph:
                 default:
                     // Anticipation squash down to near-zero scale, then swap — reads as "this piece
-                    // collapses into its promoted form" rather than a jump-cut.
+                    // collapses into its promoted form" rather than a jump-cut. PromotionMorph is
+                    // hooked to this same tween for now — swap this case out for the real dissolve/
+                    // VFX morph when that work lands; nothing outside this method needs to change.
                     _transitionSequence = Sequence.Create(Tween.Scale(_transform, VanishedScale, SquashOutDuration, Ease.InBack))
                         .ChainCallback(onComplete);
                     break;
@@ -196,12 +271,18 @@ namespace ChessTheBetrayal.UI
                     break;
 
                 case PieceTransitionStyle.Squash:
+                case PieceTransitionStyle.PromotionMorph:
                 default:
                     // Spawn at vanished scale and pop back up to whatever scale BoardVisuals just
-                    // set (pieceScaleMultiplier), with a slight overshoot for punch.
+                    // set (pieceScaleMultiplier), with a slight overshoot for punch. A small
+                    // rise-and-settle hop runs alongside the scale so the promoted piece feels like
+                    // it materializes with a bounce rather than just growing in place.
+                    // PromotionMorph is hooked to this same tween for now — see PlayTransitionOut.
                     Vector3 targetScale = _transform.localScale;
                     _transform.localScale = Vector3.one * VanishedScale;
-                    _transitionSequence = Sequence.Create(Tween.Scale(_transform, targetScale, SquashInDuration, Easing.Overshoot(1.5f)));
+                    float restY = _transform.position.y;
+                    _transitionSequence = Sequence.Create(Tween.Scale(_transform, targetScale, SquashInDuration, Easing.Overshoot(1.5f)))
+                        .Group(Tween.PositionY(_transform, restY + PromotionPopHopHeight, restY, PromotionPopHopDuration, Ease.OutBack));
                     break;
             }
         }

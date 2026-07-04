@@ -460,7 +460,7 @@ namespace ChessTheBetrayal.UI
                     ChessPieceType promotedType = move.PromotedTo;
                     int promotedMoveDirection = move.PieceMoveDirection;
 
-                    movingPiece.PlayTransitionOut(PieceTransitionStyle.Squash, () =>
+                    movingPiece.PlayTransitionOut(PieceTransitionStyle.PromotionMorph, () =>
                     {
                         // The pawn (or the whole scene) may have been destroyed while the
                         // transition was still playing — e.g. a game reset. Unity's overloaded
@@ -476,7 +476,7 @@ namespace ChessTheBetrayal.UI
                             hasMoved: true
                         );
                         ChessPiece promoted = SpawnSinglePiece(promotedData, promotionPos);
-                        promoted?.PlayTransitionIn(PieceTransitionStyle.Squash);
+                        promoted?.PlayTransitionIn(PieceTransitionStyle.PromotionMorph);
                     });
                 }
                 else
@@ -486,7 +486,11 @@ namespace ChessTheBetrayal.UI
 
                     Vector3 targetPos = GetTileCenter(move.EndPosition.x, move.EndPosition.y);
                     targetPos.y += pieceYOffset;
-                    movingPiece.SetPosition(targetPos);
+
+                    MoveStyle style = move.IsCapture
+                        ? MoveStyle.Capture
+                        : (move.PieceType == ChessPieceType.Knight ? MoveStyle.Knight : MoveStyle.Quiet);
+                    movingPiece.SetPosition(targetPos, style);
 
                     // A Betrayal Act's MoveExecutedPayload arrives after MatchDriver has already
                     // raised Initiated/RetributionPending on the BetrayalEventChannel, so the piece
@@ -509,7 +513,7 @@ namespace ChessTheBetrayal.UI
 
                     Vector3 rookPos = GetTileCenter(move.RookEndPosition.Value.x, move.RookEndPosition.Value.y);
                     rookPos.y += pieceYOffset;
-                    rook.SetPosition(rookPos);
+                    rook.SetPosition(rookPos, MoveStyle.Quiet);
                 }
             }
         }
@@ -638,7 +642,7 @@ namespace ChessTheBetrayal.UI
             {
                 Vector3 glidePos = GetTileCenter(payload.ToPosition.x, payload.ToPosition.y);
                 glidePos.y += pieceYOffset;
-                pawn.SetPosition(glidePos);
+                pawn.SetPosition(glidePos, MoveStyle.Promotion);
             }
         }
 

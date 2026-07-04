@@ -119,6 +119,13 @@ namespace ChessTheBetrayal.UI
                 skipButtonRoot.localScale = Vector3.one * _skipHiddenScale;
                 _skipButtonTween = Tween.Scale(skipButtonRoot, _skipShowScale, _skipShowDuration, _skipShowEase);
             }
+            else if (skipButtonRoot.localScale == Vector3.one * _skipHiddenScale)
+            {
+                // Betrayal's RetributionPending -> Defection can resolve synchronously within the
+                // same PlayMove call (no legal executioner), hiding the button again before its
+                // show tween has ticked even once — already at hidden scale, so just finish the job.
+                skipButtonRoot.gameObject.SetActive(false);
+            }
             else
             {
                 _skipButtonTween = Tween.Scale(skipButtonRoot, _skipHiddenScale, _skipHideDuration, _skipHideEase)

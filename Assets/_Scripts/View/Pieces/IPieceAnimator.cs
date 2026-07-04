@@ -7,12 +7,31 @@ namespace ChessTheBetrayal.UI
     /// The visual shape of a piece-swap transition (promotion, defection). Squash is an
     /// anticipation-style scale-down/up used when the swap should read as "this piece becomes a
     /// new piece." Spin is a 180-degree Y rotation used when the swap should read as "this piece
-    /// turns around to reveal its new side."
+    /// turns around to reveal its new side." PromotionMorph is promotion's own style, kept
+    /// distinct from Squash/Spin so its tween can evolve independently of Defection's — today it
+    /// plays the same squash-based tween as Squash, but is the seam a future dissolve/VFX morph
+    /// (see the promotion animator design notes) hooks into without ever touching the call site
+    /// in BoardVisuals again.
     /// </summary>
     public enum PieceTransitionStyle
     {
         Squash,
-        Spin
+        Spin,
+        PromotionMorph
+    }
+
+    /// <summary>
+    /// The visual feel of a board-move glide. Quiet is a plain slide; Capture adds a landing
+    /// impact punch to sell contact; Knight arcs over the board (it "hops" rather than slides
+    /// through occupied squares, matching how the piece actually moves); Promotion is a slower,
+    /// punch-free glide since the morph itself (PlayTransitionOut/In) is the payoff beat.
+    /// </summary>
+    public enum MoveStyle
+    {
+        Quiet,
+        Capture,
+        Knight,
+        Promotion
     }
 
     /// <summary>
@@ -30,6 +49,13 @@ namespace ChessTheBetrayal.UI
         /// tween would fight with what the player just did).
         /// </summary>
         void MoveTo(Vector3 worldPos, bool force = false);
+
+        /// <summary>
+        /// Slides the piece toward worldPos with a specific move feel — see MoveStyle. This is the
+        /// board-move entry point (AnimateMove); the plain MoveTo above stays for callers that
+        /// don't carry move context (death-pile placement, selection snap-back).
+        /// </summary>
+        void MoveTo(Vector3 worldPos, MoveStyle style, bool force = false);
 
         /// <summary>
         /// Scales the piece toward scale. force = true snaps instantly with no interpolation
