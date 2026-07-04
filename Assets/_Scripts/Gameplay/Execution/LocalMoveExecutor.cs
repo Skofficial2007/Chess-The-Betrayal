@@ -189,12 +189,6 @@ namespace ChessTheBetrayal.Gameplay
             {
                 _engine.GetLegalMoves(_board, from, _legalMoves);
             }
-            catch (BetrayalRuleViolationException ex)
-            {
-                if (_logMoves) Debug.LogException(ex);
-                OnMoveRejected?.Invoke(from, to);
-                return;
-            }
             catch (DomainException ex)
             {
                 if (_logMoves) Debug.LogException(ex);
@@ -308,12 +302,6 @@ namespace ChessTheBetrayal.Gameplay
                 {
                     _engine.GetLegalMoves(_board, _pendingPromotionMove.StartPosition, _legalMoves);
                 }
-            }
-            catch (BetrayalRuleViolationException ex)
-            {
-                if (_logMoves) Debug.LogException(ex);
-                OnMoveRejected?.Invoke(_pendingPromotionMove.StartPosition, _pendingPromotionMove.EndPosition);
-                return;
             }
             catch (DomainException ex)
             {
