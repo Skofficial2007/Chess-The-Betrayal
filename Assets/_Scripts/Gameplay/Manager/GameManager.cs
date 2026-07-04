@@ -293,9 +293,9 @@ namespace ChessTheBetrayal.Gameplay
         private void OnExecutorMoveRejected(Vector2Int from, Vector2Int to) =>
             _moveRejectedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveRejectedPayload(from, to));
 
-        private void OnExecutorPromotionRequired(Vector2Int from, Vector2Int to)
+        private void OnExecutorPromotionRequired(Vector2Int from, Vector2Int to, bool isCapture)
         {
-            _promotionRequiredChannel?.Raise(new ChessTheBetrayal.Events.Payloads.PromotionRequiredPayload(from, to));
+            _promotionRequiredChannel?.Raise(new ChessTheBetrayal.Events.Payloads.PromotionRequiredPayload(from, to, isCapture));
         }
 
         #endregion

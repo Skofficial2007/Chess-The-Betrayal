@@ -11,12 +11,13 @@ namespace ChessTheBetrayal.Events
         [Header("Debug Test Payload")]
         [SerializeField] private Vector2Int _debugFrom = new Vector2Int(0, 6);
         [SerializeField] private Vector2Int _debugTo = new Vector2Int(0, 7);
+        [SerializeField] private bool _debugIsCapture;
 
         [ContextMenu("Raise with Debug Payload")]
         private void RaiseDebug()
         {
             if (!Application.isPlaying) return;
-            Raise(new PromotionRequiredPayload(_debugFrom, _debugTo));
+            Raise(new PromotionRequiredPayload(_debugFrom, _debugTo, _debugIsCapture));
         }
     }
 }
