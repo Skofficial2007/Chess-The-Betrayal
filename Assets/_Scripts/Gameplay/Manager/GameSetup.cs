@@ -1,6 +1,8 @@
 using UnityEngine;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Logic;
+using ChessTheBetrayal.Core.Match;
+using ChessTheBetrayal.Core.Utils;
 
 namespace ChessTheBetrayal.Gameplay
 {
@@ -28,21 +30,32 @@ namespace ChessTheBetrayal.Gameplay
         };
 
         private readonly bool _logMoves;
+        private readonly IRandomSource _rng;
+        private readonly IFirstMoverPolicy _firstMoverPolicy;
 
         public GameSetup(bool logMoves)
+            : this(logMoves, new SystemRandomSource(), new RandomFirstMoverPolicy())
+        {
+        }
+
+        public GameSetup(bool logMoves, IRandomSource rng, IFirstMoverPolicy firstMoverPolicy)
         {
             _logMoves = logMoves;
+            _rng = rng;
+            _firstMoverPolicy = firstMoverPolicy;
         }
 
         /// <summary>
-        /// Rolls which team the human player controls and which side moves first. Per the pitch
-        /// doc, first-mover is also random — deliberately independent of player-team assignment —
-        /// so neither player can rely on opening book knowledge from knowing they're White.
+        /// Rolls which team the human player (Seat.PlayerA) controls. White always moves first —
+        /// orthodox chess rules are untouched — so firstMover is always Team.White; only the
+        /// seat-to-color mapping is randomized, via IFirstMoverPolicy, so neither player can rely
+        /// on opening book knowledge from knowing they're White ahead of the roll.
         /// </summary>
         public (Team playerTeam, Team firstMover) RollTeams()
         {
-            Team playerTeam = UnityEngine.Random.value > 0.5f ? Team.White : Team.Black;
-            Team firstMover = UnityEngine.Random.value > 0.5f ? Team.White : Team.Black;
+            SideAssignment assignment = _firstMoverPolicy.Assign(_rng);
+            Team playerTeam = assignment.White == Seat.PlayerA ? Team.White : Team.Black;
+            Team firstMover = Team.White;
 
             if (_logMoves)
             {
