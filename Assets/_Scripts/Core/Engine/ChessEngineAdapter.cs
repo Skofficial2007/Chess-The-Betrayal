@@ -37,5 +37,9 @@ namespace ChessTheBetrayal.Core.Engine
             ChessEngine.EvaluateGameState(board, team, clock);
 
         public int GetMaterialAdvantage(BoardState board) => ChessEngine.GetMaterialAdvantage(board);
+
+        public void ApplyMove(BoardState board, MoveCommand move) => ChessEngine.ApplyMoveToBoard(board, move);
+
+        public void UndoMove(BoardState board, MoveCommand move) => ChessEngine.UndoMoveOnBoard(board, move);
     }
 }

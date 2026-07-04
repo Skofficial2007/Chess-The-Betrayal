@@ -3,6 +3,7 @@ using UnityEngine;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Core.Logic;
+using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.Core.Diagnostics;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
@@ -41,8 +42,23 @@ namespace ChessTheBetrayal.Gameplay
         private GameClockController _clockController;
         private BetrayalBountyConfig _bountyConfig;
 
+        // Captured once when an Act move starts a Betrayal sub-sequence, and reused for every
+        // ply in that sequence (Retribution/DefensiveOverride/Defection). FullMoveNumber keeps
+        // incrementing under the hood even though the turn hasn't flipped (RecordMove runs for
+        // every ply, Betrayal or not) — without this, the log would show the move number jumping
+        // mid-sequence instead of staying on the ply where the Betrayal actually started.
+        private int _betrayalSequenceMoveNumber = -1;
+
         /// <summary>The current phase of the turn (Normal, Betrayal sub-phases, GameOver, etc.).</summary>
         public TurnPhase CurrentPhase { get; private set; } = TurnPhase.GameOver;
+
+        /// <summary>
+        /// Ordered, one-line-per-ply record of every move applied this match, including Betrayal
+        /// sub-phase moves (Act/Retribution/DefensiveOverride/Defection). This is the ground truth
+        /// to dump when a bug report needs the exact position recreated — see MatchMoveLog.DumpToString.
+        /// Cleared by GameManager on new-match setup (GameSetup owns match lifecycle, not history).
+        /// </summary>
+        public MatchMoveLog MoveLog { get; } = new MatchMoveLog();
 
         public MatchDriver(
             IChessEngine engine,
@@ -101,6 +117,8 @@ namespace ChessTheBetrayal.Gameplay
         {
             if (_logMoves) Debug.Log($"[MatchDriver] Executing: {move}");
 
+            int moveNumberBeforeApply = _board.FullMoveNumber;
+
             TurnAdvanceResult result;
             try
             {
@@ -127,6 +145,14 @@ namespace ChessTheBetrayal.Gameplay
             // --- BETRAYAL MECHANIC: Phase 1 (The Act) ---
             if (move.Stage == BetrayalStage.Act)
             {
+                // Pin the move number for the whole sub-sequence — see field doc comment.
+                _betrayalSequenceMoveNumber = moveNumberBeforeApply;
+
+                // Recorded as Normal, not evaluated for Check/Checkmate: the turn hasn't resolved
+                // yet (see EvaluateGameState's PendingBetrayerSquare guard) — a real result gets
+                // logged once Retribution/Defection completes the turn, below.
+                MoveLog.Record(move, _betrayalSequenceMoveNumber, GameState.Normal);
+
                 _betrayalChannel?.Raise(new ChessTheBetrayal.Events.Payloads.BetrayalPayload(move.PieceTeam, move.EndPosition, ChessTheBetrayal.Events.Payloads.BetrayalPhase.Initiated));
                 _betrayalChannel?.Raise(new ChessTheBetrayal.Events.Payloads.BetrayalPayload(move.PieceTeam, move.EndPosition, ChessTheBetrayal.Events.Payloads.BetrayalPhase.RetributionPending));
 
@@ -158,7 +184,7 @@ namespace ChessTheBetrayal.Gameplay
                 // ---------------------------------------------------------------
 
                 _clock?.OnMoveMade(move.PieceTeam); // Standard Fischer increment now applies
-                CheckForGameEnd(); // Discovered checks against the opponent evaluate here for the first time
+                CheckForGameEnd(move); // Discovered checks against the opponent evaluate here for the first time
                 return;
             }
 
@@ -171,7 +197,7 @@ namespace ChessTheBetrayal.Gameplay
                 // ------------------------------------------------------------
 
                 _clock?.OnMoveMade(move.PieceTeam); // The Defensive Override move IS the final action of this turn — standard increment applies
-                CheckForGameEnd(); // Discovered checks against the opponent evaluate here
+                CheckForGameEnd(move); // Discovered checks against the opponent evaluate here
                 return;
             }
 
@@ -186,7 +212,7 @@ namespace ChessTheBetrayal.Gameplay
                 isCheck
             ));
 
-            CheckForGameEnd();
+            CheckForGameEnd(move);
         }
 
         /// <summary>
@@ -233,7 +259,7 @@ namespace ChessTheBetrayal.Gameplay
             else
             {
                 // No time bounty — Defection alone grants nothing, per design doc.
-                CheckForGameEnd(); // the opponent's newly-acquired piece may itself deliver check/checkmate — evaluated here for the first time.
+                CheckForGameEnd(result.DefectionMove); // the opponent's newly-acquired piece may itself deliver check/checkmate — evaluated here for the first time.
             }
         }
 
@@ -241,10 +267,25 @@ namespace ChessTheBetrayal.Gameplay
         /// Checks whether the game has ended (checkmate or stalemate) after a turn completes.
         /// Also fires OnCheck if the next player is in check but still has moves.
         /// </summary>
-        public void CheckForGameEnd()
+        /// <param name="justPlayed">The move that just completed a turn (any stage that reaches
+        /// this point is turn-ending — Act never calls this). Pass null only when called from a
+        /// context with no single completing move (there is none today; kept for future callers).
+        /// Recorded into MoveLog with the GameState this call determines, so the log always
+        /// reflects the actual checkmate/stalemate/check outcome, not a guess made earlier.</param>
+        public void CheckForGameEnd(MoveCommand? justPlayed = null)
         {
             Team currentTeam = _board.CurrentTurn;
             GameState state = _engine.EvaluateGameState(_board, currentTeam, GetCurrentClockSnapshot());
+
+            if (justPlayed.HasValue)
+            {
+                // Use the pinned sequence number if a Betrayal sub-sequence produced this move
+                // (Retribution/DefensiveOverride/Defection), so the log doesn't show the move
+                // number jumping mid-sequence — see _betrayalSequenceMoveNumber's doc comment.
+                int loggedMoveNumber = _betrayalSequenceMoveNumber >= 0 ? _betrayalSequenceMoveNumber : _board.FullMoveNumber;
+                MoveLog.Record(justPlayed.Value, loggedMoveNumber, state);
+                _betrayalSequenceMoveNumber = -1;
+            }
 
             switch (state)
             {
@@ -296,6 +337,7 @@ namespace ChessTheBetrayal.Gameplay
             if (_logMoves)
             {
                 Debug.Log($"[MatchDriver] Game Over. Winner: {(winner.HasValue ? winner.ToString() : "Draw")}. Timeout: {byTimeout}");
+                Debug.Log($"[MatchDriver] Full move log ({MoveLog.Entries.Count} plies):\n{MoveLog.DumpToString()}");
             }
         }
 

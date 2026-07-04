@@ -1,0 +1,100 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.Core.Engine;
+
+namespace ChessTheBetrayal.AI
+{
+    /// <summary>
+    /// IAIAgent implementation that runs Alpha-Beta on a BACKGROUND THREAD, then marshals the
+    /// chosen move back to the main thread. Two hard rules make this safe:
+    ///
+    ///   1. BOARD ISOLATION. The search NEVER touches the live main-thread board. We clone it once
+    ///      (CloneForSnapshot) at the instant the search is requested, and the worker mutates only
+    ///      that clone. This is mandatory, not optional: Core's move generation mutates the board
+    ///      during the Betrayal "disguise trick", so a shared board would data-race the main thread.
+    ///
+    ///   2. MAIN-THREAD MARSHALLING. OnMoveDecided must fire on the main thread (callers touch
+    ///      Unity objects). The worker doesn't invoke it directly; it enqueues the result and a
+    ///      main-thread pump (Tick, called from a MonoBehaviour Update in the Gameplay layer)
+    ///      raises the event. This class stays Unity-free so it lives in the AI assembly.
+    ///
+    /// Runs on both desktop and mobile targets — background-thread search is the chosen model for
+    /// this project across platforms (no main-thread-only fallback), so a depth-6-8 search never
+    /// hitches the frame on either.
+    /// </summary>
+    public sealed class AsyncAIAgent : IAIAgent
+    {
+        public event Action<MoveCommand> OnMoveDecided;
+
+        private readonly AlphaBetaSearch _search;
+        private readonly AISearchSettings _settings;
+
+        private volatile bool _hasResult;
+        private MoveCommand _pendingResult;
+        private CancellationTokenSource _cts;
+
+        public AsyncAIAgent(IChessEngine engine, IPositionEvaluator evaluator, AISearchSettings settings)
+        {
+            _search = new AlphaBetaSearch(engine, evaluator);
+            _settings = settings;
+        }
+
+        /// <summary>
+        /// Kicks off a background search. Clones the board on the CALLING (main) thread — cloning
+        /// reads the live board, so it must happen before we hand off, while nothing else mutates it.
+        /// </summary>
+        public void RequestBestMove(BoardState board, Team team, CancellationToken cancellation = default)
+        {
+            CancelInFlight();
+
+            // Clone on the main thread — snapshot is now owned exclusively by the worker.
+            BoardState isolated = board.CloneForSnapshot();
+
+            _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+            CancellationToken token = _cts.Token;
+
+            Task.Run(() =>
+            {
+                try
+                {
+                    MoveCommand best = _search.FindBestMove(isolated, _settings, token);
+                    if (!token.IsCancellationRequested)
+                    {
+                        _pendingResult = best;
+                        _hasResult = true; // volatile write publishes _pendingResult to the main thread
+                    }
+                }
+                catch (OperationCanceledException) { /* expected on reset/scene change */ }
+                // Any other exception intentionally surfaces in the Editor console via the Task's
+                // unobserved-exception path during development; wrap with a logger seam before ship.
+            }, token);
+        }
+
+        /// <summary>
+        /// Pump this from a MonoBehaviour Update() on the main thread. When the worker has a result,
+        /// it raises OnMoveDecided here — on the main thread — so the listener can safely feed the
+        /// move into MatchDriver.PlayMove and drive Unity animations.
+        /// </summary>
+        public void Tick()
+        {
+            if (!_hasResult) return;
+            _hasResult = false;
+            OnMoveDecided?.Invoke(_pendingResult);
+        }
+
+        private void CancelInFlight()
+        {
+            if (_cts != null)
+            {
+                _cts.Cancel();
+                _cts.Dispose();
+                _cts = null;
+            }
+            _hasResult = false;
+        }
+
+        public void Dispose() => CancelInFlight();
+    }
+}
