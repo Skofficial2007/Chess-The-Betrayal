@@ -596,10 +596,13 @@ namespace ChessTheBetrayal.Core.Engine
             }
             else if (move.Stage == BetrayalStage.Retribution || move.Stage == BetrayalStage.DefensiveOverride)
             {
-                // Defection deliberately does NOT clear these: GetForcedSaveMoves (and the
-                // ForcedSave UI/AI path) needs PendingBetrayerSquare/BetrayalInitiator to still
-                // identify the defected piece until the terminal Retribution/DefensiveOverride move
-                // finally closes out the Betrayal sequence.
+                // This is the terminal move of a Betrayal sequence that went through ForcedSave —
+                // GetForcedSaveMoves (and the ForcedSave UI/AI path) needed PendingBetrayerSquare/
+                // BetrayalInitiator to still identify the defected piece up until now, so Defection
+                // itself doesn't clear them (see TurnResolver.ResultFromDefectionOutcome for the
+                // sibling case: a Defection that does NOT require ForcedSave closes the sequence —
+                // and clears this same state — immediately, since no Retribution/DefensiveOverride
+                // move is coming to do it here).
                 board.PendingBetrayerSquare = null;
                 board.BetrayalInitiator = null;
             }

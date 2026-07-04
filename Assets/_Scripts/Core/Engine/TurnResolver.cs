@@ -135,6 +135,16 @@ namespace ChessTheBetrayal.Core.Engine
             // with CurrentTurn flipping via NextTurn().
             board.ToggleTurnHash();
             board.NextTurn();
+
+            // No ForcedSave means the Betrayal sub-sequence is fully resolved right here — there is
+            // no further Retribution/DefensiveOverride move coming to close it out (that only
+            // happens via AdvanceBetrayalState's Retribution/DefensiveOverride branch, which never
+            // runs for a Defection). Leaving PendingBetrayerSquare/BetrayalInitiator set past this
+            // point permanently short-circuits EvaluateGameState's Betrayal guard to GameState.Normal
+            // for the rest of the game, since PieceData.Empty.Team defaults to Team.White (0) and can
+            // coincidentally equal a White BetrayalInitiator.
+            board.PendingBetrayerSquare = null;
+            board.BetrayalInitiator = null;
             return new TurnAdvanceResult(
                 TurnPhase.Normal, true, false, true, outcome.DefectedSquare, outcome.DefectionMove);
         }

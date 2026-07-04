@@ -423,6 +423,12 @@ namespace ChessTheBetrayal.Gameplay
         /// </summary>
         private void TearDownCurrentMatch()
         {
+            if (logMoves && LiveBoard != null && !LiveBoard.IsGameOver)
+            {
+                Debug.Log($"[GameManager] Match exited mid-game. Final position:\n{BoardStateDump.ToAscii(LiveBoard)}");
+                Debug.Log($"[GameManager] Move log at exit ({MoveLog.Entries.Count} plies):\n{MoveLog.DumpToString()}");
+            }
+
             LiveBoard.Clear();
             TearDownAIAgent();
 
