@@ -63,5 +63,28 @@ namespace ChessTheBetrayal.UI
         /// at the same square.
         /// </summary>
         void PlayTransitionIn(PieceTransitionStyle style);
+
+        /// <summary>
+        /// Plays the tap-to-select "pick up" animation: an anticipatory squash, then a rise with a
+        /// slight overshoot, settling into a subtle idle bob for as long as the piece stays
+        /// selected. The lift height and per-type feel (e.g. a King rising more than a Pawn) are
+        /// owned here rather than by the caller, so BoardVisuals never has to know piece-type
+        /// specifics to orchestrate a selection.
+        /// </summary>
+        void LiftSelect();
+
+        /// <summary>
+        /// Plays the "set down" animation: stops the idle bob and eases the piece back to the
+        /// exact position it was lifted from, with no overshoot (a lift feels snappy; a landing
+        /// feels gentle). Safe to call even if the piece was never lifted.
+        /// </summary>
+        void LowerDeselect();
+
+        /// <summary>
+        /// Immediately stops any lift/bob tweens with no landing animation — for use when the
+        /// piece itself is about to be destroyed (captured while selected) and there is no "down"
+        /// left to ease into. LowerDeselect is for the normal deselect path; this is for teardown.
+        /// </summary>
+        void CancelSelectionAnimation();
     }
 }

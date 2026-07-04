@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using PrimeTween;
 using UnityEngine;
+using ChessTheBetrayal.Core.Data;
 
 namespace ChessTheBetrayal.UI
 {
@@ -32,21 +34,50 @@ namespace ChessTheBetrayal.UI
         // "vanished" is approximated as a small positive scale instead.
         private const float VanishedScale = 0.05f;
 
+        // Selection lift: a quick anticipatory squash, then a rise-with-overshoot that settles at
+        // the same time the squash recovers, followed by a subtle infinite idle bob. Durations and
+        // strengths are tuned so the whole pickup reads in well under half a second — "a piece was
+        // just picked up," not "a piece is floating."
+        private const float LiftSquashDuration = 0.06f;
+        private const float LiftRiseDuration = 0.18f;
+        private const float LiftLowerDuration = 0.12f;
+        private const float LiftOvershootStrength = 1.1f;
+        private const float LiftSquashWidthFactor = 1.05f;
+        private const float LiftSquashHeightFactor = 0.92f;
+        private const float BobAmplitude = 0.0025f;
+        private const float BobDuration = 1.2f;
+
+        // Default lift height for every piece type. Empty by design: no per-type tuning has been
+        // decided yet, but the lookup exists so adding e.g. a King-rises-higher-than-a-Pawn feel
+        // later is a one-line addition here, not a re-plumbing of BoardVisuals/ChessPiece.
+        private const float DefaultLiftHeight = 0.3f;
+        private static readonly Dictionary<ChessPieceType, float> LiftHeightByType = new Dictionary<ChessPieceType, float>();
+
         private static readonly Color BetrayerGlowColor = Color.red * 2f;
         private static readonly int EmissionColorId = Shader.PropertyToID("_EmissionColor");
 
         private readonly Transform _transform;
         private readonly Renderer _renderer;
+        private readonly Func<ChessPieceType> _getType;
 
         private Tween _moveTween;
         private Tween _scaleTween;
         private Sequence _transitionSequence;
         private MaterialPropertyBlock _mpb;
 
-        public PrimeTweenPieceAnimator(Transform transform, Renderer renderer)
+        // Selection-lift state. _liftRestPosition/_liftRestScale are captured the moment
+        // LiftSelect() runs, so LowerDeselect() and CancelSelectionAnimation() can restore the
+        // exact pre-lift transform even if the bob loop or rise tween is still mid-flight.
+        private Sequence _liftSequence;
+        private Tween _bobTween;
+        private Vector3? _liftRestPosition;
+        private Vector3 _liftRestScale;
+
+        public PrimeTweenPieceAnimator(Transform transform, Renderer renderer, Func<ChessPieceType> getType)
         {
             _transform = transform;
             _renderer = renderer;
+            _getType = getType;
         }
 
         public void MoveTo(Vector3 worldPos, bool force = false)
@@ -58,6 +89,13 @@ namespace ChessTheBetrayal.UI
             }
 
             _moveTween.Stop();
+
+            // A caller driving MoveTo directly (a board move, castling, snap-back) means the piece
+            // is no longer conceptually "lifted" — stop any in-flight lift/bob so they can't fight
+            // over the Transform. In normal play selection is always cleared before a move
+            // executes, so this is defense-in-depth rather than a path that fires every move.
+            StopLiftTweens();
+            _liftRestPosition = null;
 
             if (force)
             {
@@ -166,6 +204,71 @@ namespace ChessTheBetrayal.UI
                     _transitionSequence = Sequence.Create(Tween.Scale(_transform, targetScale, SquashInDuration, Easing.Overshoot(1.5f)));
                     break;
             }
+        }
+
+        public void LiftSelect()
+        {
+            // Re-lifting an already-lifted piece (a stale/duplicate select) would otherwise stack
+            // a second rest position on top of the lifted one, so restart from a clean slate first.
+            StopLiftTweens();
+
+            _liftRestPosition = _transform.position;
+            _liftRestScale = _transform.localScale;
+
+            float liftHeight = LiftHeightByType.TryGetValue(_getType(), out float height) ? height : DefaultLiftHeight;
+            Vector3 liftedPosition = _liftRestPosition.Value + new Vector3(0f, liftHeight, 0f);
+            Vector3 squashScale = Vector3.Scale(_liftRestScale, new Vector3(LiftSquashWidthFactor, LiftSquashHeightFactor, LiftSquashWidthFactor));
+
+            _liftSequence = Sequence.Create()
+                // 1. Quick anticipatory squash — sells the weight of the piece being gripped.
+                .Chain(Tween.Scale(_transform, squashScale, LiftSquashDuration, Ease.OutQuad))
+                // 2. Rise to lift height and recover scale at the same time (Group, not Chain —
+                // both must play in parallel), each with a slight overshoot so the settle feels
+                // springy rather than mechanical.
+                .Chain(Tween.Position(_transform, liftedPosition, LiftRiseDuration, Easing.Overshoot(LiftOvershootStrength)))
+                .Group(Tween.Scale(_transform, _liftRestScale, LiftRiseDuration, Easing.Overshoot(LiftOvershootStrength)))
+                .ChainCallback(StartBobLoop);
+        }
+
+        public void LowerDeselect()
+        {
+            StopLiftTweens();
+
+            if (!_liftRestPosition.HasValue) return;
+
+            // No overshoot on the way down — a lift feels snappy and eager, a landing should feel
+            // like gently setting the piece back on the board.
+            Tween.Position(_transform, _liftRestPosition.Value, LiftLowerDuration, Ease.OutQuad);
+            Tween.Scale(_transform, _liftRestScale, LiftLowerDuration, Ease.OutQuad);
+
+            _liftRestPosition = null;
+        }
+
+        public void CancelSelectionAnimation()
+        {
+            StopLiftTweens();
+            _liftRestPosition = null;
+        }
+
+        private void StartBobLoop()
+        {
+            // A very subtle infinite up/down drift while the piece stays selected — 2-3mm of travel
+            // is intentionally barely perceptible; it's there to make the selection feel alive, not
+            // to draw attention to itself. cycles: -1 + CycleMode.Yoyo loops until explicitly
+            // stopped by StopLiftTweens (LowerDeselect/CancelSelectionAnimation/a fresh LiftSelect).
+            float baseY = _transform.position.y;
+            _bobTween = Tween.PositionY(_transform, baseY, baseY + BobAmplitude, BobDuration / 2f, Ease.InOutSine, cycles: -1, cycleMode: CycleMode.Yoyo);
+        }
+
+        /// <summary>
+        /// Stops the lift sequence and bob loop without touching the Transform — callers decide
+        /// separately whether to then restore position/scale (LowerDeselect) or leave it as-is
+        /// (CancelSelectionAnimation, called right before the GameObject is destroyed anyway).
+        /// </summary>
+        private void StopLiftTweens()
+        {
+            _liftSequence.Stop();
+            _bobTween.Stop();
         }
 
         /// <summary>

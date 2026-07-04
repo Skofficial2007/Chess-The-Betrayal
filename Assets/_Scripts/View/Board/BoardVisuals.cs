@@ -32,7 +32,6 @@ namespace ChessTheBetrayal.UI
         [SerializeField] private float pieceScaleMultiplier = 1f;
         [SerializeField] private float deathSize = 0.45f; // Set to 0.5f
         [SerializeField] private float deathSpacing = 0.35f; // Set to 1.25f
-        [SerializeField] private float selectedLiftHeight = 0.3f;
 
         [Header("Move Indicator (Circle)")]
         [SerializeField, Range(0.05f, 0.5f)] private float moveIndicatorRadiusRatio = 0.45f; // Set to 0.48f
@@ -572,21 +571,21 @@ namespace ChessTheBetrayal.UI
         }
 
         /// <summary>
-        /// Raises the piece at the given grid position by selectedLiftHeight — the tap-to-select
-        /// "lift" effect. No-op if nothing is there (e.g. a stale event after the piece moved).
+        /// Plays the tap-to-select "pick up" animation on the piece at the given grid position.
+        /// No-op if nothing is there (e.g. a stale event after the piece moved). Lift height and
+        /// the squash/rise/bob feel live entirely in IPieceAnimator now — BoardVisuals only
+        /// resolves which piece to tell, not how the lift should look.
         /// </summary>
         public void LiftPieceAt(Vector2Int gridPos)
         {
             if (_piecesByPosition.TryGetValue(gridPos, out ChessPiece piece))
             {
-                Vector3 worldPos = GetTileCenter(gridPos.x, gridPos.y);
-                worldPos.y += pieceYOffset + selectedLiftHeight;
-                piece.SetPosition(worldPos);
+                piece.LiftSelect();
             }
         }
 
         /// <summary>
-        /// Lowers the piece at the given grid position back to its resting height. Safe to call
+        /// Plays the "set down" animation on the piece at the given grid position. Safe to call
         /// even if the piece already moved away from gridPos (no-op) — SelectionClearedEvent
         /// doesn't carry a position, so PieceLiftView must remember which tile it lifted.
         /// </summary>
@@ -594,9 +593,7 @@ namespace ChessTheBetrayal.UI
         {
             if (_piecesByPosition.TryGetValue(gridPos, out ChessPiece piece))
             {
-                Vector3 worldPos = GetTileCenter(gridPos.x, gridPos.y);
-                worldPos.y += pieceYOffset;
-                piece.SetPosition(worldPos);
+                piece.LowerDeselect();
             }
         }
 
