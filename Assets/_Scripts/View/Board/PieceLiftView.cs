@@ -8,16 +8,30 @@ namespace ChessTheBetrayal.UI
     /// <summary>
     /// Lifts the selected piece on PieceSelected and lowers it back on SelectionCleared. Pure
     /// View reaction — knows nothing about selection rules, only that a piece at a given
-    /// position should visually rise or fall. Wire this to PieceSelectedEventChannel and the
-    /// SelectionCleared GameEventChannel via PieceSelectedEventListener/GameEventListener in the
-    /// Inspector, same pattern as every other BoardVisuals reaction (see HandleGameStarted etc.).
+    /// position should visually rise or fall.
     /// </summary>
     public class PieceLiftView : MonoBehaviour
     {
         [SerializeField] private BoardVisuals boardVisuals;
 
+        [Header("Event Channels")]
+        [SerializeField] private ChessTheBetrayal.Events.PieceSelectedEventChannel _pieceSelectedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _selectionClearedChannel;
+
         // SelectionClearedEvent carries no payload, so we remember what we lifted.
         private Vector2Int _liftedTile = Vector2Int.Invalid;
+
+        private void OnEnable()
+        {
+            _pieceSelectedChannel?.Register(HandlePieceSelected);
+            _selectionClearedChannel?.Register(HandleSelectionCleared);
+        }
+
+        private void OnDisable()
+        {
+            _pieceSelectedChannel?.Unregister(HandlePieceSelected);
+            _selectionClearedChannel?.Unregister(HandleSelectionCleared);
+        }
 
         public void HandlePieceSelected(PieceSelectedPayload payload)
         {

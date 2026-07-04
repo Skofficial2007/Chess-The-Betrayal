@@ -1,5 +1,6 @@
 using UnityEngine;
 using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.Infrastructure;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
 namespace ChessTheBetrayal.Gameplay
@@ -27,6 +28,7 @@ namespace ChessTheBetrayal.Gameplay
         [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _selectionClearedChannel;
 
         private ISelectionInput _selectionInput;
+        private GameManager _gameManager;
         private Vector2Int _selectedTile = Vector2Int.Invalid;
 
         private bool IsSelected => _selectedTile != Vector2Int.Invalid;
@@ -38,6 +40,11 @@ namespace ChessTheBetrayal.Gameplay
             {
                 Debug.LogError($"[SelectionController] {nameof(selectionInputBehaviour)} does not implement ISelectionInput.");
             }
+        }
+
+        private void Start()
+        {
+            _gameManager = ServiceLocator.Instance.Resolve<GameManager>();
         }
 
         private void OnEnable()
@@ -68,12 +75,12 @@ namespace ChessTheBetrayal.Gameplay
 
             if (IsLegalDestination(_selectedTile, tile))
             {
-                GameManager.Instance.RequestMove(_selectedTile, tile);
+                _gameManager.RequestMove(_selectedTile, tile);
                 Deselect();
                 return;
             }
 
-            if (GameManager.Instance.CanSelectPiece(tile))
+            if (_gameManager.CanSelectPiece(tile))
             {
                 // Switch selection to the newly tapped own piece.
                 Deselect();
@@ -87,11 +94,11 @@ namespace ChessTheBetrayal.Gameplay
 
         private void TrySelect(Vector2Int tile)
         {
-            if (!GameManager.Instance.CanSelectPiece(tile)) return;
+            if (!_gameManager.CanSelectPiece(tile)) return;
 
             // A selectable piece with zero legal moves (e.g. pinned during Retribution, or a
             // piece that isn't the forced Executioner/Save piece) offers nothing to select into.
-            var legalMoves = GameManager.Instance.GetLegalMovesAt(tile);
+            var legalMoves = _gameManager.GetLegalMovesAt(tile);
             if (legalMoves.Count == 0) return;
 
             _selectedTile = tile;
@@ -106,9 +113,9 @@ namespace ChessTheBetrayal.Gameplay
             _selectionClearedChannel?.Raise();
         }
 
-        private static bool IsLegalDestination(Vector2Int from, Vector2Int to)
+        private bool IsLegalDestination(Vector2Int from, Vector2Int to)
         {
-            var legalMoves = GameManager.Instance.GetLegalMovesAt(from);
+            var legalMoves = _gameManager.GetLegalMovesAt(from);
             for (int i = 0; i < legalMoves.Count; i++)
             {
                 if (legalMoves[i].EndPosition == to) return true;

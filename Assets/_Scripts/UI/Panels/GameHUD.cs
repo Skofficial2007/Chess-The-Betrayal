@@ -22,6 +22,11 @@ namespace ChessTheBetrayal.UI
         [Header("Clock")]
         [SerializeField] private ClockDisplayWidget _clockWidget;
 
+        [Header("Event Channels")]
+        [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _checkDetectedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.TurnChangedEventChannel _turnChangedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.LowTimeAlertEventChannel _lowTimeAlertChannel;
+
         [Header("Retribution Skip")]
         [SerializeField] private ChessTheBetrayal.Events.BetrayalEventChannel _betrayalChannel;
         [SerializeField] private RectTransform skipButtonRoot;
@@ -65,6 +70,9 @@ namespace ChessTheBetrayal.UI
         {
             InspectorGuard.Require(exitButton, nameof(exitButton), this);
             InspectorGuard.Require(_clockWidget, nameof(_clockWidget), this);
+            InspectorGuard.Require(_checkDetectedChannel, nameof(_checkDetectedChannel), this);
+            InspectorGuard.Require(_turnChangedChannel, nameof(_turnChangedChannel), this);
+            InspectorGuard.Require(_lowTimeAlertChannel, nameof(_lowTimeAlertChannel), this);
             InspectorGuard.Require(_betrayalChannel, nameof(_betrayalChannel), this);
             InspectorGuard.Require(skipButtonRoot, nameof(skipButtonRoot), this);
             InspectorGuard.Require(skipButton, nameof(skipButton), this);
@@ -73,22 +81,18 @@ namespace ChessTheBetrayal.UI
         private void OnEnable()
         {
             _betrayalChannel?.Register(HandleBetrayalPhaseChanged);
+            _checkDetectedChannel?.Register(HandleCheckDetected);
+            _turnChangedChannel?.Register(HandleTurnChanged);
+            _lowTimeAlertChannel?.Register(HandleLowTimeWarning);
         }
 
         private void OnDisable()
         {
             _betrayalChannel?.Unregister(HandleBetrayalPhaseChanged);
+            _checkDetectedChannel?.Unregister(HandleCheckDetected);
+            _turnChangedChannel?.Unregister(HandleTurnChanged);
+            _lowTimeAlertChannel?.Unregister(HandleLowTimeWarning);
             _skipButtonTween?.Kill();
-        }
-
-        private void Start()
-        {
-            // No direct GameManager subscriptions - all events come through the Inspector-wired channels
-        }
-
-        private void OnDestroy()
-        {
-            // Cleanup if needed
         }
 
         /// <summary>

@@ -4,6 +4,7 @@ using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Diagnostics;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Gameplay;
+using ChessTheBetrayal.Infrastructure;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
 namespace ChessTheBetrayal.UI
@@ -14,12 +15,6 @@ namespace ChessTheBetrayal.UI
     /// </summary>
     public class BoardVisuals : MonoBehaviour
     {
-        #region Singleton
-
-        public static BoardVisuals Instance { get; private set; }
-
-        #endregion
-
         #region Inspector Fields
 
         [Header("Board Geometry")]
@@ -46,6 +41,14 @@ namespace ChessTheBetrayal.UI
 
         [Header("Data Source")]
         [SerializeField] private ChessTheBetrayal.Events.SharedBoardStateSO _sharedBoardState;
+
+        [Header("Event Channels")]
+        [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _gameStartedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _gameResetChannel;
+        [SerializeField] private ChessTheBetrayal.Events.MoveExecutedEventChannel _moveExecutedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.MoveRejectedEventChannel _moveRejectedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.PromotionRequiredEventChannel _promotionRequiredChannel;
+        [SerializeField] private ChessTheBetrayal.Events.BetrayalEventChannel _betrayalChannel;
 
         #endregion
 
@@ -87,13 +90,7 @@ namespace ChessTheBetrayal.UI
 
         private void Awake()
         {
-            // Singleton pattern
-            if (Instance != null && Instance != this)
-            {
-                Destroy(gameObject);
-                return;
-            }
-            Instance = this;
+            ServiceLocator.Instance.Register(this);
 
             ValidateRequiredFields();
 
@@ -110,6 +107,12 @@ namespace ChessTheBetrayal.UI
         {
             InspectorGuard.Require(tileMaterial, nameof(tileMaterial), this);
             InspectorGuard.Require(_sharedBoardState, nameof(_sharedBoardState), this);
+            InspectorGuard.Require(_gameStartedChannel, nameof(_gameStartedChannel), this);
+            InspectorGuard.Require(_gameResetChannel, nameof(_gameResetChannel), this);
+            InspectorGuard.Require(_moveExecutedChannel, nameof(_moveExecutedChannel), this);
+            InspectorGuard.Require(_moveRejectedChannel, nameof(_moveRejectedChannel), this);
+            InspectorGuard.Require(_promotionRequiredChannel, nameof(_promotionRequiredChannel), this);
+            InspectorGuard.Require(_betrayalChannel, nameof(_betrayalChannel), this);
 
             if (whiteTeamPrefabs == null || whiteTeamPrefabs.Length == 0)
             {
@@ -124,16 +127,35 @@ namespace ChessTheBetrayal.UI
 
         private void Start()
         {
-            if (GameManager.Instance == null)
+            if (!ServiceLocator.Instance.TryResolve<GameManager>(out _))
             {
-                Debug.LogError("[BoardVisuals] GameManager.Instance is null!");
-                return;
+                Debug.LogError("[BoardVisuals] GameManager was never registered!");
             }
         }
 
-        private void OnDestroy()
+        /// <summary>
+        /// Direct C# subscriptions replacing the *EventListener + UnityEvent Inspector wiring
+        /// (Phase 3c). A broken method reference here is a compile error; a broken UnityEvent
+        /// target was a silent no-op — see di-migration-plan.md.
+        /// </summary>
+        private void OnEnable()
         {
-            // Cleanup if needed
+            _gameStartedChannel?.Register(HandleGameStarted);
+            _gameResetChannel?.Register(ClearAllVisuals);
+            _moveExecutedChannel?.Register(AnimateMove);
+            _moveRejectedChannel?.Register(HandleMoveRejected);
+            _promotionRequiredChannel?.Register(HandlePromotionOptimisticSnap);
+            _betrayalChannel?.Register(HandleBetrayalPhaseChanged);
+        }
+
+        private void OnDisable()
+        {
+            _gameStartedChannel?.Unregister(HandleGameStarted);
+            _gameResetChannel?.Unregister(ClearAllVisuals);
+            _moveExecutedChannel?.Unregister(AnimateMove);
+            _moveRejectedChannel?.Unregister(HandleMoveRejected);
+            _promotionRequiredChannel?.Unregister(HandlePromotionOptimisticSnap);
+            _betrayalChannel?.Unregister(HandleBetrayalPhaseChanged);
         }
 
         #endregion
