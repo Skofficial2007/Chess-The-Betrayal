@@ -320,9 +320,12 @@ namespace ChessTheBetrayal.UI
         }
 
         /// <summary>
-        /// Instantiates a single piece GameObject at the specified position.
+        /// Instantiates a single piece GameObject at the specified position and keys it into
+        /// _piecesByPosition. Returns the spawned ChessPiece (null on a bad prefab index) so
+        /// callers that need to animate it in — promotion and defection's reveal transitions —
+        /// don't have to look it back up.
         /// </summary>
-        private void SpawnSinglePiece(PieceData data, Vector2Int pos)
+        private ChessPiece SpawnSinglePiece(PieceData data, Vector2Int pos)
         {
             // Select prefab array and parent based on team
             GameObject[] prefabs = data.Team == Team.White ? whiteTeamPrefabs : blackTeamPrefabs;
@@ -334,7 +337,7 @@ namespace ChessTheBetrayal.UI
             if (index < 0 || index >= prefabs.Length || prefabs[index] == null)
             {
                 Debug.LogError($"[BoardVisuals] Invalid prefab for {data.Team} {data.Type}");
-                return;
+                return null;
             }
 
             // Calculate world position
@@ -362,6 +365,8 @@ namespace ChessTheBetrayal.UI
 
             // Store in lookup
             _piecesByPosition[pos] = visualPiece;
+
+            return visualPiece;
         }
 
         /// <summary>
@@ -409,7 +414,10 @@ namespace ChessTheBetrayal.UI
         #region Animations & Movement Execution
 
         /// <summary>
-        /// Reads a completed MoveCommand and triggers all the necessary animations — moving pieces, handling captures, castling, and promotion.
+        /// Reads a completed MoveCommand and triggers all the necessary animations: captures
+        /// (including en passant) resolve first, then the primary piece either slides to its
+        /// destination or — on promotion — plays a vanish/reveal transition and swaps prefabs,
+        /// then castling (if any) slides the rook in the same pass as the king.
         /// </summary>
         public void AnimateMove(ChessTheBetrayal.Events.Payloads.MoveExecutedPayload payload)
         {
@@ -438,19 +446,39 @@ namespace ChessTheBetrayal.UI
             {
                 _piecesByPosition.Remove(move.StartPosition);
 
-                // Handle Promotion: destroy old piece and spawn new one
+                // Handle Promotion: play the pawn's vanish animation, then — once it completes —
+                // destroy it and spawn the promoted piece with its own reveal animation. The swap
+                // is deferred to PlayTransitionOut's callback (which may fire on a later frame)
+                // rather than happening immediately, so the pawn is visibly seen collapsing into
+                // its new form instead of jump-cutting. The fields we need are copied into locals
+                // up front because `move` is a snapshot on this method's stack — by the time the
+                // callback runs, only what the closure explicitly captured is still guaranteed to
+                // hold the right values.
                 if (move.IsPromotion)
                 {
-                    Destroy(movingPiece.gameObject);
+                    Vector2Int promotionPos = move.EndPosition;
+                    Team promotedTeam = move.PieceTeam;
+                    ChessPieceType promotedType = move.PromotedTo;
+                    int promotedMoveDirection = move.PieceMoveDirection;
 
-                    PieceData promotedData = new PieceData(
-                        team: move.PieceTeam,
-                        type: move.PromotedTo,
-                        moveDirection: move.PieceMoveDirection,
-                        startRow: 0,
-                        hasMoved: true
-                    );
-                    SpawnSinglePiece(promotedData, move.EndPosition);
+                    movingPiece.PlayTransitionOut(PieceTransitionStyle.Squash, () =>
+                    {
+                        // The pawn (or the whole scene) may have been destroyed while the
+                        // transition was still playing — e.g. a game reset. Unity's overloaded
+                        // == correctly reports true here even though the C# reference isn't null.
+                        if (movingPiece == null) return;
+                        Destroy(movingPiece.gameObject);
+
+                        PieceData promotedData = new PieceData(
+                            team: promotedTeam,
+                            type: promotedType,
+                            moveDirection: promotedMoveDirection,
+                            startRow: 0,
+                            hasMoved: true
+                        );
+                        ChessPiece promoted = SpawnSinglePiece(promotedData, promotionPos);
+                        promoted?.PlayTransitionIn(PieceTransitionStyle.Squash);
+                    });
                 }
                 else
                 {
@@ -623,22 +651,24 @@ namespace ChessTheBetrayal.UI
                     break;
 
                 case ChessTheBetrayal.Events.Payloads.BetrayalPhase.ForcedSaveActive:
-                    // The swap already happened on DefectionOccurred above; just make sure
-                    // the glow is off on the now-defected piece before the save move plays.
-                    if (_piecesByPosition.TryGetValue(payload.BetrayerPosition, out ChessPiece saved))
-                    {
-                        saved.SetBetrayerGlow(false);
-                    }
+                    // Nothing to do: SwapPieceTeam (triggered by DefectionOccurred above) always
+                    // spawns the defected piece fresh via SpawnSinglePiece, which never carries the
+                    // Betrayer glow — so the new piece is already glow-off by construction. This
+                    // used to force the glow off explicitly, but that lookup raced SwapPieceTeam's
+                    // transition-out animation (both phases fire synchronously, back-to-back, from
+                    // MatchDriver — see its ResolveRetribution-adjacent method) and would silently
+                    // no-op via TryGetValue failing while the swap's completion callback hadn't
+                    // run yet.
                     break;
             }
         }
 
         /// <summary>
-        /// Destroys the piece at the given position and respawns it as the opposing team's
-        /// prefab in the same square — the same destroy-and-instantiate pattern AnimateMove
-        /// already uses for promotion. Routing the new GameObject through SpawnSinglePiece
-        /// also sets its ChessPiece.team correctly, which is what keeps later graveyard
-        /// routing accurate for pieces that defected.
+        /// Plays the piece's defection spin, then destroys it and respawns it as the opposing
+        /// team's prefab in the same square — the same transition-then-swap pattern AnimateMove
+        /// uses for promotion. Routing the new GameObject through SpawnSinglePiece also sets its
+        /// ChessPiece.team correctly, which is what keeps later graveyard routing accurate for
+        /// pieces that defected.
         /// </summary>
         private void SwapPieceTeam(Vector2Int pos)
         {
@@ -654,8 +684,16 @@ namespace ChessTheBetrayal.UI
             );
 
             _piecesByPosition.Remove(pos);
-            Destroy(piece.gameObject);
-            SpawnSinglePiece(flipped, pos);
+
+            piece.PlayTransitionOut(PieceTransitionStyle.Spin, () =>
+            {
+                // Guards the same "destroyed while the transition was mid-flight" case documented
+                // in AnimateMove's promotion branch above (e.g. a game reset during the spin).
+                if (piece == null) return;
+                Destroy(piece.gameObject);
+                ChessPiece defected = SpawnSinglePiece(flipped, pos);
+                defected?.PlayTransitionIn(PieceTransitionStyle.Spin);
+            });
         }
 
         #endregion
