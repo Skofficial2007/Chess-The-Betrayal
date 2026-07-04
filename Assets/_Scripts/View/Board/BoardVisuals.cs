@@ -527,7 +527,7 @@ namespace ChessTheBetrayal.UI
             // Apply visual changes
             victim.SetScale(Vector3.one * deathSize);
             victim.SetPosition(deathPos);
-            victim.transform.rotation = Quaternion.LookRotation(lookDir == Vector3.zero ? Vector3.forward : lookDir);
+            victim.FaceDirection(lookDir);
         }
 
         /// <summary>
