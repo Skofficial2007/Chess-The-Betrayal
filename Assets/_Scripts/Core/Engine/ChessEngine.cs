@@ -410,7 +410,17 @@ namespace ChessTheBetrayal.Core.Engine
         /// other move type uses. An Alpha-Beta search exploring a failed Betrayal unmakes it exactly
         /// like any other move; there is no separate "undo defection" API.
         /// </summary>
-        public static DefectionOutcome ResolveFailedRetribution(BoardState board)
+        public static DefectionOutcome ResolveFailedRetribution(BoardState board) =>
+            ResolveDefection(board, DefectionReason.NoLegalCapture);
+
+        /// <summary>
+        /// Resolves Defection (Resolution B) regardless of why it was triggered — a forced failure
+        /// (no legal Executioner) and a voluntary skip of a legal Retribution both run through this
+        /// exact same code, including the self-check test for the Defensive Override (rulebook 5B).
+        /// <paramref name="reason"/> is descriptive only (logging/analytics/AI move-eval) and must
+        /// never change the outcome.
+        /// </summary>
+        public static DefectionOutcome ResolveDefection(BoardState board, DefectionReason reason)
         {
             Vector2Int betrayerSquare = board.PendingBetrayerSquare.Value;
             Team initiator = board.BetrayalInitiator.Value;
@@ -420,7 +430,7 @@ namespace ChessTheBetrayal.Core.Engine
             ApplyMoveToBoard(board, defectionMove);
 
             bool selfCheckAfterDefection = IsKingInCheck(board, initiator);
-            return new DefectionOutcome(selfCheckAfterDefection, betrayerSquare, defectionMove);
+            return new DefectionOutcome(selfCheckAfterDefection, betrayerSquare, defectionMove, reason);
         }
 
         private static void ApplyZobristMove(BoardState board, MoveCommand move, int previousCastlingMask, int? previousEnPassantFile)
@@ -820,11 +830,15 @@ namespace ChessTheBetrayal.Core.Engine
         /// </summary>
         public readonly MoveCommand DefectionMove;
 
-        public DefectionOutcome(bool requiresForcedSave, Vector2Int defectedSquare, MoveCommand defectionMove)
+        /// <summary>Descriptive only — logging/analytics/AI move-eval. Never branches resolution.</summary>
+        public readonly DefectionReason Reason;
+
+        public DefectionOutcome(bool requiresForcedSave, Vector2Int defectedSquare, MoveCommand defectionMove, DefectionReason reason)
         {
             RequiresForcedSave = requiresForcedSave;
             DefectedSquare = defectedSquare;
             DefectionMove = defectionMove;
+            Reason = reason;
         }
     }
 

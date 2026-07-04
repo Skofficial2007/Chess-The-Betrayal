@@ -1,6 +1,9 @@
 using System;
 using UnityEngine;
 using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.Core.Diagnostics;
+using ChessTheBetrayal.Gameplay;
+using ChessTheBetrayal.Infrastructure;
 
 namespace ChessTheBetrayal.UI
 {
@@ -9,8 +12,6 @@ namespace ChessTheBetrayal.UI
     /// </summary>
     public class UIManager : MonoBehaviour
     {
-        public static UIManager Instance { get; private set; }
-
         [Header("Panel References")]
         [SerializeField] private GameModeSelectorUI gameModeSelectionUI;
         [SerializeField] private TeamSelectionUI teamSelectionUI;
@@ -21,6 +22,9 @@ namespace ChessTheBetrayal.UI
 
         [Header("Event Channels")]
         [SerializeField] private ChessTheBetrayal.Events.TeamSelectedEventChannel _teamSelectedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.PromotionRequiredEventChannel _promotionRequiredChannel;
+        [SerializeField] private ChessTheBetrayal.Events.GameOverEventChannel _gameOverChannel;
+        [SerializeField] private ChessTheBetrayal.Events.GameModeConfiguredEventChannel _gameModeConfiguredChannel;
 
         // Events
         public event Action<GameModeConfig> OnGameModeSelected;
@@ -29,19 +33,34 @@ namespace ChessTheBetrayal.UI
         public event Action<Team> OnTeamSelected;
         public event Action<ChessPieceType> OnPromotionSelected;
         public event Action OnGameReset;
+        public event Action OnRetributionSkipRequested;
 
         private Team _assignedTeam;
 
         private void Awake()
         {
-            if (Instance != null && Instance != this)
-            {
-                Destroy(gameObject);
-                return;
-            }
+            ServiceLocator.Instance.Register(this);
 
-            Instance = this;
+            ValidateRequiredFields();
             RegisterPanelEvents();
+
+            _promotionRequiredChannel?.Register(HandlePromotionRequiredChannel);
+            _gameOverChannel?.Register(HandleGameOver);
+            _gameModeConfiguredChannel?.Register(ConfigureHUDForMode);
+        }
+
+        private void ValidateRequiredFields()
+        {
+            InspectorGuard.Require(gameModeSelectionUI, nameof(gameModeSelectionUI), this);
+            InspectorGuard.Require(teamSelectionUI, nameof(teamSelectionUI), this);
+            InspectorGuard.Require(promotionUI, nameof(promotionUI), this);
+            InspectorGuard.Require(gameOverUI, nameof(gameOverUI), this);
+            InspectorGuard.Require(mainMenuUI, nameof(mainMenuUI), this);
+            InspectorGuard.Require(gameHUD, nameof(gameHUD), this);
+            InspectorGuard.Require(_teamSelectedChannel, nameof(_teamSelectedChannel), this);
+            InspectorGuard.Require(_promotionRequiredChannel, nameof(_promotionRequiredChannel), this);
+            InspectorGuard.Require(_gameOverChannel, nameof(_gameOverChannel), this);
+            InspectorGuard.Require(_gameModeConfiguredChannel, nameof(_gameModeConfiguredChannel), this);
         }
 
         private void Start()
@@ -80,6 +99,10 @@ namespace ChessTheBetrayal.UI
         private void OnDestroy()
         {
             UnregisterPanelEvents();
+
+            _promotionRequiredChannel?.Unregister(HandlePromotionRequiredChannel);
+            _gameOverChannel?.Unregister(HandleGameOver);
+            _gameModeConfiguredChannel?.Unregister(ConfigureHUDForMode);
         }
 
         #region Setup
@@ -111,6 +134,7 @@ namespace ChessTheBetrayal.UI
             if (gameHUD != null)
             {
                 gameHUD.OnExitToMenu += HandleGameExit;
+                gameHUD.OnRetributionSkipClicked += HandleRetributionSkipClicked;
             }
 
             if (gameOverUI != null)
@@ -147,6 +171,7 @@ namespace ChessTheBetrayal.UI
             if (gameHUD != null)
             {
                 gameHUD.OnExitToMenu -= HandleGameExit;
+                gameHUD.OnRetributionSkipClicked -= HandleRetributionSkipClicked;
             }
 
             if (gameOverUI != null)
@@ -306,6 +331,14 @@ namespace ChessTheBetrayal.UI
             }
         }
 
+        /// <summary>
+        /// Adapter for PromotionRequiredEventChannel — ShowPromotionUI() ignores the payload
+        /// (the promotion square is read directly from Inspector-driven state elsewhere), but
+        /// Register() requires an exact Action&lt;PromotionRequiredPayload&gt; signature match.
+        /// </summary>
+        private void HandlePromotionRequiredChannel(ChessTheBetrayal.Events.Payloads.PromotionRequiredPayload payload) =>
+            ShowPromotionUI();
+
         public void TriggerGameOver(Team? winningTeam, bool byTimeout = false)
         {
             if (gameOverUI != null)
@@ -393,9 +426,18 @@ namespace ChessTheBetrayal.UI
 
         private void HandleReplay()
         {
-            OnGameReset?.Invoke();
-            // Replay uses the previously selected mode, so we skip straight to Team Selection
-            ShowTeamSelection();
+            // Delegates to GameManager's bound IPostGameAction (BackToModeSelectAction in the
+            // prototype), which tears down the finished match and decides what screen comes next.
+            // UIManager never decides the mode or the destination screen itself.
+            if (ServiceLocator.Instance.TryResolve(out GameManager gameManager))
+            {
+                gameManager.HandleGameOverAcknowledged();
+            }
+        }
+
+        private void HandleRetributionSkipClicked()
+        {
+            OnRetributionSkipRequested?.Invoke();
         }
 
         private void HandleRouletteComplete()

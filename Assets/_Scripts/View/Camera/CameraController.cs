@@ -3,6 +3,7 @@ using UnityEngine;
 using Unity.Cinemachine;
 using ChessTheBetrayal.UI;
 using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.Core.Diagnostics;
 using ChessTheBetrayal.Gameplay;
 
 namespace ChessTheBetrayal.UI.Camera
@@ -24,16 +25,40 @@ namespace ChessTheBetrayal.UI.Camera
 
         [Header("Event Channels")]
         [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _matchStartRequestedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.TeamSelectedEventChannel _teamSelectedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _gameResetChannel;
+
+        private void Awake()
+        {
+            ValidateRequiredFields();
+        }
+
+        private void ValidateRequiredFields()
+        {
+            InspectorGuard.Require(menuCam, nameof(menuCam), this);
+            InspectorGuard.Require(whiteTeamCam, nameof(whiteTeamCam), this);
+            InspectorGuard.Require(blackTeamCam, nameof(blackTeamCam), this);
+            InspectorGuard.Require(_matchStartRequestedChannel, nameof(_matchStartRequestedChannel), this);
+            InspectorGuard.Require(_teamSelectedChannel, nameof(_teamSelectedChannel), this);
+            InspectorGuard.Require(_gameResetChannel, nameof(_gameResetChannel), this);
+        }
+
+        private void OnEnable()
+        {
+            _teamSelectedChannel?.Register(HandleTeamSelected);
+            _gameResetChannel?.Register(HandleGameReset);
+        }
+
+        private void OnDisable()
+        {
+            _teamSelectedChannel?.Unregister(HandleTeamSelected);
+            _gameResetChannel?.Unregister(HandleGameReset);
+        }
 
         private void Start()
         {
             // Set initial state to the Menu profile shot
             ActivateCamera(menuCam);
-        }
-
-        private void OnDestroy()
-        {
-            // Cleanup if needed
         }
 
         public void HandleTeamSelected(Team selectedTeam)

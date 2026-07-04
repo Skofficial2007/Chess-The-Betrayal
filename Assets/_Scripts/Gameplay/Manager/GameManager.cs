@@ -3,9 +3,12 @@ using UnityEngine;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Core.Logic;
+using ChessTheBetrayal.Core.Match;
+using ChessTheBetrayal.Gameplay.Flow;
 using ChessTheBetrayal.UI;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 using ChessTheBetrayal.Core.Diagnostics;
+using ChessTheBetrayal.Infrastructure;
 
 namespace ChessTheBetrayal.Gameplay
 {
@@ -32,14 +35,8 @@ namespace ChessTheBetrayal.Gameplay
     /// Normal/ForcedSave (result.DidDefect) | DefectionOccurred
     /// ForcedSave            | ForcedSaveActive
     /// </summary>
-    public class GameManager : MonoBehaviour, IClockEventHandler, IClockSnapshotSource
+    public class GameManager : MonoBehaviour, IClockEventHandler, IClockSnapshotSource, IMatchFlow
     {
-        #region Singleton
-
-        public static GameManager Instance { get; private set; }
-
-        #endregion
-
         #region Inspector Fields
 
         [Header("Board Configuration")]
@@ -73,6 +70,7 @@ namespace ChessTheBetrayal.Gameplay
         [SerializeField] private ChessTheBetrayal.Events.LowTimeAlertEventChannel _lowTimeAlertChannel;
         [SerializeField] private ChessTheBetrayal.Events.GameModeConfiguredEventChannel _gameModeConfiguredChannel;
         [SerializeField] private ChessTheBetrayal.Events.BetrayalEventChannel _betrayalChannel;
+        [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _matchStartRequestedChannel;
 
         #endregion
 
@@ -127,18 +125,25 @@ namespace ChessTheBetrayal.Gameplay
 
         private UnityDomainLogger _domainLogger;
 
+        // Composition root binding: this is the only line that changes between the prototype,
+        // AI, and multiplayer game-contexts. UI never branches on which one is active.
+        private readonly IPostGameAction _postGameAction = new BackToModeSelectAction();
+        private MatchResult _lastMatchResult;
+
+        // Resolved once in Start() — every consumer here reads it from an event callback or a
+        // later lifecycle method, all of which run after every MonoBehaviour's Awake() (see
+        // Bootstrap's doc comment for why no explicit execution order is required).
+        private UIManager _uiManager;
+
         #endregion
 
         #region Unity Lifecycle
 
         private void Awake()
         {
-            if (Instance != null && Instance != this)
-            {
-                Destroy(gameObject);
-                return;
-            }
-            Instance = this;
+            ServiceLocator.Instance.Register(this);
+
+            ValidateRequiredFields();
 
             LiveBoard = new BoardState(boardSizeX, boardSizeY);
             _setup = new GameSetup(logMoves);
@@ -173,21 +178,25 @@ namespace ChessTheBetrayal.Gameplay
                 _betrayalBountyBlitz5Ms,
                 _betrayalBountyRapidMs,
                 _betrayalBountyRapid15Ms));
+
+            _gameOverChannel?.Register(OnGameOverRaised);
+            _matchStartRequestedChannel?.Register(StartMatch);
         }
 
         private void Start()
         {
-            if (UIManager.Instance == null)
+            if (!ServiceLocator.Instance.TryResolve(out _uiManager))
             {
-                Debug.LogError("[GameManager] UIManager.Instance is null! Make sure UIManager exists in the scene.");
+                Debug.LogError("[GameManager] UIManager was never registered! Make sure UIManager exists in the scene.");
                 return;
             }
 
-            UIManager.Instance.OnTeamRollRequested += HandleTeamRollRequested;
-            UIManager.Instance.OnTeamAnimationComplete += HandleTeamAnimationComplete;
-            UIManager.Instance.OnGameReset += HandleGameReset;
-            UIManager.Instance.OnPromotionSelected += HandlePromotionChoice;
-            UIManager.Instance.OnGameModeSelected += HandleGameModeReceived;
+            _uiManager.OnTeamRollRequested += HandleTeamRollRequested;
+            _uiManager.OnTeamAnimationComplete += HandleTeamAnimationComplete;
+            _uiManager.OnGameReset += HandleGameReset;
+            _uiManager.OnPromotionSelected += HandlePromotionChoice;
+            _uiManager.OnGameModeSelected += HandleGameModeReceived;
+            _uiManager.OnRetributionSkipRequested += RequestRetributionSkip;
 
             if (logMoves)
             {
@@ -197,17 +206,48 @@ namespace ChessTheBetrayal.Gameplay
 
         private void OnDestroy()
         {
-            if (UIManager.Instance != null)
+            if (_uiManager != null)
             {
-                UIManager.Instance.OnTeamRollRequested -= HandleTeamRollRequested;
-                UIManager.Instance.OnTeamAnimationComplete -= HandleTeamAnimationComplete;
-                UIManager.Instance.OnGameReset -= HandleGameReset;
-                UIManager.Instance.OnPromotionSelected -= HandlePromotionChoice;
-                UIManager.Instance.OnGameModeSelected -= HandleGameModeReceived;
+                _uiManager.OnTeamRollRequested -= HandleTeamRollRequested;
+                _uiManager.OnTeamAnimationComplete -= HandleTeamAnimationComplete;
+                _uiManager.OnGameReset -= HandleGameReset;
+                _uiManager.OnPromotionSelected -= HandlePromotionChoice;
+                _uiManager.OnGameModeSelected -= HandleGameModeReceived;
+                _uiManager.OnRetributionSkipRequested -= RequestRetributionSkip;
             }
+
+            _gameOverChannel?.Unregister(OnGameOverRaised);
+            _matchStartRequestedChannel?.Unregister(StartMatch);
 
             // Reset the static engine logger to the safe default to prevent scene-reload issues.
             ChessEngine.Initialize(NullDomainLogger.Instance);
+        }
+
+        private void OnGameOverRaised(ChessTheBetrayal.Events.Payloads.GameOverPayload payload)
+        {
+            _lastMatchResult = new MatchResult(payload.WinningTeam, payload.IsTimeout, _selectedMode);
+        }
+
+        /// <summary>
+        /// Loud-fails on any unassigned Inspector reference at Play-mode start instead of letting
+        /// a missing channel silently no-op later. See InspectorGuard.
+        /// </summary>
+        private void ValidateRequiredFields()
+        {
+            InspectorGuard.Require(_sharedBoardState, nameof(_sharedBoardState), this);
+            InspectorGuard.Require(_sharedClockState, nameof(_sharedClockState), this);
+            InspectorGuard.Require(_gameStartedChannel, nameof(_gameStartedChannel), this);
+            InspectorGuard.Require(_gameResetChannel, nameof(_gameResetChannel), this);
+            InspectorGuard.Require(_gameOverChannel, nameof(_gameOverChannel), this);
+            InspectorGuard.Require(_turnChangedChannel, nameof(_turnChangedChannel), this);
+            InspectorGuard.Require(_moveExecutedChannel, nameof(_moveExecutedChannel), this);
+            InspectorGuard.Require(_moveRejectedChannel, nameof(_moveRejectedChannel), this);
+            InspectorGuard.Require(_promotionRequiredChannel, nameof(_promotionRequiredChannel), this);
+            InspectorGuard.Require(_checkDetectedChannel, nameof(_checkDetectedChannel), this);
+            InspectorGuard.Require(_lowTimeAlertChannel, nameof(_lowTimeAlertChannel), this);
+            InspectorGuard.Require(_gameModeConfiguredChannel, nameof(_gameModeConfiguredChannel), this);
+            InspectorGuard.Require(_betrayalChannel, nameof(_betrayalChannel), this);
+            InspectorGuard.Require(_matchStartRequestedChannel, nameof(_matchStartRequestedChannel), this);
         }
 
         private void Update()
@@ -251,7 +291,7 @@ namespace ChessTheBetrayal.Gameplay
             LiveBoard.CurrentTurn = firstMover;
 
             // Pass the decision back to the View to play the blind roulette animation
-            UIManager.Instance.TriggerTeamRoulette(PlayerTeam);
+            _uiManager.TriggerTeamRoulette(PlayerTeam);
         }
 
         /// <summary>
@@ -268,6 +308,7 @@ namespace ChessTheBetrayal.Gameplay
                 _moveExecutor.OnMoveConfirmed -= _matchDriver.PlayMove;
                 _moveExecutor.OnMoveRejected -= OnExecutorMoveRejected;
                 _moveExecutor.OnPromotionRequired -= OnExecutorPromotionRequired;
+                _moveExecutor.OnRetributionSkipConfirmed -= _matchDriver.RequestRetributionSkip;
                 _moveExecutor = null;
             }
 
@@ -276,6 +317,7 @@ namespace ChessTheBetrayal.Gameplay
             _moveExecutor.OnMoveConfirmed += _matchDriver.PlayMove;
             _moveExecutor.OnMoveRejected += OnExecutorMoveRejected;
             _moveExecutor.OnPromotionRequired += OnExecutorPromotionRequired;
+            _moveExecutor.OnRetributionSkipConfirmed += _matchDriver.RequestRetributionSkip;
 
             // FIX: Initialize the clock BEFORE transitioning to normal phase.
             // This ensures TransitionToPhase() successfully calls _clock.Resume() and starts White's timer immediately.
@@ -297,10 +339,62 @@ namespace ChessTheBetrayal.Gameplay
         }
 
         /// <summary>
-        /// Called when the player hits the reset button.
-        /// Clears everything and waits for a new team selection.
+        /// Called when the player hits Exit. Clears everything and returns to the main menu,
+        /// resetting the mode since there's no next match to carry it into.
         /// </summary>
         private void HandleGameReset()
+        {
+            TearDownCurrentMatch();
+            BroadcastPresentationReset();
+
+            _selectedMode = GameModeConfig.Unlimited;
+            _isAIMode     = false;
+
+            _gameModeConfiguredChannel?.Raise(GameModeConfig.Unlimited);
+
+            if (logMoves)
+            {
+                Debug.Log("[GameManager] Game reset. Phase: GameOver");
+            }
+        }
+
+        /// <summary>
+        /// Called by GameOverUI (via UIManager) when the player dismisses the Game Over screen.
+        /// Delegates to whichever IPostGameAction is bound for this game-context — the prototype
+        /// binds BackToModeSelectAction, so this always lands on Mode Select, never a hidden default.
+        /// </summary>
+        public void HandleGameOverAcknowledged()
+        {
+            _postGameAction.Execute(this, _lastMatchResult);
+        }
+
+        #region IMatchFlow
+
+        void IMatchFlow.TearDownCurrentMatch()
+        {
+            TearDownCurrentMatch();
+            BroadcastPresentationReset();
+        }
+
+        void IMatchFlow.StartNewMatch(GameModeConfig mode)
+        {
+            _selectedMode = mode;
+            _uiManager.ShowTeamSelection();
+        }
+
+        void IMatchFlow.ReturnToModeSelect()
+        {
+            _uiManager.ShowGameModeSelection();
+        }
+
+        /// <summary>
+        /// Domain-only teardown: unwires the move executor, stops the clock, and drops the
+        /// state machine into GameOver. Deliberately does NOT touch presentation (camera, shared
+        /// board bridge) — callers that need the view reset too must also call
+        /// BroadcastPresentationReset(), so the two concerns stay separately named even when
+        /// they're sequenced together.
+        /// </summary>
+        private void TearDownCurrentMatch()
         {
             LiveBoard.Clear();
 
@@ -309,6 +403,7 @@ namespace ChessTheBetrayal.Gameplay
                 _moveExecutor.OnMoveConfirmed -= _matchDriver.PlayMove;
                 _moveExecutor.OnMoveRejected -= OnExecutorMoveRejected;
                 _moveExecutor.OnPromotionRequired -= OnExecutorPromotionRequired;
+                _moveExecutor.OnRetributionSkipConfirmed -= _matchDriver.RequestRetributionSkip;
                 _moveExecutor = null;
             }
 
@@ -318,22 +413,25 @@ namespace ChessTheBetrayal.Gameplay
                 _clockController = null;
             }
 
-            _clock        = null;
-            _selectedMode = GameModeConfig.Unlimited;
-            _isAIMode     = false;
+            _clock = null;
 
             _matchDriver.TransitionToPhase(TurnPhase.GameOver);
+        }
 
-            _gameModeConfiguredChannel?.Raise(GameModeConfig.Unlimited);
-
+        /// <summary>
+        /// Clears the shared board bridge and raises _gameResetChannel, whose real consumer is
+        /// CameraController (wired in the Inspector) snapping back to its neutral/menu shot.
+        /// This is presentation cleanup, not domain teardown — kept separate from
+        /// TearDownCurrentMatch() so a future domain-only caller (e.g. a headless/server match
+        /// flow) doesn't pull in a View-layer side effect by accident.
+        /// </summary>
+        private void BroadcastPresentationReset()
+        {
             _sharedBoardState?.Clear();
             _gameResetChannel?.Raise();
-
-            if (logMoves)
-            {
-                Debug.Log("[GameManager] Game reset. Phase: GameOver");
-            }
         }
+
+        #endregion
 
         /// <summary>
         /// Called by the presentation layer when all intro animations are finished.
@@ -383,13 +481,20 @@ namespace ChessTheBetrayal.Gameplay
 
         private void HandlePromotionChoice(ChessPieceType chosenType) => _moveExecutor?.RequestPromotion(chosenType);
 
+        /// <summary>
+        /// UI entry point for the HUD's Skip button (visible only during RetributionPending).
+        /// Sends intent to the executor, which validates the phase before forwarding to
+        /// MatchDriver — GameManager never resolves the Betrayal sub-machine itself.
+        /// </summary>
+        public void RequestRetributionSkip() => _moveExecutor?.RequestRetributionSkip();
+
         #endregion
 
         #region Public Query Methods
 
         /// <summary>
         /// Returns all legal moves for a piece at the given position.
-        /// BoardInputController calls this to know which squares to highlight.
+        /// SelectionController and MoveHighlightView call this to know which squares to highlight.
         /// Returns an empty list if it's not that team's turn or the game isn't active.
         /// </summary>
         public IReadOnlyList<MoveCommand> GetLegalMovesAt(Vector2Int position)
