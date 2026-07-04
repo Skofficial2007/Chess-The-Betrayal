@@ -2,14 +2,14 @@ using System;
 using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
-using DG.Tweening;
+using PrimeTween;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Diagnostics;
 
 namespace ChessTheBetrayal.UI
 {
     /// <summary>
-    /// The View component for team assignment. 
+    /// The View component for team assignment.
     /// Knows nothing about chess rules; it just plays a roulette animation and reports when finished.
     /// </summary>
     public class TeamSelectionUI : MonoBehaviour
@@ -17,7 +17,7 @@ namespace ChessTheBetrayal.UI
         [Header("Team Object References")]
         [SerializeField] private Transform whiteTeamObject;
         [SerializeField] private Transform blackTeamObject;
-        
+
         [Header("UI References")]
         [SerializeField] private Image _whiteHighlight;
         [SerializeField] private Image _blackHighlight;
@@ -42,8 +42,8 @@ namespace ChessTheBetrayal.UI
         public event Action OnRollRequested;
         public event Action OnRouletteComplete;
 
-        private Tweener _whitePulseTween;
-        private Tweener _blackPulseTween;
+        private Tween _whitePulseTween;
+        private Tween _blackPulseTween;
 
         private void Awake()
         {
@@ -79,22 +79,22 @@ namespace ChessTheBetrayal.UI
             // White starts highlighted, Black not
             if (_whiteHighlight != null) _whiteHighlight.enabled = true;
             if (_blackHighlight != null) _blackHighlight.enabled = false;
-            
+
             // Reset scales
             if (whiteTeamObject != null) whiteTeamObject.localScale = Vector3.one;
             if (blackTeamObject != null) blackTeamObject.localScale = Vector3.one;
         }
 
         /// <summary>
-        /// Kills any active DOTween animations to prevent conflicts.
+        /// Stops any active PrimeTween animations to prevent conflicts.
         /// </summary>
         private void KillActiveTweens()
         {
-            _whitePulseTween?.Kill();
-            _blackPulseTween?.Kill();
-            
-            if (whiteTeamObject != null) whiteTeamObject.DOKill();
-            if (blackTeamObject != null) blackTeamObject.DOKill();
+            _whitePulseTween.Stop();
+            _blackPulseTween.Stop();
+
+            if (whiteTeamObject != null) Tween.StopAll(whiteTeamObject);
+            if (blackTeamObject != null) Tween.StopAll(blackTeamObject);
         }
 
         private IEnumerator AutoStartRoulette()
@@ -121,7 +121,7 @@ namespace ChessTheBetrayal.UI
             while (elapsed < _rouletteDuration)
             {
                 isWhiteActive = !isWhiteActive;
-                
+
                 // Update highlights
                 if (_whiteHighlight != null) _whiteHighlight.enabled = isWhiteActive;
                 if (_blackHighlight != null) _blackHighlight.enabled = !isWhiteActive;
@@ -142,21 +142,16 @@ namespace ChessTheBetrayal.UI
                 toggleInterval = Mathf.Min(_finalToggleSpeed, toggleInterval * _toggleSlowdownRate);
             }
 
-            // Phase 2: Suspense pause - both dim, slight shrink
+            // Phase 2: Suspense pause - both dim, slight shrink. Each object only tweens if it isn't
+            // already resting at the target scale (the last toggle may have left one there), which
+            // also avoids PrimeTween's "endValue equals current value" no-op warning.
             KillActiveTweens();
-            
+
             if (_whiteHighlight != null) _whiteHighlight.enabled = false;
             if (_blackHighlight != null) _blackHighlight.enabled = false;
 
-            // Shrink both during suspense
-            if (whiteTeamObject != null)
-            {
-                whiteTeamObject.DOScale(_inactiveScale, _suspensePause * 0.5f).SetEase(Ease.InOutSine);
-            }
-            if (blackTeamObject != null)
-            {
-                blackTeamObject.DOScale(_inactiveScale, _suspensePause * 0.5f).SetEase(Ease.InOutSine);
-            }
+            TweenToInactiveScale(whiteTeamObject);
+            TweenToInactiveScale(blackTeamObject);
 
             yield return new WaitForSeconds(_suspensePause);
 
@@ -165,6 +160,13 @@ namespace ChessTheBetrayal.UI
 
             // Phase 4: Signal completion
             OnRouletteComplete?.Invoke();
+        }
+
+        private void TweenToInactiveScale(Transform target)
+        {
+            if (target == null) return;
+            if (Mathf.Approximately(target.localScale.x, _inactiveScale)) return;
+            Tween.Scale(target, _inactiveScale, _suspensePause * 0.5f, Ease.InOutSine);
         }
 
         /// <summary>
@@ -176,14 +178,14 @@ namespace ChessTheBetrayal.UI
             Transform inactiveObject = isWhiteActive ? blackTeamObject : whiteTeamObject;
 
             // Kill previous pulses
-            _whitePulseTween?.Kill();
-            _blackPulseTween?.Kill();
+            _whitePulseTween.Stop();
+            _blackPulseTween.Stop();
 
             if (activeObject != null)
             {
                 activeObject.localScale = Vector3.one * _activePulseScale;
-                var tween = activeObject.DOScale(1f, 0.08f).SetEase(Ease.OutQuad);
-                
+                var tween = Tween.Scale(activeObject, 1f, 0.08f, Ease.OutQuad);
+
                 if (isWhiteActive)
                     _whitePulseTween = tween;
                 else
@@ -211,22 +213,18 @@ namespace ChessTheBetrayal.UI
             // Loser shrinks away
             if (loserObject != null)
             {
-                loserObject.DOScale(_loserShrinkScale, _winnerRevealDuration * 0.4f)
-                    .SetEase(Ease.InBack);
+                Tween.Scale(loserObject, _loserShrinkScale, _winnerRevealDuration * 0.4f, Ease.InBack);
             }
 
-            // Winner punches in with elastic bounce
+            // Winner punches in with elastic bounce. The celebration duration is baked into a local
+            // before the tween starts so the completion callback only captures the winner Transform.
             if (winnerObject != null)
             {
-                // Initial punch
-                winnerObject.DOScale(_winnerPunchScale, _winnerRevealDuration * 0.3f)
-                    .SetEase(Ease.OutBack, 2f)
-                    .OnComplete(() =>
-                    {
-                        // Celebration bounces
-                        winnerObject.DOScale(1f, _winnerRevealDuration * 0.7f)
-                            .SetEase(Ease.OutElastic, 0.8f, 0.3f);
-                    });
+                float celebrationDuration = _winnerRevealDuration * 0.7f;
+                Easing celebrationEase = Easing.Elastic(0.8f, 0.3f);
+
+                Tween.Scale(winnerObject, _winnerPunchScale, _winnerRevealDuration * 0.3f, Easing.Overshoot(2f))
+                    .OnComplete(winnerObject, target => Tween.Scale(target, 1f, celebrationDuration, celebrationEase));
             }
 
             yield return new WaitForSeconds(_winnerRevealDuration);

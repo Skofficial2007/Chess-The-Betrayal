@@ -3417,6 +3417,9 @@ MonoBehaviour:
   deathSize: 0.5
   deathSpacing: 1.25
   selectedLiftHeight: 0.3
+  moveIndicatorRadiusRatio: 0.48
+  moveIndicatorYOffset: 0.01
+  moveIndicatorSegments: 24
   tilesParent: {fileID: 608628692}
   whitePiecesParent: {fileID: 224791463}
   blackPiecesParent: {fileID: 1194650739}
@@ -11474,7 +11477,7 @@ MonoBehaviour:
   _whiteHighlight: {fileID: 481013889}
   _blackHighlight: {fileID: 2032329495}
   _startDelay: 0.5
-  _rouletteDuration: 3
+  _rouletteDuration: 2.5
   _suspensePause: 0.4
   _winnerRevealDuration: 0.8
   _initialToggleSpeed: 0.06

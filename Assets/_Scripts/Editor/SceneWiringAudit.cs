@@ -49,7 +49,7 @@ namespace ChessTheBetrayal.Events.Editor
 
         /// <summary>
         /// Only project-owned scripts are audited — anything outside this namespace (TextMeshPro,
-        /// Unity UI, Cinemachine, DOTween, etc.) has its own unrelated set of optional/lazy fields
+        /// Unity UI, Cinemachine, PrimeTween, etc.) has its own unrelated set of optional/lazy fields
         /// that are null by design and would otherwise drown the report in false positives.
         /// </summary>
         private const string ProjectNamespacePrefix = "ChessTheBetrayal";

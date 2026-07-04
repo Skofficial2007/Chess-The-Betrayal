@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 using UnityEngine.UI;
-using DG.Tweening;
+using PrimeTween;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Diagnostics;
 using ChessTheBetrayal.Gameplay;
@@ -41,7 +41,7 @@ namespace ChessTheBetrayal.UI
         public event Action OnExitToMenu;
         public event Action OnRetributionSkipClicked;
 
-        private Tweener _skipButtonTween;
+        private Tween _skipButtonTween;
         private bool _skipButtonVisible;
 
         private void Awake()
@@ -92,7 +92,7 @@ namespace ChessTheBetrayal.UI
             _checkDetectedChannel?.Unregister(HandleCheckDetected);
             _turnChangedChannel?.Unregister(HandleTurnChanged);
             _lowTimeAlertChannel?.Unregister(HandleLowTimeWarning);
-            _skipButtonTween?.Kill();
+            _skipButtonTween.Stop();
         }
 
         /// <summary>
@@ -111,22 +111,18 @@ namespace ChessTheBetrayal.UI
             if (skipButtonRoot == null || visible == _skipButtonVisible) return;
             _skipButtonVisible = visible;
 
-            _skipButtonTween?.Kill();
+            _skipButtonTween.Stop();
 
             if (visible)
             {
                 skipButtonRoot.gameObject.SetActive(true);
                 skipButtonRoot.localScale = Vector3.one * _skipHiddenScale;
-                _skipButtonTween = skipButtonRoot
-                    .DOScale(_skipShowScale, _skipShowDuration)
-                    .SetEase(_skipShowEase);
+                _skipButtonTween = Tween.Scale(skipButtonRoot, _skipShowScale, _skipShowDuration, _skipShowEase);
             }
             else
             {
-                _skipButtonTween = skipButtonRoot
-                    .DOScale(_skipHiddenScale, _skipHideDuration)
-                    .SetEase(_skipHideEase)
-                    .OnComplete(() => skipButtonRoot.gameObject.SetActive(false));
+                _skipButtonTween = Tween.Scale(skipButtonRoot, _skipHiddenScale, _skipHideDuration, _skipHideEase)
+                    .OnComplete(skipButtonRoot, root => root.gameObject.SetActive(false));
             }
         }
 
@@ -136,7 +132,7 @@ namespace ChessTheBetrayal.UI
             {
                 // Snap the Skip button back to hidden (no animation) so re-activating the HUD for a
                 // fresh match never briefly shows it before the next BetrayalPhase event arrives.
-                _skipButtonTween?.Kill();
+                _skipButtonTween.Stop();
                 _skipButtonVisible = false;
                 if (skipButtonRoot != null)
                 {
