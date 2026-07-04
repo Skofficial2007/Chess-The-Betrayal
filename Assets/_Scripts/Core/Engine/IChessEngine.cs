@@ -21,5 +21,20 @@ namespace ChessTheBetrayal.Core.Engine
         bool HasAnyLegalMoves(BoardState board, Team team);
         GameState EvaluateGameState(BoardState board, Team team, ClockState? clock = null);
         int GetMaterialAdvantage(BoardState board);
+
+        /// <summary>
+        /// Applies <paramref name="move"/> directly to <paramref name="board"/> without going through
+        /// ITurnResolver.Advance (no NextTurn, no Betrayal sub-phase auto-resolution). This is the raw
+        /// make-half of make/unmake: callers that own per-ply control over the sub-phase (an Alpha-Beta
+        /// search) apply and undo moves themselves, deciding independently whether the turn flips.
+        /// </summary>
+        void ApplyMove(BoardState board, MoveCommand move);
+
+        /// <summary>
+        /// Rolls a move applied via <see cref="ApplyMove"/> back out, restoring the board exactly.
+        /// This is the seam a search uses to explore thousands of positions without ever cloning the
+        /// board — only <see cref="BoardState.CloneForSnapshot"/> is called once, up front.
+        /// </summary>
+        void UndoMove(BoardState board, MoveCommand move);
     }
 }

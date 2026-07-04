@@ -68,6 +68,13 @@ namespace ChessTheBetrayal.Core.Engine
         TurnAdvanceResult ResolveVoluntaryDefection(BoardState board);
     }
 
+    /// <remarks>
+    /// CROSS-REFERENCE: this class decides when the turn flips (Act and Defection don't;
+    /// everything else does) by calling board.NextTurn()/ToggleTurnHash() explicitly. The AI search
+    /// (AlphaBetaSearch.ScoreChild in the AI assembly) bypasses this class entirely for per-ply
+    /// control over the Betrayal sub-phase, and re-derives the identical flip rule from
+    /// move.Stage. If you ever change WHEN Act/Defection flip the turn, update both places.
+    /// </remarks>
     public sealed class TurnResolver : ITurnResolver
     {
         [System.ThreadStatic]

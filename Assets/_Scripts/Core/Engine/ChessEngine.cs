@@ -12,6 +12,14 @@ namespace ChessTheBetrayal.Core.Engine
     /// <summary>
     /// The rules referee. Handles move generation, check detection, and figuring out when the game is over.
     /// Nothing in here touches Unity — it's pure chess logic that can run on any thread.
+    ///
+    /// THREADING INVARIANT: a given BoardState instance is never touched by more than one thread
+    /// concurrently. Move generation (GetBetrayalTargets, GetRetributionMoves) briefly mutates the
+    /// board in place — the "disguise trick" that flips a candidate victim's team, probes raw moves,
+    /// then restores it (now in a try/finally, so a throw mid-probe can't leave it stuck). That
+    /// window is safe only because each thread owns its own BoardState: the main thread owns the
+    /// live board, and a background search thread owns a private clone taken once up front via
+    /// BoardState.CloneForSnapshot (see AsyncAIAgent). Never hand the same BoardState to two threads.
     /// </summary>
     public static class ChessEngine
     {
@@ -183,12 +191,20 @@ namespace ChessTheBetrayal.Core.Engine
 
                 if (candidateVictim.Type == ChessPieceType.King || candidateTargetPos == betrayerPos) continue;
 
+                // Disguise-restore MUST be exception-safe: GetRawMoves runs arbitrary piece-strategy
+                // code, and an early return/throw mid-disguise would leave the board permanently
+                // wrong for every caller after this one (including a concurrent search thread's own
+                // clone, if move-gen is ever invoked reentrantly on it).
                 board.SetPiece(candidateVictim.WithTeam(enemyTeam), candidateTargetPos.x, candidateTargetPos.y);
-
-                localBuffer.Clear();
-                strategy.GetRawMoves(board, piece, betrayerPos, localBuffer);
-
-                board.SetPiece(candidateVictim, candidateTargetPos.x, candidateTargetPos.y);
+                try
+                {
+                    localBuffer.Clear();
+                    strategy.GetRawMoves(board, piece, betrayerPos, localBuffer);
+                }
+                finally
+                {
+                    board.SetPiece(candidateVictim, candidateTargetPos.x, candidateTargetPos.y);
+                }
 
                 for (int j = 0; j < localBuffer.Count; j++)
                 {
@@ -232,11 +248,15 @@ namespace ChessTheBetrayal.Core.Engine
                 if (strategy == null) continue;
 
                 board.SetPiece(betrayer.WithTeam(enemyTeam), betrayerSquare.x, betrayerSquare.y);
-
-                localBuffer.Clear();
-                strategy.GetRawMoves(board, executioner, pos, localBuffer);
-
-                board.SetPiece(betrayer, betrayerSquare.x, betrayerSquare.y);
+                try
+                {
+                    localBuffer.Clear();
+                    strategy.GetRawMoves(board, executioner, pos, localBuffer);
+                }
+                finally
+                {
+                    board.SetPiece(betrayer, betrayerSquare.x, betrayerSquare.y);
+                }
 
                 for (int j = 0; j < localBuffer.Count; j++)
                 {
