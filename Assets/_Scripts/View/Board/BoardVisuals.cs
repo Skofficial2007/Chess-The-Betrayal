@@ -756,9 +756,11 @@ namespace ChessTheBetrayal.UI
                 // Add to the HashSet in sync
                 _highlightedSquaresLookup.Add(pos);
 
-                // A move destination that already holds a piece (friendly or enemy — Betrayal
-                // mechanics allow capturing either) gets the capture-colored indicator instead.
-                if (_piecesByPosition.ContainsKey(pos))
+                // A move that captures gets the capture-colored indicator instead. Checking
+                // move.IsCapture (rather than whether the destination square holds a piece) is
+                // required for en passant, whose destination is empty — the captured pawn sits on
+                // a different square (MoveCommand.EnPassantCapturePosition).
+                if (moves[i].IsCapture)
                 {
                     _captureSquaresLookup.Add(pos);
                 }
