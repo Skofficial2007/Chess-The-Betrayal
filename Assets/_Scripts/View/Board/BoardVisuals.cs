@@ -154,7 +154,7 @@ namespace ChessTheBetrayal.UI
             _gameResetChannel?.Register(ClearAllVisuals);
             _moveExecutedChannel?.Register(AnimateMove);
             _moveRejectedChannel?.Register(HandleMoveRejected);
-            _promotionRequiredChannel?.Register(HandlePromotionOptimisticSnap);
+            _promotionRequiredChannel?.Register(HandlePromotionOptimisticGlide);
             _betrayalChannel?.Register(HandleBetrayalPhaseChanged);
         }
 
@@ -164,7 +164,7 @@ namespace ChessTheBetrayal.UI
             _gameResetChannel?.Unregister(ClearAllVisuals);
             _moveExecutedChannel?.Unregister(AnimateMove);
             _moveRejectedChannel?.Unregister(HandleMoveRejected);
-            _promotionRequiredChannel?.Unregister(HandlePromotionOptimisticSnap);
+            _promotionRequiredChannel?.Unregister(HandlePromotionOptimisticGlide);
             _betrayalChannel?.Unregister(HandleBetrayalPhaseChanged);
         }
 
@@ -609,17 +609,36 @@ namespace ChessTheBetrayal.UI
         }
 
         /// <summary>
-        /// Optimistically snap the dragged piece to the center of the promotion square
-        /// while the UI waits for the player's choice.
-        /// Uses an O(1) dictionary lookup based on the piece's starting position.
+        /// Optimistically glides the promoting pawn onto its destination square while the UI waits
+        /// for the player's choice.
+        ///
+        /// If the promotion also captures, the captured piece is sent to the graveyard first, so
+        /// the pawn never visually overlaps a still-standing enemy piece — the old behavior force-
+        /// snapped onto the target square unconditionally, which meant a capturing promotion looked
+        /// like the pawn teleported on top of the victim and then, moments later when the real
+        /// MoveExecutedPayload finally arrived and AnimateMove ran the actual capture, the victim
+        /// would vanish and the promotion swap would play — reading as a glitchy "snap back."
+        ///
+        /// The pawn is intentionally left keyed at FromPosition in _piecesByPosition (only its
+        /// Transform moves here) rather than re-keyed to ToPosition. AnimateMove's promotion branch
+        /// already looks the mover up by move.StartPosition and expects to find it there; leaving
+        /// the keying alone means AnimateMove needs no special-casing to avoid redoing this glide —
+        /// it just runs its normal promotion transition starting from wherever the pawn currently
+        /// is, which by then is already ToPosition.
         /// </summary>
-        public void HandlePromotionOptimisticSnap(ChessTheBetrayal.Events.Payloads.PromotionRequiredPayload payload)
+        public void HandlePromotionOptimisticGlide(ChessTheBetrayal.Events.Payloads.PromotionRequiredPayload payload)
         {
-            if (_piecesByPosition.TryGetValue(payload.FromPosition, out ChessPiece piece))
+            if (payload.IsCapture && _piecesByPosition.TryGetValue(payload.ToPosition, out ChessPiece victim))
             {
-                Vector3 snapPos = GetTileCenter(payload.ToPosition.x, payload.ToPosition.y);
-                snapPos.y += pieceYOffset;
-                piece.SetPosition(snapPos, force: true);
+                _piecesByPosition.Remove(payload.ToPosition);
+                AnimateDeath(victim);
+            }
+
+            if (_piecesByPosition.TryGetValue(payload.FromPosition, out ChessPiece pawn))
+            {
+                Vector3 glidePos = GetTileCenter(payload.ToPosition.x, payload.ToPosition.y);
+                glidePos.y += pieceYOffset;
+                pawn.SetPosition(glidePos);
             }
         }
 
