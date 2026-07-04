@@ -25,6 +25,8 @@ namespace ChessTheBetrayal.UI
 
         public void MoveTo(Vector3 worldPos, bool force = false) => _transform.position = worldPos;
 
+        public void MoveTo(Vector3 worldPos, MoveStyle style, bool force = false) => _transform.position = worldPos;
+
         public void ScaleTo(Vector3 scale, bool force = false) => _transform.localScale = scale;
 
         public void FaceDirection(Vector3 lookDirection) =>

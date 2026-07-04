@@ -60,6 +60,16 @@ namespace ChessTheBetrayal.UI
         }
 
         /// <summary>
+        /// Same as SetPosition, but with an explicit MoveStyle (quiet slide, capture punch, knight
+        /// arc, promotion glide) so a board move can carry its intended feel through to the
+        /// animator without BoardVisuals needing to know how each style is actually tweened.
+        /// </summary>
+        public void SetPosition(Vector3 worldPos, MoveStyle style, bool force = false)
+        {
+            _animator.MoveTo(worldPos, style, force);
+        }
+
+        /// <summary>
         /// Sets the target local scale (used for death-pile shrinking and initial spawn sizing).
         /// force = true snaps instantly with no interpolation.
         /// </summary>
