@@ -2,6 +2,7 @@ using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using ChessTheBetrayal.UI;
+using ChessTheBetrayal.Infrastructure;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
 namespace ChessTheBetrayal.Gameplay
@@ -26,6 +27,9 @@ namespace ChessTheBetrayal.Gameplay
         public event Action<Vector2Int> OnTileActivated;
 
         private Camera mainCamera;
+        private UIManager _uiManager;
+        private GameManager _gameManager;
+        private BoardVisuals _boardVisuals;
 
         // Tracks the tile a press started on, so release can confirm it landed on the same tile.
         private bool _isPressed;
@@ -40,11 +44,18 @@ namespace ChessTheBetrayal.Gameplay
             }
         }
 
+        private void Start()
+        {
+            _uiManager = ServiceLocator.Instance.Resolve<UIManager>();
+            _gameManager = ServiceLocator.Instance.Resolve<GameManager>();
+            _boardVisuals = ServiceLocator.Instance.Resolve<BoardVisuals>();
+        }
+
         private void Update()
         {
             if (mainCamera == null) return;
-            if (UIManager.Instance != null && UIManager.Instance.IsUIBlocking()) return;
-            if (GameManager.Instance == null || !GameManager.Instance.IsGameActive) return;
+            if (_uiManager.IsUIBlocking()) return;
+            if (!_gameManager.IsGameActive) return;
 
             if (!TryGetPointerPosition(out Vector2 pointerPos)) return;
 
@@ -85,14 +96,14 @@ namespace ChessTheBetrayal.Gameplay
             bool hitSomething = Physics.Raycast(ray, out RaycastHit hit, 200f, raycastMask);
             Vector2Int hoverIndex = Vector2Int.Invalid;
 
-            if (hitSomething && BoardVisuals.Instance != null)
+            if (hitSomething)
             {
-                hoverIndex = BoardVisuals.Instance.GetTileIndexFromTransform(hit.transform);
-                BoardVisuals.Instance.UpdateHoverHighlight(hoverIndex);
+                hoverIndex = _boardVisuals.GetTileIndexFromTransform(hit.transform);
+                _boardVisuals.UpdateHoverHighlight(hoverIndex);
             }
-            else if (BoardVisuals.Instance != null)
+            else
             {
-                BoardVisuals.Instance.ClearHoverHighlight();
+                _boardVisuals.ClearHoverHighlight();
             }
 
             if (WasPointerPressed())

@@ -8,6 +8,7 @@ using ChessTheBetrayal.Gameplay.Flow;
 using ChessTheBetrayal.UI;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 using ChessTheBetrayal.Core.Diagnostics;
+using ChessTheBetrayal.Infrastructure;
 
 namespace ChessTheBetrayal.Gameplay
 {
@@ -36,12 +37,6 @@ namespace ChessTheBetrayal.Gameplay
     /// </summary>
     public class GameManager : MonoBehaviour, IClockEventHandler, IClockSnapshotSource, IMatchFlow
     {
-        #region Singleton
-
-        public static GameManager Instance { get; private set; }
-
-        #endregion
-
         #region Inspector Fields
 
         [Header("Board Configuration")]
@@ -75,6 +70,7 @@ namespace ChessTheBetrayal.Gameplay
         [SerializeField] private ChessTheBetrayal.Events.LowTimeAlertEventChannel _lowTimeAlertChannel;
         [SerializeField] private ChessTheBetrayal.Events.GameModeConfiguredEventChannel _gameModeConfiguredChannel;
         [SerializeField] private ChessTheBetrayal.Events.BetrayalEventChannel _betrayalChannel;
+        [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _matchStartRequestedChannel;
 
         #endregion
 
@@ -134,18 +130,18 @@ namespace ChessTheBetrayal.Gameplay
         private readonly IPostGameAction _postGameAction = new BackToModeSelectAction();
         private MatchResult _lastMatchResult;
 
+        // Resolved once in Start() — every consumer here reads it from an event callback or a
+        // later lifecycle method, all of which run after every MonoBehaviour's Awake() (see
+        // Bootstrap's doc comment for why no explicit execution order is required).
+        private UIManager _uiManager;
+
         #endregion
 
         #region Unity Lifecycle
 
         private void Awake()
         {
-            if (Instance != null && Instance != this)
-            {
-                Destroy(gameObject);
-                return;
-            }
-            Instance = this;
+            ServiceLocator.Instance.Register(this);
 
             ValidateRequiredFields();
 
@@ -184,22 +180,23 @@ namespace ChessTheBetrayal.Gameplay
                 _betrayalBountyRapid15Ms));
 
             _gameOverChannel?.Register(OnGameOverRaised);
+            _matchStartRequestedChannel?.Register(StartMatch);
         }
 
         private void Start()
         {
-            if (UIManager.Instance == null)
+            if (!ServiceLocator.Instance.TryResolve(out _uiManager))
             {
-                Debug.LogError("[GameManager] UIManager.Instance is null! Make sure UIManager exists in the scene.");
+                Debug.LogError("[GameManager] UIManager was never registered! Make sure UIManager exists in the scene.");
                 return;
             }
 
-            UIManager.Instance.OnTeamRollRequested += HandleTeamRollRequested;
-            UIManager.Instance.OnTeamAnimationComplete += HandleTeamAnimationComplete;
-            UIManager.Instance.OnGameReset += HandleGameReset;
-            UIManager.Instance.OnPromotionSelected += HandlePromotionChoice;
-            UIManager.Instance.OnGameModeSelected += HandleGameModeReceived;
-            UIManager.Instance.OnRetributionSkipRequested += RequestRetributionSkip;
+            _uiManager.OnTeamRollRequested += HandleTeamRollRequested;
+            _uiManager.OnTeamAnimationComplete += HandleTeamAnimationComplete;
+            _uiManager.OnGameReset += HandleGameReset;
+            _uiManager.OnPromotionSelected += HandlePromotionChoice;
+            _uiManager.OnGameModeSelected += HandleGameModeReceived;
+            _uiManager.OnRetributionSkipRequested += RequestRetributionSkip;
 
             if (logMoves)
             {
@@ -209,17 +206,18 @@ namespace ChessTheBetrayal.Gameplay
 
         private void OnDestroy()
         {
-            if (UIManager.Instance != null)
+            if (_uiManager != null)
             {
-                UIManager.Instance.OnTeamRollRequested -= HandleTeamRollRequested;
-                UIManager.Instance.OnTeamAnimationComplete -= HandleTeamAnimationComplete;
-                UIManager.Instance.OnGameReset -= HandleGameReset;
-                UIManager.Instance.OnPromotionSelected -= HandlePromotionChoice;
-                UIManager.Instance.OnGameModeSelected -= HandleGameModeReceived;
-                UIManager.Instance.OnRetributionSkipRequested -= RequestRetributionSkip;
+                _uiManager.OnTeamRollRequested -= HandleTeamRollRequested;
+                _uiManager.OnTeamAnimationComplete -= HandleTeamAnimationComplete;
+                _uiManager.OnGameReset -= HandleGameReset;
+                _uiManager.OnPromotionSelected -= HandlePromotionChoice;
+                _uiManager.OnGameModeSelected -= HandleGameModeReceived;
+                _uiManager.OnRetributionSkipRequested -= RequestRetributionSkip;
             }
 
             _gameOverChannel?.Unregister(OnGameOverRaised);
+            _matchStartRequestedChannel?.Unregister(StartMatch);
 
             // Reset the static engine logger to the safe default to prevent scene-reload issues.
             ChessEngine.Initialize(NullDomainLogger.Instance);
@@ -249,6 +247,7 @@ namespace ChessTheBetrayal.Gameplay
             InspectorGuard.Require(_lowTimeAlertChannel, nameof(_lowTimeAlertChannel), this);
             InspectorGuard.Require(_gameModeConfiguredChannel, nameof(_gameModeConfiguredChannel), this);
             InspectorGuard.Require(_betrayalChannel, nameof(_betrayalChannel), this);
+            InspectorGuard.Require(_matchStartRequestedChannel, nameof(_matchStartRequestedChannel), this);
         }
 
         private void Update()
@@ -292,7 +291,7 @@ namespace ChessTheBetrayal.Gameplay
             LiveBoard.CurrentTurn = firstMover;
 
             // Pass the decision back to the View to play the blind roulette animation
-            UIManager.Instance.TriggerTeamRoulette(PlayerTeam);
+            _uiManager.TriggerTeamRoulette(PlayerTeam);
         }
 
         /// <summary>
@@ -380,12 +379,12 @@ namespace ChessTheBetrayal.Gameplay
         void IMatchFlow.StartNewMatch(GameModeConfig mode)
         {
             _selectedMode = mode;
-            UIManager.Instance.ShowTeamSelection();
+            _uiManager.ShowTeamSelection();
         }
 
         void IMatchFlow.ReturnToModeSelect()
         {
-            UIManager.Instance.ShowGameModeSelection();
+            _uiManager.ShowGameModeSelection();
         }
 
         /// <summary>

@@ -1,6 +1,7 @@
 using UnityEngine;
 using ChessTheBetrayal.Gameplay;
 using ChessTheBetrayal.Events.Payloads;
+using ChessTheBetrayal.Infrastructure;
 
 namespace ChessTheBetrayal.UI
 {
@@ -16,11 +17,27 @@ namespace ChessTheBetrayal.UI
     {
         [SerializeField] private BoardVisuals boardVisuals;
 
+        [Header("Event Channels")]
+        [SerializeField] private ChessTheBetrayal.Events.PieceSelectedEventChannel _pieceSelectedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _selectionClearedChannel;
+
+        private void OnEnable()
+        {
+            _pieceSelectedChannel?.Register(HandlePieceSelected);
+            _selectionClearedChannel?.Register(HandleSelectionCleared);
+        }
+
+        private void OnDisable()
+        {
+            _pieceSelectedChannel?.Unregister(HandlePieceSelected);
+            _selectionClearedChannel?.Unregister(HandleSelectionCleared);
+        }
+
         public void HandlePieceSelected(PieceSelectedPayload payload)
         {
-            if (boardVisuals == null || GameManager.Instance == null) return;
+            if (boardVisuals == null || !ServiceLocator.Instance.TryResolve(out GameManager gameManager)) return;
 
-            var legalMoves = GameManager.Instance.GetLegalMovesAt(payload.Position);
+            var legalMoves = gameManager.GetLegalMovesAt(payload.Position);
             boardVisuals.HighlightLegalMoves(legalMoves);
         }
 

@@ -6,8 +6,8 @@ namespace ChessTheBetrayal.Events.Payloads
     /// A piece was selected (tap 1 of the two-tap model). Carries only the position — legal
     /// moves are intentionally not included here. GameManager.GetLegalMovesAt returns a reused,
     /// mutable list, so a struct payload can't safely snapshot it; listeners that need the legal
-    /// move set (MoveHighlightView) re-query GameManager.Instance.GetLegalMovesAt(Position)
-    /// themselves at the moment they handle this event.
+    /// move set (MoveHighlightView) re-query GameManager.GetLegalMovesAt(Position) themselves,
+    /// resolved via ServiceLocator, at the moment they handle this event.
     /// </summary>
     public readonly struct PieceSelectedPayload
     {
