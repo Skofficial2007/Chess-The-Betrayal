@@ -11,7 +11,12 @@ namespace ChessTheBetrayal.UI
     /// </summary>
     public sealed class NullPieceAnimator : IPieceAnimator
     {
+        // Matches PrimeTweenPieceAnimator's lift height so headless/AI selection logic that reads
+        // world position back (if any ever does) sees the same rest/lifted offset either way.
+        private const float LiftHeight = 0.3f;
+
         private readonly Transform _transform;
+        private Vector3? _restPosition;
 
         public NullPieceAnimator(Transform transform)
         {
@@ -37,5 +42,24 @@ namespace ChessTheBetrayal.UI
         // The replacement piece is already in its final state the moment SpawnSinglePiece places
         // it — there's no "reveal" to play without a tween.
         public void PlayTransitionIn(PieceTransitionStyle style) { }
+
+        public void LiftSelect()
+        {
+            _restPosition = _transform.position;
+            _transform.position += new Vector3(0f, LiftHeight, 0f);
+        }
+
+        public void LowerDeselect()
+        {
+            if (_restPosition.HasValue)
+            {
+                _transform.position = _restPosition.Value;
+                _restPosition = null;
+            }
+        }
+
+        // No tween is ever running here, so cancelling is just forgetting the remembered rest
+        // position — there's nothing to stop.
+        public void CancelSelectionAnimation() => _restPosition = null;
     }
 }

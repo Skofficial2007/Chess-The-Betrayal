@@ -32,7 +32,11 @@ namespace ChessTheBetrayal.UI
             // Real, tweened animation is the default for every piece spawned in a live scene.
             // Headless/AI/test contexts opt out via SetAnimator instead of this ever branching on
             // "are we in a test" — the seam, not a runtime flag, is what makes both paths possible.
-            _animator = new PrimeTweenPieceAnimator(transform, GetComponentInChildren<Renderer>());
+            //
+            // getType is a lazy lookup rather than passing `type` by value: BoardVisuals.
+            // SpawnSinglePiece sets ChessPiece.type *after* AddComponent(), which runs Awake, so
+            // `type` would still be ChessPieceType.None if we captured it right now.
+            _animator = new PrimeTweenPieceAnimator(transform, GetComponentInChildren<Renderer>(), () => type);
         }
 
         /// <summary>
@@ -112,6 +116,36 @@ namespace ChessTheBetrayal.UI
         public void PlayTransitionIn(PieceTransitionStyle style)
         {
             _animator.PlayTransitionIn(style);
+        }
+
+        /// <summary>
+        /// Plays the tap-to-select "pick up" animation and starts the idle bob for as long as this
+        /// piece stays selected.
+        /// </summary>
+        public void LiftSelect()
+        {
+            _animator.LiftSelect();
+        }
+
+        /// <summary>
+        /// Stops the idle bob and eases the piece back down to where it was lifted from.
+        /// </summary>
+        public void LowerDeselect()
+        {
+            _animator.LowerDeselect();
+        }
+
+        /// <summary>
+        /// PrimeTween already no-ops safely against a tween whose target was destroyed (see the
+        /// class doc on PrimeTweenPieceAnimator), so this isn't strictly required for correctness —
+        /// but the idle bob loop started by LiftSelect runs indefinitely (cycles: -1) while a piece
+        /// is selected, and stopping it explicitly the instant this GameObject is destroyed (e.g.
+        /// captured mid-lift by a fast Betrayal) is cheap, obviously correct, and avoids relying
+        /// solely on library behavior for a tween with no natural end.
+        /// </summary>
+        private void OnDestroy()
+        {
+            _animator?.CancelSelectionAnimation();
         }
     }
 }
