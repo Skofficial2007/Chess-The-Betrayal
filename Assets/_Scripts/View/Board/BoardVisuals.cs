@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using PrimeTween;
 using UnityEngine;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Diagnostics;
@@ -87,6 +88,13 @@ namespace ChessTheBetrayal.UI
 
         // Squares among _highlightedSquares that currently hold a capturable piece
         private readonly HashSet<Vector2Int> _captureSquaresLookup = new HashSet<Vector2Int>(32);
+
+        // Defensive Override threat-pulse: two quick red flashes on the player's own king when a
+        // Forced Save activates, so the sudden forced move reads as "your king is in danger" rather
+        // than an unexplained rules interruption.
+        private const float KingThreatFlashIntensity = 2.5f;
+        private const float KingThreatFlashDuration = 0.15f;
+        private const int KingThreatFlashCycles = 2;
 
         #endregion
 
@@ -300,8 +308,19 @@ namespace ChessTheBetrayal.UI
             return mesh;
         }
 
+        // Board-setup dissolve-in: each side's own back rank (row 0 for White, top row for Black)
+        // materializes first, its pawn rank a beat later — reads as the army assembling rank by
+        // rank rather than the whole board popping into existence at once. SetupInitialDelay is a
+        // beat of anticipation before the wave starts at all — an instant first-frame reform reads
+        // as a pop-in glitch, while a brief held beat on the empty board makes the reform land as a
+        // deliberate reveal instead.
+        private const float SetupDissolveDuration = 0.45f;
+        private const float SetupRowStagger = 0.12f;
+        private const float SetupInitialDelay = 0.25f;
+
         /// <summary>
-        /// Spawns visual piece GameObjects for all pieces in the board state.
+        /// Spawns visual piece GameObjects for all pieces in the board state, dissolving each one
+        /// in with a back-rank-first stagger (see SetupRowStagger) rather than popping in instantly.
         /// </summary>
         private void SpawnAllPieces(BoardState board)
         {
@@ -312,7 +331,9 @@ namespace ChessTheBetrayal.UI
                     PieceData data = board.GetPiece(x, y);
                     if (!data.IsEmpty)
                     {
-                        SpawnSinglePiece(data, new Vector2Int(x, y));
+                        int rankDistance = data.Team == Team.White ? y : (board.TileCountY - 1 - y);
+                        float delay = SetupInitialDelay + rankDistance * SetupRowStagger;
+                        SpawnSinglePiece(data, new Vector2Int(x, y), spawnDissolveDelay: delay);
                     }
                 }
             }
@@ -323,8 +344,13 @@ namespace ChessTheBetrayal.UI
         /// _piecesByPosition. Returns the spawned ChessPiece (null on a bad prefab index) so
         /// callers that need to animate it in — promotion and defection's reveal transitions —
         /// don't have to look it back up.
+        ///
+        /// spawnDissolveDelay >= 0 makes the piece spawn fully dissolved (invisible) and reform via
+        /// the dissolve shader after that delay — used for the board-setup wave (SpawnAllPieces).
+        /// Pass a negative value (the default) to spawn instantly with no dissolve, for callers like
+        /// promotion/defection that drive their own transition separately.
         /// </summary>
-        private ChessPiece SpawnSinglePiece(PieceData data, Vector2Int pos)
+        private ChessPiece SpawnSinglePiece(PieceData data, Vector2Int pos, float spawnDissolveDelay = -1f)
         {
             // Select prefab array and parent based on team
             GameObject[] prefabs = data.Team == Team.White ? whiteTeamPrefabs : blackTeamPrefabs;
@@ -364,6 +390,20 @@ namespace ChessTheBetrayal.UI
 
             // Store in lookup
             _piecesByPosition[pos] = visualPiece;
+
+            if (spawnDissolveDelay >= 0f)
+            {
+                visualPiece.SetDissolveImmediate(1f);
+                Tween.Delay(spawnDissolveDelay).OnComplete(() =>
+                {
+                    // Guards against a reset/game-restart destroying the piece while it was still
+                    // waiting out its stagger delay.
+                    if (visualPiece != null)
+                    {
+                        visualPiece.DissolveTo(0f, SetupDissolveDuration);
+                    }
+                });
+            }
 
             return visualPiece;
         }
@@ -524,6 +564,7 @@ namespace ChessTheBetrayal.UI
         private void AnimateDeath(ChessPiece victim)
         {
             victim.DisableCollider();
+            victim.SetBetrayerGlow(false);
 
             List<ChessPiece> graveyard = victim.team == Team.White ? deadWhitePieces : deadBlackPieces;
             graveyard.Add(victim);
@@ -671,14 +712,12 @@ namespace ChessTheBetrayal.UI
                     break;
 
                 case ChessTheBetrayal.Events.Payloads.BetrayalPhase.ForcedSaveActive:
-                    // Nothing to do: SwapPieceTeam (triggered by DefectionOccurred above) always
-                    // spawns the defected piece fresh via SpawnSinglePiece, which never carries the
-                    // Betrayer glow — so the new piece is already glow-off by construction. This
-                    // used to force the glow off explicitly, but that lookup raced SwapPieceTeam's
-                    // transition-out animation (both phases fire synchronously, back-to-back, from
-                    // MatchDriver — see its ResolveRetribution-adjacent method) and would silently
-                    // no-op via TryGetValue failing while the swap's completion callback hadn't
-                    // run yet.
+                    // The glow-off concern this case used to guard against no longer applies here
+                    // (SwapPieceTeam's fresh-spawn piece never carries the Betrayer glow), but the
+                    // race it describes — this phase firing synchronously back-to-back with
+                    // DefectionOccurred, before SwapPieceTeam's transition-out callback has run —
+                    // still applies to the king lookup below, which is why it tolerates a miss.
+                    ThreatPulseOwnKing(payload.InitiatingTeam);
                     break;
             }
         }
@@ -714,6 +753,25 @@ namespace ChessTheBetrayal.UI
                 ChessPiece defected = SpawnSinglePiece(flipped, pos);
                 defected?.PlayTransitionIn(PieceTransitionStyle.Spin);
             });
+        }
+
+        /// <summary>
+        /// Flashes the given team's king red twice — the "Defensive Override" cue that tells the
+        /// player why they're being forced into a Save move: their own defected piece just put
+        /// their king in check. Silently no-ops if the king can't be found (defense-in-depth; see
+        /// the ForcedSaveActive case above for why that can theoretically race).
+        /// </summary>
+        private void ThreatPulseOwnKing(Team team)
+        {
+            foreach (var kv in _piecesByPosition)
+            {
+                ChessPiece piece = kv.Value;
+                if (piece.team == team && piece.type == ChessPieceType.King)
+                {
+                    piece.FlashGlow(Color.red, KingThreatFlashIntensity, KingThreatFlashDuration, KingThreatFlashCycles);
+                    return;
+                }
+            }
         }
 
         #endregion

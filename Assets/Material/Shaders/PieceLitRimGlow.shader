@@ -58,6 +58,26 @@ Shader "Custom/PieceLitRimGlow"
         _RimGlowPulseSpeed("Rim Glow Pulse Speed", Range(0.0, 12.0)) = 5.0
         _RimGlowPulseAmount("Rim Glow Pulse Amount", Range(0.0, 1.0)) = 0.35
 
+        // Dissolve — promotion's morph-away/reform effect. _DissolveAmount 0 = fully intact,
+        // 1 = fully clipped away. Driven per-instance via MaterialPropertyBlock, same pattern as
+        // the rim glow above, so it costs nothing extra to batching. Noise is procedural (a hashed
+        // value-noise built from object-space position) rather than a sampled texture, so there's
+        // no texture asset to import/assign per material.
+        //
+        // The edge itself is two-toned rather than a single flat color: a narrow white-hot
+        // _DissolveCoreColor right at the cut, cross-fading out to a wider _DissolveEdgeColor
+        // "ember" band — reads as combustion (white-hot center, cooling embers) instead of a glowing
+        // outline. A subtle high-frequency time flicker on the whole band sells "unstable fire"
+        // rather than a static gradient.
+        _DissolveAmount("Dissolve Amount", Range(0.0, 1.0)) = 0.0
+        [HDR] _DissolveEdgeColor("Dissolve Edge Color", Color) = (1, 0.35, 0.02, 1)
+        [HDR] _DissolveCoreColor("Dissolve Core Color", Color) = (1, 1, 0.85, 1)
+        _DissolveEdgeWidth("Dissolve Edge Width", Range(0.0, 0.5)) = 0.1
+        _DissolveEdgeIntensity("Dissolve Edge Intensity", Range(0.0, 6.0)) = 2.5
+        _DissolveNoiseScale("Dissolve Noise Scale", Range(1.0, 40.0)) = 12.0
+        _DissolveFlickerSpeed("Dissolve Flicker Speed", Range(0.0, 40.0)) = 18.0
+        _DissolveFlickerAmount("Dissolve Flicker Amount", Range(0.0, 1.0)) = 0.25
+
         [HideInInspector] _ClearCoatMask("_ClearCoatMask", Float) = 0.0
         [HideInInspector] _ClearCoatSmoothness("_ClearCoatSmoothness", Float) = 0.0
 
@@ -175,6 +195,49 @@ Shader "Custom/PieceLitRimGlow"
             float _RimGlowPulseSpeed;
             float _RimGlowPulseAmount;
 
+            float _DissolveAmount;
+            float4 _DissolveEdgeColor;
+            float4 _DissolveCoreColor;
+            float _DissolveEdgeWidth;
+            float _DissolveEdgeIntensity;
+            float _DissolveNoiseScale;
+            float _DissolveFlickerSpeed;
+            float _DissolveFlickerAmount;
+
+            // Cheap 3D value-noise hash, keyed off object-space position so the dissolve pattern
+            // is stable in world space (doesn't swim with the mesh's UV seams) and tiles for free
+            // across any mesh without needing unwrapped UVs or a sampled texture.
+            float3 DissolveHash3(float3 p)
+            {
+                p = frac(p * float3(0.1031, 0.1030, 0.0973));
+                p += dot(p, p.yxz + 33.33);
+                return frac((p.xxy + p.yxx) * p.zyx);
+            }
+
+            half DissolveNoise(float3 p)
+            {
+                float3 i = floor(p);
+                float3 f = frac(p);
+                f = f * f * (3.0 - 2.0 * f);
+
+                half n000 = DissolveHash3(i + float3(0, 0, 0)).x;
+                half n100 = DissolveHash3(i + float3(1, 0, 0)).x;
+                half n010 = DissolveHash3(i + float3(0, 1, 0)).x;
+                half n110 = DissolveHash3(i + float3(1, 1, 0)).x;
+                half n001 = DissolveHash3(i + float3(0, 0, 1)).x;
+                half n101 = DissolveHash3(i + float3(1, 0, 1)).x;
+                half n011 = DissolveHash3(i + float3(0, 1, 1)).x;
+                half n111 = DissolveHash3(i + float3(1, 1, 1)).x;
+
+                half nx00 = lerp(n000, n100, f.x);
+                half nx10 = lerp(n010, n110, f.x);
+                half nx01 = lerp(n001, n101, f.x);
+                half nx11 = lerp(n011, n111, f.x);
+                half nxy0 = lerp(nx00, nx10, f.y);
+                half nxy1 = lerp(nx01, nx11, f.y);
+                return lerp(nxy0, nxy1, f.z);
+            }
+
             // Same body as URP's LitPassFragment (LitForwardPass.hlsl), plus one additive term.
             half4 RimGlowLitPassFragment(Varyings input) : SV_Target0
             {
@@ -208,7 +271,30 @@ Shader "Custom/PieceLitRimGlow"
 
                 InitializeBakedGIData(input, inputData);
 
+                // Dissolve: clip pixels where the procedural noise falls below the current
+                // threshold, then light up a two-tone "burning edge" just above the threshold — a
+                // narrow white-hot core right at the cut, cross-fading out to a wider ember band —
+                // so the cut reads as combustion rather than a flat alpha wipe or single-color
+                // outline. A fast, low-amplitude time flicker rides on top so the band feels like
+                // unstable fire instead of a static gradient. _DissolveAmount is 0 by default (skip
+                // all of this) so pieces with no dissolve in flight pay nothing extra.
+                half3 dissolveGlow = 0.0;
+                if (_DissolveAmount > 0.0)
+                {
+                    float3 objectPos = TransformWorldToObject(input.positionWS);
+                    half noise = DissolveNoise(objectPos * _DissolveNoiseScale);
+                    clip(noise - _DissolveAmount);
+
+                    half distFromEdge = noise - _DissolveAmount;
+                    half emberMask = 1.0 - saturate(distFromEdge / max(_DissolveEdgeWidth, 1e-4));
+                    half coreMask = 1.0 - saturate(distFromEdge / max(_DissolveEdgeWidth * 0.25, 1e-4));
+                    half flicker = 1.0 - _DissolveFlickerAmount * (0.5 + 0.5 * sin(_Time.y * _DissolveFlickerSpeed + noise * 20.0));
+
+                    dissolveGlow = lerp(_DissolveEdgeColor.rgb, _DissolveCoreColor.rgb, coreMask) * emberMask * _DissolveEdgeIntensity * flicker;
+                }
+
                 half4 color = UniversalFragmentPBR(inputData, surfaceData);
+                color.rgb += dissolveGlow;
 
                 // Fresnel rim: 0 straight-on, 1 at grazing angles. An additive-only rim can never
                 // read equally on light and dark pieces — adding red to an already-bright surface
