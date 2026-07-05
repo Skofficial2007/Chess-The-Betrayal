@@ -85,6 +85,13 @@ namespace ChessTheBetrayal.UI
         private static readonly int RimGlowColorId = Shader.PropertyToID("_RimGlowColor");
         private static readonly int RimGlowIntensityId = Shader.PropertyToID("_RimGlowIntensity");
 
+        // Dissolve — promotion's morph effect (see Custom/PieceLitRimGlow.shader), layered on top
+        // of the existing squash tween rather than replacing it.
+        private static readonly int DissolveAmountId = Shader.PropertyToID("_DissolveAmount");
+        private Tween _dissolveTween;
+        private Sequence _glowFlashSequence;
+        private float _currentDissolve;
+
         private readonly Transform _transform;
         private readonly Renderer _renderer;
         private readonly Func<ChessPieceType> _getType;
@@ -233,6 +240,74 @@ namespace ChessTheBetrayal.UI
             _renderer.SetPropertyBlock(_mpb);
         }
 
+        public void DissolveTo(float targetAmount, float duration, Action onComplete = null)
+        {
+            if (_renderer == null)
+            {
+                onComplete?.Invoke();
+                return;
+            }
+
+            _dissolveTween.Stop();
+            _dissolveTween = Tween.Custom(this, _currentDissolve, targetAmount, duration, (self, val) => self.ApplyDissolve(val), Ease.Linear)
+                .OnComplete(() => onComplete?.Invoke());
+        }
+
+        public void SetDissolveImmediate(float amount)
+        {
+            _dissolveTween.Stop();
+            ApplyDissolve(amount);
+        }
+
+        private void ApplyDissolve(float amount)
+        {
+            _currentDissolve = amount;
+            if (_renderer == null) return;
+
+            _mpb ??= new MaterialPropertyBlock();
+            _renderer.GetPropertyBlock(_mpb);
+            _mpb.SetFloat(DissolveAmountId, amount);
+            _renderer.SetPropertyBlock(_mpb);
+        }
+
+        public void FlashGlow(Color color, float intensity, float flashDuration, int cycles)
+        {
+            if (_renderer == null) return;
+
+            _glowFlashSequence.Stop();
+
+            // Restore whatever glow state was active before the flash (e.g. a Betrayer mid-glow)
+            // rather than assuming "off", so this can't stomp on SetHighlighted's own state.
+            _mpb ??= new MaterialPropertyBlock();
+            _renderer.GetPropertyBlock(_mpb);
+            float restoreIntensity = _mpb.GetFloat(RimGlowIntensityId);
+            Color restoreColor = _mpb.GetColor(RimGlowColorId);
+            if (restoreColor == Color.clear) restoreColor = BetrayerGlowColor;
+
+            Sequence seq = Sequence.Create();
+            for (int i = 0; i < cycles; i++)
+            {
+                seq = seq
+                    .ChainCallback(() => ApplyGlow(color, intensity))
+                    .Chain(Tween.Delay(flashDuration * 0.5f))
+                    .ChainCallback(() => ApplyGlow(restoreColor, restoreIntensity))
+                    .Chain(Tween.Delay(flashDuration * 0.5f));
+            }
+
+            _glowFlashSequence = seq;
+        }
+
+        private void ApplyGlow(Color color, float intensity)
+        {
+            if (_renderer == null) return;
+
+            _mpb ??= new MaterialPropertyBlock();
+            _renderer.GetPropertyBlock(_mpb);
+            _mpb.SetColor(RimGlowColorId, color);
+            _mpb.SetFloat(RimGlowIntensityId, intensity);
+            _renderer.SetPropertyBlock(_mpb);
+        }
+
         public void PlayTransitionOut(PieceTransitionStyle style, Action onComplete)
         {
             _transitionSequence.Stop();
@@ -248,13 +323,19 @@ namespace ChessTheBetrayal.UI
                         .ChainCallback(onComplete);
                     break;
 
-                case PieceTransitionStyle.Squash:
                 case PieceTransitionStyle.PromotionMorph:
+                    // Same squash-down anticipation as Squash below, plus a dissolve ramp (0 -> 1)
+                    // layered on top via Group so the pawn both shrinks AND burns away at once,
+                    // rather than one effect replacing the other.
+                    _transitionSequence = Sequence.Create(Tween.Scale(_transform, VanishedScale, SquashOutDuration, Ease.InBack))
+                        .Group(Tween.Custom(this, _currentDissolve, 1f, SquashOutDuration, (self, val) => self.ApplyDissolve(val), Ease.OutQuad))
+                        .ChainCallback(onComplete);
+                    break;
+
+                case PieceTransitionStyle.Squash:
                 default:
                     // Anticipation squash down to near-zero scale, then swap — reads as "this piece
-                    // collapses into its promoted form" rather than a jump-cut. PromotionMorph is
-                    // hooked to this same tween for now — swap this case out for the real dissolve/
-                    // VFX morph when that work lands; nothing outside this method needs to change.
+                    // collapses into its promoted form" rather than a jump-cut.
                     _transitionSequence = Sequence.Create(Tween.Scale(_transform, VanishedScale, SquashOutDuration, Ease.InBack))
                         .ChainCallback(onComplete);
                     break;
@@ -279,20 +360,35 @@ namespace ChessTheBetrayal.UI
                     _transitionSequence = Sequence.Create(Tween.LocalRotation(_transform, restingEuler, SpinInDuration, Ease.OutBack));
                     break;
 
-                case PieceTransitionStyle.Squash:
                 case PieceTransitionStyle.PromotionMorph:
+                {
+                    // Same squash-in-with-hop as Squash below, plus the dissolve ramping back down
+                    // (1 -> 0) in parallel so the promoted piece both grows in AND reforms from the
+                    // burning edge, rather than just popping into view at full opacity.
+                    Vector3 targetScale = _transform.localScale;
+                    _transform.localScale = Vector3.one * VanishedScale;
+                    float restY = _transform.position.y;
+                    SetDissolveImmediate(1f);
+                    _transitionSequence = Sequence.Create(Tween.Scale(_transform, targetScale, SquashInDuration, Easing.Overshoot(1.5f)))
+                        .Group(Tween.PositionY(_transform, restY + PromotionPopHopHeight, restY, PromotionPopHopDuration, Ease.OutBack))
+                        .Group(Tween.Custom(this, 1f, 0f, SquashInDuration, (self, val) => self.ApplyDissolve(val), Ease.InQuad));
+                    break;
+                }
+
+                case PieceTransitionStyle.Squash:
                 default:
+                {
                     // Spawn at vanished scale and pop back up to whatever scale BoardVisuals just
                     // set (pieceScaleMultiplier), with a slight overshoot for punch. A small
                     // rise-and-settle hop runs alongside the scale so the promoted piece feels like
                     // it materializes with a bounce rather than just growing in place.
-                    // PromotionMorph is hooked to this same tween for now — see PlayTransitionOut.
                     Vector3 targetScale = _transform.localScale;
                     _transform.localScale = Vector3.one * VanishedScale;
                     float restY = _transform.position.y;
                     _transitionSequence = Sequence.Create(Tween.Scale(_transform, targetScale, SquashInDuration, Easing.Overshoot(1.5f)))
                         .Group(Tween.PositionY(_transform, restY + PromotionPopHopHeight, restY, PromotionPopHopDuration, Ease.OutBack));
                     break;
+                }
             }
         }
 

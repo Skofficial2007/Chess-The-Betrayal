@@ -7,11 +7,10 @@ namespace ChessTheBetrayal.UI
     /// The visual shape of a piece-swap transition (promotion, defection). Squash is an
     /// anticipation-style scale-down/up used when the swap should read as "this piece becomes a
     /// new piece." Spin is a 180-degree Y rotation used when the swap should read as "this piece
-    /// turns around to reveal its new side." PromotionMorph is promotion's own style, kept
-    /// distinct from Squash/Spin so its tween can evolve independently of Defection's — today it
-    /// plays the same squash-based tween as Squash, but is the seam a future dissolve/VFX morph
-    /// (see the promotion animator design notes) hooks into without ever touching the call site
-    /// in BoardVisuals again.
+    /// turns around to reveal its new side" — defection keeps this one on purpose. PromotionMorph
+    /// is the same squash scale tween as Squash, plus a dissolve/burning-edge shader effect (see
+    /// Custom/PieceLitRimGlow.shader) blended in on top via PrimeTweenPieceAnimator, so promotion
+    /// reads as both shrinking/growing AND dissolving/reforming at once.
     /// </summary>
     public enum PieceTransitionStyle
     {
@@ -74,6 +73,27 @@ namespace ChessTheBetrayal.UI
         /// through the seam so BoardVisuals never touches a Renderer directly.
         /// </summary>
         void SetHighlighted(bool active);
+
+        /// <summary>
+        /// Tweens the dissolve shader effect (see Custom/PieceLitRimGlow.shader) from its current
+        /// value to targetAmount over duration seconds — 0 is fully intact, 1 is fully dissolved
+        /// away. Used to blend a dissolve pass on top of the existing PromotionMorph squash tween.
+        /// </summary>
+        void DissolveTo(float targetAmount, float duration, System.Action onComplete = null);
+
+        /// <summary>
+        /// Instantly sets the dissolve amount with no tween — used to snap a freshly-spawned piece
+        /// to fully-dissolved before its reform tween plays.
+        /// </summary>
+        void SetDissolveImmediate(float amount);
+
+        /// <summary>
+        /// Briefly flashes the rim glow in the given color and back off, cycles times — used for
+        /// the king's "you are now in check" threat pulse on a Forced Save. Independent of
+        /// SetHighlighted's persistent Betrayer glow (this restores whatever glow state was active
+        /// before the flash once it finishes).
+        /// </summary>
+        void FlashGlow(Color color, float intensity, float flashDuration, int cycles);
 
         /// <summary>
         /// Plays the "vanish" half of a piece-swap transition (promotion or defection) on the

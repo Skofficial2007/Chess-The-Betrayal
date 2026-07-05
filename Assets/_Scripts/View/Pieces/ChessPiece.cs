@@ -108,6 +108,34 @@ namespace ChessTheBetrayal.UI
         }
 
         /// <summary>
+        /// Tweens the dissolve shader effect toward targetAmount (0 = intact, 1 = fully dissolved)
+        /// over duration seconds, layered on top of whatever transform tween is already playing —
+        /// used to blend dissolve into promotion's existing Squash morph.
+        /// </summary>
+        public void DissolveTo(float targetAmount, float duration, Action onComplete = null)
+        {
+            _animator.DissolveTo(targetAmount, duration, onComplete);
+        }
+
+        /// <summary>
+        /// Instantly snaps the dissolve amount with no tween — used to spawn the promoted piece
+        /// already fully dissolved, right before its reform tween plays.
+        /// </summary>
+        public void SetDissolveImmediate(float amount)
+        {
+            _animator.SetDissolveImmediate(amount);
+        }
+
+        /// <summary>
+        /// Briefly flashes the rim glow (e.g. red) and restores whatever glow state was active
+        /// beforehand — used for the king's threat pulse when a Forced Save activates.
+        /// </summary>
+        public void FlashGlow(Color color, float intensity, float flashDuration, int cycles)
+        {
+            _animator.FlashGlow(color, intensity, flashDuration, cycles);
+        }
+
+        /// <summary>
         /// Plays the "vanish" half of a promotion/defection swap, then invokes onComplete — the
         /// moment BoardVisuals should Destroy this GameObject and spawn its replacement. The
         /// callback may fire on a later frame (it's driven by a tween), so callers must not assume

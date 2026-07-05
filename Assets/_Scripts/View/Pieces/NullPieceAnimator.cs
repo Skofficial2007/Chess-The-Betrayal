@@ -35,6 +35,14 @@ namespace ChessTheBetrayal.UI
         // No visual highlight in a headless context — nothing reads it, so there's nothing to do.
         public void SetHighlighted(bool active) { }
 
+        // No shader/renderer to drive here, but onComplete must still fire synchronously — same
+        // rationale as PlayTransitionOut below.
+        public void DissolveTo(float targetAmount, float duration, Action onComplete = null) => onComplete?.Invoke();
+
+        public void SetDissolveImmediate(float amount) { }
+
+        public void FlashGlow(Color color, float intensity, float flashDuration, int cycles) { }
+
         // There's no tween to play, but onComplete must still fire — and fire synchronously, since
         // BoardVisuals relies on it to know the instant it should Destroy the outgoing piece and
         // spawn its replacement. Skipping the callback here would leave promotion/defection stuck
