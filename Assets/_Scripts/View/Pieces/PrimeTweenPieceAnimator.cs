@@ -74,8 +74,16 @@ namespace ChessTheBetrayal.UI
         private const float DefaultLiftHeight = 0.3f;
         private static readonly Dictionary<ChessPieceType, float> LiftHeightByType = new Dictionary<ChessPieceType, float>();
 
-        private static readonly Color BetrayerGlowColor = Color.red * 2f;
-        private static readonly int EmissionColorId = Shader.PropertyToID("_EmissionColor");
+        // Betrayer denoter: a fresnel-driven rim glow (see Custom/PieceLitRimGlow.shader) rather
+        // than a flat _EmissionColor add. Plain additive emission competes with each piece's own
+        // lit albedo — the same red reads as washed-out pink on the bright piece and a
+        // detail-erasing flat red on the dark one. The rim shader instead adds glow only at
+        // grazing/silhouette angles, on top of full normal PBR shading, so intensity reads the same
+        // regardless of the piece's baked color and the sculpted mesh detail stays visible.
+        private static readonly Color BetrayerGlowColor = Color.red;
+        private const float BetrayerGlowIntensity = 1.5f;
+        private static readonly int RimGlowColorId = Shader.PropertyToID("_RimGlowColor");
+        private static readonly int RimGlowIntensityId = Shader.PropertyToID("_RimGlowIntensity");
 
         private readonly Transform _transform;
         private readonly Renderer _renderer;
@@ -220,7 +228,8 @@ namespace ChessTheBetrayal.UI
             // material.color — keeps batching intact for the whole board.
             _mpb ??= new MaterialPropertyBlock();
             _renderer.GetPropertyBlock(_mpb);
-            _mpb.SetColor(EmissionColorId, active ? BetrayerGlowColor : Color.black);
+            _mpb.SetColor(RimGlowColorId, BetrayerGlowColor);
+            _mpb.SetFloat(RimGlowIntensityId, active ? BetrayerGlowIntensity : 0f);
             _renderer.SetPropertyBlock(_mpb);
         }
 
