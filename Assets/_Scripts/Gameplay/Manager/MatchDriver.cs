@@ -153,8 +153,13 @@ namespace ChessTheBetrayal.Gameplay
                 // logged once Retribution/Defection completes the turn, below.
                 MoveLog.Record(move, _betrayalSequenceMoveNumber, GameState.Normal);
 
-                _betrayalChannel?.Raise(new ChessTheBetrayal.Events.Payloads.BetrayalPayload(move.PieceTeam, move.EndPosition, ChessTheBetrayal.Events.Payloads.BetrayalPhase.Initiated));
-                _betrayalChannel?.Raise(new ChessTheBetrayal.Events.Payloads.BetrayalPayload(move.PieceTeam, move.EndPosition, ChessTheBetrayal.Events.Payloads.BetrayalPhase.RetributionPending));
+                // result.DidDefect is already known here (Advance resolved the whole sub-sequence
+                // as far as it could before returning) — threading it through as WillDefect lets
+                // BoardVisuals skip glowing a Betrayer that's about to be spun away with no
+                // Retribution choice for the player to make, instead of flashing the glow on then
+                // immediately off.
+                _betrayalChannel?.Raise(new ChessTheBetrayal.Events.Payloads.BetrayalPayload(move.PieceTeam, move.EndPosition, ChessTheBetrayal.Events.Payloads.BetrayalPhase.Initiated, result.DidDefect));
+                _betrayalChannel?.Raise(new ChessTheBetrayal.Events.Payloads.BetrayalPayload(move.PieceTeam, move.EndPosition, ChessTheBetrayal.Events.Payloads.BetrayalPhase.RetributionPending, result.DidDefect));
 
                 // Fire the standard move event so visuals update, but pass isCheck=false
                 // because Edge Case C dictates Discovered Checks on Opponent wait until the sequence resolves.

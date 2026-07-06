@@ -70,6 +70,63 @@ namespace ChessTheBetrayal.UI
         }
 
         /// <summary>
+        /// The rook's half of a castling move — an InOutCubic glide that starts startDelay seconds
+        /// after this call (so BoardVisuals can call this back-to-back with the king's own
+        /// SetPosition and still have the rook visibly trail it), then plays a small settle bob on
+        /// arrival. See PrimeTweenPieceAnimator.MoveToForCastle for the full choreography rationale.
+        /// </summary>
+        public void PlayCastleMove(Vector3 worldPos, float startDelay, Action onSettled = null)
+        {
+            _animator.MoveToForCastle(worldPos, startDelay, onSettled);
+        }
+
+        /// <summary>
+        /// Plays a small settle bob in place — used on the king's side of a castling move so both
+        /// pieces end the maneuver with the same tiny "landed" beat.
+        /// </summary>
+        public void PlaySettleBob()
+        {
+            _animator.PlaySettleBob();
+        }
+
+        /// <summary>
+        /// The attacker's half of a capture: an anticipation-leap-stamp onto worldPos, swelling
+        /// mid-air and clearing the victim's head at the peak. onDescentStart fires the frame the
+        /// downward leg begins, so BoardVisuals can start the victim's cower-shrink
+        /// (PlayStompedDeath) under the falling piece — the crush then lands in sync via shared
+        /// timing constants rather than a second callback. onSettled fires once the whole stamp
+        /// (impact, recover, settle bob) has finished — used to defer any animation that must
+        /// happen strictly AFTER this capture reads as complete (e.g. a queued Betrayal Defection
+        /// spin on this same piece).
+        /// </summary>
+        public void PlayCaptureStamp(Vector3 worldPos, Action onDescentStart = null, Action onSettled = null)
+        {
+            _animator.PlayCaptureStamp(worldPos, onDescentStart, onSettled);
+        }
+
+        /// <summary>
+        /// The victim's half of a capture, started at the attacker's descent: cowers smaller under
+        /// the falling piece, is slammed flat as it lands, then shrinks away. onVanished fires once
+        /// fully collapsed — the moment BoardVisuals should move it to the death pile and restore
+        /// its scale/facing there.
+        /// </summary>
+        public void PlayStompedDeath(Action onVanished)
+        {
+            _animator.PlayStompedDeath(onVanished);
+        }
+
+        /// <summary>
+        /// The en passant victim's death: a hop-and-shrink glide straight to graveyardWorldPos
+        /// (no crush, since the attacker never visually lands on this piece). onArrived fires once
+        /// it's arrived at vanished scale — the moment BoardVisuals should snap it to death-pile
+        /// scale/facing.
+        /// </summary>
+        public void PlayEnPassantDeath(Vector3 graveyardWorldPos, Action onArrived)
+        {
+            _animator.PlayEnPassantDeath(graveyardWorldPos, onArrived);
+        }
+
+        /// <summary>
         /// Sets the target local scale (used for death-pile shrinking and initial spawn sizing).
         /// force = true snaps instantly with no interpolation.
         /// </summary>

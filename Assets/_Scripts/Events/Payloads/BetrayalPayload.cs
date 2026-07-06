@@ -11,11 +11,22 @@ namespace ChessTheBetrayal.Events.Payloads
         public readonly Vector2Int BetrayerPosition;
         public readonly BetrayalPhase Phase;
 
-        public BetrayalPayload(Team team, Vector2Int pos, BetrayalPhase phase)
+        /// <summary>
+        /// True when MatchDriver already knows, at the moment this phase is raised, that no legal
+        /// Retribution move exists and Defection will happen this same Act — i.e. TurnAdvanceResult
+        /// .DidDefect was true before Initiated/RetributionPending were even raised. Lets
+        /// BoardVisuals skip the Betrayer glow entirely on Initiated/RetributionPending when the
+        /// glow would just be immediately spun away with nothing for the player to react to (there
+        /// is no Retribution choice to make), rather than flashing on for one frame and off again.
+        /// </summary>
+        public readonly bool WillDefect;
+
+        public BetrayalPayload(Team team, Vector2Int pos, BetrayalPhase phase, bool willDefect = false)
         {
             InitiatingTeam   = team;
             BetrayerPosition = pos;
             Phase            = phase;
+            WillDefect       = willDefect;
         }
     }
 
