@@ -130,8 +130,10 @@ namespace ChessTheBetrayal.UI
         private static readonly Ease EnPassantDeathHopEase = Ease.OutQuad;
         private static readonly Ease EnPassantDeathScaleEase = Ease.InQuad;
 
+        // The arc's own ease now comes from whatever style called MoveToInternal (BoardMoveEase,
+        // same InOutCubic as every other board move) via ApplyKnightArc's single Tween.Custom
+        // driver — a separate arc-specific ease would fight the "travel = weight" vocabulary.
         private const float KnightArcHeight = 0.35f;
-        private static readonly Ease KnightArcEase = Ease.OutQuad;
 
         // Promotion/defection transition timings: "out" is a quick anticipation beat, "in" is the
         // slightly longer payoff so the swap reads as deliberate rather than a glitch.
@@ -184,15 +186,16 @@ namespace ChessTheBetrayal.UI
         // because the rim is already spoken for as the Betrayer/threat denoter; selection needs
         // its own unambiguous mark. The hull is a runtime child renderer sharing the piece's mesh
         // (one extra draw call, only while something is selected), and only its WIDTH is animated
-        // here — color/width/pulse are authored on the Resources material so they're tunable in
-        // the inspector without touching code. Loaded via Resources so the shader can never be
-        // stripped from device builds and no piece prefab needs editing.
-        private const string SelectionOutlineMaterialPath = "PieceSelectionOutline";
+        // here — color/width/pulse are authored on the material so they're tunable in the inspector
+        // without touching code. Injected via SetSelectionOutlineMaterial (see ChessPiece) rather
+        // than Resources.Load: the material now lives in Assets/Material, not a Resources folder,
+        // and BoardVisuals already owns/serializes every other shared visual asset (tileMaterial,
+        // prefabs) — this keeps the same pattern instead of forcing the .mat back into a
+        // Resources folder just to satisfy a runtime lookup.
         private const float OutlineShowDuration = 0.16f;
         private const float OutlineHideDuration = 0.1f;
         private static readonly int OutlineWidthId = Shader.PropertyToID("_OutlineWidth");
-        private static Material s_selectionOutlineMaterial;
-        private static bool s_selectionOutlineLoadAttempted;
+        private Material _selectionOutlineMaterial;
 
         private MeshRenderer _outlineRenderer;
         private MaterialPropertyBlock _outlineMpb;
@@ -212,12 +215,12 @@ namespace ChessTheBetrayal.UI
         private readonly Func<ChessPieceType> _getType;
 
         private Tween _moveTween;
-        private Tween _arcTween;
         private Sequence _punchSequence;
         private Tween _scaleTween;
         private Sequence _transitionSequence;
         private Sequence _castleSequence;
         private Tween _settleBobTween;
+        private float? _settleBobBaseY;
         private Sequence _stampSequence;
         private MaterialPropertyBlock _mpb;
 
@@ -234,6 +237,16 @@ namespace ChessTheBetrayal.UI
             _transform = transform;
             _renderer = renderer;
             _getType = getType;
+        }
+
+        /// <summary>
+        /// Injects the shared selection outline material — see ChessPiece.SetSelectionOutlineMaterial
+        /// for why this replaced Resources.Load. Safe to call at any time before the piece is first
+        /// selected; the outline renderer is only built lazily on first selection (TryEnsureOutlineRenderer).
+        /// </summary>
+        public void SetSelectionOutlineMaterial(Material material)
+        {
+            _selectionOutlineMaterial = material;
         }
 
         public void MoveTo(Vector3 worldPos, bool force = false)
@@ -270,10 +283,10 @@ namespace ChessTheBetrayal.UI
             }
 
             _moveTween.Stop();
-            _arcTween.Stop();
             _punchSequence.Stop();
             _castleSequence.Stop();
             _settleBobTween.Stop();
+            _settleBobBaseY = null;
             _stampSequence.Stop();
 
             // A caller driving MoveTo directly (a board move, castling, snap-back) means the piece
@@ -299,16 +312,25 @@ namespace ChessTheBetrayal.UI
             // skip it outright rather than let a harmless no-op animation spam the console.
             if (_transform.position == worldPos) return;
 
-            float startY = _transform.position.y;
-            _moveTween = Tween.Position(_transform, worldPos, duration, ease, useUnscaledTime: true);
-
             if (arc)
             {
-                // A knight "hops" rather than slides through occupied squares: an extra Y-only
-                // tween running in parallel with the XZ move, up and back down via a Yoyo cycle so
-                // it reads as a single parabolic arc rather than two separate motions.
-                _arcTween = Tween.PositionY(_transform, startY, startY + KnightArcHeight, duration / 2f, KnightArcEase,
-                    cycles: 2, cycleMode: CycleMode.Yoyo, useUnscaledTime: true);
+                // A knight "hops" rather than slides through occupied squares. Previously this ran
+                // TWO independent tweens in parallel — Tween.Position (below, driving X/Y/Z toward
+                // worldPos) and a second Tween.PositionY arcing up and back down — but both write
+                // transform.position.y every single frame, and nothing guarantees whose write lands
+                // last. Two competing writers on the same axis is exactly what let tiny residual
+                // errors compound move after move, reading as pieces slowly floating higher off the
+                // board over a game. Fixed the same way the capture stamp's leap already is: ONE
+                // driver (ApplyKnightArc) owns the whole position for the whole duration, computing
+                // XZ as a lerp and Y as a straight lerp PLUS a parabolic bump that is mathematically
+                // zero at t=0 and t=1 — so the piece is guaranteed to land exactly on worldPos with
+                // no residual, no matter how many knight moves happen in a row.
+                Vector3 knightStartPos = _transform.position;
+                _moveTween = Tween.Custom(this, 0f, 1f, duration, (self, t) => self.ApplyKnightArc(t, knightStartPos, worldPos), ease, useUnscaledTime: true);
+            }
+            else
+            {
+                _moveTween = Tween.Position(_transform, worldPos, duration, ease, useUnscaledTime: true);
             }
 
             if (punch)
@@ -336,6 +358,7 @@ namespace ChessTheBetrayal.UI
             _moveTween.Stop();
             _castleSequence.Stop();
             _settleBobTween.Stop();
+            _settleBobBaseY = null;
             _stampSequence.Stop();
             StopLiftTweens();
             _liftRestPosition = null;
@@ -360,11 +383,26 @@ namespace ChessTheBetrayal.UI
 
         public void PlaySettleBob()
         {
+            // Restore Y to whatever it was before the PREVIOUS bob started (if one is still
+            // running) rather than reading the live transform, which — mid-Yoyo — could be
+            // sitting anywhere between baseY and baseY + SettleBobHeight. Stop() alone does not
+            // snap a tween back to its start value, so reading position.y right after Stop() used
+            // to pick up that half-finished offset as the new "baseline," and each subsequent call
+            // compounded a fraction of SettleBobHeight — the piece slowly floating higher every
+            // move. Snapping first guarantees every PlaySettleBob starts from the same true rest Y.
+            if (_settleBobBaseY.HasValue)
+            {
+                Vector3 pos = _transform.position;
+                pos.y = _settleBobBaseY.Value;
+                _transform.position = pos;
+            }
             _settleBobTween.Stop();
 
             float baseY = _transform.position.y;
+            _settleBobBaseY = baseY;
             _settleBobTween = Tween.PositionY(_transform, baseY, baseY + SettleBobHeight, SettleBobDuration / 2f,
-                Ease.InOutSine, cycles: 2, cycleMode: CycleMode.Yoyo, useUnscaledTime: true);
+                Ease.InOutSine, cycles: 2, cycleMode: CycleMode.Yoyo, useUnscaledTime: true)
+                .OnComplete(this, self => self._settleBobBaseY = null);
         }
 
         public void PlayCaptureStamp(Vector3 worldPos, Action onDescentStart = null, Action onSettled = null)
@@ -378,10 +416,10 @@ namespace ChessTheBetrayal.UI
             }
 
             _moveTween.Stop();
-            _arcTween.Stop();
             _punchSequence.Stop();
             _castleSequence.Stop();
             _settleBobTween.Stop();
+            _settleBobBaseY = null;
             _stampSequence.Stop();
             StopLiftTweens();
             _liftRestPosition = null;
@@ -466,13 +504,30 @@ namespace ChessTheBetrayal.UI
             _transform.position = new Vector3(x, baseline + peakBump, z);
         }
 
+        /// <summary>
+        /// Places the transform along a knight's hop arc at normalized progress t (0 = start tile,
+        /// 1 = end tile): XZ is a straight lerp, Y is a straight lerp plus a parabolic bump
+        /// (4 * KnightArcHeight * t * (1-t)) that is mathematically zero at t=0 and t=1. One driver
+        /// owning the whole position for the whole move — see MoveToInternal's arc branch for why
+        /// this replaced two separate Position/PositionY tweens racing to write the same axis.
+        /// </summary>
+        private void ApplyKnightArc(float t, Vector3 startPos, Vector3 endPos)
+        {
+            float x = Mathf.Lerp(startPos.x, endPos.x, t);
+            float z = Mathf.Lerp(startPos.z, endPos.z, t);
+            float baseline = Mathf.Lerp(startPos.y, endPos.y, t);
+            float arcBump = 4f * KnightArcHeight * t * (1f - t);
+
+            _transform.position = new Vector3(x, baseline + arcBump, z);
+        }
+
         public void PlayStompedDeath(Action onVanished)
         {
             _moveTween.Stop();
-            _arcTween.Stop();
             _punchSequence.Stop();
             _castleSequence.Stop();
             _settleBobTween.Stop();
+            _settleBobBaseY = null;
             _stampSequence.Stop();
             StopLiftTweens();
             _liftRestPosition = null;
@@ -514,10 +569,10 @@ namespace ChessTheBetrayal.UI
             }
 
             _moveTween.Stop();
-            _arcTween.Stop();
             _punchSequence.Stop();
             _castleSequence.Stop();
             _settleBobTween.Stop();
+            _settleBobBaseY = null;
             _stampSequence.Stop();
             StopLiftTweens();
             _liftRestPosition = null;
@@ -883,8 +938,12 @@ namespace ChessTheBetrayal.UI
             if (_outlineRenderer != null) return true;
             if (_renderer == null) return false;
 
-            Material outlineMaterial = GetSelectionOutlineMaterial();
-            if (outlineMaterial == null) return false;
+            if (_selectionOutlineMaterial == null)
+            {
+                Debug.LogWarning($"[{nameof(PrimeTweenPieceAnimator)}] No selection outline material was " +
+                    "injected (see ChessPiece.SetSelectionOutlineMaterial) — this piece will select without an outline ring.");
+                return false;
+            }
 
             // Inverted hull needs the same mesh to extrude; a piece without a MeshFilter (e.g. a
             // hypothetical skinned piece) just doesn't get a ring rather than erroring.
@@ -898,7 +957,7 @@ namespace ChessTheBetrayal.UI
             outlineFilter.sharedMesh = sourceFilter.sharedMesh;
 
             _outlineRenderer = outlineObject.AddComponent<MeshRenderer>();
-            _outlineRenderer.sharedMaterial = outlineMaterial;
+            _outlineRenderer.sharedMaterial = _selectionOutlineMaterial;
             // The hull is a pure view-space marker: it must never darken the board with a second
             // shadow of the piece, and it samples no lighting, so skip every lighting system.
             _outlineRenderer.shadowCastingMode = ShadowCastingMode.Off;
@@ -910,7 +969,7 @@ namespace ChessTheBetrayal.UI
             // The target width is authored on the material (designer-tunable), read once here;
             // the per-frame animated value goes through a MaterialPropertyBlock so the shared
             // material asset itself is never mutated at runtime.
-            _outlineTargetWidth = outlineMaterial.GetFloat(OutlineWidthId);
+            _outlineTargetWidth = _selectionOutlineMaterial.GetFloat(OutlineWidthId);
             ApplyOutlineWidth(0f);
             return true;
         }
@@ -924,21 +983,6 @@ namespace ChessTheBetrayal.UI
             _outlineRenderer.GetPropertyBlock(_outlineMpb);
             _outlineMpb.SetFloat(OutlineWidthId, width);
             _outlineRenderer.SetPropertyBlock(_outlineMpb);
-        }
-
-        private static Material GetSelectionOutlineMaterial()
-        {
-            if (s_selectionOutlineMaterial != null) return s_selectionOutlineMaterial;
-            if (s_selectionOutlineLoadAttempted) return null;
-
-            s_selectionOutlineLoadAttempted = true;
-            s_selectionOutlineMaterial = Resources.Load<Material>(SelectionOutlineMaterialPath);
-            if (s_selectionOutlineMaterial == null)
-            {
-                Debug.LogWarning($"[{nameof(PrimeTweenPieceAnimator)}] Selection outline material " +
-                    $"'Resources/{SelectionOutlineMaterialPath}.mat' not found — pieces will select without an outline ring.");
-            }
-            return s_selectionOutlineMaterial;
         }
 
         /// <summary>

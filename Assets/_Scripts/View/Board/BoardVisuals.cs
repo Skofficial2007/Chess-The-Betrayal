@@ -20,6 +20,8 @@ namespace ChessTheBetrayal.UI
 
         [Header("Board Geometry")]
         [SerializeField] private Material tileMaterial;
+        [Tooltip("Shared inverted-hull outline material (Custom/PieceSelectionOutline.shader) applied to every piece's selection ring. Injected at spawn instead of loaded via Resources.Load.")]
+        [SerializeField] private Material selectionOutlineMaterial;
         [SerializeField, Range(0.1f, 4f)] private float tileSize = 1f; // Set to 1.5f
         [SerializeField] private float tilesYOffset = 0.0f; // Set to 0.3f
         [SerializeField] private Vector3 boardCenter = Vector3.zero; // Set to (0, 4, 0)
@@ -153,6 +155,7 @@ namespace ChessTheBetrayal.UI
         private void ValidateRequiredFields()
         {
             InspectorGuard.Require(tileMaterial, nameof(tileMaterial), this);
+            InspectorGuard.Require(selectionOutlineMaterial, nameof(selectionOutlineMaterial), this);
             InspectorGuard.Require(_sharedBoardState, nameof(_sharedBoardState), this);
             InspectorGuard.Require(_gameStartedChannel, nameof(_gameStartedChannel), this);
             InspectorGuard.Require(_gameResetChannel, nameof(_gameResetChannel), this);
@@ -416,6 +419,7 @@ namespace ChessTheBetrayal.UI
             }
             visualPiece.team = data.Team;
             visualPiece.type = data.Type;
+            visualPiece.SetSelectionOutlineMaterial(selectionOutlineMaterial);
 
             // Store in lookup
             _piecesByPosition[pos] = visualPiece;

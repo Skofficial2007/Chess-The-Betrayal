@@ -3395,6 +3395,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ChessTheMasterPiece.View.BoardVisuals
   tileMaterial: {fileID: 2100000, guid: 6c937ed00be0fa34296014f684e72017, type: 2}
+  selectionOutlineMaterial: {fileID: 2100000, guid: 5b0c3e4d1f60718293a4b5c6d7e8f901, type: 2}
   tileSize: 1.5
   tilesYOffset: 0.3
   boardCenter: {x: 0, y: 4, z: 0}
