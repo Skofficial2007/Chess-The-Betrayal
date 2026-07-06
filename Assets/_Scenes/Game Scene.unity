@@ -3413,7 +3413,7 @@ MonoBehaviour:
   - {fileID: 8008001567241584016, guid: 1d2a3b0b6052ad446ae577d8f5a58aed, type: 3}
   - {fileID: 8008001567241584016, guid: 99008777202584e4290e42c3f6765cd7, type: 3}
   pieceYOffset: 0.2
-  pieceScaleMultiplier: 1
+  pieceScaleMultiplier: 0.9
   deathSize: 0.5
   deathSpacing: 1.25
   moveIndicatorRadiusRatio: 0.48
@@ -11602,7 +11602,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4cdbe3d4b9c95614cbf6c864892fca04, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Infrastructure.Bootstrap
   materialsToPrewarm:
   - {fileID: 2100000, guid: 4e35bd112af04883b4ae0455e9c58652, type: 2}

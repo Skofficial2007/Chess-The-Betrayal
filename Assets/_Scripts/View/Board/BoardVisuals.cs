@@ -30,7 +30,7 @@ namespace ChessTheBetrayal.UI
 
         [Header("Piece Visuals")]
         [SerializeField] private float pieceYOffset = 0.05f; // Set to 0.2f
-        [SerializeField] private float pieceScaleMultiplier = 1f;
+        [SerializeField] private float pieceScaleMultiplier = 0.9f;
         [SerializeField] private float deathSize = 0.45f; // Set to 0.5f
         [SerializeField] private float deathSpacing = 0.35f; // Set to 1.25f
 
@@ -61,6 +61,35 @@ namespace ChessTheBetrayal.UI
 
         // Maps logical grid coordinates to visual GameObjects
         private Dictionary<Vector2Int, ChessPiece> _piecesByPosition = new Dictionary<Vector2Int, ChessPiece>();
+
+        // Tracks a capture-stamp victim whose death is still waiting on the ATTACKER's
+        // onDescentStart callback (see AnimateMove) — keyed by the attacker, since the attacker is
+        // what a same-frame Betrayal Defection can destroy mid-leap (SwapPieceTeam spins and
+        // destroys the Betrayer immediately after its own Act-stage capture stamp starts, before
+        // the leap ever reaches its fall phase). Without this, the victim was already removed from
+        // _piecesByPosition but never told to animate anywhere — visually stuck on the board,
+        // overlapping the Betrayer's old square, forever. FlushPendingStampVictim (called from
+        // SwapPieceTeam and anywhere else that can destroy an attacker mid-stamp) is the safety net:
+        // if the attacker never delivers its callback, send the victim to the graveyard directly.
+        private readonly Dictionary<ChessPiece, ChessPiece> _pendingStampVictimByAttacker = new Dictionary<ChessPiece, ChessPiece>();
+
+        // Tracks a piece whose Defection spin (SwapPieceTeam) must wait for its OWN Act-stage
+        // capture stamp to finish playing first — MatchDriver resolves the whole Retribution ->
+        // Defection sub-sequence synchronously in one PlayMove call when no legal Retribution move
+        // exists, so DefectionOccurred can arrive in the very same frame the capture stamp starts.
+        // Spinning/destroying the Betrayer immediately would cut its own stamp off mid-leap (the
+        // bug _pendingStampVictimByAttacker's flush guards against) AND visually skip straight from
+        // "piece captured something" to "piece spins away" with no beat in between. Queuing the
+        // pending team-swap here and firing it from the stamp's own completion (see AnimateMove)
+        // instead makes the two animations play out one after another, in order.
+        private readonly Dictionary<ChessPiece, Vector2Int> _pendingDefectionByAttacker = new Dictionary<ChessPiece, Vector2Int>();
+
+        // Set the instant a Betrayal Act's Initiated phase arrives already knowing (via
+        // BetrayalPayload.WillDefect) that no Retribution move exists — read by AnimateMove's Act
+        // branch so it can skip glowing the Betrayer entirely. There's no Retribution choice for
+        // the player to make in that case, so the glow would only flash on for a moment before the
+        // piece immediately spins away — worse than not glowing at all.
+        private bool _actWillDefect;
 
         // Tile meshes and lookup for raycasting
         private GameObject[,] tiles;
@@ -466,7 +495,14 @@ namespace ChessTheBetrayal.UI
             // Safety check for invalid commands
             if (move.PieceType == ChessPieceType.None) return;
 
-            // 1. Handle Captures
+            // 1. Handle Captures. A direct capture (attacker lands ON the victim's tile) plays the
+            // full cartoon "stamp": the attacker lunges in and stomps, the victim gets crushed flat
+            // at the exact instant of impact. En passant is captured on a DIFFERENT square than the
+            // attacker's landing tile — there's no piece-on-piece contact to stomp, so it keeps the
+            // plain squash-and-shrink death instead of a lunge onto empty air.
+            bool isDirectCaptureStamp = move.IsCapture && !move.IsEnPassant;
+            ChessPiece stampVictim = null;
+
             if (move.IsCapture)
             {
                 Vector2Int capturePos = move.IsEnPassant && move.EnPassantCapturePosition.HasValue
@@ -476,7 +512,18 @@ namespace ChessTheBetrayal.UI
                 if (_piecesByPosition.TryGetValue(capturePos, out ChessPiece deadPiece))
                 {
                     _piecesByPosition.Remove(capturePos);
-                    AnimateDeath(deadPiece);
+
+                    if (isDirectCaptureStamp)
+                    {
+                        // Deferred to the attacker's onImpact below (see step 2) so the victim's
+                        // squash lands on the exact same frame the attacker's lunge does, rather
+                        // than starting immediately and running out of sync with the stomp.
+                        stampVictim = deadPiece;
+                    }
+                    else
+                    {
+                        AnimateDeath(deadPiece);
+                    }
                 }
             }
 
@@ -519,6 +566,77 @@ namespace ChessTheBetrayal.UI
                         promoted?.PlayTransitionIn(PieceTransitionStyle.PromotionMorph);
                     });
                 }
+                else if (move.IsCastling)
+                {
+                    // Castling's king-side of the choreography: lead the rook by starting at
+                    // delay 0, on the same PlayCastleMove path (rather than the plain
+                    // SetPosition/Quiet used by every other non-capture move) so the king ends
+                    // with the identical tiny settle bob the rook plays once IT arrives below —
+                    // "two pieces settling into place together," not a simultaneous teleport with
+                    // an uncoordinated landing.
+                    _piecesByPosition[move.EndPosition] = movingPiece;
+
+                    Vector3 kingTargetPos = GetTileCenter(move.EndPosition.x, move.EndPosition.y);
+                    kingTargetPos.y += pieceYOffset;
+                    movingPiece.PlayCastleMove(kingTargetPos, startDelay: 0f);
+                }
+                else if (isDirectCaptureStamp)
+                {
+                    // The stamp: attacker leaps above the victim's tile and stomps down onto it.
+                    // onDescentStart fires the frame the attacker begins dropping — the victim
+                    // starts cowering/shrinking under it right then (see PlayStompedDeath), so the
+                    // two pieces never overlap at full size and the crush lands in sync with the
+                    // attacker's touchdown. Driving both animators off this one shared beat keeps
+                    // them visually synced without either needing to know the other exists.
+                    _piecesByPosition[move.EndPosition] = movingPiece;
+
+                    Vector3 stampTargetPos = GetTileCenter(move.EndPosition.x, move.EndPosition.y);
+                    stampTargetPos.y += pieceYOffset;
+
+                    ChessPiece victimForClosure = stampVictim;
+                    ChessPiece attackerForClosure = movingPiece;
+
+                    // Registered BEFORE the stamp starts so SwapPieceTeam knows to QUEUE (rather
+                    // than immediately play) a Defection spin on this same piece if one arrives
+                    // before the stamp finishes — see _pendingStampVictimByAttacker's field doc.
+                    if (victimForClosure != null)
+                    {
+                        _pendingStampVictimByAttacker[attackerForClosure] = victimForClosure;
+                    }
+
+                    movingPiece.PlayCaptureStamp(
+                        stampTargetPos,
+                        onDescentStart: () =>
+                        {
+                            if (victimForClosure == null) return;
+                            victimForClosure.PlayStompedDeath(() => SendToGraveyard(victimForClosure));
+                        },
+                        onSettled: () =>
+                        {
+                            // The attacker's whole capture animation has now fully finished. Only
+                            // NOW is it safe to un-register and play a Defection spin that arrived
+                            // for this same piece mid-stamp (see SwapPieceTeam/
+                            // _pendingDefectionByAttacker) — "capture finishes, then Defection
+                            // plays," never the two overlapping.
+                            _pendingStampVictimByAttacker.Remove(attackerForClosure);
+
+                            if (attackerForClosure != null &&
+                                _pendingDefectionByAttacker.TryGetValue(attackerForClosure, out Vector2Int defectionPos))
+                            {
+                                _pendingDefectionByAttacker.Remove(attackerForClosure);
+                                SwapPieceTeamNow(attackerForClosure, defectionPos);
+                            }
+                        });
+
+                    // Skip the glow entirely when Defection is already locked in for this Act (see
+                    // _actWillDefect's doc comment) — there's no Retribution choice to present, so
+                    // glowing would just flash on for a beat before the piece spins away moments
+                    // later once the stamp above finishes.
+                    if (move.Stage == BetrayalStage.Act && !_actWillDefect)
+                    {
+                        movingPiece.SetBetrayerGlow(true);
+                    }
+                }
                 else
                 {
                     // Standard move: update dictionary and slide piece
@@ -535,15 +653,28 @@ namespace ChessTheBetrayal.UI
                     // A Betrayal Act's MoveExecutedPayload arrives after MatchDriver has already
                     // raised Initiated/RetributionPending on the BetrayalEventChannel, so the piece
                     // is still keyed at StartPosition when that handler runs. Glow it here instead,
-                    // once it's guaranteed to be at EndPosition.
-                    if (move.Stage == BetrayalStage.Act)
+                    // once it's guaranteed to be at EndPosition — unless Defection is already
+                    // locked in for this Act (see _actWillDefect's doc comment), in which case
+                    // there's no Retribution choice to present and the glow would just flash on
+                    // for a beat before SwapPieceTeam spins the piece away.
+                    if (move.Stage == BetrayalStage.Act && !_actWillDefect)
                     {
                         movingPiece.SetBetrayerGlow(true);
                     }
                 }
             }
+            else if (stampVictim != null)
+            {
+                // Defensive: the attacker wasn't found at StartPosition (shouldn't happen in normal
+                // play) but a victim was already pulled off the board above — don't leave it stuck
+                // invisible-but-alive in the dictionary. Falls back to the plain death animation
+                // since there's no attacker to synchronize a stomp with.
+                AnimateDeath(stampVictim);
+            }
 
-            // 3. Handle Castling (move the Rook)
+            // 3. Handle Castling (move the Rook) — starts CastleRookStartDelay seconds after the
+            // king (see PrimeTweenPieceAnimator.MoveToForCastle) so the king visibly leads and the
+            // rook tucks in right behind it, rather than both pieces sliding in lockstep.
             if (move.IsCastling && move.RookStartPosition.HasValue && move.RookEndPosition.HasValue)
             {
                 if (_piecesByPosition.TryGetValue(move.RookStartPosition.Value, out ChessPiece rook))
@@ -553,19 +684,44 @@ namespace ChessTheBetrayal.UI
 
                     Vector3 rookPos = GetTileCenter(move.RookEndPosition.Value.x, move.RookEndPosition.Value.y);
                     rookPos.y += pieceYOffset;
-                    rook.SetPosition(rookPos, MoveStyle.Quiet);
+                    rook.PlayCastleMove(rookPos, PrimeTweenPieceAnimator.CastleRookStartDelay);
                 }
             }
         }
 
         /// <summary>
-        /// Animates a captured piece moving to the death pile.
+        /// Animates a captured piece moving to the death pile. Used for en passant (and the
+        /// defensive fallback below) — the attacker never visually lands on this victim's square,
+        /// so there's no impact beat to crush against. Instead the victim plays its own hop-and-
+        /// shrink glide (PlayEnPassantDeath) straight to its reserved graveyard slot, then snaps to
+        /// death-pile scale/facing on arrival. Direct captures use PlayStompedDeath -> SendToGraveyard
+        /// instead (see AnimateMove), which crushes the piece flat in place first.
         /// </summary>
         private void AnimateDeath(ChessPiece victim)
         {
             victim.DisableCollider();
             victim.SetBetrayerGlow(false);
 
+            (Vector3 deathPos, Vector3 lookDir) = ReserveGraveyardSlot(victim);
+
+            victim.PlayEnPassantDeath(deathPos, onArrived: () =>
+            {
+                if (victim == null) return;
+                victim.SetScale(Vector3.one * deathSize, force: true);
+                victim.FaceDirection(lookDir);
+            });
+        }
+
+        /// <summary>
+        /// Claims the next open slot in victim's team's graveyard stack (adding it to the list, so
+        /// the slot is permanently reserved the instant this is called) and returns its world
+        /// position plus the look direction a piece should face once it's there. Pure bookkeeping —
+        /// no visual mutation — so callers can compute WHERE a piece is headed before it starts
+        /// animating toward the graveyard (PlayEnPassantDeath glides there) as well as after
+        /// (SendToGraveyard teleports there once a stomp has already finished on the board).
+        /// </summary>
+        private (Vector3 position, Vector3 lookDir) ReserveGraveyardSlot(ChessPiece victim)
+        {
             List<ChessPiece> graveyard = victim.team == Team.White ? deadWhitePieces : deadBlackPieces;
             graveyard.Add(victim);
 
@@ -596,9 +752,30 @@ namespace ChessTheBetrayal.UI
             Vector3 lookDir = (boardCenterPos - deathPos).normalized;
             lookDir.y = 0;
 
-            // Apply visual changes
-            victim.SetScale(Vector3.one * deathSize);
-            victim.SetPosition(deathPos);
+            return (deathPos, lookDir);
+        }
+
+        /// <summary>
+        /// Places an already-vanished victim at its team's death pile: turns off its
+        /// collider/glow, reserves the next open graveyard slot, and snaps position/facing/scale
+        /// there instantly. Used once a capture "stamp" (PlayStompedDeath) has already finished
+        /// collapsing the piece on the board — the graveyard placement itself is still a teleport,
+        /// but it happens AFTER the crush animation, not instead of it. En passant's death instead
+        /// travels to its slot directly (see AnimateMove/PlayEnPassantDeath) since there's no
+        /// on-board crush to finish first.
+        /// </summary>
+        private void SendToGraveyard(ChessPiece victim)
+        {
+            victim.DisableCollider();
+            victim.SetBetrayerGlow(false);
+
+            (Vector3 deathPos, Vector3 lookDir) = ReserveGraveyardSlot(victim);
+
+            // The stomp already shrank the victim to VanishedScale on the board; restore its
+            // death-pile size here so it reads as a normal (if small) captured piece in the
+            // graveyard rather than staying pinned at the stamp's near-zero scale.
+            victim.SetScale(Vector3.one * deathSize, force: true);
+            victim.SetPosition(deathPos, force: true);
             victim.FaceDirection(lookDir);
         }
 
@@ -689,17 +866,29 @@ namespace ChessTheBetrayal.UI
 
         /// <summary>
         /// Reacts to Betrayal phase transitions: glows the Betrayer while Retribution is
-        /// pending, and swaps its prefab to the opposing team the moment Defection occurs.
+        /// genuinely pending, and swaps its prefab to the opposing team the moment Defection
+        /// occurs — deferred until any in-flight capture stamp on that piece finishes first (see
+        /// SwapPieceTeam).
         /// </summary>
         public void HandleBetrayalPhaseChanged(ChessTheBetrayal.Events.Payloads.BetrayalPayload payload)
         {
             switch (payload.Phase)
             {
                 case ChessTheBetrayal.Events.Payloads.BetrayalPhase.Initiated:
+                    // Cached for AnimateMove's Act branch, which runs moments later off the
+                    // MoveExecutedPayload MatchDriver raises right after this: if Defection is
+                    // already locked in (no legal Retribution move exists), skip the Betrayer glow
+                    // entirely — there's no Retribution choice for the player to make, so the glow
+                    // would only flash on for a beat before the piece spins away, which reads as a
+                    // glitch rather than a deliberate cue.
+                    _actWillDefect = payload.WillDefect;
+                    break;
+
                 case ChessTheBetrayal.Events.Payloads.BetrayalPhase.RetributionPending:
-                    // The Betrayer's glow is applied by AnimateMove instead: these two phases are
-                    // raised by MatchDriver before the corresponding MoveExecutedPayload, so the
-                    // piece is still keyed at its start square in _piecesByPosition at this point.
+                    // The Betrayer's glow (when it happens at all) is applied by AnimateMove
+                    // instead: this phase is raised by MatchDriver before the corresponding
+                    // MoveExecutedPayload, so the piece is still keyed at its start square in
+                    // _piecesByPosition at this point.
                     break;
 
                 case ChessTheBetrayal.Events.Payloads.BetrayalPhase.Resolved:
@@ -728,11 +917,37 @@ namespace ChessTheBetrayal.UI
         /// uses for promotion. Routing the new GameObject through SpawnSinglePiece also sets its
         /// ChessPiece.team correctly, which is what keeps later graveyard routing accurate for
         /// pieces that defected.
+        ///
+        /// When no legal Retribution move exists, MatchDriver resolves Act -> Defection
+        /// synchronously in one call, so this can be reached in the SAME FRAME the piece's own
+        /// capture stamp just started — i.e. before that piece has finished playing "I just
+        /// captured something." Rather than yanking the stamp mid-leap (which used to cut the
+        /// animation off and, worse, silently strand the victim on the board), the spin is queued
+        /// in _pendingDefectionByAttacker and fired from the stamp's own completion callback in
+        /// AnimateMove instead — so the two animations always play in order: capture finishes,
+        /// THEN the Defection spin begins.
         /// </summary>
         private void SwapPieceTeam(Vector2Int pos)
         {
             if (!_piecesByPosition.TryGetValue(pos, out ChessPiece piece)) return;
 
+            if (_pendingStampVictimByAttacker.ContainsKey(piece))
+            {
+                _pendingDefectionByAttacker[piece] = pos;
+                return;
+            }
+
+            SwapPieceTeamNow(piece, pos);
+        }
+
+        /// <summary>
+        /// The actual spin-and-swap, split out from SwapPieceTeam so AnimateMove's stamp completion
+        /// can invoke it directly once a queued Defection's capture animation has finished (see
+        /// _pendingDefectionByAttacker's doc comment) without re-running the "is this piece mid-stamp"
+        /// check that already applies here.
+        /// </summary>
+        private void SwapPieceTeamNow(ChessPiece piece, Vector2Int pos)
+        {
             Team newTeam = piece.team == Team.White ? Team.Black : Team.White;
             PieceData flipped = new PieceData(
                 team: newTeam,

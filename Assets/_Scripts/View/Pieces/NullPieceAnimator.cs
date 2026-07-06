@@ -27,6 +27,35 @@ namespace ChessTheBetrayal.UI
 
         public void MoveTo(Vector3 worldPos, MoveStyle style, bool force = false) => _transform.position = worldPos;
 
+        // Headless/AI play has no notion of a staggered choreography — the rook just arrives, and
+        // onSettled must still fire synchronously so BoardVisuals' castling logic (if it ever
+        // waits on it) doesn't stall forever.
+        public void MoveToForCastle(Vector3 worldPos, float startDelay, Action onSettled = null)
+        {
+            _transform.position = worldPos;
+            onSettled?.Invoke();
+        }
+
+        public void PlaySettleBob() { }
+
+        // No stomp to play headlessly — just arrive and fire both callbacks synchronously so
+        // BoardVisuals' capture logic (which drives the victim's PlayStompedDeath and any queued
+        // Defection spin off these) doesn't stall waiting on a tween that will never exist here.
+        public void PlayCaptureStamp(Vector3 worldPos, Action onDescentStart = null, Action onSettled = null)
+        {
+            _transform.position = worldPos;
+            onDescentStart?.Invoke();
+            onSettled?.Invoke();
+        }
+
+        public void PlayStompedDeath(Action onVanished) => onVanished?.Invoke();
+
+        public void PlayEnPassantDeath(Vector3 graveyardWorldPos, Action onArrived)
+        {
+            _transform.position = graveyardWorldPos;
+            onArrived?.Invoke();
+        }
+
         public void ScaleTo(Vector3 scale, bool force = false) => _transform.localScale = scale;
 
         public void FaceDirection(Vector3 lookDirection) =>
