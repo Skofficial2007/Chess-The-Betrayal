@@ -50,6 +50,23 @@ namespace ChessTheBetrayal.UI
         }
 
         /// <summary>
+        /// Injects the shared selection outline material (see Custom/PieceSelectionOutline.shader)
+        /// that PrimeTweenPieceAnimator lazily builds a child renderer from the first time this
+        /// piece is selected. Called by BoardVisuals right after spawning — the material now lives
+        /// as a normal serialized reference on BoardVisuals (alongside tileMaterial and the piece
+        /// prefabs) rather than being looked up via Resources.Load, since it was moved out of a
+        /// Resources folder into Assets/Material. A no-op for any other IPieceAnimator (e.g.
+        /// NullPieceAnimator in headless/AI play, which never builds an outline at all).
+        /// </summary>
+        public void SetSelectionOutlineMaterial(Material material)
+        {
+            if (_animator is PrimeTweenPieceAnimator tweenAnimator)
+            {
+                tweenAnimator.SetSelectionOutlineMaterial(material);
+            }
+        }
+
+        /// <summary>
         /// Sets the target world position for this piece to slide towards.
         /// force = true snaps instantly with no interpolation (illegal-move revert, promotion
         /// snap-to-square) — anywhere a visible tween would fight with what the player just did.
