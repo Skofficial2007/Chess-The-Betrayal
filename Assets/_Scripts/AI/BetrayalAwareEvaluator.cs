@@ -65,10 +65,7 @@ namespace ChessTheBetrayal.AI
                 PieceData piece = board.GetPiece(x, y);
 
                 total += BaseValue(piece.Type);
-                // PST hook: add PieceSquareBonus(piece, x, y, team) here in the tuning pass.
-                // Left out of v1 to keep the first working agent simple — material + betrayal
-                // option value is enough to get a beating-a-beginner opponent and validate the
-                // Betrayal search paths first.
+                total += PieceSquareTables.Bonus(piece.Type, x, y, team, board.TileCountX, board.TileCountY);
             }
 
             return total;
