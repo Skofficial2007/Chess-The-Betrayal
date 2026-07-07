@@ -8,11 +8,12 @@ using ChessTheBetrayal.Tests.Utilities;
 namespace ChessTheBetrayal.Tests.EditMode.AI
 {
     /// <summary>
-    /// Perft over the exact seam AlphaBetaSearch drives (IChessEngine.GetAllLegalMoves/ApplyMove/
-    /// UndoMove), for a Betrayal-active position. Regression-guards the pending-Retribution
-    /// move-gen "disguise trick" (GetBetrayalTargets/GetRetributionMoves briefly mutate the board
-    /// in place while probing raw moves) — if that trick ever leaks a stray board mutation, the
-    /// node count at a fixed depth changes even though nothing about the position did.
+    /// Perft over the exact seam AlphaBetaSearch drives (IChessEngine.
+    /// GetAllLegalMovesIncludingBetrayal/ApplyMove/UndoMove), for a Betrayal-active position.
+    /// Regression-guards the pending-Retribution move-gen "disguise trick" (GetBetrayalTargets/
+    /// GetRetributionMoves briefly mutate the board in place while probing raw moves) — if that
+    /// trick ever leaks a stray board mutation, the node count at a fixed depth changes even
+    /// though nothing about the position did.
     /// </summary>
     [TestFixture]
     public class SearchPerftTests
@@ -30,7 +31,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             if (depth == 0) return 1;
 
             List<MoveCommand> moves = new List<MoveCommand>();
-            _engine.GetAllLegalMoves(board, board.CurrentTurn, moves);
+            _engine.GetAllLegalMovesIncludingBetrayal(board, board.CurrentTurn, moves);
 
             ulong nodes = 0;
             Team currentTurn = board.CurrentTurn;

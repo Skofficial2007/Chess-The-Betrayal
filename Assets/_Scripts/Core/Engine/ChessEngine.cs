@@ -172,6 +172,45 @@ namespace ChessTheBetrayal.Core.Engine
             }
         }
 
+        /// <summary>
+        /// Same shape as <see cref="GetAllLegalMoves"/>, but calls the public per-position
+        /// GetLegalMoves(board, position, output) overload instead of the private one — the only
+        /// difference being that overload also appends GetBetrayalTargets. See IChessEngine's doc
+        /// comment for why GetAllLegalMoves itself must stay Act-free (GetForcedSaveMoves and
+        /// HasAnyLegalMoves both depend on that) while the AI search needs Act moves visible.
+        /// </summary>
+        public static void GetAllLegalMovesIncludingBetrayal(BoardState board, Team team, List<MoveCommand> masterBuffer)
+        {
+            masterBuffer.Clear();
+
+            if (board.PendingBetrayerSquare.HasValue && board.BetrayalInitiator.HasValue)
+            {
+                PieceData betrayer = board.GetPiece(board.PendingBetrayerSquare.Value);
+
+                if (betrayer.Team == board.BetrayalInitiator.Value)
+                {
+                    GetRetributionMoves(board, team, board.PendingBetrayerSquare.Value, masterBuffer);
+                    return;
+                }
+            }
+
+            if (masterBuffer.Capacity < MaxMovesPerPosition)
+            {
+                masterBuffer.Capacity = MaxMovesPerPosition;
+            }
+
+            int[] indicesSnapshot = SnapshotIndices(board.GetPieceIndices(team), ref _indexScratchBuffer, out int indexCount);
+
+            for (int i = 0; i < indexCount; i++)
+            {
+                int idx = indicesSnapshot[i];
+                Vector2Int pos = new Vector2Int(idx % board.TileCountX, idx / board.TileCountX);
+
+                GetLegalMoves(board, pos, MoveGenBuffer);
+                masterBuffer.AddRange(MoveGenBuffer);
+            }
+        }
+
         public static void GetBetrayalTargets(BoardState board, Vector2Int betrayerPos, List<MoveCommand> output)
         {
             PieceData piece = board.GetPiece(betrayerPos);
