@@ -30,6 +30,11 @@ namespace ChessTheBetrayal.UI
         [SerializeField] private GameObject[] whiteTeamPrefabs;
         [SerializeField] private GameObject[] blackTeamPrefabs;
 
+        [Tooltip("Extra Y-axis rotation (degrees) applied on top of the standard facing for each White prefab index (same Pawn/Rook/Knight/Bishop/Queen/King order as the arrays above). Only needed when a source mesh (e.g. a piece pack's model) wasn't authored facing the same default direction as the rest of the set — leave every entry at 0 unless a specific piece visibly faces the wrong way. Array length may be shorter than the prefab arrays; missing entries default to 0.")]
+        [SerializeField] private float[] whiteMeshFacingCorrectionDegrees = new float[0];
+        [Tooltip("Same as whiteMeshFacingCorrectionDegrees, but for Black prefabs. The Black Knight model in the current piece pack is authored facing a different default direction than its White counterpart, which is why this exists.")]
+        [SerializeField] private float[] blackMeshFacingCorrectionDegrees = { 0f, 0f, 180f, 0f, 0f, 0f };
+
         [Header("Piece Visuals")]
         [SerializeField] private float pieceYOffset = 0.05f; // Set to 0.2f
         [SerializeField] private float pieceScaleMultiplier = 0.9f;
@@ -488,11 +493,18 @@ namespace ChessTheBetrayal.UI
             GameObject go = Instantiate(prefabs[index], worldPos, Quaternion.identity, parent);
             go.transform.localScale = Vector3.one * Mathf.Max(0.0001f, pieceScaleMultiplier);
 
-            // Rotate enemy pieces 180 degrees to face player
-            if (data.MoveDirection == -1)
-            {
-                go.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
-            }
+            // Rotate enemy pieces 180 degrees to face player, plus any per-mesh facing correction
+            // for a specific prefab whose source model wasn't authored facing the same default
+            // direction as the rest of its own team's set (see whiteMeshFacingCorrectionDegrees'
+            // doc comment — currently only the Black Knight needs one). The correction is baked
+            // into this same rotation assignment (not a separate child transform) so every
+            // downstream consumer of this piece's rotation — the defection Spin transition,
+            // castling, the check-shake — sees ONE correct "resting" rotation and never has to know
+            // a correction was ever needed.
+            float facingCorrection = GetMeshFacingCorrectionDegrees(data.Team, index);
+            go.transform.rotation = data.MoveDirection == -1
+                ? Quaternion.Euler(0f, 180f + facingCorrection, 0f)
+                : Quaternion.Euler(0f, facingCorrection, 0f);
 
             // Configure visual component
             ChessPiece visualPiece = go.GetComponent<ChessPiece>();
@@ -522,6 +534,19 @@ namespace ChessTheBetrayal.UI
             }
 
             return visualPiece;
+        }
+
+        /// <summary>
+        /// Looks up the extra Y-axis facing correction (degrees) for a team/prefab-index pair from
+        /// whiteMeshFacingCorrectionDegrees / blackMeshFacingCorrectionDegrees. Returns 0 for any
+        /// index the array doesn't cover, so leaving an array short (or empty, as White's default
+        /// is) is always safe rather than requiring every entry to be explicitly authored.
+        /// </summary>
+        private float GetMeshFacingCorrectionDegrees(Team team, int prefabIndex)
+        {
+            float[] corrections = team == Team.White ? whiteMeshFacingCorrectionDegrees : blackMeshFacingCorrectionDegrees;
+            if (corrections == null || prefabIndex < 0 || prefabIndex >= corrections.Length) return 0f;
+            return corrections[prefabIndex];
         }
 
         /// <summary>
