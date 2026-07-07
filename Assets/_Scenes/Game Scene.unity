@@ -23,7 +23,7 @@ RenderSettings:
   m_AmbientSkyColor: {r: 0.212, g: 0.227, b: 0.259, a: 1}
   m_AmbientEquatorColor: {r: 0.114, g: 0.125, b: 0.133, a: 1}
   m_AmbientGroundColor: {r: 0.047, g: 0.043, b: 0.035, a: 1}
-  m_AmbientIntensity: 1.5
+  m_AmbientIntensity: 0.75
   m_AmbientMode: 0
   m_SubtractiveShadowColor: {r: 0.42, g: 0.478, b: 0.627, a: 1}
   m_SkyboxMaterial: {fileID: 2100000, guid: 7416536dbe0334cfd888dd1beb75a9fb, type: 2}
@@ -849,74 +849,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 176898961}
   serializedVersion: 2
-  m_LocalRotation: {x: -0, y: 0.8290376, z: -0.5591929, w: 0}
-  m_LocalPosition: {x: 0.2, y: 19, z: 7.5}
+  m_LocalRotation: {x: 0, y: 0.8829476, z: -0.4694715, w: 0}
+  m_LocalPosition: {x: 0.2, y: 16, z: 8.5}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 931333779}
-  m_LocalEulerAnglesHint: {x: 68, y: 180, z: 0}
---- !u!1001 &178688236
-PrefabInstance:
-  m_ObjectHideFlags: 0
-  serializedVersion: 2
-  m_Modification:
-    serializedVersion: 3
-    m_TransformParent: {fileID: 608628692}
-    m_Modifications:
-    - target: {fileID: 2945135481426523700, guid: 19e08c4a49894fc43a19828debfc60c7, type: 3}
-      propertyPath: m_LocalPosition.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2945135481426523700, guid: 19e08c4a49894fc43a19828debfc60c7, type: 3}
-      propertyPath: m_LocalPosition.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2945135481426523700, guid: 19e08c4a49894fc43a19828debfc60c7, type: 3}
-      propertyPath: m_LocalPosition.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2945135481426523700, guid: 19e08c4a49894fc43a19828debfc60c7, type: 3}
-      propertyPath: m_LocalRotation.w
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 2945135481426523700, guid: 19e08c4a49894fc43a19828debfc60c7, type: 3}
-      propertyPath: m_LocalRotation.x
-      value: -0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2945135481426523700, guid: 19e08c4a49894fc43a19828debfc60c7, type: 3}
-      propertyPath: m_LocalRotation.y
-      value: -0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2945135481426523700, guid: 19e08c4a49894fc43a19828debfc60c7, type: 3}
-      propertyPath: m_LocalRotation.z
-      value: -0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2945135481426523700, guid: 19e08c4a49894fc43a19828debfc60c7, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2945135481426523700, guid: 19e08c4a49894fc43a19828debfc60c7, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2945135481426523700, guid: 19e08c4a49894fc43a19828debfc60c7, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 5748501013957282082, guid: 19e08c4a49894fc43a19828debfc60c7, type: 3}
-      propertyPath: m_Name
-      value: highPolyWood
-      objectReference: {fileID: 0}
-    - target: {fileID: 5748501013957282082, guid: 19e08c4a49894fc43a19828debfc60c7, type: 3}
-      propertyPath: m_IsActive
-      value: 0
-      objectReference: {fileID: 0}
-    m_RemovedComponents: []
-    m_RemovedGameObjects: []
-    m_AddedGameObjects: []
-    m_AddedComponents: []
-  m_SourcePrefab: {fileID: 100100000, guid: 19e08c4a49894fc43a19828debfc60c7, type: 3}
+  m_LocalEulerAnglesHint: {x: 56, y: 180, z: 0}
 --- !u!1 &199838162
 GameObject:
   m_ObjectHideFlags: 0
@@ -2341,8 +2280,8 @@ Light:
   m_Enabled: 1
   serializedVersion: 12
   m_Type: 1
-  m_Color: {r: 1, g: 1, b: 1, a: 1}
-  m_Intensity: 3
+  m_Color: {r: 1, g: 0.98, b: 0.96, a: 1}
+  m_Intensity: 2
   m_Range: 10
   m_SpotAngle: 30
   m_InnerSpotAngle: 21.80208
@@ -2351,7 +2290,7 @@ Light:
     m_Type: 2
     m_Resolution: -1
     m_CustomResolution: -1
-    m_Strength: 0.4
+    m_Strength: 0.35
     m_Bias: 0.05
     m_NormalBias: 0.4
     m_NearPlane: 0.2
@@ -2587,13 +2526,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 431397999}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.5591929, y: -0, z: -0, w: 0.8290376}
-  m_LocalPosition: {x: -0.2, y: 19, z: -7.5}
+  m_LocalRotation: {x: 0.4694715, y: 0, z: 0, w: 0.8829476}
+  m_LocalPosition: {x: -0.2, y: 16, z: -8.5}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 931333779}
-  m_LocalEulerAnglesHint: {x: 68, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: 56, y: 0, z: 0}
 --- !u!1 &446247926
 GameObject:
   m_ObjectHideFlags: 0
@@ -3376,7 +3315,6 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1088944649}
-  - {fileID: 1578654457}
   - {fileID: 204307616}
   - {fileID: 224791463}
   - {fileID: 1194650739}
@@ -3395,6 +3333,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ChessTheMasterPiece.View.BoardVisuals
   tileMaterial: {fileID: 2100000, guid: 6c937ed00be0fa34296014f684e72017, type: 2}
+  selectionOutlineMaterial: {fileID: 2100000, guid: 5b0c3e4d1f60718293a4b5c6d7e8f901, type: 2}
   tileSize: 1.5
   tilesYOffset: 0.3
   boardCenter: {x: 0, y: 4, z: 0}
@@ -3412,11 +3351,23 @@ MonoBehaviour:
   - {fileID: 8008001567241584016, guid: 38777103c529cc6478c2131aeef3dc9b, type: 3}
   - {fileID: 8008001567241584016, guid: 1d2a3b0b6052ad446ae577d8f5a58aed, type: 3}
   - {fileID: 8008001567241584016, guid: 99008777202584e4290e42c3f6765cd7, type: 3}
+  whiteMeshFacingCorrectionDegrees: []
+  blackMeshFacingCorrectionDegrees:
+  - 0
+  - 0
+  - 180
+  - 0
+  - 0
+  - 0
   pieceYOffset: 0.2
-  pieceScaleMultiplier: 1
+  pieceScaleMultiplier: 0.9
   deathSize: 0.5
   deathSpacing: 1.25
-  selectedLiftHeight: 0.3
+  moveIndicatorRadiusRatio: 0.48
+  moveIndicatorYOffset: 0.01
+  moveIndicatorSegments: 24
+  checkFrameSizeRatio: 0.9
+  checkFrameThicknessRatio: 0.1
   tilesParent: {fileID: 608628692}
   whitePiecesParent: {fileID: 224791463}
   blackPiecesParent: {fileID: 1194650739}
@@ -3425,6 +3376,7 @@ MonoBehaviour:
   _gameResetChannel: {fileID: 11400000, guid: ed78152f3286a5242ae689ab254de072, type: 2}
   _moveExecutedChannel: {fileID: 11400000, guid: 6208cd50b3355dd4e96e80b19dbb45c8, type: 2}
   _moveRejectedChannel: {fileID: 11400000, guid: 1d62eeb867403064d91fb6eaf1db9180, type: 2}
+  _selectionRejectedChannel: {fileID: 11400000, guid: c0609eaec6f91d048932939dba02d3d9, type: 2}
   _promotionRequiredChannel: {fileID: 11400000, guid: 79c9467366ac5eb44acb92c5c3c1253e, type: 2}
   _betrayalChannel: {fileID: 11400000, guid: 1c8afe13a2243ca43b04b34b3581f608, type: 2}
 --- !u!114 &608628703
@@ -5981,7 +5933,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Gameplay.PointerSelectionInput
   raycastMask:
     serializedVersion: 2
-    m_Bits: 448
+    m_Bits: 1984
+  minTimeBetweenActivations: 0.15
   showDebugRays: 1
 --- !u!1 &1093037577
 GameObject:
@@ -6015,6 +5968,7 @@ MonoBehaviour:
   selectionInputBehaviour: {fileID: 1088944650}
   _pieceSelectedChannel: {fileID: 11400000, guid: 845179b56be5f3f46b0241d577dd2ea3, type: 2}
   _selectionClearedChannel: {fileID: 11400000, guid: ae902c5f3aacc724c9c5421642e2bd53, type: 2}
+  _selectionRejectedChannel: {fileID: 11400000, guid: c0609eaec6f91d048932939dba02d3d9, type: 2}
 --- !u!4 &1093037579
 Transform:
   m_ObjectHideFlags: 0
@@ -9129,11 +9083,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1567324134}
   m_CullTransparentMesh: 1
---- !u!4 &1578654457 stripped
-Transform:
-  m_CorrespondingSourceObject: {fileID: 2945135481426523700, guid: 19e08c4a49894fc43a19828debfc60c7, type: 3}
-  m_PrefabInstance: {fileID: 178688236}
-  m_PrefabAsset: {fileID: 0}
 --- !u!1 &1612257541
 GameObject:
   m_ObjectHideFlags: 0
@@ -11474,7 +11423,7 @@ MonoBehaviour:
   _whiteHighlight: {fileID: 481013889}
   _blackHighlight: {fileID: 2032329495}
   _startDelay: 0.5
-  _rouletteDuration: 3
+  _rouletteDuration: 2.5
   _suspensePause: 0.4
   _winnerRevealDuration: 0.8
   _initialToggleSpeed: 0.06
@@ -11602,6 +11551,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4cdbe3d4b9c95614cbf6c864892fca04, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Infrastructure.Bootstrap
+  materialsToPrewarm:
+  - {fileID: 2100000, guid: 4e35bd112af04883b4ae0455e9c58652, type: 2}
 --- !u!1 &1998978608
 GameObject:
   m_ObjectHideFlags: 0

@@ -49,7 +49,7 @@ namespace ChessTheBetrayal.Events.Editor
 
         /// <summary>
         /// Only project-owned scripts are audited — anything outside this namespace (TextMeshPro,
-        /// Unity UI, Cinemachine, DOTween, etc.) has its own unrelated set of optional/lazy fields
+        /// Unity UI, Cinemachine, PrimeTween, etc.) has its own unrelated set of optional/lazy fields
         /// that are null by design and would otherwise drown the report in false positives.
         /// </summary>
         private const string ProjectNamespacePrefix = "ChessTheBetrayal";
@@ -99,7 +99,7 @@ namespace ChessTheBetrayal.Events.Editor
                     if (!isNull) continue;
 
                     // Arrays/lists of Object are audited for emptiness, not per-element nullness —
-                    // BoardVisuals' prefab arrays are the motivating case (Phase 1 flags them as a unit).
+                    // BoardVisuals' prefab arrays are the motivating case.
                     report.NullFields.Add((GetPath(mb.transform), field.Name, mb.gameObject));
                 }
 

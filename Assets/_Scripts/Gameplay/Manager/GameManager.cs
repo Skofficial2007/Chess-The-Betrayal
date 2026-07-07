@@ -48,12 +48,12 @@ namespace ChessTheBetrayal.Gameplay
         [SerializeField] private bool logMoves = true;
 
         [Header("Betrayal Time Bounty (milliseconds)")]
-        [SerializeField] private long _betrayalBountyBulletMs = 3_000L;   // Bullet 1|0: +3s
-        [SerializeField] private long _betrayalBountyBullet2Ms = 5_000L;   // Bullet 2|1: +5s
-        [SerializeField] private long _betrayalBountyBlitzMs = 8_000L;   // Blitz 3|0: +8s
-        [SerializeField] private long _betrayalBountyBlitz5Ms = 12_000L;  // Blitz 5|5: +12s
-        [SerializeField] private long _betrayalBountyRapidMs = 20_000L;  // Rapid 10|0: +20s
-        [SerializeField] private long _betrayalBountyRapid15Ms = 30_000L;  // Rapid 15|10: +30s
+        [SerializeField] private long _betrayalBountyBulletMs = 3_000L;   // Bullet 1|0
+        [SerializeField] private long _betrayalBountyBullet2Ms = 5_000L;   // Bullet 2|1
+        [SerializeField] private long _betrayalBountyBlitzMs = 8_000L;   // Blitz 3|0
+        [SerializeField] private long _betrayalBountyBlitz5Ms = 12_000L;  // Blitz 5|5
+        [SerializeField] private long _betrayalBountyRapidMs = 20_000L;  // Rapid 10|0
+        [SerializeField] private long _betrayalBountyRapid15Ms = 30_000L;  // Rapid 15|10
 
         [Header("Shared State")]
         [SerializeField] private ChessTheBetrayal.Events.SharedBoardStateSO _sharedBoardState;
@@ -169,7 +169,7 @@ namespace ChessTheBetrayal.Gameplay
                 verbose: logMoves,
                 onFatalError: evt =>
                 {
-                    // Reserved: Route fatal domain errors to a UI toast in a future sprint.
+                    // TODO: route fatal domain errors to a UI toast, e.g.
                     // UIManager.Instance?.ShowDomainErrorToast(evt.Code.ToString());
                 });
 
@@ -270,7 +270,8 @@ namespace ChessTheBetrayal.Gameplay
 
         private void Update()
         {
-            // NON-NEGOTIABLE: Logger flush must remain first.
+            // Flush queued domain-log lines before any other per-frame work, so they reach
+            // the console ahead of anything else this frame produces.
             _domainLogger?.FlushToUnityConsole();
 
             // Write the latest clock state to the shared bridge every frame.
@@ -293,9 +294,9 @@ namespace ChessTheBetrayal.Gameplay
         private void OnExecutorMoveRejected(Vector2Int from, Vector2Int to) =>
             _moveRejectedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveRejectedPayload(from, to));
 
-        private void OnExecutorPromotionRequired(Vector2Int from, Vector2Int to)
+        private void OnExecutorPromotionRequired(Vector2Int from, Vector2Int to, bool isCapture)
         {
-            _promotionRequiredChannel?.Raise(new ChessTheBetrayal.Events.Payloads.PromotionRequiredPayload(from, to));
+            _promotionRequiredChannel?.Raise(new ChessTheBetrayal.Events.Payloads.PromotionRequiredPayload(from, to, isCapture));
         }
 
         #endregion
@@ -346,16 +347,18 @@ namespace ChessTheBetrayal.Gameplay
             _moveExecutor.OnPromotionRequired += OnExecutorPromotionRequired;
             _moveExecutor.OnRetributionSkipConfirmed += _matchDriver.RequestRetributionSkip;
 
-            // FIX: Initialize the clock BEFORE transitioning to normal phase.
-            // This ensures TransitionToPhase() successfully calls _clock.Resume() and starts White's timer immediately.
+            // The clock has to exist before TransitionToPhase runs — the phase transition
+            // is what resumes it.
             InitializeClock();
 
-            // FIX: Boot into Starting phase. Clock remains paused until presentation layer signals ready.
+            // Boot into Starting so the clock stays paused until the presentation layer
+            // signals ready (see StartMatch).
             _matchDriver.TransitionToPhase(TurnPhase.Starting);
 
             _gameModeConfiguredChannel?.Raise(_selectedMode);
 
-            // Write the live board reference to the shared bridge BEFORE raising the event.
+            // Populate the shared board bridge before raising the event, so listeners that
+            // read the board from the event callback see the live position and not stale data.
             _sharedBoardState?.Set(LiveBoard);
             _gameStartedChannel?.Raise();
 
@@ -423,6 +426,12 @@ namespace ChessTheBetrayal.Gameplay
         /// </summary>
         private void TearDownCurrentMatch()
         {
+            if (logMoves && LiveBoard != null && !LiveBoard.IsGameOver)
+            {
+                Debug.Log($"[GameManager] Match exited mid-game. Final position:\n{BoardStateDump.ToAscii(LiveBoard)}");
+                Debug.Log($"[GameManager] Move log at exit ({MoveLog.Entries.Count} plies):\n{MoveLog.DumpToString()}");
+            }
+
             LiveBoard.Clear();
             TearDownAIAgent();
 
@@ -496,7 +505,6 @@ namespace ChessTheBetrayal.Gameplay
         /// </summary>
         public void RequestMove(Vector2Int from, Vector2Int to)
         {
-            // --- BETRAYAL MECHANIC FIX ---
             // Allow inputs during standard play, Retribution, and Forced Save phases.
             if ((CurrentPhase != TurnPhase.Normal && CurrentPhase != TurnPhase.RetributionPending && CurrentPhase != TurnPhase.ForcedSave) || LiveBoard.IsGameOver)
             {
@@ -548,7 +556,7 @@ namespace ChessTheBetrayal.Gameplay
         ClockState? IClockSnapshotSource.Current => GetCurrentClockSnapshot();
 
         /// <summary>
-        /// Configures the session for AI participation, enforcing the performance bypass invariant.
+        /// Configures the session for AI play. AI sessions always run untimed (see InitializeClock).
         /// Constructs the background-thread search agent, but does not start a search — nothing
         /// calls TryRequestAIMove() yet, so this is safe to call without changing any current
         /// human-vs-human behavior. Wiring the actual turn-trigger is deliberately deferred until

@@ -215,9 +215,9 @@ namespace ChessTheBetrayal.Core.Data
             ulong savedHash = ZobristHash;
             ComputeFullZobristHash();
             ulong recomputedHash = ZobristHash;
-            
-            // RESTORE — non-negotiable invariant. The hash must be perfectly reverted
-            // after the assertion check to prevent silent transposition table corruption.
+
+            // Put the hash back exactly as it was: leaving the recomputed value in place
+            // would silently corrupt the transposition table.
             ZobristHash = savedHash;
 
             if (savedHash != recomputedHash)
@@ -235,9 +235,8 @@ namespace ChessTheBetrayal.Core.Data
         public PieceData[,] LogicalBoard { get; private set; }
 
         // For faster piece lookups, we maintain separate lists of occupied squares for each team.
-        // The boolean arrays track occupancy for quick checks,
-        // while the index lists allow iteration over pieces without scanning the whole board.
-        // Indices are maintained incrementally in SetPiece for optimal AI search performance.
+        // The boolean arrays track occupancy for quick checks, while the index lists let us
+        // iterate a team's pieces without scanning all 64 squares. SetPiece keeps both in sync.
         private readonly bool[] _whiteOccupied = new bool[64];
         private readonly bool[] _blackOccupied = new bool[64];
         private readonly List<int> _whitePieceIndices = new List<int>(16);
@@ -269,10 +268,14 @@ namespace ChessTheBetrayal.Core.Data
         public List<PieceData> BlackCaptured { get; private set; }
 
         /// <summary>
-        /// Game state flags
+        /// True once the game has ended and no further moves are accepted.
         /// </summary>
         public bool IsGameOver { get; set; }
-        public Team? Winner { get; set; } // null if stalemate
+
+        /// <summary>
+        /// The team that won, or null if the game ended in stalemate.
+        /// </summary>
+        public Team? Winner { get; set; }
 
         /// <summary>
         /// Global, shared, once-per-match resource for the Betrayal mechanic.
@@ -305,7 +308,7 @@ namespace ChessTheBetrayal.Core.Data
 
         /// <summary>
         /// Places a piece on the board at the specified position.
-        /// Maintains piece indices incrementally for optimal AI search performance.
+        /// Also keeps the per-team occupancy lists and the king cache in sync.
         /// </summary>
         public void SetPiece(PieceData piece, int x, int y)
         {
@@ -320,7 +323,7 @@ namespace ChessTheBetrayal.Core.Data
                 if (existing.Team == Team.White)
                 {
                     _whiteOccupied[sq] = false;
-                    _whitePieceIndices.Remove(sq); // O(N) where N ≤ 16
+                    _whitePieceIndices.Remove(sq);
                 }
                 else
                 {
@@ -350,7 +353,7 @@ namespace ChessTheBetrayal.Core.Data
                 if (piece.Team == Team.White)
                 {
                     _whiteOccupied[sq] = true;
-                    _whitePieceIndices.Add(sq); // O(1) amortized
+                    _whitePieceIndices.Add(sq);
                     // Update king cache
                     if (piece.Type == ChessPieceType.King)
                     {
@@ -531,19 +534,20 @@ namespace ChessTheBetrayal.Core.Data
         }
 
         /// <summary>
-        /// Fallback scan included for safety, though it should never trigger in production.
-        /// </summary>  
+        /// Finds the given team's king, checking the cached square first. If the cache is
+        /// stale, it falls back to scanning the team's pieces and repairs the cache.
+        /// </summary>
         public bool TryFindKing(Team team, out Vector2Int kingPos)
         {
             int cachedSquare = team == Team.White ? _whiteKingSquare : _blackKingSquare;
-            
+
             // Fast path: Use cached position
             if (cachedSquare >= 0)
             {
                 int x = cachedSquare % TileCountX;
                 int y = cachedSquare / TileCountX;
                 PieceData piece = LogicalBoard[x, y];
-                
+
                 // Verify cache coherence (should always be true)
                 if (piece.Type == ChessPieceType.King && piece.Team == team)
                 {
@@ -551,7 +555,7 @@ namespace ChessTheBetrayal.Core.Data
                     return true;
                 }
             }
-            
+
             // Fallback: Full scan (cache miss or corruption - should never happen)
             List<int> indices = GetPieceIndices(team);
             for (int i = 0; i < indices.Count; i++)
@@ -575,7 +579,7 @@ namespace ChessTheBetrayal.Core.Data
                     return true;
                 }
             }
-            
+
             kingPos = Vector2Int.Invalid;
             return false;
         }
@@ -629,8 +633,10 @@ namespace ChessTheBetrayal.Core.Data
         }
 
         /// <summary>
-        /// Creates a full deep copy of this board state for save/load, UI, and network snapshots ONLY.
-        /// NEVER call this from an AI search tree or move simulation — use the Make/Unmake architecture in ChessEngine instead to prevent catastrophic heap allocation.
+        /// Creates a full deep copy of this board state for save/load, UI, and network snapshots.
+        /// Don't call this from an AI search or move simulation: a search visits thousands of
+        /// positions per second, and copying the whole board for each one would be far too slow.
+        /// Use ChessEngine's Make/Unmake instead.
         /// </summary>
         public BoardState CloneForSnapshot()
         {
@@ -649,12 +655,11 @@ namespace ChessTheBetrayal.Core.Data
 
             Array.Copy(this.LogicalBoard, clone.LogicalBoard, this.LogicalBoard.Length);
 
-            // Copy the occupancy arrays and piece index lists
+            // Copy the occupancy arrays, piece index lists, and king cache
             Array.Copy(this._whiteOccupied, clone._whiteOccupied, 64);
             Array.Copy(this._blackOccupied, clone._blackOccupied, 64);
             clone._whitePieceIndices.AddRange(this._whitePieceIndices);
             clone._blackPieceIndices.AddRange(this._blackPieceIndices);
-            // PERF-002: Copy king cache
             clone._whiteKingSquare = this._whiteKingSquare;
             clone._blackKingSquare = this._blackKingSquare;
 
@@ -676,8 +681,9 @@ namespace ChessTheBetrayal.Core.Data
         }
 
         /// <summary>
-        /// Returns the list of occupied square indices for the specified team.
-        /// Indices are maintained incrementally, so this is always O(1).
+        /// Returns the live, incrementally maintained list of occupied square indices for the
+        /// given team. Callers must not mutate it, and should snapshot it before mutating the
+        /// board mid-iteration — SetPiece edits this list in place.
         /// </summary>
         public List<int> GetPieceIndices(Team team)
         {

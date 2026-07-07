@@ -14,8 +14,8 @@ TagManager:
   - Tile
   - Highlight
   - MoveHighlight
-  - 
-  - 
+  - MoveHighlightCapture
+  - CheckHighlight
   - 
   - 
   - 

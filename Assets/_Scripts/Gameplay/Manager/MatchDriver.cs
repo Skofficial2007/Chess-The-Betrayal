@@ -138,11 +138,11 @@ namespace ChessTheBetrayal.Gameplay
                 Debug.LogException(ex);
                 return;
             }
-            // Note: DO NOT catch (Exception) here. Genuine CLR crashes must surface.
+            // Don't catch (Exception) here — genuine CLR crashes must surface.
 
             TransitionToPhase(result.NextPhase);
 
-            // --- BETRAYAL MECHANIC: Phase 1 (The Act) ---
+            // The Act: the Betrayer has just captured a Victim.
             if (move.Stage == BetrayalStage.Act)
             {
                 // Pin the move number for the whole sub-sequence — see field doc comment.
@@ -153,8 +153,13 @@ namespace ChessTheBetrayal.Gameplay
                 // logged once Retribution/Defection completes the turn, below.
                 MoveLog.Record(move, _betrayalSequenceMoveNumber, GameState.Normal);
 
-                _betrayalChannel?.Raise(new ChessTheBetrayal.Events.Payloads.BetrayalPayload(move.PieceTeam, move.EndPosition, ChessTheBetrayal.Events.Payloads.BetrayalPhase.Initiated));
-                _betrayalChannel?.Raise(new ChessTheBetrayal.Events.Payloads.BetrayalPayload(move.PieceTeam, move.EndPosition, ChessTheBetrayal.Events.Payloads.BetrayalPhase.RetributionPending));
+                // result.DidDefect is already known here (Advance resolved the whole sub-sequence
+                // as far as it could before returning) — threading it through as WillDefect lets
+                // BoardVisuals skip glowing a Betrayer that's about to be spun away with no
+                // Retribution choice for the player to make, instead of flashing the glow on then
+                // immediately off.
+                _betrayalChannel?.Raise(new ChessTheBetrayal.Events.Payloads.BetrayalPayload(move.PieceTeam, move.EndPosition, ChessTheBetrayal.Events.Payloads.BetrayalPhase.Initiated, result.DidDefect));
+                _betrayalChannel?.Raise(new ChessTheBetrayal.Events.Payloads.BetrayalPayload(move.PieceTeam, move.EndPosition, ChessTheBetrayal.Events.Payloads.BetrayalPhase.RetributionPending, result.DidDefect));
 
                 // Fire the standard move event so visuals update, but pass isCheck=false
                 // because Edge Case C dictates Discovered Checks on Opponent wait until the sequence resolves.
@@ -171,30 +176,28 @@ namespace ChessTheBetrayal.Gameplay
                 return;
             }
 
-            // --- BETRAYAL MECHANIC: Phase 2 (Retribution Success) ---
+            // Retribution succeeded: an ally executed the Betrayer.
             if (move.Stage == BetrayalStage.Retribution)
             {
                 _betrayalChannel?.Raise(new ChessTheBetrayal.Events.Payloads.BetrayalPayload(move.PieceTeam, move.EndPosition, ChessTheBetrayal.Events.Payloads.BetrayalPhase.Resolved));
 
                 ApplyTimeBounty(move.PieceTeam);
 
-                // --- UI FIX: Tell BoardVisuals to play the capture animation ---
+                // Fire the move event so BoardVisuals plays the capture animation.
                 bool isCheckAfterRetribution = _engine.IsKingInCheck(_board, _board.CurrentTurn);
                 _moveExecutedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveExecutedPayload(move, _board.FullMoveNumber, isCheckAfterRetribution));
-                // ---------------------------------------------------------------
 
                 _clock?.OnMoveMade(move.PieceTeam); // Standard Fischer increment now applies
                 CheckForGameEnd(move); // Discovered checks against the opponent evaluate here for the first time
                 return;
             }
 
-            // --- BETRAYAL MECHANIC: Phase 3 (Defensive Override Success) ---
+            // Defensive Override succeeded: the initiator made their forced king-saving move.
             if (move.Stage == BetrayalStage.DefensiveOverride)
             {
-                // --- UI FIX: Tell BoardVisuals to play the save animation ---
+                // Fire the move event so BoardVisuals plays the save animation.
                 bool isCheckAfterSave = _engine.IsKingInCheck(_board, _board.CurrentTurn);
                 _moveExecutedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveExecutedPayload(move, _board.FullMoveNumber, isCheckAfterSave));
-                // ------------------------------------------------------------
 
                 _clock?.OnMoveMade(move.PieceTeam); // The Defensive Override move IS the final action of this turn — standard increment applies
                 CheckForGameEnd(move); // Discovered checks against the opponent evaluate here
@@ -400,7 +403,7 @@ namespace ChessTheBetrayal.Gameplay
         /// <summary>
         /// Evaluates if a team has sufficient material to force a checkmate.
         /// v1 implementation: a team can force mate if they have any piece beyond the King.
-        /// Uses GetPieceIndices for O(N) traversal to maintain high performance.
+        /// Iterates only the pieces on the board rather than all 64 squares.
         /// </summary>
         public static bool CanForceMate(BoardState board, Team team)
         {
@@ -459,7 +462,7 @@ namespace ChessTheBetrayal.Gameplay
 
         private void ApplyTimeBounty(Team team)
         {
-            // DESIGN RULE: No bounty in Unlimited mode. Explicit check.
+            // No bounty in Unlimited mode.
             if (_selectedMode.IsUnlimited) return;
 
             long bonus = GetBetrayalBountyMs(_bountyConfig);

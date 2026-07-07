@@ -18,7 +18,7 @@ namespace ChessTheBetrayal.Gameplay
     {
         public event Action<MoveCommand> OnMoveConfirmed;
         public event Action<Vector2Int, Vector2Int> OnMoveRejected;
-        public event Action<Vector2Int, Vector2Int> OnPromotionRequired;
+        public event Action<Vector2Int, Vector2Int, bool> OnPromotionRequired;
         public event Action OnRetributionSkipConfirmed;
 
         private readonly BoardState _board;
@@ -98,7 +98,7 @@ namespace ChessTheBetrayal.Gameplay
                 {
                     _pendingPromotionMove = _movesToTarget[0];
                     _isAwaitingPromotion = true;
-                    OnPromotionRequired?.Invoke(_pendingPromotionMove.StartPosition, to);
+                    OnPromotionRequired?.Invoke(_pendingPromotionMove.StartPosition, to, _pendingPromotionMove.IsCapture);
                     return;
                 }
 
@@ -111,7 +111,7 @@ namespace ChessTheBetrayal.Gameplay
                 return;
             }
 
-            // --- BETRAYAL MECHANIC: Phase 3 Forced Save Override ---
+            // Forced Save (Defensive Override): the side under betrayal must resolve the check.
             if (_phaseProvider != null && _phaseProvider() == TurnPhase.ForcedSave)
             {
                 _legalMoves.Clear();
@@ -144,7 +144,7 @@ namespace ChessTheBetrayal.Gameplay
                 {
                     _pendingPromotionMove = _movesToTarget[0];
                     _isAwaitingPromotion = true;
-                    OnPromotionRequired?.Invoke(_pendingPromotionMove.StartPosition, to);
+                    OnPromotionRequired?.Invoke(_pendingPromotionMove.StartPosition, to, _pendingPromotionMove.IsCapture);
                     return;
                 }
 
@@ -156,7 +156,6 @@ namespace ChessTheBetrayal.Gameplay
                 OnMoveConfirmed?.Invoke(validSave);
                 return;
             }
-            // --- END Phase 3 Forced Save Override ---
 
             // Validate piece ownership
             PieceData piece = _board.GetPiece(from);
@@ -233,7 +232,7 @@ namespace ChessTheBetrayal.Gameplay
                 if (_logMoves) Debug.Log($"[LocalMoveExecutor] Promotion detected at {to}. Awaiting UI choice.");
 
                 // Fire the promotion event - UI will show the dialog
-                OnPromotionRequired?.Invoke(_pendingPromotionMove.StartPosition, to);
+                OnPromotionRequired?.Invoke(_pendingPromotionMove.StartPosition, to, _pendingPromotionMove.IsCapture);
                 return;
             }
 

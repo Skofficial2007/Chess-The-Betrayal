@@ -87,6 +87,14 @@ namespace ChessTheBetrayal.Core.Movement
 
             int epFileX = board.EnPassantFile.Value;
 
+            // En passant is only legal from the rank immediately beside the square the enemy pawn
+            // double-stepped through — i.e. one step back (against dir) from the promotion rank.
+            // Without this check, any pawn merely sharing a file-adjacency with epFileX —
+            // regardless of its own rank — would be offered a phantom en passant capture.
+            int promotionRank = dir == 1 ? board.TileCountY - 1 : 0;
+            int captureRank = promotionRank - dir * 3;
+            if (pos.y != captureRank) return;
+
             // Check if the vulnerable pawn is directly adjacent to our pawn
             if (System.Math.Abs(epFileX - pos.x) == 1)
             {
