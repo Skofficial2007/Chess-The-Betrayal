@@ -11,7 +11,7 @@ namespace ChessTheBetrayal.UI
     /// Real, tweened IPieceAnimator used for human play. Animates a single piece's Transform via
     /// PrimeTween — chosen over a hand-rolled per-frame Lerp because PrimeTween safely no-ops
     /// against a target destroyed mid-tween (pieces get Destroy()d for capture, promotion, and
-    /// defection while a move or lift tween could still be running) and is zero-allocation.
+    /// defection while a move or lift tween could still be running).
     ///
     /// One instance is owned per ChessPiece (see ChessPiece.Awake) — it is not shared, so every
     /// Tween/Sequence field below belongs to exactly one piece's Transform.
@@ -56,23 +56,23 @@ namespace ChessTheBetrayal.UI
         private const float CapturePunchDuration = 0.12f;
         private const float CapturePunchScale = 1.12f;
 
-        // The capture "stamp" — a cartoon power-stomp. The critical staging rule (learned the hard
-        // way, twice): the attacker and victim must NEVER overlap at full size, from ANY camera
-        // angle. Two separate tweens for XZ-travel and Y-height (even carefully timed with
-        // Chain/Group) can still let horizontal distance get ahead of vertical clearance — e.g. an
-        // eased-out XZ tween covers most of its ground EARLY while a separately-timed Y-rise is
-        // still climbing, so for a window the attacker is hovering low and close/over the victim's
-        // tile at the same time. The fix: ONE single 0->1 driver tween computes BOTH XZ (lerp) and
-        // Y (a true parabola, 4h*t*(1-t)) from the exact same t every frame, so "how far across"
-        // and "how high up" are physically coupled and can never drift apart. Beats:
+        // The capture "stamp" — a cartoon power-stomp. The staging rule (learned the hard way,
+        // twice): the attacker and victim must never overlap at full size, from any camera angle.
+        // Two separate tweens for XZ-travel and Y-height (even carefully timed with Chain/Group)
+        // can still let horizontal distance get ahead of vertical clearance — e.g. an eased-out XZ
+        // tween covers most of its ground early while a separately-timed Y-rise is still climbing,
+        // so for a window the attacker is hovering low and close/over the victim's tile at the same
+        // time. Instead, a single 0->1 driver tween computes both XZ (lerp) and Y (a true parabola,
+        // 4h*t*(1-t)) from the exact same t every frame, so "how far across" and "how high up" are
+        // physically coupled and can never drift apart. Beats:
         //   1. Anticipation (pull back + crouch): a held breath before the pounce. No travel yet.
         //   2. Leap: one continuous parabolic arc from start tile to landing tile, peaking well
         //      above the victim's head. Growing to 1.15x mid-air on the way up (jumping things get
         //      bigger, per every good cartoon), landing still oversized.
-        //   3. Descent: onDescentStart fires at the arc's PEAK (t=0.5) — the earliest possible
-        //      moment that still reads as "the attacker is now falling toward you" — so the
-        //      victim's cower-shrink has the entire second half of the arc (not just a short fall
-        //      leg) to get out of the way before contact.
+        //   3. Descent: onDescentStart fires at the arc's peak (t=0.5) — the earliest moment that
+        //      still reads as "the attacker is now falling toward you" — so the victim's
+        //      cower-shrink has the entire second half of the arc (not just a short fall leg) to
+        //      get out of the way before contact.
         //   4. Impact: flatten hard against the tile, then a big springy overshoot back to rest
         //      scale — the "settling back to normal size" that closes the arc — and a settle bob.
         private const float StampAnticipationDuration = 0.09f;
@@ -81,9 +81,9 @@ namespace ChessTheBetrayal.UI
         private const float StampAnticipationCrouchDrop = 0.03f;
         private static readonly Ease StampAnticipationEase = Ease.OutQuad;
 
-        // PUBLIC: BoardVisuals/PlayStompedDeath need the same total duration and the exact fraction
-        // (half) at which onDescentStart fires, so the victim's cower window always matches the
-        // attacker's actual remaining airtime — constants beat magic-number duplication.
+        // Public so BoardVisuals/PlayStompedDeath can read the same total duration and the exact
+        // fraction (half) at which onDescentStart fires, so the victim's cower window always matches
+        // the attacker's actual remaining airtime rather than duplicating the numbers by hand.
         public const float StampLeapDuration = 0.3f;
         public const float StampDescentStartFraction = 0.5f;
         // Peak height above the higher of start/land Y. Pieces are ~1 unit tall at this board
@@ -185,7 +185,7 @@ namespace ChessTheBetrayal.UI
         // around the piece the player currently has picked up. Chosen over reusing the rim glow
         // because the rim is already spoken for as the Betrayer/threat denoter; selection needs
         // its own unambiguous mark. The hull is a runtime child renderer sharing the piece's mesh
-        // (one extra draw call, only while something is selected), and only its WIDTH is animated
+        // (one extra draw call, only while something is selected), and only its width is animated
         // here — color/width/pulse are authored on the material so they're tunable in the inspector
         // without touching code. Injected via SetSelectionOutlineMaterial (see ChessPiece) rather
         // than Resources.Load: the material now lives in Assets/Material, not a Resources folder,
@@ -198,13 +198,13 @@ namespace ChessTheBetrayal.UI
         private Material _selectionOutlineMaterial;
 
         // King "in check" shake — a startle, not a clean wobble. Three things play at once, all off
-        // the SAME single 0..1 driver tween so they can never drift apart or leave the king at a
+        // the same single 0..1 driver tween so they can never drift apart or leave the king at a
         // stale offset (the capture-stamp arc's lesson): a fast decaying side-to-side vibration, a
         // small syncopated rotational tilt (a piece flinching leans, it doesn't just slide), and a
         // brief up-hop at the front of the motion (the "jolt" of being threatened). Everything
-        // decays to zero by t=1 via a (1-t) envelope, so the king ends EXACTLY where it started
-        // with no settle tween needed. One Tween.Custom, zero per-frame allocation, unscaled time
-        // so it plays at full speed even while a hitstop/pause scales Time.timeScale.
+        // decays to zero by t=1 via a (1-t) envelope, so the king ends exactly where it started
+        // with no settle tween needed. One Tween.Custom on unscaled time, so it plays at full speed
+        // even while a hitstop/pause scales Time.timeScale.
         private const float ShakeDuration = 0.42f;
         private const float ShakePositionMagnitude = 0.06f;   // peak lateral offset (world units)
         private const float ShakeHopHeight = 0.05f;           // peak upward jolt at the front
@@ -332,15 +332,15 @@ namespace ChessTheBetrayal.UI
 
             if (arc)
             {
-                // A knight "hops" rather than slides through occupied squares. Previously this ran
-                // TWO independent tweens in parallel — Tween.Position (below, driving X/Y/Z toward
+                // A knight "hops" rather than slides through occupied squares. This once ran two
+                // independent tweens in parallel — Tween.Position (below, driving X/Y/Z toward
                 // worldPos) and a second Tween.PositionY arcing up and back down — but both write
                 // transform.position.y every single frame, and nothing guarantees whose write lands
                 // last. Two competing writers on the same axis is exactly what let tiny residual
                 // errors compound move after move, reading as pieces slowly floating higher off the
-                // board over a game. Fixed the same way the capture stamp's leap already is: ONE
+                // board over a game. Handled the same way the capture stamp's leap already is: one
                 // driver (ApplyKnightArc) owns the whole position for the whole duration, computing
-                // XZ as a lerp and Y as a straight lerp PLUS a parabolic bump that is mathematically
+                // XZ as a lerp and Y as a straight lerp plus a parabolic bump that is mathematically
                 // zero at t=0 and t=1 — so the piece is guaranteed to land exactly on worldPos with
                 // no residual, no matter how many knight moves happen in a row.
                 Vector3 knightStartPos = _transform.position;
@@ -401,7 +401,7 @@ namespace ChessTheBetrayal.UI
 
         public void PlaySettleBob()
         {
-            // Restore Y to whatever it was before the PREVIOUS bob started (if one is still
+            // Restore Y to whatever it was before the previous bob started (if one is still
             // running) rather than reading the live transform, which — mid-Yoyo — could be
             // sitting anywhere between baseY and baseY + SettleBobHeight. Stop() alone does not
             // snap a tween back to its start value, so reading position.y right after Stop() used
@@ -458,14 +458,14 @@ namespace ChessTheBetrayal.UI
             pullBackPos.y = startPos.y - StampAnticipationCrouchDrop;
 
             // Swollen mid-air size — held through the landing and only released back to restScale
-            // by the post-impact recover, so the piece that lands is visibly BIGGER than the piece
+            // by the post-impact recover, so the piece that lands is visibly bigger than the piece
             // that took off (and than the victim cowering under it).
             Vector3 airborneScale = restScale * StampAirborneScaleFactor;
             Vector3 impactScale = new Vector3(restScale.x * StampImpactWidthFactor, restScale.y * StampImpactHeightFactor, restScale.z * StampImpactWidthFactor);
 
             float halfDuration = StampLeapDuration * StampDescentStartFraction;
 
-            // The whole stamp lives on ONE sequence, built beat by beat with Chain (sequential)
+            // The whole stamp lives on one sequence, built beat by beat with Chain (sequential)
             // and Group (parallel-with-previous) so timing is exact and every leg shares the same
             // useUnscaledTime — mixing an unscaled child into a scaled-time sequence (or vice
             // versa) is silently dropped by PrimeTween, so the sequence itself must be created
@@ -474,8 +474,8 @@ namespace ChessTheBetrayal.UI
                 // 1. Anticipation: pull back and crouch down — a held breath before the pounce.
                 .Group(Tween.Position(_transform, pullBackPos, StampAnticipationDuration, StampAnticipationEase, useUnscaledTime: true))
                 .Group(Tween.Scale(_transform, crouchScale, StampAnticipationDuration, StampAnticipationEase, useUnscaledTime: true))
-                // 2. Leap, first half (0 -> 0.5): ONE driver tween computes XZ (lerp) and Y (the
-                // rising half of a parabola) from the SAME progress value every frame, so
+                // 2. Leap, first half (0 -> 0.5): one driver tween computes XZ (lerp) and Y (the
+                // rising half of a parabola) from the same progress value every frame, so
                 // "how far across" and "how high up" can never drift apart — the piece is
                 // physically guaranteed to already be near peak height by the time it's over the
                 // victim's tile, instead of two independently-eased tweens letting horizontal
@@ -486,14 +486,14 @@ namespace ChessTheBetrayal.UI
                 .Group(Tween.Scale(_transform, airborneScale, halfDuration, Easing.Overshoot(StampAirborneGrowOvershoot), useUnscaledTime: true))
                 // 3. onDescentStart fires exactly at the arc's peak (t=0.5) — the earliest moment
                 // that still reads as "now falling toward you" — giving the victim's cower-shrink
-                // the ENTIRE second half of the arc to get small before contact.
+                // the entire second half of the arc to get small before contact.
                 .ChainCallback(() => onDescentStart?.Invoke())
                 // Leap, second half (0.5 -> 1): same driver, same coupled XZ/Y formula, continuing
                 // seamlessly from the peak down to the landing tile.
                 .Chain(Tween.Custom(this, 0.5f, 1f, halfDuration, (self, t) => self.ApplyStampArc(t, startPos, landPos, peakY), Ease.InQuad, useUnscaledTime: true))
-                // 4. Impact: flatten HARD against the tile (still oversized — a big flat slap)...
+                // 4. Impact: flatten hard against the tile (still oversized — a big flat slap)...
                 .Chain(Tween.Scale(_transform, impactScale, StampImpactSquashDuration, Ease.OutQuad, useUnscaledTime: true))
-                // ...then recover with a big springy overshoot back down to REST scale — this is
+                // ...then recover with a big springy overshoot back down to rest scale — this is
                 // the "settling back to its normal size" beat that closes the whole arc.
                 .Chain(Tween.Scale(_transform, restScale, StampImpactRecoverDuration, Easing.Overshoot(StampRecoverOvershoot), useUnscaledTime: true))
                 .ChainCallback(PlaySettleBob)
@@ -554,12 +554,12 @@ namespace ChessTheBetrayal.UI
             Vector3 restScale = _transform.localScale;
             float restY = _transform.position.y;
             Vector3 cowerScale = restScale * StampVictimCowerScaleFactor;
-            // Pancake factors apply to the COWERED size, not the rest size — by crush time the
+            // Pancake factors apply to the cowered size, not the rest size — by crush time the
             // piece has already shrunk to StampVictimCowerScaleFactor, and the pancake should read
             // as that smaller piece being flattened, not suddenly re-widening past the attacker.
             Vector3 pancakeScale = new Vector3(cowerScale.x * StampVictimWidthFactor, cowerScale.y * StampVictimHeightFactor, cowerScale.z * StampVictimWidthFactor);
 
-            // Called at the attacker's DESCENT START — the arc's peak, t=0.5 — not at impact (see
+            // Called at the attacker's descent start — the arc's peak, t=0.5 — not at impact (see
             // PlayCaptureStamp). Stage 1 spans exactly the attacker's remaining airtime (half of
             // StampLeapDuration, same shared constant and unscaled clock, so no cross-object
             // callback is needed for the sync): the victim cowers — shrinks toward the tile under
@@ -602,7 +602,7 @@ namespace ChessTheBetrayal.UI
             // than the one it lands on), so instead of a crush it plays its own "swept off the
             // board" beat: a small hop — same InOutCubic/OutQuad vocabulary as a normal board move,
             // just with the piece shrinking to nothing across the same glide rather than teleporting
-            // to the graveyard at full size and only THEN scaling down. XZ and Y are driven by
+            // to the graveyard at full size and only then scaling down. XZ and Y are driven by
             // separate tweens (same pattern as PlayCaptureStamp's leap) so the horizontal glide and
             // the vertical hop-arc don't fight over the Y axis.
             _stampSequence = Sequence.Create(useUnscaledTime: true)
@@ -727,8 +727,8 @@ namespace ChessTheBetrayal.UI
         {
             // A check delivered while a previous shake is still mid-flight (rare, but a fast forced
             // sequence can do it) would otherwise read the half-finished offset as the new rest
-            // pose. Stop() cancels the tween but does NOT restore the transform, so if one was live,
-            // restore the cached rest pose first, THEN read the true rest — the same
+            // pose. Stop() cancels the tween but does not restore the transform, so if one was live,
+            // restore the cached rest pose first, then read the true rest — the same
             // snap-before-reread guard PlaySettleBob uses for its baseY. Checked before Stop() since
             // Stop() clears isAlive.
             bool wasShaking = _shakeTween.isAlive;
@@ -756,7 +756,8 @@ namespace ChessTheBetrayal.UI
         /// sinusoidal lateral vibration, a detuned rotational tilt, and a single up-hop concentrated
         /// at the front of the motion. A (1-t) envelope multiplies every component so all of them
         /// reach exactly zero at t=1 — the king lands back on its exact rest transform with no
-        /// separate settle tween. Pure math off cached rest pose, so it's allocation-free per frame.
+        /// separate settle tween. Everything is computed from the cached rest pose, so nothing has
+        /// to be started or torn down each frame.
         /// </summary>
         private void ApplyShake(float t, Vector3 lateral, Vector3 up)
         {
@@ -786,13 +787,13 @@ namespace ChessTheBetrayal.UI
                     // what rotates back into view during PlayTransitionIn — the spin sells "this
                     // piece turned into something else" without any shader or dissolve work.
                     //
-                    // RELATIVE to the piece's own current rotation, slerped quaternion-to-quaternion
+                    // Relative to the piece's own current rotation, slerped quaternion-to-quaternion
                     // via Tween.Custom rather than Tween.LocalRotation's Vector3/Euler overload —
                     // see PlayTransitionIn's Spin case for why a Euler-angle target is unsafe here.
                     // A hardcoded absolute (0, 90, 0) target used to work by coincidence for White
                     // (which rests at identity) but was wrong for Black (which rests pre-rotated 180
                     // degrees — see BoardVisuals.SpawnSinglePiece): it snapped the piece toward
-                    // White's facing instead of turning another quarter away from its OWN facing,
+                    // White's facing instead of turning another quarter away from its own facing,
                     // which is what let a defected piece finish this transition already facing the
                     // wrong way before PlayTransitionIn even ran on the freshly-spawned replacement.
                     Quaternion startRotation = _transform.localRotation;
@@ -807,7 +808,7 @@ namespace ChessTheBetrayal.UI
 
                 case PieceTransitionStyle.PromotionMorph:
                     // Same squash-down anticipation as Squash below, plus a dissolve ramp (0 -> 1)
-                    // layered on top via Group so the pawn both shrinks AND burns away at once,
+                    // layered on top via Group so the pawn both shrinks and burns away at once,
                     // rather than one effect replacing the other.
                     _transitionSequence = Sequence.Create(useUnscaledTime: true)
                         .Chain(Tween.Scale(_transform, VanishedScale, SquashOutDuration, Ease.InBack, useUnscaledTime: true))
@@ -841,18 +842,18 @@ namespace ChessTheBetrayal.UI
                     // pre-rotated 180 degrees at spawn (see BoardVisuals.SpawnSinglePiece) — a
                     // freshly-spawned Black piece already rests at (0, 180, 0), not identity.
                     //
-                    // Driven via Tween.Custom slerping two cached QUATERNIONS end to end, rather
+                    // Driven via Tween.Custom slerping two cached quaternions end to end, rather
                     // than Tween.LocalRotation's Vector3/Euler overload: that overload interpolates
                     // Euler angles component-wise using whatever euler triple Transform.eulerAngles
-                    // happens to report for the CURRENT rotation at the moment the tween is created,
+                    // happens to report for the current rotation at the moment the tween is created,
                     // and Quaternion-to-Euler decomposition is not unique — composing restingRotation
                     // with a -90 degree offset can read back as a completely different (but
-                    // equivalent) triple than restingEuler expects to lerp FROM. That mismatch was
+                    // equivalent) triple than restingEuler expects to lerp from. That mismatch was
                     // the actual bug behind a defected piece (e.g. Betrayal's failed-Retribution
-                    // team flip) sometimes finishing this transition still facing its OLD team's
+                    // team flip) sometimes finishing this transition still facing its old team's
                     // direction instead of the new team's. Slerping quaternion-to-quaternion has no
                     // such ambiguity: it always interpolates the shortest path between the two exact
-                    // rotations and lands EXACTLY on restingRotation at t=1.
+                    // rotations and lands exactly on restingRotation at t=1.
                     Quaternion restingRotation = _transform.localRotation;
                     Quaternion edgeOnRotation = restingRotation * Quaternion.Euler(0f, -90f, 0f);
                     _transform.localRotation = edgeOnRotation;
@@ -866,7 +867,7 @@ namespace ChessTheBetrayal.UI
                 case PieceTransitionStyle.PromotionMorph:
                 {
                     // Same squash-in-with-hop as Squash below, plus the dissolve ramping back down
-                    // (1 -> 0) in parallel so the promoted piece both grows in AND reforms from the
+                    // (1 -> 0) in parallel so the promoted piece both grows in and reforms from the
                     // burning edge, rather than just popping into view at full opacity.
                     Vector3 targetScale = _transform.localScale;
                     _transform.localScale = Vector3.one * VanishedScale;
@@ -912,7 +913,7 @@ namespace ChessTheBetrayal.UI
 
             // squashScale can equal _transform.localScale only in the degenerate case of a
             // zero-scale piece, which never happens in practice, but PrimeTween's start-equals-end
-            // warning is about the SEQUENCE's own internal tween creation, not a live comparison
+            // warning is about the sequence's own internal tween creation, not a live comparison
             // against the current transform (the squash always animates away from whatever the
             // piece's scale was even mid-tween). No guard needed here — see LowerDeselect for the
             // case that actually needs one (a rest-scale target the transform may already be at).

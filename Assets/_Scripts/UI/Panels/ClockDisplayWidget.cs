@@ -7,9 +7,9 @@ using ChessTheBetrayal.Core.Logic;
 namespace ChessTheBetrayal.UI
 {
     /// <summary>
-    /// A high-performance, zero-allocation clock display widget.
-    /// Reads the clock state every frame and writes to TextMeshPro via the StringBuilder overload,
-    /// preventing garbage collection spikes on the UI hot path.
+    /// Shows the remaining time for each side on the clock HUD.
+    /// Reads the clock state every frame and writes to TextMeshPro through its StringBuilder
+    /// overload, reusing one buffer so the per-frame update does not build a new string each time.
     /// </summary>
     public class ClockDisplayWidget : MonoBehaviour
     {
@@ -25,10 +25,10 @@ namespace ChessTheBetrayal.UI
         [Header("Data Source")]
         [SerializeField] private ChessTheBetrayal.Events.SharedClockStateSO _sharedClockState;
 
-        // Pre-allocated buffer to prevent string instantiation during per-frame UI updates.
+        // Reused each frame so the per-frame time update does not build a new string.
         private readonly StringBuilder _sb = new StringBuilder(8);
 
-        // Caching previous values to skip redundant TextMeshPro vertex rebuilds.
+        // Remember the last values shown so we skip redundant TextMeshPro vertex rebuilds.
         private long _lastWhiteMs = -1L;
         private long _lastBlackMs = -1L;
 

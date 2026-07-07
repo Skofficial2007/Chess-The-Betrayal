@@ -30,6 +30,8 @@ namespace ChessTheBetrayal.Core.Engine
             _logger = logger ?? NullDomainLogger.Instance;
         }
 
+        // 218 is the highest number of legal moves known to be reachable in any chess position,
+        // so a move buffer with this capacity never needs to grow.
         public const int MaxMovesPerPosition = 218;
 
         [System.ThreadStatic]
@@ -54,10 +56,11 @@ namespace ChessTheBetrayal.Core.Engine
         private static int[] _betrayalIndexBuffer;
 
         /// <summary>
-        /// Copies a piece-index list into the given reusable thread-static buffer (creating/growing it as needed)
+        /// Copies a piece-index list into the given thread-static buffer (creating/growing it as needed)
         /// so callers that mutate the board mid-iteration (e.g. the betrayal disguise trick, or nested attack
-        /// checks) can iterate a stable snapshot without heap-allocating. Each call site must use its own
-        /// dedicated buffer slot to avoid clobbering an outer snapshot that's still being iterated.
+        /// checks) can iterate a stable snapshot. One scratch buffer gets reused instead of building a fresh
+        /// list on every call — move generation runs this constantly during search. Each call site must use
+        /// its own dedicated buffer slot to avoid clobbering an outer snapshot that's still being iterated.
         /// </summary>
         private static int[] SnapshotIndices(List<int> source, ref int[] buffer, out int count)
         {
@@ -677,7 +680,8 @@ namespace ChessTheBetrayal.Core.Engine
         /// This is how the AI can explore thousands of move sequences without ever copying the board.
         /// </summary>
         /// <remarks>
-        /// Exposed via [InternalsVisibleTo] — remains encapsulated from external production assemblies.
+        /// The InternalsVisibleTo at the top of the file lets the edit-mode tests call this directly;
+        /// other production assemblies still can't.
         /// </remarks>
         internal static void UndoMoveOnBoard(BoardState board, MoveCommand move, bool recordHistory = true)
         {
@@ -791,7 +795,6 @@ namespace ChessTheBetrayal.Core.Engine
         /// <summary>
         /// Returns the material difference between teams, from White's perspective.
         /// Positive means White is ahead; negative means Black is ahead.
-        /// Optimized to use O(N) piece lists instead of O(64) board scans.
         /// </summary>
         public static int GetMaterialAdvantage(BoardState board)
         {
