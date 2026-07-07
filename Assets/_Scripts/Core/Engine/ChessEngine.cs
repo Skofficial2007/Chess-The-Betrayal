@@ -456,6 +456,9 @@ namespace ChessTheBetrayal.Core.Engine
             return new DefectionOutcome(selfCheckAfterDefection, betrayerSquare, defectionMove, reason);
         }
 
+        // TURN-FLIP INVARIANT: Act/Defection do NOT flip side-to-move; Retribution/DefensiveOverride
+        // (and ordinary None moves) DO. Mirrored in AlphaBetaSearch.StageFlipsTurn
+        // (ChessTheBetrayal.AI) — change BOTH or SearchTurnFlipAgreementTests fails.
         private static void ApplyZobristMove(BoardState board, MoveCommand move, int previousCastlingMask, int? previousEnPassantFile)
         {
             if (move.Stage == BetrayalStage.Defection)
@@ -589,6 +592,9 @@ namespace ChessTheBetrayal.Core.Engine
             return null;
         }
 
+        // TURN-FLIP INVARIANT: Act/Defection do NOT flip side-to-move; Retribution/DefensiveOverride
+        // (and ordinary None moves) DO. Mirrored in AlphaBetaSearch.StageFlipsTurn
+        // (ChessTheBetrayal.AI) — change BOTH or SearchTurnFlipAgreementTests fails.
         private static void AdvanceBetrayalState(BoardState board, MoveCommand move)
         {
             if (move.Stage == BetrayalStage.Act)
