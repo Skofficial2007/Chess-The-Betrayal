@@ -1,8 +1,8 @@
 namespace ChessTheBetrayal.Core.Data
 {
     /// <summary>
-    /// Mutable value-type snapshot of the clock at a single instant.
-    /// UI and network layers read a struct copy to prevent heap allocation.
+    /// A mutable value-type snapshot of the clock at a single instant, so UI and
+    /// network layers can read a copy without sharing mutable state.
     /// </summary>
     public struct ClockState
     {

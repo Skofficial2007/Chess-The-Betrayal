@@ -5,7 +5,7 @@ namespace ChessTheBetrayal.AI
 {
     /// <summary>
     /// Static evaluation from one team's point of view. Positive = good for forTeam.
-    /// Allocation-free: reads piece-index lists, no LINQ, no temporaries.
+    /// Scores a position by reading the per-team piece lists.
     ///
     /// Betrayal-specific terms (from the AI research analysis):
     ///   1. Option value  — an UNSPENT betrayal right is worth a small bonus to whoever still
@@ -39,7 +39,7 @@ namespace ChessTheBetrayal.AI
 
             int score = whiteScore - blackScore; // White's perspective
 
-            // --- Betrayal option value (Term 1) ---
+            // Betrayal option value (Term 1).
             // The right is a single global resource. Whoever it's "for" is the side to move while
             // it's still available — but since it's once-per-match-total and first-come, we simply
             // credit the side to move for holding a live option. Cheap and symmetric.
@@ -55,7 +55,7 @@ namespace ChessTheBetrayal.AI
         private static int MaterialAndPosition(BoardState board, Team team)
         {
             int total = 0;
-            var indices = board.GetPieceIndices(team); // O(1), no alloc
+            var indices = board.GetPieceIndices(team);
 
             for (int i = 0; i < indices.Count; i++)
             {

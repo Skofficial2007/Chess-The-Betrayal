@@ -52,8 +52,11 @@ namespace ChessTheBetrayal.Gameplay
 
         /// <summary>
         /// Fired when a pawn reaches the end and needs promotion.
-        /// Passes (from, to) so the visual layer can optimistically snap the correct piece.
+        /// Passes (from, to, isCapture) so the visual layer can glide the correct piece onto an
+        /// empty square — isCapture is included because the move's legality (and therefore whether
+        /// it captures) is already fully resolved at this point, before the player even picks a
+        /// promoted piece type, so the View shouldn't have to re-derive it.
         /// </summary>
-        event Action<Vector2Int, Vector2Int> OnPromotionRequired;
+        event Action<Vector2Int, Vector2Int, bool> OnPromotionRequired;
     }
 }

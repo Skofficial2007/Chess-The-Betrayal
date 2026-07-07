@@ -20,6 +20,8 @@ namespace ChessTheBetrayal.Gameplay
     {
         [Header("Input Settings")]
         [SerializeField] private LayerMask raycastMask = ~0; // Default: raycast everything
+        [Tooltip("Minimum real-time seconds between two accepted tile activations. A single physical tap can only ever produce one activation already (see WasPointerReleased), but this guards against rapid double-taps/mashing — e.g. a fast player tapping twice before the first tap's animation has visually settled — from both being processed as separate activations.")]
+        [SerializeField, Range(0f, 0.5f)] private float minTimeBetweenActivations = 0.15f;
 
         [Header("Debug")]
         [SerializeField] private bool showDebugRays = false;
@@ -34,6 +36,11 @@ namespace ChessTheBetrayal.Gameplay
         // Tracks the tile a press started on, so release can confirm it landed on the same tile.
         private bool _isPressed;
         private Vector2Int _pressStartTile = Vector2Int.Invalid;
+
+        // Debounce: the last time OnTileActivated actually fired, in unscaled real time (so it
+        // isn't affected by Time.timeScale, matching every animation tween in this codebase which
+        // runs useUnscaledTime). See minTimeBetweenActivations' doc comment for why this exists.
+        private float _lastActivationRealtime = float.NegativeInfinity;
 
         private void Awake()
         {
@@ -119,7 +126,20 @@ namespace ChessTheBetrayal.Gameplay
                 // a tile activation — the two-tap model has no use for drag gestures.
                 if (_isPressed && hoverIndex != Vector2Int.Invalid && hoverIndex == _pressStartTile)
                 {
-                    OnTileActivated?.Invoke(hoverIndex);
+                    // Debounced: a fast double-tap/mash landing within minTimeBetweenActivations of
+                    // the last ACCEPTED activation is dropped rather than forwarded. Every downstream
+                    // consumer (SelectionController's two-tap state machine, GameManager.RequestMove)
+                    // already validates against authoritative logical state and is individually
+                    // reentrancy-safe, so this isn't fixing a correctness bug — it's closing the gap
+                    // where a fast repeated tap could visually interact with a piece/tile whose
+                    // previous move animation (slide, capture stamp, castle rook, promotion swap,
+                    // defection spin) hasn't settled yet, before it's even had a chance to read as
+                    // finished on screen.
+                    if (Time.unscaledTime - _lastActivationRealtime >= minTimeBetweenActivations)
+                    {
+                        _lastActivationRealtime = Time.unscaledTime;
+                        OnTileActivated?.Invoke(hoverIndex);
+                    }
                 }
 
                 _isPressed = false;

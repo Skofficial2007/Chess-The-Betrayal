@@ -3,8 +3,10 @@ using System.Text;
 namespace ChessTheBetrayal.Core.Logic
 {
     /// <summary>
-    /// A zero-allocation string formatter for clock displays.
-    /// Pre-caches digit strings and mutates a provided StringBuilder to prevent garbage collection spikes during high-frequency UI updates.
+    /// Formats a remaining-time value into the mm:ss text shown on the clock.
+    /// Writes into a StringBuilder the caller owns and caches the two-digit
+    /// strings up front, so refreshing the clock every frame does not build a
+    /// fresh string each time.
     /// </summary>
     public static class ClockFormatter
     {
