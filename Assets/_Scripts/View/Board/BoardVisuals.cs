@@ -65,6 +65,7 @@ namespace ChessTheBetrayal.UI
         [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _gameResetChannel;
         [SerializeField] private ChessTheBetrayal.Events.MoveExecutedEventChannel _moveExecutedChannel;
         [SerializeField] private ChessTheBetrayal.Events.MoveRejectedEventChannel _moveRejectedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.SelectionRejectedEventChannel _selectionRejectedChannel;
         [SerializeField] private ChessTheBetrayal.Events.PromotionRequiredEventChannel _promotionRequiredChannel;
         [SerializeField] private ChessTheBetrayal.Events.BetrayalEventChannel _betrayalChannel;
 
@@ -184,6 +185,7 @@ namespace ChessTheBetrayal.UI
             InspectorGuard.Require(_gameResetChannel, nameof(_gameResetChannel), this);
             InspectorGuard.Require(_moveExecutedChannel, nameof(_moveExecutedChannel), this);
             InspectorGuard.Require(_moveRejectedChannel, nameof(_moveRejectedChannel), this);
+            InspectorGuard.Require(_selectionRejectedChannel, nameof(_selectionRejectedChannel), this);
             InspectorGuard.Require(_promotionRequiredChannel, nameof(_promotionRequiredChannel), this);
             InspectorGuard.Require(_betrayalChannel, nameof(_betrayalChannel), this);
 
@@ -217,6 +219,7 @@ namespace ChessTheBetrayal.UI
             _gameResetChannel?.Register(ClearAllVisuals);
             _moveExecutedChannel?.Register(AnimateMove);
             _moveRejectedChannel?.Register(HandleMoveRejected);
+            _selectionRejectedChannel?.Register(HandleSelectionRejected);
             _promotionRequiredChannel?.Register(HandlePromotionOptimisticGlide);
             _betrayalChannel?.Register(HandleBetrayalPhaseChanged);
         }
@@ -227,6 +230,7 @@ namespace ChessTheBetrayal.UI
             _gameResetChannel?.Unregister(ClearAllVisuals);
             _moveExecutedChannel?.Unregister(AnimateMove);
             _moveRejectedChannel?.Unregister(HandleMoveRejected);
+            _selectionRejectedChannel?.Unregister(HandleSelectionRejected);
             _promotionRequiredChannel?.Unregister(HandlePromotionOptimisticGlide);
             _betrayalChannel?.Unregister(HandleBetrayalPhaseChanged);
         }
@@ -978,6 +982,23 @@ namespace ChessTheBetrayal.UI
         {
             // Extract the original coordinate and snap it back
             SnapPieceBack(payload.FromPosition);
+        }
+
+        /// <summary>
+        /// Handles a tap on a piece that belongs to the current turn's team but has zero legal
+        /// moves right now (pinned, stuck behind a forced Betrayal sub-phase, etc.) — see
+        /// SelectionController.TrySelect, which raises this instead of silently declining the
+        /// selection. Reuses the same startle Shake() the king's check-warning plays (see
+        /// ShowKingInCheck) so "this piece can't move" reads with the same visual language as
+        /// "this king is in danger" — a piece rattling in place. No-op if the piece can't be found
+        /// (e.g. a stale event racing a game reset).
+        /// </summary>
+        public void HandleSelectionRejected(ChessTheBetrayal.Events.Payloads.SelectionRejectedPayload payload)
+        {
+            if (_piecesByPosition.TryGetValue(payload.Position, out ChessPiece piece))
+            {
+                piece.Shake();
+            }
         }
 
         /// <summary>
