@@ -780,14 +780,30 @@ namespace ChessTheBetrayal.UI
             switch (style)
             {
                 case PieceTransitionStyle.Spin:
+                {
                     // Quarter-turn to edge-on, as if the piece is turning away from the camera.
                     // The swap happens the instant it's edge-on, so the incoming prefab's face is
                     // what rotates back into view during PlayTransitionIn — the spin sells "this
                     // piece turned into something else" without any shader or dissolve work.
+                    //
+                    // RELATIVE to the piece's own current rotation, slerped quaternion-to-quaternion
+                    // via Tween.Custom rather than Tween.LocalRotation's Vector3/Euler overload —
+                    // see PlayTransitionIn's Spin case for why a Euler-angle target is unsafe here.
+                    // A hardcoded absolute (0, 90, 0) target used to work by coincidence for White
+                    // (which rests at identity) but was wrong for Black (which rests pre-rotated 180
+                    // degrees — see BoardVisuals.SpawnSinglePiece): it snapped the piece toward
+                    // White's facing instead of turning another quarter away from its OWN facing,
+                    // which is what let a defected piece finish this transition already facing the
+                    // wrong way before PlayTransitionIn even ran on the freshly-spawned replacement.
+                    Quaternion startRotation = _transform.localRotation;
+                    Quaternion edgeOnRotation = startRotation * Quaternion.Euler(0f, 90f, 0f);
                     _transitionSequence = Sequence.Create(useUnscaledTime: true)
-                        .Chain(Tween.LocalRotation(_transform, new Vector3(0f, 90f, 0f), SpinOutDuration, Ease.InQuad, useUnscaledTime: true))
+                        .Chain(Tween.Custom(this, 0f, 1f, SpinOutDuration,
+                            (self, t) => self._transform.localRotation = Quaternion.Slerp(startRotation, edgeOnRotation, t),
+                            Ease.InQuad, useUnscaledTime: true))
                         .ChainCallback(onComplete);
                     break;
+                }
 
                 case PieceTransitionStyle.PromotionMorph:
                     // Same squash-down anticipation as Squash below, plus a dissolve ramp (0 -> 1)
@@ -817,17 +833,35 @@ namespace ChessTheBetrayal.UI
             switch (style)
             {
                 case PieceTransitionStyle.Spin:
+                {
                     // Start edge-on relative to this piece's own resting rotation (mirroring where
                     // the outgoing piece left off in PlayTransitionOut), then spin the remaining
                     // quarter-turn back to facing forward. Computed relative to the resting
                     // rotation rather than a hardcoded value because enemy-facing prefabs are
-                    // pre-rotated 180° at spawn (see BoardVisuals.SpawnSinglePiece).
+                    // pre-rotated 180 degrees at spawn (see BoardVisuals.SpawnSinglePiece) — a
+                    // freshly-spawned Black piece already rests at (0, 180, 0), not identity.
+                    //
+                    // Driven via Tween.Custom slerping two cached QUATERNIONS end to end, rather
+                    // than Tween.LocalRotation's Vector3/Euler overload: that overload interpolates
+                    // Euler angles component-wise using whatever euler triple Transform.eulerAngles
+                    // happens to report for the CURRENT rotation at the moment the tween is created,
+                    // and Quaternion-to-Euler decomposition is not unique — composing restingRotation
+                    // with a -90 degree offset can read back as a completely different (but
+                    // equivalent) triple than restingEuler expects to lerp FROM. That mismatch was
+                    // the actual bug behind a defected piece (e.g. Betrayal's failed-Retribution
+                    // team flip) sometimes finishing this transition still facing its OLD team's
+                    // direction instead of the new team's. Slerping quaternion-to-quaternion has no
+                    // such ambiguity: it always interpolates the shortest path between the two exact
+                    // rotations and lands EXACTLY on restingRotation at t=1.
                     Quaternion restingRotation = _transform.localRotation;
-                    Vector3 restingEuler = restingRotation.eulerAngles;
-                    _transform.localRotation = restingRotation * Quaternion.Euler(0f, -90f, 0f);
+                    Quaternion edgeOnRotation = restingRotation * Quaternion.Euler(0f, -90f, 0f);
+                    _transform.localRotation = edgeOnRotation;
                     _transitionSequence = Sequence.Create(useUnscaledTime: true)
-                        .Chain(Tween.LocalRotation(_transform, restingEuler, SpinInDuration, Ease.OutBack, useUnscaledTime: true));
+                        .Chain(Tween.Custom(this, 0f, 1f, SpinInDuration,
+                            (self, t) => self._transform.localRotation = Quaternion.Slerp(edgeOnRotation, restingRotation, t),
+                            Ease.OutBack, useUnscaledTime: true));
                     break;
+                }
 
                 case PieceTransitionStyle.PromotionMorph:
                 {
