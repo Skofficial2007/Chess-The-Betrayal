@@ -135,5 +135,126 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
             _engine.UndoMove(board, defection);
             Assert.That(board.GetPiece(square).Team, Is.EqualTo(Team.White), "Undo must flip the defected piece back to its original team.");
         }
+
+        [Test]
+        public void ApplyMove_ThenUndoMove_ActStage_RestoresPendingBetrayerState()
+        {
+            // Betrayer (Knight b1) targets a friendly victim (Pawn a3); the Act move relocates the
+            // Knight and opens the Retribution window. Undo through the seam must restore both the
+            // piece layout and the pending-Betrayer board state exactly.
+            BoardState board = TestBoardSetupUtility.CreateEmpty()
+                .WithPiece("e1", Team.White, ChessPieceType.King)
+                .WithPiece("e8", Team.Black, ChessPieceType.King)
+                .WithPiece("b1", Team.White, ChessPieceType.Knight)
+                .WithPiece("a3", Team.White, ChessPieceType.Pawn)
+                .WithBetrayalRight(true);
+            board.ComputeFullZobristHash();
+            ulong initialHash = board.ZobristHash;
+
+            var moveBuffer = new System.Collections.Generic.List<MoveCommand>();
+            ChessEngine.GetBetrayalTargets(board, TestBoardSetupUtility.AlgebraicToVector("b1"), moveBuffer);
+            MoveCommand actMove = moveBuffer[0];
+
+            _engine.ApplyMove(board, actMove);
+            Assert.That(board.BetrayalRightAvailable, Is.False, "Act must consume the betrayal right.");
+            Assert.That(board.PendingBetrayerSquare, Is.Not.Null, "Act must open the pending-Betrayer window.");
+
+            _engine.UndoMove(board, actMove);
+
+            Assert.That(board.BetrayalRightAvailable, Is.True, "Undo must restore the unspent betrayal right.");
+            Assert.That(board.PendingBetrayerSquare, Is.Null, "Undo must clear the pending-Betrayer window.");
+            Assert.That(board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("b1")).Type, Is.EqualTo(ChessPieceType.Knight), "Knight must return to its origin square.");
+            Assert.That(board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("a3")).Type, Is.EqualTo(ChessPieceType.Pawn), "Victim pawn must be restored at a3.");
+            Assert.DoesNotThrow(() => board.AssertZobristConsistency(), "Hash must remain internally consistent after unwind.");
+            Assert.That(board.ZobristHash, Is.EqualTo(initialHash), "Hash must return to its pre-Act value after undo.");
+        }
+
+        [Test]
+        public void ApplyMove_ThenUndoMove_RetributionStage_RestoresExecutionerAndBetrayer()
+        {
+            // Rook a1 (executioner) captures the just-betrayed Knight at a3, closing the sequence.
+            // Undo through the seam must restore the Rook, resurrect the Knight, and reopen the
+            // pending-Betrayer window exactly as it stood before Retribution was applied.
+            BoardState board = TestBoardSetupUtility.CreateEmpty()
+                .WithPiece("e1", Team.White, ChessPieceType.King)
+                .WithPiece("e8", Team.Black, ChessPieceType.King)
+                .WithPiece("b1", Team.White, ChessPieceType.Knight)
+                .WithPiece("a3", Team.White, ChessPieceType.Pawn)
+                .WithPiece("a1", Team.White, ChessPieceType.Rook)
+                .WithBetrayalRight(true);
+            board.ComputeFullZobristHash();
+
+            var moveBuffer = new System.Collections.Generic.List<MoveCommand>();
+            ChessEngine.GetBetrayalTargets(board, TestBoardSetupUtility.AlgebraicToVector("b1"), moveBuffer);
+            MoveCommand actMove = moveBuffer[0];
+            _engine.ApplyMove(board, actMove);
+            ulong hashAfterAct = board.ZobristHash;
+
+            ChessEngine.GetRetributionMoves(board, Team.White, board.PendingBetrayerSquare.Value, moveBuffer);
+            MoveCommand retMove = moveBuffer[0];
+
+            _engine.ApplyMove(board, retMove);
+            Assert.That(board.PendingBetrayerSquare, Is.Null, "Retribution must close the pending-Betrayer window.");
+
+            _engine.UndoMove(board, retMove);
+
+            Assert.That(board.PendingBetrayerSquare, Is.Not.Null, "Undo must reopen the pending-Betrayer window Retribution closed.");
+            Assert.That(board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("a1")).Type, Is.EqualTo(ChessPieceType.Rook), "Rook must return to a1.");
+            Assert.That(board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("a3")).Type, Is.EqualTo(ChessPieceType.Knight), "Executed Knight must be restored at a3.");
+            Assert.DoesNotThrow(() => board.AssertZobristConsistency(), "Hash must remain internally consistent after unwind.");
+            Assert.That(board.ZobristHash, Is.EqualTo(hashAfterAct), "Hash must return to its post-Act, pre-Retribution value after undo.");
+
+            _engine.UndoMove(board, actMove);
+            Assert.DoesNotThrow(() => board.AssertZobristConsistency(), "Hash must remain internally consistent after unwinding both plies.");
+        }
+
+        [Test]
+        public void ApplyMove_ThenUndoMove_DefensiveOverrideStage_RestoresKingAndBetrayerState()
+        {
+            // Pinned executioner (Rook e4) can't take Retribution, so the Knight at e3 defects and
+            // immediately checks the King at e1 — forcing a Defensive Override (King escape). Undo
+            // through the seam must reverse the King's escape and restore the pre-save board state.
+            BoardState board = TestBoardSetupUtility.CreateEmpty()
+                .WithPiece("e1", Team.White, ChessPieceType.King)
+                .WithPiece("e4", Team.White, ChessPieceType.Rook)
+                .WithPiece("e8", Team.Black, ChessPieceType.Rook)
+                .WithPiece("e3", Team.White, ChessPieceType.Knight)
+                .WithPiece("d3", Team.White, ChessPieceType.Pawn)
+                .WithBetrayalRight(true);
+            board.ComputeFullZobristHash();
+
+            MoveCommand actMove = MoveCommand.CreateStandardMove(
+                TestBoardSetupUtility.AlgebraicToVector("e3"), TestBoardSetupUtility.AlgebraicToVector("d3"),
+                board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("e3")),
+                board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("d3")), board)
+                .WithStage(BetrayalStage.Act);
+
+            _engine.ApplyMove(board, actMove);
+
+            var moveBuffer = new System.Collections.Generic.List<MoveCommand>();
+            ChessEngine.GetRetributionMoves(board, Team.White, board.PendingBetrayerSquare.Value, moveBuffer);
+            Assert.That(moveBuffer.Count, Is.EqualTo(0), "Pinned Rook must have no legal Retribution.");
+
+            DefectionOutcome outcome = ChessEngine.ResolveFailedRetribution(board);
+            Assert.That(outcome.RequiresForcedSave, Is.True, "Defected Knight must check the King, forcing a save.");
+            ulong hashAfterDefection = board.ZobristHash;
+
+            ChessEngine.GetForcedSaveMoves(board, Team.White, moveBuffer);
+            MoveCommand saveMove = moveBuffer[0];
+
+            _engine.ApplyMove(board, saveMove);
+            Assert.That(board.PendingBetrayerSquare, Is.Null, "Defensive Override must close the pending-Betrayer window.");
+
+            _engine.UndoMove(board, saveMove);
+
+            Assert.That(board.PendingBetrayerSquare, Is.Not.Null, "Undo must reopen the pending-Betrayer window the save closed.");
+            Assert.That(board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("e1")).Type, Is.EqualTo(ChessPieceType.King), "King must be restored to e1.");
+            Assert.DoesNotThrow(() => board.AssertZobristConsistency(), "Hash must remain internally consistent after unwind.");
+            Assert.That(board.ZobristHash, Is.EqualTo(hashAfterDefection), "Hash must return to its post-Defection, pre-save value after undo.");
+
+            _engine.UndoMove(board, outcome.DefectionMove);
+            _engine.UndoMove(board, actMove);
+            Assert.DoesNotThrow(() => board.AssertZobristConsistency(), "Hash must remain internally consistent after unwinding the full sequence.");
+        }
     }
 }
