@@ -210,6 +210,14 @@ namespace ChessTheBetrayal.UI
         }
 
         /// <summary>
+        /// Rattles the piece in place and settles back to rest — the king's "you're in check" cue.
+        /// </summary>
+        public void Shake()
+        {
+            _animator.Shake();
+        }
+
+        /// <summary>
         /// Plays the "vanish" half of a promotion/defection swap, then invokes onComplete — the
         /// moment BoardVisuals should Destroy this GameObject and spawn its replacement. The
         /// callback may fire on a later frame (it's driven by a tween), so callers must not assume

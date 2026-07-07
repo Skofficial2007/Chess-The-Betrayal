@@ -41,6 +41,12 @@ namespace ChessTheBetrayal.UI
         [SerializeField] private float moveIndicatorYOffset = 0.01f;
         [SerializeField, Range(8, 64)] private int moveIndicatorSegments = 24;
 
+        [Header("Check Indicator (Frame)")]
+        [Tooltip("Outer size of the check-warning frame as a fraction of the tile (1 = full tile). Slightly under 1 insets the frame so the king reads as sitting INSIDE it.")]
+        [SerializeField, Range(0.5f, 1f)] private float checkFrameSizeRatio = 0.9f;
+        [Tooltip("Border thickness of the check frame as a fraction of its outer size (0.1 = a border 10% of the frame's width on each edge).")]
+        [SerializeField, Range(0.02f, 0.3f)] private float checkFrameThicknessRatio = 0.1f;
+
         [Header("Hierarchy Containers")]
         [SerializeField] private Transform tilesParent;
         [SerializeField] private Transform whitePiecesParent;
@@ -100,6 +106,18 @@ namespace ChessTheBetrayal.UI
         // Circular move-indicator child object per tile (hidden until a move highlight targets it)
         private MeshRenderer[,] moveIndicatorRenderers;
 
+        // Square check-warning child object per tile (hidden until a king is in check on that
+        // square). Kept as its own renderer/mesh rather than reusing the tile's own MeshRenderer so
+        // the tile itself (base/hover layer) and the check warning (MoveHighlightCapture layer,
+        // red material) can be toggled completely independently — the same separation of concerns
+        // moveIndicatorRenderers already uses for legal-move dots.
+        private MeshRenderer[,] checkIndicatorRenderers;
+
+        // The square currently showing the check-warning highlight, so a later move that resolves
+        // (or shifts) check can find and clear the old one before showing a new one. Invalid when
+        // no king is currently in check.
+        private Vector2Int _checkHighlightSquare = Vector2Int.Invalid;
+
         // Death piles
         private List<ChessPiece> deadWhitePieces = new List<ChessPiece>();
         private List<ChessPiece> deadBlackPieces = new List<ChessPiece>();
@@ -115,7 +133,7 @@ namespace ChessTheBetrayal.UI
         // Cached values
         private Vector3 boardOrigin;
         private int tileCountX, tileCountY;
-        private int tileLayer, highlightLayer, moveHighlightLayer, moveHighlightCaptureLayer;
+        private int tileLayer, highlightLayer, moveHighlightLayer, moveHighlightCaptureLayer, checkHighlightLayer;
 
         // Squares among _highlightedSquares that currently hold a capturable piece
         private readonly HashSet<Vector2Int> _captureSquaresLookup = new HashSet<Vector2Int>(32);
@@ -247,6 +265,7 @@ namespace ChessTheBetrayal.UI
         {
             tiles = new GameObject[tileCountX, tileCountY];
             moveIndicatorRenderers = new MeshRenderer[tileCountX, tileCountY];
+            checkIndicatorRenderers = new MeshRenderer[tileCountX, tileCountY];
             _tileByTransform.Clear();
 
             for (int x = 0; x < tileCountX; x++)
@@ -300,9 +319,27 @@ namespace ChessTheBetrayal.UI
                     indicatorRenderer.enabled = false;
                     indicatorGO.layer = tileLayer;
 
+                    // Create the check-warning FRAME child, hidden until a king in check occupies
+                    // this tile. A hollow square ring (not a filled square, and not the move dot's
+                    // circle) inset slightly inside the tile, so the king reads as sitting FRAMED
+                    // inside a red border with the tile still visible through the middle — see the
+                    // class doc on SetKingInCheckHighlight for why this is its own mesh/material/layer.
+                    GameObject checkGO = new GameObject($"CheckIndicator_{x}_{y}");
+                    checkGO.transform.SetParent(tileGO.transform, false);
+                    checkGO.transform.localPosition = new Vector3(0f, moveIndicatorYOffset, 0f);
+
+                    float frameOuter = tileSize * checkFrameSizeRatio;
+                    Mesh checkFrameMesh = GenerateFrameMesh(frameOuter, frameOuter * checkFrameThicknessRatio);
+                    checkGO.AddComponent<MeshFilter>().sharedMesh = checkFrameMesh;
+                    MeshRenderer checkRenderer = checkGO.AddComponent<MeshRenderer>();
+                    checkRenderer.sharedMaterial = tileMaterial;
+                    checkRenderer.enabled = false;
+                    checkGO.layer = tileLayer;
+
                     // Store references
                     tiles[x, y] = tileGO;
                     moveIndicatorRenderers[x, y] = indicatorRenderer;
+                    checkIndicatorRenderers[x, y] = checkRenderer;
                     _tileByTransform[tileGO.transform] = new Vector2Int(x, y);
                 }
             }
@@ -336,6 +373,52 @@ namespace ChessTheBetrayal.UI
 
             mesh.vertices = vertices;
             mesh.triangles = triangles;
+            mesh.RecalculateNormals();
+            return mesh;
+        }
+
+        /// <summary>
+        /// Builds a flat hollow square ring (frame) centered on the origin, used for the king's
+        /// check-warning indicator: an outer square of side outerSize with an inner square of side
+        /// (outerSize - 2*thickness) cut out of the middle, leaving a border thickness units wide on
+        /// every edge and transparent nothing inside. Eight outer/inner corner vertices stitched
+        /// into eight triangles (two per side) — cheap enough to build one per tile at setup.
+        /// </summary>
+        private static Mesh GenerateFrameMesh(float outerSize, float thickness)
+        {
+            Mesh mesh = new Mesh { name = "CheckFrameMesh" };
+
+            float outer = outerSize * 0.5f;
+            float inner = Mathf.Max(0f, outer - thickness);
+
+            // 0..3 outer corners, 4..7 inner corners — same corner order (BL, TL, BR, TR) for both
+            // rings so each side's quad is a simple outer-pair + matching inner-pair.
+            mesh.vertices = new Vector3[]
+            {
+                new Vector3(-outer, 0f, -outer), // 0 outer BL
+                new Vector3(-outer, 0f,  outer), // 1 outer TL
+                new Vector3( outer, 0f, -outer), // 2 outer BR
+                new Vector3( outer, 0f,  outer), // 3 outer TR
+                new Vector3(-inner, 0f, -inner), // 4 inner BL
+                new Vector3(-inner, 0f,  inner), // 5 inner TL
+                new Vector3( inner, 0f, -inner), // 6 inner BR
+                new Vector3( inner, 0f,  inner), // 7 inner TR
+            };
+
+            // Four border strips (left, right, bottom, top), two triangles each, wound so the
+            // frame faces up (+Y) like every other board indicator.
+            mesh.triangles = new int[]
+            {
+                // Left strip (outer BL,TL -> inner BL,TL)
+                0, 1, 4,   1, 5, 4,
+                // Right strip (inner BR,TR -> outer BR,TR)
+                6, 7, 2,   7, 3, 2,
+                // Bottom strip (outer BL,inner BL -> outer BR,inner BR)
+                0, 4, 2,   4, 6, 2,
+                // Top strip (inner TL,outer TL -> inner TR,outer TR)
+                5, 1, 7,   1, 3, 7,
+            };
+
             mesh.RecalculateNormals();
             return mesh;
         }
@@ -479,6 +562,7 @@ namespace ChessTheBetrayal.UI
             // Clear highlights
             ClearLegalMoveHighlights();
             ClearHoverHighlight();
+            ClearCheckHighlight();
         }
 
         #endregion
@@ -689,6 +773,43 @@ namespace ChessTheBetrayal.UI
                     Vector3 rookPos = GetTileCenter(move.RookEndPosition.Value.x, move.RookEndPosition.Value.y);
                     rookPos.y += pieceYOffset;
                     rook.PlayCastleMove(rookPos, PrimeTweenPieceAnimator.CastleRookStartDelay);
+                }
+            }
+
+            // 4. Check warning: payload.IsCheck reports whether the side about to move NEXT (i.e.
+            // the opponent of whoever just moved, move.PieceTeam) is now in check — see
+            // MatchDriver.CheckForGameEnd. Frame their king in red and give it a startle
+            // shake; clear any stale highlight otherwise (check can resolve, or the
+            // highlighted king can change between moves, e.g. a discovered check on a different
+            // turn). Deferred to the end of AnimateMove so it never races the king's own move/
+            // castle animation still being set up above.
+            if (payload.IsCheck)
+            {
+                Team defendingTeam = move.PieceTeam == Team.White ? Team.Black : Team.White;
+                ShowKingInCheck(defendingTeam);
+            }
+            else
+            {
+                ClearCheckHighlight();
+            }
+        }
+
+        /// <summary>
+        /// Finds team's king among the currently spawned pieces and shows the check-warning frame
+        /// under it plus a startle shake — the same lookup pattern ThreatPulseOwnKing already uses,
+        /// kept as its own linear scan rather than a maintained king-position cache since it only
+        /// runs once per move and the board never has more than one king per team.
+        /// </summary>
+        private void ShowKingInCheck(Team team)
+        {
+            foreach (var kv in _piecesByPosition)
+            {
+                ChessPiece piece = kv.Value;
+                if (piece.team == team && piece.type == ChessPieceType.King)
+                {
+                    SetKingInCheckHighlight(kv.Key);
+                    piece.Shake();
+                    return;
                 }
             }
         }
@@ -1165,6 +1286,46 @@ namespace ChessTheBetrayal.UI
             }
         }
 
+        /// <summary>
+        /// Shows the red check-warning frame under the king's tile at kingPos and clears any
+        /// previous one (a check can shift squares between moves — e.g. king moves out of check on
+        /// one turn, a discovered check lands on a different king the next). Uses the dedicated
+        /// CheckHighlight URP layer/material (its own bright red frame look, separate from the
+        /// capturing-move dot's red) on the hollow frame mesh, so "your king is in danger" reads as
+        /// a red border framing the king rather than a colored dot or a filled tile.
+        /// </summary>
+        public void SetKingInCheckHighlight(Vector2Int kingPos)
+        {
+            ClearCheckHighlight();
+
+            if (kingPos.x < 0 || kingPos.x >= tileCountX || kingPos.y < 0 || kingPos.y >= tileCountY) return;
+
+            MeshRenderer indicator = checkIndicatorRenderers[kingPos.x, kingPos.y];
+            if (indicator == null) return;
+
+            indicator.enabled = true;
+            indicator.gameObject.layer = checkHighlightLayer;
+            _checkHighlightSquare = kingPos;
+        }
+
+        /// <summary>
+        /// Hides the check-warning square, if one is currently showing. Safe to call unconditionally
+        /// (e.g. every move) — a no-op when no king is in check.
+        /// </summary>
+        public void ClearCheckHighlight()
+        {
+            if (_checkHighlightSquare == Vector2Int.Invalid) return;
+
+            if (_checkHighlightSquare.x >= 0 && _checkHighlightSquare.x < tileCountX &&
+                _checkHighlightSquare.y >= 0 && _checkHighlightSquare.y < tileCountY)
+            {
+                MeshRenderer indicator = checkIndicatorRenderers[_checkHighlightSquare.x, _checkHighlightSquare.y];
+                if (indicator != null) indicator.enabled = false;
+            }
+
+            _checkHighlightSquare = Vector2Int.Invalid;
+        }
+
         #endregion
 
         #region Initialization Helpers
@@ -1178,11 +1339,16 @@ namespace ChessTheBetrayal.UI
             highlightLayer = LayerMask.NameToLayer("Highlight");
             moveHighlightLayer = LayerMask.NameToLayer("MoveHighlight");
             moveHighlightCaptureLayer = LayerMask.NameToLayer("MoveHighlightCapture");
+            checkHighlightLayer = LayerMask.NameToLayer("CheckHighlight");
 
             if (tileLayer == -1) tileLayer = 0;
             if (highlightLayer == -1) highlightLayer = 0;
             if (moveHighlightLayer == -1) moveHighlightLayer = 0;
             if (moveHighlightCaptureLayer == -1) moveHighlightCaptureLayer = 0;
+            // Falls back to the capture layer if the CheckHighlight layer hasn't been created yet,
+            // so the check warning still shows (as the capture red) rather than silently landing on
+            // the Default layer and rendering as an untinted frame.
+            if (checkHighlightLayer == -1) checkHighlightLayer = moveHighlightCaptureLayer;
         }
 
         /// <summary>

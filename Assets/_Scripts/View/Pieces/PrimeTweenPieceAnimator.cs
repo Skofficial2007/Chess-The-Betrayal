@@ -197,6 +197,24 @@ namespace ChessTheBetrayal.UI
         private static readonly int OutlineWidthId = Shader.PropertyToID("_OutlineWidth");
         private Material _selectionOutlineMaterial;
 
+        // King "in check" shake — a startle, not a clean wobble. Three things play at once, all off
+        // the SAME single 0..1 driver tween so they can never drift apart or leave the king at a
+        // stale offset (the capture-stamp arc's lesson): a fast decaying side-to-side vibration, a
+        // small syncopated rotational tilt (a piece flinching leans, it doesn't just slide), and a
+        // brief up-hop at the front of the motion (the "jolt" of being threatened). Everything
+        // decays to zero by t=1 via a (1-t) envelope, so the king ends EXACTLY where it started
+        // with no settle tween needed. One Tween.Custom, zero per-frame allocation, unscaled time
+        // so it plays at full speed even while a hitstop/pause scales Time.timeScale.
+        private const float ShakeDuration = 0.42f;
+        private const float ShakePositionMagnitude = 0.06f;   // peak lateral offset (world units)
+        private const float ShakeHopHeight = 0.05f;           // peak upward jolt at the front
+        private const float ShakeTiltDegrees = 7f;            // peak Z-axis lean
+        private const float ShakeFrequency = 32f;             // rad/sec of the lateral vibration
+        private const float ShakeTiltFrequency = 26f;         // slightly detuned so tilt/slide don't lock in phase
+        private Tween _shakeTween;
+        private Vector3 _shakeRestPosition;
+        private Quaternion _shakeRestRotation;
+
         private MeshRenderer _outlineRenderer;
         private MaterialPropertyBlock _outlineMpb;
         private Tween _outlineTween;
@@ -703,6 +721,56 @@ namespace ChessTheBetrayal.UI
             _mpb.SetColor(RimGlowColorId, color);
             _mpb.SetFloat(RimGlowIntensityId, intensity);
             _renderer.SetPropertyBlock(_mpb);
+        }
+
+        public void Shake()
+        {
+            // A check delivered while a previous shake is still mid-flight (rare, but a fast forced
+            // sequence can do it) would otherwise read the half-finished offset as the new rest
+            // pose. Stop() cancels the tween but does NOT restore the transform, so if one was live,
+            // restore the cached rest pose first, THEN read the true rest — the same
+            // snap-before-reread guard PlaySettleBob uses for its baseY. Checked before Stop() since
+            // Stop() clears isAlive.
+            bool wasShaking = _shakeTween.isAlive;
+            _shakeTween.Stop();
+            if (wasShaking)
+            {
+                _transform.position = _shakeRestPosition;
+                _transform.localRotation = _shakeRestRotation;
+            }
+            _shakeRestPosition = _transform.position;
+            _shakeRestRotation = _transform.localRotation;
+
+            // Local right/up, so the vibration and hop read identically for White and Black kings
+            // despite Black's prefab being pre-rotated 180° at spawn (see SpawnSinglePiece). Tilt is
+            // about the piece's own forward axis (a lean toward/away from the shake direction).
+            Vector3 lateral = _transform.right;
+            Vector3 up = _transform.up;
+
+            _shakeTween = Tween.Custom(this, 0f, 1f, ShakeDuration,
+                (self, t) => self.ApplyShake(t, lateral, up), Ease.Linear, useUnscaledTime: true);
+        }
+
+        /// <summary>
+        /// Drives the whole check-shake from one normalized progress t (0..1): a decaying-amplitude
+        /// sinusoidal lateral vibration, a detuned rotational tilt, and a single up-hop concentrated
+        /// at the front of the motion. A (1-t) envelope multiplies every component so all of them
+        /// reach exactly zero at t=1 — the king lands back on its exact rest transform with no
+        /// separate settle tween. Pure math off cached rest pose, so it's allocation-free per frame.
+        /// </summary>
+        private void ApplyShake(float t, Vector3 lateral, Vector3 up)
+        {
+            float envelope = 1f - t;               // linear decay to zero by the end
+            float decay = envelope * envelope;     // squared: hits hard up front, tapers smoothly
+
+            float sway = Mathf.Sin(t * ShakeFrequency) * ShakePositionMagnitude * decay;
+            float tilt = Mathf.Sin(t * ShakeTiltFrequency) * ShakeTiltDegrees * decay;
+            // Hop is a half-sine bump weighted to the front third of the motion — the initial jolt —
+            // rather than oscillating the whole way through, so it reads as one recoil, not a bounce.
+            float hop = Mathf.Sin(Mathf.Clamp01(t * 3f) * Mathf.PI) * ShakeHopHeight * decay;
+
+            _transform.position = _shakeRestPosition + lateral * sway + up * hop;
+            _transform.localRotation = _shakeRestRotation * Quaternion.AngleAxis(tilt, Vector3.forward);
         }
 
         public void PlayTransitionOut(PieceTransitionStyle style, Action onComplete)
