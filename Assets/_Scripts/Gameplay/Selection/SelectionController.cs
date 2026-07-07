@@ -26,6 +26,7 @@ namespace ChessTheBetrayal.Gameplay
         [Header("Event Channels")]
         [SerializeField] private ChessTheBetrayal.Events.PieceSelectedEventChannel _pieceSelectedChannel;
         [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _selectionClearedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.SelectionRejectedEventChannel _selectionRejectedChannel;
 
         private ISelectionInput _selectionInput;
         private GameManager _gameManager;
@@ -98,8 +99,17 @@ namespace ChessTheBetrayal.Gameplay
 
             // A selectable piece with zero legal moves (e.g. pinned during Retribution, or a
             // piece that isn't the forced Executioner/Save piece) offers nothing to select into.
+            // CanSelectPiece already confirmed this IS the current turn's own piece — so this is
+            // specifically "your piece, but it can't move right now," not an invalid target. Raise
+            // SelectionRejected (rather than just returning silently) so a View can shake the piece
+            // to say so, without ever firing for a tap on an opponent's piece or empty square (see
+            // HandleTileActivated's final else, which stays a silent Deselect for those).
             var legalMoves = _gameManager.GetLegalMovesAt(tile);
-            if (legalMoves.Count == 0) return;
+            if (legalMoves.Count == 0)
+            {
+                _selectionRejectedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.SelectionRejectedPayload(tile));
+                return;
+            }
 
             _selectedTile = tile;
             _pieceSelectedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.PieceSelectedPayload(tile));
