@@ -25,10 +25,10 @@ Material:
     m_TexEnvs: []
     m_Ints: []
     m_Floats:
-    - _OutlinePulseAmount: 0.2
+    - _OutlinePulseAmount: 0.22
     - _OutlinePulseSpeed: 2.5
-    - _OutlineSoftness: 0.35
-    - _OutlineWidth: 0.024
+    - _OutlineSoftness: 0.3
+    - _OutlineWidth: 0.03
     m_Colors:
-    - _OutlineColor: {r: 2.2, g: 1.6, b: 0.45, a: 1}
+    - _OutlineColor: {r: 2.6, g: 1.75, b: 0.4, a: 1}
   m_BuildTextureStacks: []
