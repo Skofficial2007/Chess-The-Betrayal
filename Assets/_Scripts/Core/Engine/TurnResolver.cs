@@ -69,11 +69,11 @@ namespace ChessTheBetrayal.Core.Engine
     }
 
     /// <remarks>
-    /// CROSS-REFERENCE: this class decides when the turn flips (Act and Defection don't;
+    /// TURN-FLIP INVARIANT: this class decides when the turn flips (Act and Defection don't;
     /// everything else does) by calling board.NextTurn()/ToggleTurnHash() explicitly. The AI search
-    /// (AlphaBetaSearch.ScoreChild in the AI assembly) bypasses this class entirely for per-ply
-    /// control over the Betrayal sub-phase, and re-derives the identical flip rule from
-    /// move.Stage. If you ever change WHEN Act/Defection flip the turn, update both places.
+    /// bypasses this class entirely for per-ply control over the Betrayal sub-phase, re-deriving the
+    /// identical rule in AlphaBetaSearch.StageFlipsTurn (ChessTheBetrayal.AI). If you ever change
+    /// WHEN Act/Defection flip the turn, update both places — SearchTurnFlipAgreementTests fails otherwise.
     /// </remarks>
     public sealed class TurnResolver : ITurnResolver
     {
