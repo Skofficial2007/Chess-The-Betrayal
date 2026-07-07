@@ -116,7 +116,7 @@ namespace ChessTheBetrayal.Gameplay
         // Background-thread search agent. Null until SetAIMode() constructs it — most sessions
         // (human vs human) never touch this at all. Ticked from Update() so OnMoveDecided always
         // fires on the main thread (see AsyncAIAgent's class doc for why that's mandatory).
-        // Not yet wired to actually request/play moves — see TryRequestAIMove().
+        // Requested via TryRequestAIMove(), called from StartMatch() and OnTurnChangedForAI().
         private IAIAgent _aiAgent;
         private Team _aiTeam;
 
@@ -197,6 +197,7 @@ namespace ChessTheBetrayal.Gameplay
 
             _gameOverChannel?.Register(OnGameOverRaised);
             _matchStartRequestedChannel?.Register(StartMatch);
+            _turnChangedChannel?.Register(OnTurnChangedForAI);
         }
 
         private void Start()
@@ -236,6 +237,7 @@ namespace ChessTheBetrayal.Gameplay
 
             _gameOverChannel?.Unregister(OnGameOverRaised);
             _matchStartRequestedChannel?.Unregister(StartMatch);
+            _turnChangedChannel?.Unregister(OnTurnChangedForAI);
 
             // Reset the static engine logger to the safe default to prevent scene-reload issues.
             ChessEngine.Initialize(NullDomainLogger.Instance);
@@ -287,6 +289,13 @@ namespace ChessTheBetrayal.Gameplay
             if (_aiAgent is AsyncAIAgent asyncAgent)
             {
                 asyncAgent.Tick();
+
+                // TEMP DEBUG (AI-08 manual verification): surface any worker-thread exception.
+                string searchException = asyncAgent.ConsumeLastSearchException();
+                if (searchException != null)
+                {
+                    Debug.LogError($"[GameManager][DEBUG] AI search threw:\n{searchException}");
+                }
             }
         }
 
@@ -346,6 +355,16 @@ namespace ChessTheBetrayal.Gameplay
             _moveExecutor.OnMoveRejected += OnExecutorMoveRejected;
             _moveExecutor.OnPromotionRequired += OnExecutorPromotionRequired;
             _moveExecutor.OnRetributionSkipConfirmed += _matchDriver.RequestRetributionSkip;
+
+            // TEMP DEBUG HOOK (AI-08 manual verification) — remove once a real Settings screen
+            // drives SetAIMode. Ultimate mode only; AI takes whichever side the roulette didn't
+            // give the human.
+            if (_selectedMode.IsUnlimited)
+            {
+                Team aiTeam = PlayerTeam == Team.White ? Team.Black : Team.White;
+                SetAIMode(aiTeam);
+                if (logMoves) Debug.Log($"[GameManager][DEBUG] AI enabled for {aiTeam}. Human plays {PlayerTeam}.");
+            }
 
             // The clock has to exist before TransitionToPhase runs — the phase transition
             // is what resumes it.
@@ -480,6 +499,10 @@ namespace ChessTheBetrayal.Gameplay
             {
                 _matchDriver.TransitionToPhase(TurnPhase.Normal);
                 if (logMoves) Debug.Log("[GameManager] Match officially started. Clock running.");
+
+                // Human-Black path: no TurnChangedEvent precedes the very first ply, so this is
+                // the only place that can kick off the AI's opening move.
+                TryRequestAIMove();
             }
         }
 
@@ -557,10 +580,11 @@ namespace ChessTheBetrayal.Gameplay
 
         /// <summary>
         /// Configures the session for AI play. AI sessions always run untimed (see InitializeClock).
-        /// Constructs the background-thread search agent, but does not start a search — nothing
-        /// calls TryRequestAIMove() yet, so this is safe to call without changing any current
-        /// human-vs-human behavior. Wiring the actual turn-trigger is deliberately deferred until
-        /// the full AI flow is being implemented.
+        /// Constructs the background-thread search agent. Call this — and only this — before
+        /// HandleTeamAnimationComplete/StartMatch run their course; _isAIMode/_aiAgent being set
+        /// is what makes TryRequestAIMove (fired from StartMatch and every TurnChangedEvent) not
+        /// a no-op. Calling it late (after StartMatch) simply means the AI won't move until the
+        /// next turn change — there's no unsafe half-configured state in between.
         /// </summary>
         public void SetAIMode(Team aiTeam = Team.Black, BetrayalUsage betrayalUsage = BetrayalUsage.Full)
         {
@@ -587,12 +611,19 @@ namespace ChessTheBetrayal.Gameplay
         private void HandleAIMoveDecided(MoveCommand move) => _matchDriver.PlayMove(move);
 
         /// <summary>
-        /// Call once it's aiTeam's turn in a live match to kick off a background search. Not
-        /// invoked anywhere yet — this is the seam the full AI-turn flow will call into.
+        /// Fires whenever a turn-ending move completes (see MatchDriver.CheckForGameEnd's
+        /// GameState.Normal/Check branches). This is what triggers the AI's move after every
+        /// human reply — the very first ply (when the AI draws White) has no preceding
+        /// TurnChangedEvent, so StartMatch() calls TryRequestAIMove() directly for that case.
+        /// </summary>
+        private void OnTurnChangedForAI(ChessTheBetrayal.Events.Payloads.TurnChangedPayload payload) => TryRequestAIMove();
+
+        /// <summary>
+        /// Call once it's aiTeam's turn in a live match to kick off a background search.
         /// </summary>
         private void TryRequestAIMove()
         {
-            if (_aiAgent == null || LiveBoard.CurrentTurn != _aiTeam || !IsGameActive) return;
+            if (!AITurnGate.ShouldRequestMove(_aiAgent != null, LiveBoard.CurrentTurn, _aiTeam, IsGameActive)) return;
             _aiAgent.RequestBestMove(LiveBoard, _aiTeam);
         }
 

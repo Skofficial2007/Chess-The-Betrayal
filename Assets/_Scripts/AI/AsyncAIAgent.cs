@@ -35,6 +35,17 @@ namespace ChessTheBetrayal.AI
         private MoveCommand _pendingResult;
         private CancellationTokenSource _cts;
 
+        // TEMP DEBUG : surfaces a worker-thread exception to the
+        // main-thread caller instead of letting it vanish into the Task's unobserved-exception
+        // path. Remove once the AI flow has been confirmed working end-to-end in-editor.
+        private volatile string _lastSearchException;
+        public string ConsumeLastSearchException()
+        {
+            string ex = _lastSearchException;
+            _lastSearchException = null;
+            return ex;
+        }
+
         public AsyncAIAgent(IChessEngine engine, IPositionEvaluator evaluator, AISearchSettings settings)
         {
             _search = new AlphaBetaSearch(engine, evaluator);
@@ -67,8 +78,10 @@ namespace ChessTheBetrayal.AI
                     }
                 }
                 catch (OperationCanceledException) { /* expected on reset/scene change */ }
-                // Any other exception intentionally surfaces in the Editor console via the Task's
-                // unobserved-exception path during development; wrap with a logger seam before ship.
+                catch (Exception ex)
+                {
+                    _lastSearchException = ex.ToString();
+                }
             }, token);
         }
 
