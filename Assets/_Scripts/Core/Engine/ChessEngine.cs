@@ -677,13 +677,9 @@ namespace ChessTheBetrayal.Core.Engine
 
         /// <summary>
         /// Rolls back a move completely, restoring the board to exactly how it was before.
-        /// This is how the AI can explore thousands of move sequences without ever copying the board.
+        /// This is how a search can explore thousands of move sequences without ever copying the board.
         /// </summary>
-        /// <remarks>
-        /// The InternalsVisibleTo at the top of the file lets the edit-mode tests call this directly;
-        /// other production assemblies still can't.
-        /// </remarks>
-        internal static void UndoMoveOnBoard(BoardState board, MoveCommand move, bool recordHistory = true)
+        public static void UndoMoveOnBoard(BoardState board, MoveCommand move, bool recordHistory = true)
         {
             int currentCastlingMask = board.CastlingRights;
             int? currentEnPassantFile = board.EnPassantFile;
