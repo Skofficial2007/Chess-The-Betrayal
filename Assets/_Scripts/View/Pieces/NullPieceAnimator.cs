@@ -72,6 +72,10 @@ namespace ChessTheBetrayal.UI
 
         public void FlashGlow(Color color, float intensity, float flashDuration, int cycles) { }
 
+        // No tween in headless/AI play — the king's position is unaffected, matching how every
+        // other transform-tween method here is a no-op or instant snap.
+        public void Shake() { }
+
         // There's no tween to play, but onComplete must still fire — and fire synchronously, since
         // BoardVisuals relies on it to know the instant it should Destroy the outgoing piece and
         // spawn its replacement. Skipping the callback here would leave promotion/defection stuck

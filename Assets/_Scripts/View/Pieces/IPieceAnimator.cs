@@ -149,6 +149,15 @@ namespace ChessTheBetrayal.UI
         void FlashGlow(Color color, float intensity, float flashDuration, int cycles);
 
         /// <summary>
+        /// Rattles the piece side-to-side and settles back to its exact current position — the
+        /// king's "I'm in check" cue, played the instant a move delivers check (see
+        /// BoardVisuals.AnimateMove). Independent of any move/lift tween in flight; reads the
+        /// piece's live position as its own rest point rather than assuming it's already settled,
+        /// so it's safe to call in the same frame a board-move glide just started.
+        /// </summary>
+        void Shake();
+
+        /// <summary>
         /// Plays the "vanish" half of a piece-swap transition (promotion or defection) on the
         /// outgoing piece, then invokes onComplete — the moment BoardVisuals should Destroy this
         /// GameObject and spawn its replacement. Callers must not assume onComplete fires on the
