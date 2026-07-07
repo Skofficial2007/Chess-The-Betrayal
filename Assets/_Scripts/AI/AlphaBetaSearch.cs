@@ -75,6 +75,7 @@ namespace ChessTheBetrayal.AI
                 int alpha = -Infinity;
                 int beta = Infinity;
                 MoveCommand bestThisDepth = bestMove;
+                int bestIndexThisDepth = 0;
                 int bestScore = -Infinity;
                 bool completed = true;
 
@@ -83,18 +84,19 @@ namespace ChessTheBetrayal.AI
                     if (ct.IsCancellationRequested) { completed = false; break; }
 
                     MoveCommand move = _rootMoves[i];
-                    _engine.ApplyMove(board, move);
+                    ApplyMoveAndTurn(board, move);
 
                     // Root moves are always the current player's own choices. An Act or Defection
                     // at the root keeps the SAME player to move, so we recurse without negation.
                     int score = ScoreChild(board, move, depth - 1, alpha, beta, rootTeam, ct);
 
-                    _engine.UndoMove(board, move);
+                    UndoMoveAndTurn(board, move);
 
                     if (score > bestScore)
                     {
                         bestScore = score;
                         bestThisDepth = move;
+                        bestIndexThisDepth = i;
                     }
                     if (score > alpha) alpha = score;
                 }
@@ -103,7 +105,9 @@ namespace ChessTheBetrayal.AI
                 {
                     bestMove = bestThisDepth;
                     // Move ordering payoff: put the best move first next iteration for max cutoffs.
-                    MoveToFront(bestMove);
+                    // Uses the index found above — MoveCommand has no IEquatable, so an IndexOf(move)
+                    // lookup here would box through the reflection-based ValueType.Equals fallback.
+                    MoveToFront(bestIndexThisDepth);
 
                     // Early exit on forced mate found — no deeper search changes the decision.
                     if (bestScore >= MateScore) break;
@@ -179,9 +183,9 @@ namespace ChessTheBetrayal.AI
                 if (ct.IsCancellationRequested) return best;
 
                 MoveCommand move = moves[i];
-                _engine.ApplyMove(board, move);
+                ApplyMoveAndTurn(board, move);
                 int score = ScoreChild(board, move, depth - 1, alpha, beta, perspectiveTeam, ct);
-                _engine.UndoMove(board, move);
+                UndoMoveAndTurn(board, move);
 
                 if (score > best) best = score;
                 if (best > alpha) alpha = best;
@@ -193,6 +197,27 @@ namespace ChessTheBetrayal.AI
             }
 
             return best;
+        }
+
+        /// <summary>
+        /// Applies a move AND advances board.CurrentTurn to match — IChessEngine.ApplyMove
+        /// deliberately does not touch CurrentTurn (per-ply turn control belongs to the caller),
+        /// but GetAllLegalMoves/IsKingInCheck/GetRetributionMoves all read CurrentTurn to know
+        /// whose position they're looking at. The search is the caller responsible for keeping it
+        /// in sync, using the exact same StageFlipsTurn rule ApplyZobristMove and TurnResolver use.
+        /// </summary>
+        private void ApplyMoveAndTurn(BoardState board, MoveCommand move)
+        {
+            _engine.ApplyMove(board, move);
+            if (StageFlipsTurn(move.Stage)) board.NextTurn();
+        }
+
+        /// <summary>Mirror of <see cref="ApplyMoveAndTurn"/> — restores CurrentTurn before undoing
+        /// the move itself, so UndoMove sees the same CurrentTurn ApplyMove was called with.</summary>
+        private void UndoMoveAndTurn(BoardState board, MoveCommand move)
+        {
+            if (StageFlipsTurn(move.Stage)) board.NextTurn();
+            _engine.UndoMove(board, move);
         }
 
         /// <summary>
@@ -264,6 +289,9 @@ namespace ChessTheBetrayal.AI
                     // the defected piece now counts for the opponent in the resolved material sum.
                     DefectionOutcome outcome = ChessEngine.ResolveFailedRetribution(board);
                     int resolvedScore = Quiescence(board, alpha, beta, perspectiveTeam, ct);
+                    // ResolveFailedRetribution applies the Defection move directly via ChessEngine,
+                    // bypassing our ApplyMoveAndTurn wrapper — but Defection never flips the turn
+                    // (StageFlipsTurn is false for it), so a plain UndoMove is correct here too.
                     _engine.UndoMove(board, outcome.DefectionMove);
                     return resolvedScore;
                 }
@@ -273,11 +301,11 @@ namespace ChessTheBetrayal.AI
                 for (int i = 0; i < retribution.Count; i++)
                 {
                     MoveCommand move = retribution[i];
-                    _engine.ApplyMove(board, move);
+                    ApplyMoveAndTurn(board, move);
                     // Retribution flips the turn, so negate.
                     Team childPerspective = perspectiveTeam == Team.White ? Team.Black : Team.White;
                     int score = -Quiescence(board, -beta, -alpha, childPerspective, ct);
-                    _engine.UndoMove(board, move);
+                    UndoMoveAndTurn(board, move);
                     if (score > best) best = score;
                     if (best > alpha) alpha = best;
                     if (alpha >= beta) break;
@@ -301,9 +329,9 @@ namespace ChessTheBetrayal.AI
                 MoveCommand move = moves[i];
                 if (!move.IsCapture && move.Stage != BetrayalStage.Act) continue; // quiet move, skip
 
-                _engine.ApplyMove(board, move);
+                ApplyMoveAndTurn(board, move);
                 int score = ScoreChild(board, move, 0, alpha, beta, perspectiveTeam, ct);
-                _engine.UndoMove(board, move);
+                UndoMoveAndTurn(board, move);
 
                 if (score >= beta) return beta;
                 if (score > alpha) alpha = score;
@@ -354,14 +382,13 @@ namespace ChessTheBetrayal.AI
             _ => 0
         };
 
-        private void MoveToFront(MoveCommand move)
+        private void MoveToFront(int index)
         {
-            int idx = _rootMoves.IndexOf(move);
-            if (idx > 0)
-            {
-                _rootMoves.RemoveAt(idx);
-                _rootMoves.Insert(0, move);
-            }
+            if (index <= 0) return;
+
+            MoveCommand move = _rootMoves[index];
+            _rootMoves.RemoveAt(index);
+            _rootMoves.Insert(0, move);
         }
     }
 }
