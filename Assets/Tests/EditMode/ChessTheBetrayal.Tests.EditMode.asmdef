@@ -3,6 +3,7 @@
   "references": [
     "ChessTheBetrayal.Core",
     "ChessTheBetrayal.Gameplay.Flow",
+    "ChessTheBetrayal.AI",
     "ChessTheBetrayal.Tests.Utilities"
   ],
   "includePlatforms": ["Editor"],

@@ -3,6 +3,8 @@ using System.Threading;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("ChessTheBetrayal.Tests.EditMode")]
+
 namespace ChessTheBetrayal.AI
 {
     /// <summary>
@@ -204,10 +206,7 @@ namespace ChessTheBetrayal.AI
         private int ScoreChild(BoardState board, MoveCommand move, int childDepth,
                                int alpha, int beta, Team perspectiveTeam, CancellationToken ct)
         {
-            bool turnFlipped = move.Stage != BetrayalStage.Act
-                            && move.Stage != BetrayalStage.Defection;
-
-            if (turnFlipped)
+            if (StageFlipsTurn(move.Stage))
             {
                 // Standard negamax step: opponent to move, minimize from our view => negate.
                 Team childPerspective = perspectiveTeam == Team.White ? Team.Black : Team.White;
@@ -222,6 +221,15 @@ namespace ChessTheBetrayal.AI
                 return Search(board, childDepth, alpha, beta, perspectiveTeam, ct);
             }
         }
+
+        /// <summary>
+        /// True when <paramref name="stage"/> passes the turn to the opponent (Retribution,
+        /// DefensiveOverride, and ordinary None moves); false for Act and Defection, which are
+        /// half-moves by the same player. Mirrors ChessEngine.ApplyZobristMove's turn-hash toggle
+        /// and TurnResolver's NextTurn() calls exactly — if that rule ever changes, update both.
+        /// </summary>
+        internal static bool StageFlipsTurn(BetrayalStage stage) =>
+            stage != BetrayalStage.Act && stage != BetrayalStage.Defection;
 
         /// <summary>
         /// Quiescence: extends the search through "loud" positions to kill the horizon effect.
