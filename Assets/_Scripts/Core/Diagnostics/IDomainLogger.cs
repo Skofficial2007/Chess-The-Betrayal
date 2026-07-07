@@ -1,14 +1,14 @@
 namespace ChessTheBetrayal.Core.Diagnostics
 {
     /// <summary>
-    /// Contract for all diagnostic output from domain classes.
+    /// Defines how domain classes emit diagnostic output.
     /// Implementations should reside in the presentation or server layers to maintain strict domain decoupling.
     /// </summary>
     public interface IDomainLogger
     {
         /// <summary>
-        /// Indicates whether verbose logging is enabled. 
-        /// Used to guard string allocation and formatting on performance-critical hot paths.
+        /// Indicates whether verbose logging is enabled.
+        /// Check this before building a detail string so we skip the formatting work when nobody is listening.
         /// </summary>
         bool IsVerbose { get; }
 
@@ -18,16 +18,16 @@ namespace ChessTheBetrayal.Core.Diagnostics
     }
 
     /// <summary>
-    /// A fully value-typed log payload. Declared as a readonly struct to guarantee
-    /// stack allocation and prevent garbage collection pressure on call sites.
+    /// A value-typed log payload. A readonly struct so passing one around
+    /// does not create garbage at call sites.
     /// </summary>
     public readonly struct DomainLogEvent
     {
         public readonly DomainEventCode Code;
 
         /// <summary>
-        /// Optional human-readable detail. To prevent allocation overhead, 
-        /// strings should only be passed when guarded by verbosity checks.
+        /// Optional human-readable detail. Only pass a string when a verbosity
+        /// check has already confirmed it will actually be used.
         /// </summary>
         public readonly string Message;
 

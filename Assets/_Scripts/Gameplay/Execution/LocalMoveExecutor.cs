@@ -111,7 +111,7 @@ namespace ChessTheBetrayal.Gameplay
                 return;
             }
 
-            // --- BETRAYAL MECHANIC: Phase 3 Forced Save Override ---
+            // Forced Save (Defensive Override): the side under betrayal must resolve the check.
             if (_phaseProvider != null && _phaseProvider() == TurnPhase.ForcedSave)
             {
                 _legalMoves.Clear();
@@ -156,7 +156,6 @@ namespace ChessTheBetrayal.Gameplay
                 OnMoveConfirmed?.Invoke(validSave);
                 return;
             }
-            // --- END Phase 3 Forced Save Override ---
 
             // Validate piece ownership
             PieceData piece = _board.GetPiece(from);

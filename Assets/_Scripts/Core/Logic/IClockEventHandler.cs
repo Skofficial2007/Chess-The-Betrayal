@@ -3,7 +3,7 @@ using ChessTheBetrayal.Core.Data;
 namespace ChessTheBetrayal.Core.Logic
 {
     /// <summary>
-    /// Defines the callback contract for clock lifecycle events.
+    /// Defines how the presentation layer reacts to clock lifecycle events.
     /// Implemented by the presentation layer (e.g., GameManager) to react to domain timing events
     /// without coupling the core logic to the game engine.
     /// </summary>

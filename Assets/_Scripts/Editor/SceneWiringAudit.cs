@@ -99,7 +99,7 @@ namespace ChessTheBetrayal.Events.Editor
                     if (!isNull) continue;
 
                     // Arrays/lists of Object are audited for emptiness, not per-element nullness —
-                    // BoardVisuals' prefab arrays are the motivating case (Phase 1 flags them as a unit).
+                    // BoardVisuals' prefab arrays are the motivating case.
                     report.NullFields.Add((GetPath(mb.transform), field.Name, mb.gameObject));
                 }
 

@@ -23,15 +23,10 @@ namespace ChessTheBetrayal.Core.Engine
     /// Because it's a readonly struct, it's safe to store and pass around without worrying about data being changed underneath you.
     /// </summary>
     /// <remarks>
-    /// TODO: Current struct size ~88 bytes impacts AI search cache locality at depth 8+.
-    /// Solution: Introduce compact PackedMove : uint (32-bit) for search tree only:
-    ///   - 6 bits from square (0-63)
-    ///   - 6 bits to square (0-63)
-    ///   - 4 bits flags (capture, promotion, castling, en passant)
-    ///   - 4 bits special data (promotion piece, castling direction)
-    /// Keep MoveCommand as full-fidelity type for game execution and network serialization.
-    /// Conversion: PackedMove.Expand(board) → MoveCommand when applying moves.
-    /// Do NOT optimize before AI sprint - multiplayer requires this full representation.
+    /// TODO: this struct is deliberately full-fidelity, which makes it fairly large. When the AI
+    /// search work happens, the plan is to add a compact packed move type for the search tree only
+    /// and expand it back into a MoveCommand when a move is actually applied. Don't shrink this
+    /// type before then — game execution and network serialization need the full data.
     /// </remarks>
     public readonly struct MoveCommand
     {
@@ -50,8 +45,8 @@ namespace ChessTheBetrayal.Core.Engine
         public readonly ChessPieceType CapturedType;
         public readonly bool CapturedHadMoved;
 
-        // Complete immutable snapshot of the captured piece.
-        // Essential for AI unmake/remake paths where piece history must survive defection/resurrection.
+        // Full snapshot of the captured piece, so undoing a move puts back exactly the piece
+        // that was taken — including flags like HasMoved.
         public readonly PieceData CapturedPieceFullState;
 
         public readonly SpecialMove SpecialMoveType;
@@ -65,7 +60,7 @@ namespace ChessTheBetrayal.Core.Engine
         public readonly Vector2Int? RookEndPosition;
         public readonly Vector2Int? EnPassantCapturePosition;
 
-        // Snapshots of board special states BEFORE this move (for perfect Make/Unmake logic)
+        // Board special states as they were before this move, so an undo can restore them exactly
         public readonly int PreviousCastlingMask;
         public readonly int? PreviousEnPassantFile;
         public readonly bool PreviousBetrayalRightAvailable;

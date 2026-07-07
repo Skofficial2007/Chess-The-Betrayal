@@ -22,9 +22,9 @@ namespace ChessTheBetrayal.UI
         [SerializeField] private Material tileMaterial;
         [Tooltip("Shared inverted-hull outline material (Custom/PieceSelectionOutline.shader) applied to every piece's selection ring. Injected at spawn instead of loaded via Resources.Load.")]
         [SerializeField] private Material selectionOutlineMaterial;
-        [SerializeField, Range(0.1f, 4f)] private float tileSize = 1f; // Set to 1.5f
-        [SerializeField] private float tilesYOffset = 0.0f; // Set to 0.3f
-        [SerializeField] private Vector3 boardCenter = Vector3.zero; // Set to (0, 4, 0)
+        [SerializeField, Range(0.1f, 4f)] private float tileSize = 1f;
+        [SerializeField] private float tilesYOffset = 0.0f;
+        [SerializeField] private Vector3 boardCenter = Vector3.zero;
 
         [Header("Prefabs (Order: Pawn, Rook, Knight, Bishop, Queen, King)")]
         [SerializeField] private GameObject[] whiteTeamPrefabs;
@@ -36,13 +36,13 @@ namespace ChessTheBetrayal.UI
         [SerializeField] private float[] blackMeshFacingCorrectionDegrees = { 0f, 0f, 180f, 0f, 0f, 0f };
 
         [Header("Piece Visuals")]
-        [SerializeField] private float pieceYOffset = 0.05f; // Set to 0.2f
+        [SerializeField] private float pieceYOffset = 0.05f;
         [SerializeField] private float pieceScaleMultiplier = 0.9f;
-        [SerializeField] private float deathSize = 0.45f; // Set to 0.5f
-        [SerializeField] private float deathSpacing = 0.35f; // Set to 1.25f
+        [SerializeField] private float deathSize = 0.45f;
+        [SerializeField] private float deathSpacing = 0.35f;
 
         [Header("Move Indicator (Circle)")]
-        [SerializeField, Range(0.05f, 0.5f)] private float moveIndicatorRadiusRatio = 0.45f; // Set to 0.48f
+        [SerializeField, Range(0.05f, 0.5f)] private float moveIndicatorRadiusRatio = 0.45f;
         [SerializeField] private float moveIndicatorYOffset = 0.01f;
         [SerializeField, Range(8, 64)] private int moveIndicatorSegments = 24;
 
@@ -106,18 +106,18 @@ namespace ChessTheBetrayal.UI
         private bool _actWillDefect;
 
         // Tile meshes and lookup for raycasting
-        private GameObject[,] tiles;
+        private GameObject[,] _tiles;
         private Dictionary<Transform, Vector2Int> _tileByTransform = new Dictionary<Transform, Vector2Int>();
 
         // Circular move-indicator child object per tile (hidden until a move highlight targets it)
-        private MeshRenderer[,] moveIndicatorRenderers;
+        private MeshRenderer[,] _moveIndicatorRenderers;
 
         // Square check-warning child object per tile (hidden until a king is in check on that
         // square). Kept as its own renderer/mesh rather than reusing the tile's own MeshRenderer so
         // the tile itself (base/hover layer) and the check warning (MoveHighlightCapture layer,
         // red material) can be toggled completely independently — the same separation of concerns
-        // moveIndicatorRenderers already uses for legal-move dots.
-        private MeshRenderer[,] checkIndicatorRenderers;
+        // _moveIndicatorRenderers already uses for legal-move dots.
+        private MeshRenderer[,] _checkIndicatorRenderers;
 
         // The square currently showing the check-warning highlight, so a later move that resolves
         // (or shifts) check can find and clear the old one before showing a new one. Invalid when
@@ -125,11 +125,11 @@ namespace ChessTheBetrayal.UI
         private Vector2Int _checkHighlightSquare = Vector2Int.Invalid;
 
         // Death piles
-        private List<ChessPiece> deadWhitePieces = new List<ChessPiece>();
-        private List<ChessPiece> deadBlackPieces = new List<ChessPiece>();
+        private List<ChessPiece> _deadWhitePieces = new List<ChessPiece>();
+        private List<ChessPiece> _deadBlackPieces = new List<ChessPiece>();
 
         // Highlighting state
-        private Vector2Int hoverIndex = Vector2Int.Invalid;
+        private Vector2Int _hoverIndex = Vector2Int.Invalid;
         private readonly List<Vector2Int> _highlightedSquares = new List<Vector2Int>(32);
 
         // Mirror of the list above, used for fast "is this square highlighted?" checks.
@@ -137,9 +137,9 @@ namespace ChessTheBetrayal.UI
         private readonly List<ChessPiece> _destroyQueue = new List<ChessPiece>(32);
 
         // Cached values
-        private Vector3 boardOrigin;
-        private int tileCountX, tileCountY;
-        private int tileLayer, highlightLayer, moveHighlightLayer, moveHighlightCaptureLayer, checkHighlightLayer;
+        private Vector3 _boardOrigin;
+        private int _tileCountX, _tileCountY;
+        private int _tileLayer, _highlightLayer, _moveHighlightLayer, _moveHighlightCaptureLayer, _checkHighlightLayer;
 
         // Squares among _highlightedSquares that currently hold a capturable piece
         private readonly HashSet<Vector2Int> _captureSquaresLookup = new HashSet<Vector2Int>(32);
@@ -209,9 +209,9 @@ namespace ChessTheBetrayal.UI
         }
 
         /// <summary>
-        /// Direct C# subscriptions replacing the *EventListener + UnityEvent Inspector wiring
-        /// (Phase 3c). A broken method reference here is a compile error; a broken UnityEvent
-        /// target was a silent no-op — see di-migration-plan.md.
+        /// Direct C# subscriptions replacing the *EventListener + UnityEvent Inspector wiring.
+        /// A broken method reference here is a compile error; a broken UnityEvent target was a
+        /// silent no-op.
         /// </summary>
         private void OnEnable()
         {
@@ -249,16 +249,16 @@ namespace ChessTheBetrayal.UI
 
             ClearAllVisuals();
 
-            tileCountX = initialBoard.TileCountX;
-            tileCountY = initialBoard.TileCountY;
+            _tileCountX = initialBoard.TileCountX;
+            _tileCountY = initialBoard.TileCountY;
 
             // Calculate board origin (bottom-left corner)
-            float halfWidth = tileCountX * tileSize * 0.5f;
-            float halfHeight = tileCountY * tileSize * 0.5f;
-            boardOrigin = boardCenter - new Vector3(halfWidth, 0f, halfHeight);
+            float halfWidth = _tileCountX * tileSize * 0.5f;
+            float halfHeight = _tileCountY * tileSize * 0.5f;
+            _boardOrigin = boardCenter - new Vector3(halfWidth, 0f, halfHeight);
 
             // Generate tile meshes if they don't exist
-            if (tiles == null || tiles.GetLength(0) != tileCountX || tiles.GetLength(1) != tileCountY)
+            if (_tiles == null || _tiles.GetLength(0) != _tileCountX || _tiles.GetLength(1) != _tileCountY)
             {
                 GenerateTileMeshes();
             }
@@ -272,20 +272,20 @@ namespace ChessTheBetrayal.UI
         /// </summary>
         private void GenerateTileMeshes()
         {
-            tiles = new GameObject[tileCountX, tileCountY];
-            moveIndicatorRenderers = new MeshRenderer[tileCountX, tileCountY];
-            checkIndicatorRenderers = new MeshRenderer[tileCountX, tileCountY];
+            _tiles = new GameObject[_tileCountX, _tileCountY];
+            _moveIndicatorRenderers = new MeshRenderer[_tileCountX, _tileCountY];
+            _checkIndicatorRenderers = new MeshRenderer[_tileCountX, _tileCountY];
             _tileByTransform.Clear();
 
-            for (int x = 0; x < tileCountX; x++)
+            for (int x = 0; x < _tileCountX; x++)
             {
-                for (int y = 0; y < tileCountY; y++)
+                for (int y = 0; y < _tileCountY; y++)
                 {
                     GameObject tileGO = new GameObject($"Tile_{x}_{y}");
                     tileGO.transform.SetParent(tilesParent, false);
 
                     // Position at tile center
-                    Vector3 worldPos = boardOrigin + new Vector3(
+                    Vector3 worldPos = _boardOrigin + new Vector3(
                         x * tileSize + tileSize * 0.5f,
                         tilesYOffset,
                         y * tileSize + tileSize * 0.5f
@@ -314,7 +314,7 @@ namespace ChessTheBetrayal.UI
                     bc.size = new Vector3(tileSize, 0.05f, tileSize);
 
                     // Set layer
-                    tileGO.layer = tileLayer;
+                    tileGO.layer = _tileLayer;
 
                     // Create the circular move-indicator child, hidden until a legal-move highlight targets it
                     GameObject indicatorGO = new GameObject($"MoveIndicator_{x}_{y}");
@@ -326,7 +326,7 @@ namespace ChessTheBetrayal.UI
                     MeshRenderer indicatorRenderer = indicatorGO.AddComponent<MeshRenderer>();
                     indicatorRenderer.sharedMaterial = tileMaterial;
                     indicatorRenderer.enabled = false;
-                    indicatorGO.layer = tileLayer;
+                    indicatorGO.layer = _tileLayer;
 
                     // Create the check-warning FRAME child, hidden until a king in check occupies
                     // this tile. A hollow square ring (not a filled square, and not the move dot's
@@ -343,12 +343,12 @@ namespace ChessTheBetrayal.UI
                     MeshRenderer checkRenderer = checkGO.AddComponent<MeshRenderer>();
                     checkRenderer.sharedMaterial = tileMaterial;
                     checkRenderer.enabled = false;
-                    checkGO.layer = tileLayer;
+                    checkGO.layer = _tileLayer;
 
                     // Store references
-                    tiles[x, y] = tileGO;
-                    moveIndicatorRenderers[x, y] = indicatorRenderer;
-                    checkIndicatorRenderers[x, y] = checkRenderer;
+                    _tiles[x, y] = tileGO;
+                    _moveIndicatorRenderers[x, y] = indicatorRenderer;
+                    _checkIndicatorRenderers[x, y] = checkRenderer;
                     _tileByTransform[tileGO.transform] = new Vector2Int(x, y);
                 }
             }
@@ -560,32 +560,32 @@ namespace ChessTheBetrayal.UI
         {
             _destroyQueue.Clear();
 
-            // Dictionary<K,V> enumerator is a struct - safe to foreach the key-value pairs
+            // Collect first, then destroy — destroying a piece while iterating the dictionary would
+            // break the enumeration mid-loop.
             foreach (var kv in _piecesByPosition)
             {
                 _destroyQueue.Add(kv.Value);
             }
 
-            // Standard for-loops guarantee zero heap allocations
             for (int i = 0; i < _destroyQueue.Count; i++)
             {
                 if (_destroyQueue[i] != null) Destroy(_destroyQueue[i].gameObject);
             }
 
-            for (int i = 0; i < deadWhitePieces.Count; i++)
+            for (int i = 0; i < _deadWhitePieces.Count; i++)
             {
-                if (deadWhitePieces[i] != null) Destroy(deadWhitePieces[i].gameObject);
+                if (_deadWhitePieces[i] != null) Destroy(_deadWhitePieces[i].gameObject);
             }
 
-            for (int i = 0; i < deadBlackPieces.Count; i++)
+            for (int i = 0; i < _deadBlackPieces.Count; i++)
             {
-                if (deadBlackPieces[i] != null) Destroy(deadBlackPieces[i].gameObject);
+                if (_deadBlackPieces[i] != null) Destroy(_deadBlackPieces[i].gameObject);
             }
 
-            // Clear collections (O(1) allocation-free)
+            // Clear collections
             _piecesByPosition.Clear();
-            deadWhitePieces.Clear();
-            deadBlackPieces.Clear();
+            _deadWhitePieces.Clear();
+            _deadBlackPieces.Clear();
             _destroyQueue.Clear();
 
             // Clear highlights
@@ -606,7 +606,6 @@ namespace ChessTheBetrayal.UI
         /// </summary>
         public void AnimateMove(ChessTheBetrayal.Events.Payloads.MoveExecutedPayload payload)
         {
-            // Extract the MoveCommand from the payload so the rest of the method works exactly as before.
             MoveCommand move = payload.Move;
 
             // Safety check for invalid commands
@@ -876,32 +875,32 @@ namespace ChessTheBetrayal.UI
         /// </summary>
         private (Vector3 position, Vector3 lookDir) ReserveGraveyardSlot(ChessPiece victim)
         {
-            List<ChessPiece> graveyard = victim.team == Team.White ? deadWhitePieces : deadBlackPieces;
+            List<ChessPiece> graveyard = victim.team == Team.White ? _deadWhitePieces : _deadBlackPieces;
             graveyard.Add(victim);
 
             // Determine which side of the board for this team's graveyard
-            int majorRowIndex = (victim.team == Team.White) ? 0 : tileCountY - 1;
-            float rowCenterZ = boardOrigin.z + majorRowIndex * tileSize + tileSize * 0.5f;
+            int majorRowIndex = (victim.team == Team.White) ? 0 : _tileCountY - 1;
+            float rowCenterZ = _boardOrigin.z + majorRowIndex * tileSize + tileSize * 0.5f;
 
             float stackSpacing = Mathf.Max(0.01f, deathSpacing);
             int stackIndex = graveyard.Count - 1;
 
             // Position off the side of the board
             float xPos = (victim.team == Team.White)
-                ? boardOrigin.x + tileCountX * tileSize + (tileSize * 0.5f)
-                : boardOrigin.x - (tileSize * 0.5f);
+                ? _boardOrigin.x + _tileCountX * tileSize + (tileSize * 0.5f)
+                : _boardOrigin.x - (tileSize * 0.5f);
 
             float zPos = (victim.team == Team.White)
                 ? (rowCenterZ - (stackIndex * 0.5f * stackSpacing)) + (stackIndex * stackSpacing)
                 : (rowCenterZ + (stackIndex * 0.5f * stackSpacing)) - (stackIndex * stackSpacing);
 
-            Vector3 deathPos = new Vector3(xPos, boardOrigin.y + tilesYOffset + pieceYOffset, zPos);
+            Vector3 deathPos = new Vector3(xPos, _boardOrigin.y + tilesYOffset + pieceYOffset, zPos);
 
             // Calculate look direction toward board center
-            Vector3 boardCenterPos = boardOrigin + new Vector3(
-                tileCountX * tileSize * 0.5f,
+            Vector3 boardCenterPos = _boardOrigin + new Vector3(
+                _tileCountX * tileSize * 0.5f,
                 0f,
-                tileCountY * tileSize * 0.5f
+                _tileCountY * tileSize * 0.5f
             );
             Vector3 lookDir = (boardCenterPos - deathPos).normalized;
             lookDir.y = 0;
@@ -1203,7 +1202,7 @@ namespace ChessTheBetrayal.UI
         /// </summary>
         private Vector3 GetTileCenter(int x, int y)
         {
-            return boardOrigin + new Vector3(
+            return _boardOrigin + new Vector3(
                 x * tileSize + tileSize * 0.5f,
                 tilesYOffset,
                 y * tileSize + tileSize * 0.5f
@@ -1219,19 +1218,19 @@ namespace ChessTheBetrayal.UI
         /// </summary>
         public void UpdateHoverHighlight(Vector2Int idx)
         {
-            if (hoverIndex == idx) return;
+            if (_hoverIndex == idx) return;
 
             // Clear old hover
-            if (hoverIndex != Vector2Int.Invalid)
+            if (_hoverIndex != Vector2Int.Invalid)
             {
-                SetTileLayer(hoverIndex, isHover: false);
+                SetTileLayer(_hoverIndex, isHover: false);
             }
 
             // Set new hover
-            hoverIndex = idx;
-            if (hoverIndex != Vector2Int.Invalid)
+            _hoverIndex = idx;
+            if (_hoverIndex != Vector2Int.Invalid)
             {
-                SetTileLayer(hoverIndex, isHover: true);
+                SetTileLayer(_hoverIndex, isHover: true);
             }
         }
 
@@ -1254,8 +1253,6 @@ namespace ChessTheBetrayal.UI
                 Vector2Int pos = moves[i].EndPosition;
 
                 _highlightedSquares.Add(pos);
-
-                // Add to the HashSet in sync
                 _highlightedSquaresLookup.Add(pos);
 
                 // A move that captures gets the capture-colored indicator instead. Checking
@@ -1279,24 +1276,22 @@ namespace ChessTheBetrayal.UI
             for (int i = 0; i < _highlightedSquares.Count; i++)
             {
                 Vector2Int pos = _highlightedSquares[i];
-                if (pos.x >= 0 && pos.x < tileCountX && pos.y >= 0 && pos.y < tileCountY && tiles[pos.x, pos.y] != null)
+                if (pos.x >= 0 && pos.x < _tileCountX && pos.y >= 0 && pos.y < _tileCountY && _tiles[pos.x, pos.y] != null)
                 {
-                    tiles[pos.x, pos.y].layer = tileLayer;
+                    _tiles[pos.x, pos.y].layer = _tileLayer;
 
-                    MeshRenderer indicator = moveIndicatorRenderers[pos.x, pos.y];
+                    MeshRenderer indicator = _moveIndicatorRenderers[pos.x, pos.y];
                     if (indicator != null) indicator.enabled = false;
                 }
             }
             _highlightedSquares.Clear();
-
-            // Clear the HashSet in sync
             _highlightedSquaresLookup.Clear();
             _captureSquaresLookup.Clear();
 
             // Restore hover if active
-            if (hoverIndex != Vector2Int.Invalid)
+            if (_hoverIndex != Vector2Int.Invalid)
             {
-                SetTileLayer(hoverIndex, isHover: true);
+                SetTileLayer(_hoverIndex, isHover: true);
             }
         }
 
@@ -1308,14 +1303,14 @@ namespace ChessTheBetrayal.UI
         /// </summary>
         private void SetTileLayer(Vector2Int pos, bool isHover)
         {
-            if (pos.x < 0 || pos.x >= tileCountX || pos.y < 0 || pos.y >= tileCountY) return;
+            if (pos.x < 0 || pos.x >= _tileCountX || pos.y < 0 || pos.y >= _tileCountY) return;
 
-            GameObject tile = tiles[pos.x, pos.y];
+            GameObject tile = _tiles[pos.x, pos.y];
             if (tile == null) return;
 
-            tile.layer = isHover ? highlightLayer : tileLayer;
+            tile.layer = isHover ? _highlightLayer : _tileLayer;
 
-            MeshRenderer indicator = moveIndicatorRenderers[pos.x, pos.y];
+            MeshRenderer indicator = _moveIndicatorRenderers[pos.x, pos.y];
             if (indicator == null) return;
 
             // Check the lookup set, not the list — it's much faster for this kind of check
@@ -1323,8 +1318,8 @@ namespace ChessTheBetrayal.UI
             {
                 indicator.enabled = true;
                 indicator.gameObject.layer = _captureSquaresLookup.Contains(pos)
-                    ? moveHighlightCaptureLayer
-                    : moveHighlightLayer;
+                    ? _moveHighlightCaptureLayer
+                    : _moveHighlightLayer;
             }
             else
             {
@@ -1344,13 +1339,13 @@ namespace ChessTheBetrayal.UI
         {
             ClearCheckHighlight();
 
-            if (kingPos.x < 0 || kingPos.x >= tileCountX || kingPos.y < 0 || kingPos.y >= tileCountY) return;
+            if (kingPos.x < 0 || kingPos.x >= _tileCountX || kingPos.y < 0 || kingPos.y >= _tileCountY) return;
 
-            MeshRenderer indicator = checkIndicatorRenderers[kingPos.x, kingPos.y];
+            MeshRenderer indicator = _checkIndicatorRenderers[kingPos.x, kingPos.y];
             if (indicator == null) return;
 
             indicator.enabled = true;
-            indicator.gameObject.layer = checkHighlightLayer;
+            indicator.gameObject.layer = _checkHighlightLayer;
             _checkHighlightSquare = kingPos;
         }
 
@@ -1362,10 +1357,10 @@ namespace ChessTheBetrayal.UI
         {
             if (_checkHighlightSquare == Vector2Int.Invalid) return;
 
-            if (_checkHighlightSquare.x >= 0 && _checkHighlightSquare.x < tileCountX &&
-                _checkHighlightSquare.y >= 0 && _checkHighlightSquare.y < tileCountY)
+            if (_checkHighlightSquare.x >= 0 && _checkHighlightSquare.x < _tileCountX &&
+                _checkHighlightSquare.y >= 0 && _checkHighlightSquare.y < _tileCountY)
             {
-                MeshRenderer indicator = checkIndicatorRenderers[_checkHighlightSquare.x, _checkHighlightSquare.y];
+                MeshRenderer indicator = _checkIndicatorRenderers[_checkHighlightSquare.x, _checkHighlightSquare.y];
                 if (indicator != null) indicator.enabled = false;
             }
 
@@ -1381,20 +1376,20 @@ namespace ChessTheBetrayal.UI
         /// </summary>
         private void CacheLayers()
         {
-            tileLayer = LayerMask.NameToLayer("Tile");
-            highlightLayer = LayerMask.NameToLayer("Highlight");
-            moveHighlightLayer = LayerMask.NameToLayer("MoveHighlight");
-            moveHighlightCaptureLayer = LayerMask.NameToLayer("MoveHighlightCapture");
-            checkHighlightLayer = LayerMask.NameToLayer("CheckHighlight");
+            _tileLayer = LayerMask.NameToLayer("Tile");
+            _highlightLayer = LayerMask.NameToLayer("Highlight");
+            _moveHighlightLayer = LayerMask.NameToLayer("MoveHighlight");
+            _moveHighlightCaptureLayer = LayerMask.NameToLayer("MoveHighlightCapture");
+            _checkHighlightLayer = LayerMask.NameToLayer("CheckHighlight");
 
-            if (tileLayer == -1) tileLayer = 0;
-            if (highlightLayer == -1) highlightLayer = 0;
-            if (moveHighlightLayer == -1) moveHighlightLayer = 0;
-            if (moveHighlightCaptureLayer == -1) moveHighlightCaptureLayer = 0;
+            if (_tileLayer == -1) _tileLayer = 0;
+            if (_highlightLayer == -1) _highlightLayer = 0;
+            if (_moveHighlightLayer == -1) _moveHighlightLayer = 0;
+            if (_moveHighlightCaptureLayer == -1) _moveHighlightCaptureLayer = 0;
             // Falls back to the capture layer if the CheckHighlight layer hasn't been created yet,
             // so the check warning still shows (as the capture red) rather than silently landing on
             // the Default layer and rendering as an untinted frame.
-            if (checkHighlightLayer == -1) checkHighlightLayer = moveHighlightCaptureLayer;
+            if (_checkHighlightLayer == -1) _checkHighlightLayer = _moveHighlightCaptureLayer;
         }
 
         /// <summary>

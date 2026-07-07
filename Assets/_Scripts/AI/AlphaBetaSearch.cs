@@ -12,16 +12,15 @@ namespace ChessTheBetrayal.AI
     /// Runs on a background thread against an ISOLATED BoardState clone — it never touches the
     /// main-thread board, so the disguise-trick mutation inside move generation is safe.
     ///
-    /// THE ONE RULE THAT MAKES BETRAYAL SEARCH CORRECT
-    /// -----------------------------------------------
+    /// The one rule that makes Betrayal search correct:
     /// A standard engine flips the side-to-move every ply. Betrayal breaks that: an Act and a
-    /// Defection are half-moves by the SAME player (the turn does not pass). Our Core already
+    /// Defection are half-moves by the same player (the turn does not pass). Our Core already
     /// encodes this — ApplyZobristMove skips the turn-hash toggle for Act and Defection. The
-    /// search must mirror it: negate the child score ONLY when the turn actually flipped. When it
-    /// didn't (Act, Defection), we recurse WITHOUT negation and WITHOUT swapping alpha/beta,
+    /// search must mirror it: negate the child score only when the turn actually flipped. When it
+    /// didn't (Act, Defection), we recurse without negation and without swapping alpha/beta,
     /// because the same maximizer keeps moving. Alpha and beta therefore carry straight through
     /// the Retribution sub-phase with no special-casing — the sub-phase is just extra plies for
-    /// the same player, and GetAllLegalMoves already returns ONLY the legal Retribution moves
+    /// the same player, and GetAllLegalMoves already returns only the legal Retribution moves
     /// when a betrayer is pending, so the branching there is naturally tiny (1-4 executioners).
     ///
     /// CROSS-REFERENCE: this turn-flip rule is re-derived here from move.Stage rather than driven
