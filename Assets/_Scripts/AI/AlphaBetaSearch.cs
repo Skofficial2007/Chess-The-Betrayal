@@ -126,7 +126,7 @@ namespace ChessTheBetrayal.AI
         private void BuildRootMoves(BoardState board, Team team, BetrayalUsage usage)
         {
             _rootMoves.Clear();
-            _engine.GetAllLegalMoves(board, team, _rootMoves);
+            _engine.GetAllLegalMovesIncludingBetrayal(board, team, _rootMoves);
 
             if (usage == BetrayalUsage.DefendOnly)
             {
@@ -157,10 +157,14 @@ namespace ChessTheBetrayal.AI
             List<MoveCommand> moves = _moveBuffers[depth];
             moves.Clear();
 
-            // GetAllLegalMoves returns ONLY Retribution moves when a betrayer is pending, so the
-            // multi-phase machine "just works" as ordinary children here — no phase flag needed in
-            // the signature; the board's own state drives which moves come back.
-            _engine.GetAllLegalMoves(board, board.CurrentTurn, moves);
+            // GetAllLegalMovesIncludingBetrayal returns ONLY Retribution moves when a betrayer is
+            // pending (same fallthrough GetAllLegalMoves has), so the multi-phase machine "just
+            // works" as ordinary children here — no phase flag needed in the signature; the
+            // board's own state drives which moves come back. Includes Act moves (unlike
+            // GetAllLegalMoves) so the search can both play Betrayal itself and see the opponent
+            // threatening one, at every ply — DefendOnly strips Act from the AGENT's choices only
+            // at the root (see BuildRootMoves); this recursion never filters.
+            _engine.GetAllLegalMovesIncludingBetrayal(board, board.CurrentTurn, moves);
 
             if (moves.Count == 0)
             {
@@ -318,10 +322,11 @@ namespace ChessTheBetrayal.AI
             if (standPat >= beta) return beta;
             if (standPat > alpha) alpha = standPat;
 
-            // Search captures only (loud moves). Reuse a buffer; filter to captures.
+            // Search captures only (loud moves) plus Act, which the loop below explicitly keeps —
+            // reuse a buffer; filter happens per-move just below.
             List<MoveCommand> moves = _moveBuffers[0];
             moves.Clear();
-            _engine.GetAllLegalMoves(board, board.CurrentTurn, moves);
+            _engine.GetAllLegalMovesIncludingBetrayal(board, board.CurrentTurn, moves);
             OrderMoves(moves);
 
             for (int i = 0; i < moves.Count; i++)

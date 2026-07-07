@@ -23,6 +23,9 @@ namespace ChessTheBetrayal.Core.Engine
         public void GetAllLegalMoves(BoardState board, Team team, List<MoveCommand> masterBuffer) =>
             ChessEngine.GetAllLegalMoves(board, team, masterBuffer);
 
+        public void GetAllLegalMovesIncludingBetrayal(BoardState board, Team team, List<MoveCommand> masterBuffer) =>
+            ChessEngine.GetAllLegalMovesIncludingBetrayal(board, team, masterBuffer);
+
         public void GetRetributionMoves(BoardState board, Team executionerTeam, Vector2Int betrayerSquare, List<MoveCommand> output) =>
             ChessEngine.GetRetributionMoves(board, executionerTeam, betrayerSquare, output);
 
