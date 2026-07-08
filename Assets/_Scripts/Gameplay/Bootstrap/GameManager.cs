@@ -49,6 +49,12 @@ namespace ChessTheBetrayal.App
         [Header("Debug")]
         [SerializeField] private bool logMoves = true;
 
+        // TEMP DEBUG FIELD (AI-11): lets the debug AI hook below (HandleTeamAnimationComplete)
+        // actually exercise DefendOnly, since there's no Settings screen yet to drive SetAIMode's
+        // betrayalUsage parameter (see ai-sprint-settings-not-yet-built memory). Remove alongside
+        // the rest of the TEMP debug hook once a real Settings screen exists.
+        [SerializeField] private BetrayalUsage debugAIBetrayalUsage = BetrayalUsage.Full;
+
         [Header("Betrayal Time Bounty (milliseconds)")]
         [SerializeField] private long _betrayalBountyBulletMs = 3_000L;   // Bullet 1|0
         [SerializeField] private long _betrayalBountyBullet2Ms = 5_000L;   // Bullet 2|1
@@ -385,8 +391,8 @@ namespace ChessTheBetrayal.App
             if (_selectedMode.IsUnlimited)
             {
                 Team aiTeam = PlayerTeam == Team.White ? Team.Black : Team.White;
-                SetAIMode(aiTeam);
-                if (logMoves) Debug.Log($"[GameManager][DEBUG] AI enabled for {aiTeam}. Human plays {PlayerTeam}.");
+                SetAIMode(aiTeam, debugAIBetrayalUsage);
+                if (logMoves) Debug.Log($"[GameManager][DEBUG] AI enabled for {aiTeam}, BetrayalUsage={debugAIBetrayalUsage}. Human plays {PlayerTeam}.");
             }
 
             // The clock has to exist before TransitionToPhase runs — the phase transition
