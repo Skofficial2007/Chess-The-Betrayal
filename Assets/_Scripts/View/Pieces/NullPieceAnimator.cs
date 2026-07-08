@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace ChessTheBetrayal.UI
+namespace ChessTheBetrayal.View
 {
     /// <summary>
     /// An IPieceAnimator that applies every change instantly with no tween. A Transform still gets

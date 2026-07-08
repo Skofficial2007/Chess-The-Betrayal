@@ -1,7 +1,7 @@
 using System;
 using ChessTheBetrayal.Core.Utils;
 
-namespace ChessTheBetrayal.Gameplay
+namespace ChessTheBetrayal.Gameplay.Manager
 {
     /// <summary>
     /// IRandomSource backed by System.Random, for local and AI sessions. Not used for

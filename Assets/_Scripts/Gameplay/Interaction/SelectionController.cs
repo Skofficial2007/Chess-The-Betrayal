@@ -1,15 +1,17 @@
 using UnityEngine;
 using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.Infrastructure;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
-namespace ChessTheBetrayal.Gameplay
+namespace ChessTheBetrayal.Gameplay.Interaction
 {
     /// <summary>
     /// The two-tap selection state machine (tap piece -> highlights persist -> tap destination
     /// completes the move). Owns no device code — it only reacts to ISelectionInput.OnTileActivated
-    /// and asks GameManager whether a square is selectable / what its legal moves are. Because
-    /// GameManager.CanSelectPiece and GetLegalMovesAt already route through MatchDriver's
+    /// and asks the match (via <see cref="IBoardQuery"/>) whether a square is selectable / what its
+    /// legal moves are — it never touches the concrete GameManager. Because CanSelectPiece and
+    /// GetLegalMovesAt already route through MatchDriver's
     /// Betrayal-phase-aware logic (Normal / RetributionPending / ForcedSave), this controller
     /// never needs to know about Betrayal phases itself — it stays a dumb two-state machine and
     /// the domain decides legality.
@@ -29,7 +31,7 @@ namespace ChessTheBetrayal.Gameplay
         [SerializeField] private ChessTheBetrayal.Events.SelectionRejectedEventChannel _selectionRejectedChannel;
 
         private ISelectionInput _selectionInput;
-        private GameManager _gameManager;
+        private IBoardQuery _gameManager;
         private Vector2Int _selectedTile = Vector2Int.Invalid;
 
         private bool IsSelected => _selectedTile != Vector2Int.Invalid;
@@ -45,7 +47,7 @@ namespace ChessTheBetrayal.Gameplay
 
         private void Start()
         {
-            _gameManager = ServiceLocator.Instance.Resolve<GameManager>();
+            _gameManager = ServiceLocator.Instance.Resolve<IBoardQuery>();
         }
 
         private void OnEnable()

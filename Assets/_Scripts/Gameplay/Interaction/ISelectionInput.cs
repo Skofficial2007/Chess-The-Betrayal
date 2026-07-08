@@ -2,7 +2,7 @@ using System;
 using ChessTheBetrayal.Core.Data;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
-namespace ChessTheBetrayal.Gameplay
+namespace ChessTheBetrayal.Gameplay.Interaction
 {
     /// <summary>
     /// Device-agnostic tap/click intent. A tile was "activated" — pressed and released on the

@@ -1,0 +1,20 @@
+{
+  "name": "ChessTheBetrayal.EditorTools",
+  "references": [
+    "ChessTheBetrayal.Core",
+    "ChessTheBetrayal.Events",
+    "ChessTheBetrayal.Infrastructure",
+    "ChessTheBetrayal.UI",
+    "ChessTheBetrayal.View"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": []
+}

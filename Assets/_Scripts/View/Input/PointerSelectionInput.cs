@@ -2,10 +2,12 @@ using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using ChessTheBetrayal.UI;
+using ChessTheBetrayal.Core.Match;
+using ChessTheBetrayal.Gameplay.Interaction;
 using ChessTheBetrayal.Infrastructure;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
-namespace ChessTheBetrayal.Gameplay
+namespace ChessTheBetrayal.View
 {
     /// <summary>
     /// Mouse- and touch-driven ISelectionInput. Raises OnTileActivated on pointer-up as a tap:
@@ -30,7 +32,7 @@ namespace ChessTheBetrayal.Gameplay
 
         private Camera mainCamera;
         private UIManager _uiManager;
-        private GameManager _gameManager;
+        private IBoardQuery _gameManager;
         private BoardVisuals _boardVisuals;
 
         // Tracks the tile a press started on, so release can confirm it landed on the same tile.
@@ -54,7 +56,7 @@ namespace ChessTheBetrayal.Gameplay
         private void Start()
         {
             _uiManager = ServiceLocator.Instance.Resolve<UIManager>();
-            _gameManager = ServiceLocator.Instance.Resolve<GameManager>();
+            _gameManager = ServiceLocator.Instance.Resolve<IBoardQuery>();
             _boardVisuals = ServiceLocator.Instance.Resolve<BoardVisuals>();
         }
 

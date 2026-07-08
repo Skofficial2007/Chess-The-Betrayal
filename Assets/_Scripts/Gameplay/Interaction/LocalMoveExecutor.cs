@@ -7,7 +7,7 @@ using ChessTheBetrayal.Core.Logic;
 using ChessTheBetrayal.Core.Diagnostics;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
-namespace ChessTheBetrayal.Gameplay
+namespace ChessTheBetrayal.Gameplay.Interaction
 {
     /// <summary>
     /// Handles move validation for local, offline play.

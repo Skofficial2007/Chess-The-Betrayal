@@ -1,7 +1,7 @@
 using NUnit.Framework;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
-using ChessTheBetrayal.Gameplay;
+using ChessTheBetrayal.Gameplay.Manager;
 using ChessTheBetrayal.Tests.Utilities;
 
 namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager

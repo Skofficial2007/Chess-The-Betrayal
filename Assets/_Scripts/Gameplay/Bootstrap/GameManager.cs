@@ -6,12 +6,14 @@ using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Core.Logic;
 using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.Gameplay.Flow;
+using ChessTheBetrayal.Gameplay.Interaction;
+using ChessTheBetrayal.Gameplay.Manager;
 using ChessTheBetrayal.UI;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 using ChessTheBetrayal.Core.Diagnostics;
 using ChessTheBetrayal.Infrastructure;
 
-namespace ChessTheBetrayal.Gameplay
+namespace ChessTheBetrayal.App
 {
     /// <summary>
     /// The Unity entry point for a match. Owns the MonoBehaviour lifecycle, the Inspector-serialized
@@ -36,7 +38,7 @@ namespace ChessTheBetrayal.Gameplay
     /// Normal/ForcedSave (result.DidDefect) | DefectionOccurred
     /// ForcedSave            | ForcedSaveActive
     /// </summary>
-    public class GameManager : MonoBehaviour, IClockEventHandler, IClockSnapshotSource, IMatchFlow
+    public class GameManager : MonoBehaviour, IClockEventHandler, IClockSnapshotSource, IMatchFlow, IBoardQuery
     {
         #region Inspector Fields
 
@@ -162,6 +164,13 @@ namespace ChessTheBetrayal.Gameplay
         private void Awake()
         {
             ServiceLocator.Instance.Register(this);
+
+            // Register under the Core-owned seams the presentation layer resolves. The locator keys
+            // strictly on the static generic type, so each interface needs its own explicit call —
+            // this is what lets UI/View/interaction code resolve the match host without referencing
+            // the concrete GameManager (which would recreate the assembly cycle this rework removed).
+            ServiceLocator.Instance.Register<IBoardQuery>(this);
+            ServiceLocator.Instance.Register<IMatchFlow>(this);
 
             ValidateRequiredFields();
 
@@ -422,11 +431,12 @@ namespace ChessTheBetrayal.Gameplay
         }
 
         /// <summary>
-        /// Called by GameOverUI (via UIManager) when the player dismisses the Game Over screen.
-        /// Delegates to whichever IPostGameAction is bound for this game-context — the prototype
-        /// binds BackToModeSelectAction, so this always lands on Mode Select, never a hidden default.
+        /// Called by GameOverUI (via UIManager, through IMatchFlow) when the player dismisses the
+        /// Game Over screen. Delegates to whichever IPostGameAction is bound for this game-context —
+        /// the prototype binds BackToModeSelectAction, so this always lands on Mode Select, never a
+        /// hidden default.
         /// </summary>
-        public void HandleGameOverAcknowledged()
+        public void AcknowledgeGameOver()
         {
             _postGameAction.Execute(this, _lastMatchResult);
         }

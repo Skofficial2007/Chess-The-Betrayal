@@ -1,0 +1,21 @@
+{
+  "name": "ChessTheBetrayal.App",
+  "references": [
+    "ChessTheBetrayal.Core",
+    "ChessTheBetrayal.AI",
+    "ChessTheBetrayal.Events",
+    "ChessTheBetrayal.Infrastructure",
+    "ChessTheBetrayal.Gameplay.Flow",
+    "ChessTheBetrayal.Gameplay.Manager",
+    "ChessTheBetrayal.Gameplay.Interaction",
+    "ChessTheBetrayal.UI"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": []
+}

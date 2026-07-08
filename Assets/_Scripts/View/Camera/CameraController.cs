@@ -4,9 +4,8 @@ using Unity.Cinemachine;
 using ChessTheBetrayal.UI;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Diagnostics;
-using ChessTheBetrayal.Gameplay;
 
-namespace ChessTheBetrayal.UI.Camera
+namespace ChessTheBetrayal.View
 {
     /// <summary>
     /// Listens to UI events and shifts the Cinemachine priorities to 

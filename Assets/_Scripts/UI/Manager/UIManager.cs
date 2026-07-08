@@ -2,7 +2,7 @@ using System;
 using UnityEngine;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Diagnostics;
-using ChessTheBetrayal.Gameplay;
+using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.Infrastructure;
 
 namespace ChessTheBetrayal.UI
@@ -426,12 +426,13 @@ namespace ChessTheBetrayal.UI
 
         private void HandleReplay()
         {
-            // Delegates to GameManager's bound IPostGameAction (BackToModeSelectAction in the
-            // prototype), which tears down the finished match and decides what screen comes next.
-            // UIManager never decides the mode or the destination screen itself.
-            if (ServiceLocator.Instance.TryResolve(out GameManager gameManager))
+            // Delegates through IMatchFlow to the host's bound IPostGameAction (BackToModeSelectAction
+            // in the prototype), which tears down the finished match and decides what screen comes
+            // next. UIManager resolves the interface, never the concrete GameManager — that's what
+            // keeps the UI assembly free of any upward dependency on the App layer.
+            if (ServiceLocator.Instance.TryResolve(out IMatchFlow matchFlow))
             {
-                gameManager.HandleGameOverAcknowledged();
+                matchFlow.AcknowledgeGameOver();
             }
         }
 
