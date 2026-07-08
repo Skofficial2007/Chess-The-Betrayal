@@ -38,7 +38,7 @@ namespace ChessTheBetrayal.App
     /// Normal/ForcedSave (result.DidDefect) | DefectionOccurred
     /// ForcedSave            | ForcedSaveActive
     /// </summary>
-    public class GameManager : MonoBehaviour, IClockEventHandler, IClockSnapshotSource, IMatchFlow, IBoardQuery
+    public class GameManager : MonoBehaviour, IMatchFlow, IBoardQuery
     {
         #region Inspector Fields
 
@@ -145,10 +145,13 @@ namespace ChessTheBetrayal.App
         private readonly List<MoveCommand> _legalMoves = new List<MoveCommand>(32);
 
         // ── Clock System ──────────────────────────────────────────────────────────────
-        private GameModeConfig      _selectedMode = GameModeConfig.Unlimited;
-        private bool                _isAIMode     = false;
-        private ChessClock          _clock;
-        private GameClockController _clockController;
+        private GameModeConfig _selectedMode = GameModeConfig.Unlimited;
+        private bool           _isAIMode     = false;
+
+        // Clock lifecycle (construct/attach/deactivate/snapshot). Implements IClockEventHandler/
+        // IClockSnapshotSource directly — see ClockCoordinator's class doc for why the interfaces
+        // live there instead of being forwarded through GameManager.
+        private ClockCoordinator _clockCoordinator;
 
         private UnityDomainLogger _domainLogger;
 
@@ -218,6 +221,8 @@ namespace ChessTheBetrayal.App
 
             _aiCoordinator = new AIMatchCoordinator(_engine, LiveBoard, _matchDriver.PlayMove);
             _aiCoordinator.OnSearchException += HandleAISearchException;
+
+            _clockCoordinator = new ClockCoordinator(_setup, OnClockTimeout, OnLowTimeWarning);
 
             _gameOverChannel?.Register(OnGameOverRaised);
             _matchStartRequestedChannel?.Register(StartMatch);
@@ -311,10 +316,7 @@ namespace ChessTheBetrayal.App
 
             // Write the latest clock state to the shared bridge every frame.
             // Skipped in unlimited/AI mode, where there's no controller and nothing to report.
-            if (_clockController != null)
-            {
-                _sharedClockState?.Set(GetCurrentClockSnapshot());
-            }
+            _clockCoordinator.PushSnapshotTo(_sharedClockState);
 
             // Pump the AI coordinator so a completed background search hands its move back to us
             // on the main thread. No-op until SetAIMode() constructs an agent and something starts
@@ -378,7 +380,7 @@ namespace ChessTheBetrayal.App
                 _moveExecutor = null;
             }
 
-            _moveExecutor = new LocalMoveExecutor(LiveBoard, _engine, () => CurrentPhase, this, logMoves);
+            _moveExecutor = new LocalMoveExecutor(LiveBoard, _engine, () => CurrentPhase, _clockCoordinator, logMoves);
 
             _moveExecutor.OnMoveConfirmed += _matchDriver.PlayMove;
             _moveExecutor.OnMoveRejected += OnExecutorMoveRejected;
@@ -493,13 +495,7 @@ namespace ChessTheBetrayal.App
                 _moveExecutor = null;
             }
 
-            if (_clockController != null)
-            {
-                _clockController.Deactivate();
-                _clockController = null;
-            }
-
-            _clock = null;
+            _clockCoordinator.Deactivate();
 
             _matchDriver.TransitionToPhase(TurnPhase.GameOver);
         }
@@ -537,15 +533,12 @@ namespace ChessTheBetrayal.App
         }
 
         /// <summary>
-        /// Builds the clock via GameSetup and hands it to MatchDriver. Bypassed entirely during
-        /// AI sessions to preserve engine search performance.
+        /// Builds the clock via ClockCoordinator and hands it to MatchDriver. Bypassed entirely
+        /// during AI sessions to preserve engine search performance.
         /// </summary>
         private void InitializeClock()
         {
-            (_clock, _clockController) = _setup.InitializeClock(
-                _selectedMode, _isAIMode, LiveBoard.CurrentTurn, this, gameObject, _clockController);
-
-            _matchDriver.AttachClock(_clock, _clockController, _selectedMode);
+            _clockCoordinator.Initialize(_selectedMode, _isAIMode, LiveBoard.CurrentTurn, gameObject, _matchDriver);
         }
 
         #endregion
@@ -613,20 +606,6 @@ namespace ChessTheBetrayal.App
         public bool CanSelectPiece(Vector2Int position) => _matchDriver.CanSelectPiece(position);
 
         /// <summary>
-        /// Returns a value-type snapshot of the clock state, or null if untimed/AI mode.
-        /// </summary>
-        public ClockState? GetCurrentClockSnapshot()
-        {
-            return _clockController != null ? (ClockState?)_clockController.CurrentState : null;
-        }
-
-        /// <summary>
-        /// IClockSnapshotSource implementation. LocalMoveExecutor is handed `this` instead of
-        /// reaching into GameManager.Instance, so it never depends on the singleton directly.
-        /// </summary>
-        ClockState? IClockSnapshotSource.Current => GetCurrentClockSnapshot();
-
-        /// <summary>
         /// Configures the session for AI play. AI sessions always run untimed (see InitializeClock).
         /// Constructs the background-thread search agent via <see cref="_aiCoordinator"/>. Call
         /// this — and only this — before HandleTeamAnimationComplete/StartMatch run their course;
@@ -654,11 +633,15 @@ namespace ChessTheBetrayal.App
 
         #endregion
 
-        #region IClockEventHandler
+        #region Clock Event Routing
 
-        public void OnClockTimeout(Team timedOutTeam) => _matchDriver.HandleClockTimeout(timedOutTeam);
+        // Passed to ClockCoordinator's constructor as narrow delegates — GameManager's only
+        // remaining clock-shaped responsibility is routing these two events into match-flow/UI,
+        // not owning clock lifecycle itself (see ClockCoordinator, which implements
+        // IClockEventHandler directly).
+        private void OnClockTimeout(Team timedOutTeam) => _matchDriver.HandleClockTimeout(timedOutTeam);
 
-        public void OnLowTimeWarning(Team team, long remainingMs)
+        private void OnLowTimeWarning(Team team, long remainingMs)
         {
             _lowTimeAlertChannel?.Raise(new ChessTheBetrayal.Events.Payloads.LowTimeAlertPayload(team, remainingMs));
         }
