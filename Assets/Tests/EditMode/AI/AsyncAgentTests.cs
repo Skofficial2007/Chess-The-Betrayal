@@ -54,6 +54,26 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
+        public void IsSearching_FalseAfterTickDeliversTheResult()
+        {
+            // IsSearching's own doc comment promises it goes false "once a result is consumed via
+            // Tick()" — UndoService relies on exactly this to decide pop-1 vs pop-2. If it stayed
+            // true after delivery, every Undo pressed after the AI's first reply would incorrectly
+            // read as "search still in flight."
+            BoardState board = TestBoardSetupUtility.CreateStandard();
+            bool delivered = false;
+            _agent.OnMoveDecided += _ => delivered = true;
+
+            _agent.RequestBestMove(board, Team.White);
+            Assert.That(_agent.IsSearching, Is.True);
+
+            PumpTickUntil(() => delivered);
+
+            Assert.That(_agent.IsSearching, Is.False,
+                "IsSearching must go false once Tick() has consumed and delivered the result.");
+        }
+
+        [Test]
         public void RequestBestMove_BeforeTickIsPumped_DoesNotFireOnMoveDecided()
         {
             // The worker publishes its result via a volatile flag; only Tick() may raise the event.

@@ -121,12 +121,11 @@ namespace ChessTheBetrayal.App
         // Handles move validation. Swap this out for NetworkMoveExecutor to go online.
         private IMoveExecutor _moveExecutor;
 
-        // Background-thread search agent. Null until SetAIMode() constructs it — most sessions
-        // (human vs human) never touch this at all. Ticked from Update() so OnMoveDecided always
-        // fires on the main thread (see AsyncAIAgent's class doc for why that's mandatory).
-        // Requested via TryRequestAIMove(), called from StartMatch() and OnTurnChangedForAI().
-        private IAIAgent _aiAgent;
-        private Team _aiTeam;
+        // AI turn-triggering, background search lifecycle, and Undo's cancel-before-pop ordering.
+        // Constructed in Awake() (see AIMatchCoordinator's class doc for why it takes a playMove
+        // delegate instead of a MatchDriver reference). Null-agent-safe internally — most sessions
+        // (human vs human) never call SetAIMode and every other method is then a no-op.
+        private AIMatchCoordinator _aiCoordinator;
 
         // Instance-scoped rules engine (move generation, check detection, the Betrayal state
         // machine). Shared by GameSetup and MatchDriver so the exact same seam can be handed to
@@ -217,6 +216,9 @@ namespace ChessTheBetrayal.App
             _undoService = new UndoService(_engine, LiveBoard, _matchDriver);
             _matchDriver.OnTurnCompleted += _undoService.RecordTurn;
 
+            _aiCoordinator = new AIMatchCoordinator(_engine, LiveBoard, _matchDriver.PlayMove);
+            _aiCoordinator.OnSearchException += HandleAISearchException;
+
             _gameOverChannel?.Register(OnGameOverRaised);
             _matchStartRequestedChannel?.Register(StartMatch);
             _turnChangedChannel?.Register(OnTurnChangedForAI);
@@ -245,7 +247,11 @@ namespace ChessTheBetrayal.App
 
         private void OnDestroy()
         {
-            TearDownAIAgent();
+            if (_aiCoordinator != null)
+            {
+                _aiCoordinator.OnSearchException -= HandleAISearchException;
+                _aiCoordinator.Dispose();
+            }
 
             if (_matchDriver != null && _undoService != null)
             {
@@ -310,21 +316,15 @@ namespace ChessTheBetrayal.App
                 _sharedClockState?.Set(GetCurrentClockSnapshot());
             }
 
-            // Pump the AI agent so a completed background search hands its move back to us on the
-            // main thread. No-op until SetAIMode() constructs _aiAgent and something starts calling
-            // TryRequestAIMove() at the right turn boundary.
-            if (_aiAgent is AsyncAIAgent asyncAgent)
-            {
-                asyncAgent.Tick();
-
-                // TEMP DEBUG (AI-08 manual verification): surface any worker-thread exception.
-                string searchException = asyncAgent.ConsumeLastSearchException();
-                if (searchException != null)
-                {
-                    Debug.LogError($"[GameManager][DEBUG] AI search threw:\n{searchException}");
-                }
-            }
+            // Pump the AI coordinator so a completed background search hands its move back to us
+            // on the main thread. No-op until SetAIMode() constructs an agent and something starts
+            // calling TryRequestAIMove() at the right turn boundary.
+            _aiCoordinator.Tick();
         }
+
+        // TEMP DEBUG (AI-08 manual verification): surface any worker-thread exception.
+        private void HandleAISearchException(string exception) =>
+            Debug.LogError($"[GameManager][DEBUG] AI search threw:\n{exception}");
 
         // Named methods (rather than lambdas) so we can unsubscribe cleanly.
         private void OnExecutorMoveRejected(Vector2Int from, Vector2Int to) =>
@@ -482,7 +482,7 @@ namespace ChessTheBetrayal.App
             }
 
             LiveBoard.Clear();
-            TearDownAIAgent();
+            _aiCoordinator.Dispose();
 
             if (_moveExecutor != null)
             {
@@ -532,7 +532,7 @@ namespace ChessTheBetrayal.App
 
                 // Human-Black path: no TurnChangedEvent precedes the very first ply, so this is
                 // the only place that can kick off the AI's opening move.
-                TryRequestAIMove();
+                _aiCoordinator.TryRequestMove(IsGameActive);
             }
         }
 
@@ -586,10 +586,10 @@ namespace ChessTheBetrayal.App
         {
             if (_undoService == null) return;
 
-            bool aiSearchInFlight = _aiAgent is AsyncAIAgent asyncAgent && asyncAgent.IsSearching;
+            bool aiSearchInFlight = _aiCoordinator.IsSearchInFlight;
             if (aiSearchInFlight)
             {
-                (_aiAgent as AsyncAIAgent)?.CancelSearch();
+                _aiCoordinator.CancelInFlightSearch();
             }
 
             _undoService.RequestUndo(_isAIMode, CurrentPhase, aiSearchInFlight);
@@ -628,62 +628,29 @@ namespace ChessTheBetrayal.App
 
         /// <summary>
         /// Configures the session for AI play. AI sessions always run untimed (see InitializeClock).
-        /// Constructs the background-thread search agent. Call this — and only this — before
-        /// HandleTeamAnimationComplete/StartMatch run their course; _isAIMode/_aiAgent being set
-        /// is what makes TryRequestAIMove (fired from StartMatch and every TurnChangedEvent) not
-        /// a no-op. Calling it late (after StartMatch) simply means the AI won't move until the
-        /// next turn change — there's no unsafe half-configured state in between.
+        /// Constructs the background-thread search agent via <see cref="_aiCoordinator"/>. Call
+        /// this — and only this — before HandleTeamAnimationComplete/StartMatch run their course;
+        /// _isAIMode/the coordinator's agent being set is what makes TryRequestAIMove (fired from
+        /// StartMatch and every TurnChangedEvent) not a no-op. Calling it late (after StartMatch)
+        /// simply means the AI won't move until the next turn change — there's no unsafe
+        /// half-configured state in between.
         /// </summary>
         public void SetAIMode(Team aiTeam = Team.Black, BetrayalUsage betrayalUsage = BetrayalUsage.Full)
         {
             _isAIMode     = true;
             _selectedMode = GameModeConfig.Unlimited;
-            _aiTeam       = aiTeam;
 
-            TearDownAIAgent();
-
-            var agent = new AsyncAIAgent(
-                _engine,
-                new BetrayalAwareEvaluator(),
-                AISearchSettings.Ultimate(betrayalUsage));
-
-            agent.OnMoveDecided += HandleAIMoveDecided;
-            _aiAgent = agent;
+            _aiCoordinator.SetAIMode(aiTeam, betrayalUsage);
         }
-
-        /// <summary>
-        /// Feeds the AI's chosen move through the exact same seam a human move takes
-        /// (MatchDriver.PlayMove) — the AI never gets a special-cased execution path.
-        /// Runs on the main thread: AsyncAIAgent.Tick() only raises this from Update().
-        /// </summary>
-        private void HandleAIMoveDecided(MoveCommand move) => _matchDriver.PlayMove(move);
 
         /// <summary>
         /// Fires whenever a turn-ending move completes (see MatchDriver.CheckForGameEnd's
         /// GameState.Normal/Check branches). This is what triggers the AI's move after every
         /// human reply — the very first ply (when the AI draws White) has no preceding
-        /// TurnChangedEvent, so StartMatch() calls TryRequestAIMove() directly for that case.
+        /// TurnChangedEvent, so StartMatch() calls TryRequestAIMove directly for that case.
         /// </summary>
-        private void OnTurnChangedForAI(ChessTheBetrayal.Events.Payloads.TurnChangedPayload payload) => TryRequestAIMove();
-
-        /// <summary>
-        /// Call once it's aiTeam's turn in a live match to kick off a background search.
-        /// </summary>
-        private void TryRequestAIMove()
-        {
-            if (!AITurnGate.ShouldRequestMove(_aiAgent != null, LiveBoard.CurrentTurn, _aiTeam, IsGameActive)) return;
-            _aiAgent.RequestBestMove(LiveBoard, _aiTeam);
-        }
-
-        private void TearDownAIAgent()
-        {
-            if (_aiAgent is AsyncAIAgent asyncAgent)
-            {
-                asyncAgent.OnMoveDecided -= HandleAIMoveDecided;
-                asyncAgent.Dispose();
-            }
-            _aiAgent = null;
-        }
+        private void OnTurnChangedForAI(ChessTheBetrayal.Events.Payloads.TurnChangedPayload payload) =>
+            _aiCoordinator.TryRequestMove(IsGameActive);
 
         #endregion
 
