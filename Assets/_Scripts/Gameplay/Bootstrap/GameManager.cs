@@ -6,7 +6,6 @@ using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Core.Logic;
 using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.Gameplay.Flow;
-using ChessTheBetrayal.Gameplay.Interaction;
 using ChessTheBetrayal.Gameplay.Manager;
 using ChessTheBetrayal.UI;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
@@ -17,7 +16,7 @@ namespace ChessTheBetrayal.App
 {
     /// <summary>
     /// The Unity entry point for a match. Owns the MonoBehaviour lifecycle, the Inspector-serialized
-    /// configuration (event channels, board size, time-bounty schedule), and the UIManager event
+    /// configuration (event channels, board size, time-bounty schedule), and composition-root
     /// wiring — nothing else. Every actual rules/orchestration responsibility is delegated:
     ///
     /// - <see cref="GameSetup"/> builds a new match: rolls player/first-mover team, places the
@@ -25,10 +24,16 @@ namespace ChessTheBetrayal.App
     /// - <see cref="MatchDriver"/> runs an in-progress match: applies moves through
     ///   <see cref="IChessEngine"/>, translates the result into event-channel raises and clock
     ///   calls, evaluates end-of-game conditions, and owns the <see cref="TurnPhase"/> state machine.
+    /// - <see cref="MatchFlowCoordinator"/> owns match setup/teardown, mode/AI-flag state, and the
+    ///   move executor — the collaborator this class composes and forwards IMatchFlow/IBoardQuery to.
+    /// - <see cref="AIMatchCoordinator"/> owns the background AI agent's lifecycle.
+    /// - <see cref="ClockCoordinator"/> owns the match clock's lifecycle.
     ///
     /// If the board looks wrong before move one, the bug is in GameSetup. If a move resolves
-    /// incorrectly once the game is running, the bug is in MatchDriver. If neither, it's here —
-    /// most likely a Unity wiring issue (a missing event subscription, a null Inspector reference).
+    /// incorrectly once the game is running, the bug is in MatchDriver. If a match won't start,
+    /// tear down, or the AI/clock won't engage, the bug is in one of the four collaborators above.
+    /// If none of those, it's here — most likely a Unity wiring issue (a missing event
+    /// subscription, a null Inspector reference).
     ///
     /// Betrayal Phase Contract (see MatchDriver.PlayMove for where these are raised):
     /// Domain `TurnPhase`    | Presentation `BetrayalPhase` Raised
@@ -49,7 +54,7 @@ namespace ChessTheBetrayal.App
         [Header("Debug")]
         [SerializeField] private bool logMoves = true;
 
-        // TEMP DEBUG FIELD (AI-11): lets the debug AI hook below (HandleTeamAnimationComplete)
+        // TEMP DEBUG FIELD (AI-11): lets the debug AI hook in MatchFlowCoordinator.HandleTeamAnimationComplete
         // actually exercise DefendOnly, since there's no Settings screen yet to drive SetAIMode's
         // betrayalUsage parameter (see ai-sprint-settings-not-yet-built memory). Remove alongside
         // the rest of the TEMP debug hook once a real Settings screen exists.
@@ -85,15 +90,11 @@ namespace ChessTheBetrayal.App
 
         #region Public Properties
 
-        /// <summary>
-        /// The board. All game logic reads from and writes to this.
-        /// </summary>
+        /// <summary>The board. All game logic reads from and writes to this.</summary>
         public BoardState LiveBoard { get; private set; }
 
-        /// <summary>
-        /// Which team the human player is controlling.
-        /// </summary>
-        public Team PlayerTeam { get; private set; } = Team.White;
+        /// <summary>Which team the human player is controlling. Delegated to MatchFlowCoordinator.</summary>
+        public Team PlayerTeam => _matchFlow.PlayerTeam;
 
         /// <summary>
         /// Ordered ply-by-ply record of the current match, including Betrayal sub-phase moves.
@@ -118,8 +119,10 @@ namespace ChessTheBetrayal.App
 
         #region Private Fields
 
-        // Handles move validation. Swap this out for NetworkMoveExecutor to go online.
-        private IMoveExecutor _moveExecutor;
+        // Owns match setup/teardown, mode/AI-flag state, and the move executor — the deepest of
+        // the three AI-13 collaborators, since it orchestrates the other two below plus
+        // MatchDriver/UndoService/GameSetup. Constructed in Awake().
+        private MatchFlowCoordinator _matchFlow;
 
         // AI turn-triggering, background search lifecycle, and Undo's cancel-before-pop ordering.
         // Constructed in Awake() (see AIMatchCoordinator's class doc for why it takes a playMove
@@ -144,10 +147,6 @@ namespace ChessTheBetrayal.App
         // Reused across calls so we're not allocating a new list every time someone hovers over a piece.
         private readonly List<MoveCommand> _legalMoves = new List<MoveCommand>(32);
 
-        // ── Clock System ──────────────────────────────────────────────────────────────
-        private GameModeConfig _selectedMode = GameModeConfig.Unlimited;
-        private bool           _isAIMode     = false;
-
         // Clock lifecycle (construct/attach/deactivate/snapshot). Implements IClockEventHandler/
         // IClockSnapshotSource directly — see ClockCoordinator's class doc for why the interfaces
         // live there instead of being forwarded through GameManager.
@@ -158,7 +157,6 @@ namespace ChessTheBetrayal.App
         // Composition root binding: this is the only line that changes between the prototype,
         // AI, and multiplayer game-contexts. UI never branches on which one is active.
         private readonly IPostGameAction _postGameAction = new BackToModeSelectAction();
-        private MatchResult _lastMatchResult;
 
         // Resolved once in Start() — every consumer here reads it from an event callback or a
         // later lifecycle method, all of which run after every MonoBehaviour's Awake() (see
@@ -222,7 +220,26 @@ namespace ChessTheBetrayal.App
             _aiCoordinator = new AIMatchCoordinator(_engine, LiveBoard, _matchDriver.PlayMove);
             _aiCoordinator.OnSearchException += HandleAISearchException;
 
+            // Continue the AI through its own forced Betrayal sub-sequence (Act -> Retribution, or
+            // Defection -> DefensiveOverride): these transitions don't flip the side to move, so no
+            // TurnChangedEvent fires — this event is what re-prompts the AI to play the owed move.
+            _matchDriver.OnBetrayalMoveRequired += OnBetrayalMoveRequiredForAI;
+
             _clockCoordinator = new ClockCoordinator(_setup, OnClockTimeout, OnLowTimeWarning);
+
+            _matchFlow = new MatchFlowCoordinator(
+                LiveBoard, _setup, _matchDriver, _engine, _undoService, _aiCoordinator, _clockCoordinator,
+                gameObject, boardSizeX, boardSizeY, logMoves, debugAIBetrayalUsage,
+                triggerTeamRoulette: team => _uiManager.TriggerTeamRoulette(team),
+                showTeamSelection: () => _uiManager.ShowTeamSelection(),
+                showGameModeSelection: () => _uiManager.ShowGameModeSelection(),
+                onExecutorMoveRejected: OnExecutorMoveRejected,
+                onExecutorPromotionRequired: OnExecutorPromotionRequired,
+                raiseGameModeConfigured: mode => _gameModeConfiguredChannel?.Raise(mode),
+                raiseGameStarted: () => _gameStartedChannel?.Raise(),
+                setSharedBoardState: board => _sharedBoardState?.Set(board),
+                clearSharedBoardState: () => _sharedBoardState?.Clear(),
+                raiseGameReset: () => _gameResetChannel?.Raise());
 
             _gameOverChannel?.Register(OnGameOverRaised);
             _matchStartRequestedChannel?.Register(StartMatch);
@@ -263,6 +280,11 @@ namespace ChessTheBetrayal.App
                 _matchDriver.OnTurnCompleted -= _undoService.RecordTurn;
             }
 
+            if (_matchDriver != null)
+            {
+                _matchDriver.OnBetrayalMoveRequired -= OnBetrayalMoveRequiredForAI;
+            }
+
             if (_uiManager != null)
             {
                 _uiManager.OnTeamRollRequested -= HandleTeamRollRequested;
@@ -281,10 +303,8 @@ namespace ChessTheBetrayal.App
             ChessEngine.Initialize(NullDomainLogger.Instance);
         }
 
-        private void OnGameOverRaised(ChessTheBetrayal.Events.Payloads.GameOverPayload payload)
-        {
-            _lastMatchResult = new MatchResult(payload.WinningTeam, payload.IsTimeout, _selectedMode);
-        }
+        private void OnGameOverRaised(ChessTheBetrayal.Events.Payloads.GameOverPayload payload) =>
+            _matchFlow.RecordMatchResult(payload.WinningTeam, payload.IsTimeout);
 
         /// <summary>
         /// Loud-fails on any unassigned Inspector reference at Play-mode start instead of letting
@@ -341,102 +361,13 @@ namespace ChessTheBetrayal.App
 
         #region Game Flow
 
-        private void HandleGameModeReceived(GameModeConfig config)
-        {
-            _selectedMode = config;
-        }
+        private void HandleGameModeReceived(GameModeConfig config) => _matchFlow.HandleGameModeReceived(config);
 
-        /// <summary>
-        /// UI requested a team. We do the domain math and tell the UI what to animate.
-        /// </summary>
-        private void HandleTeamRollRequested()
-        {
-            (Team playerTeam, Team firstMover) = _setup.RollTeams();
-            PlayerTeam = playerTeam;
-            LiveBoard.CurrentTurn = firstMover;
+        private void HandleTeamRollRequested() => _matchFlow.HandleTeamRollRequested();
 
-            // Pass the decision back to the View to play the blind roulette animation
-            _uiManager.TriggerTeamRoulette(PlayerTeam);
-        }
+        private void HandleTeamAnimationComplete() => _matchFlow.HandleTeamAnimationComplete();
 
-        /// <summary>
-        /// The View finished its 4-second animation. Now we actually build the game state.
-        /// </summary>
-        private void HandleTeamAnimationComplete()
-        {
-            LiveBoard.Clear();
-            _setup.PlaceStandardPieces(LiveBoard, boardSizeX, boardSizeY);
-            _matchDriver.MoveLog.Clear();
-            _matchDriver.ResetTurnAccumulator();
-            _undoService?.Clear();
-
-            // Tear down the previous executor if one exists (e.g. the player hit Replay).
-            if (_moveExecutor != null)
-            {
-                _moveExecutor.OnMoveConfirmed -= _matchDriver.PlayMove;
-                _moveExecutor.OnMoveRejected -= OnExecutorMoveRejected;
-                _moveExecutor.OnPromotionRequired -= OnExecutorPromotionRequired;
-                _moveExecutor.OnRetributionSkipConfirmed -= _matchDriver.RequestRetributionSkip;
-                _moveExecutor = null;
-            }
-
-            _moveExecutor = new LocalMoveExecutor(LiveBoard, _engine, () => CurrentPhase, _clockCoordinator, logMoves);
-
-            _moveExecutor.OnMoveConfirmed += _matchDriver.PlayMove;
-            _moveExecutor.OnMoveRejected += OnExecutorMoveRejected;
-            _moveExecutor.OnPromotionRequired += OnExecutorPromotionRequired;
-            _moveExecutor.OnRetributionSkipConfirmed += _matchDriver.RequestRetributionSkip;
-
-            // TEMP DEBUG HOOK (AI-08 manual verification) — remove once a real Settings screen
-            // drives SetAIMode. Ultimate mode only; AI takes whichever side the roulette didn't
-            // give the human.
-            if (_selectedMode.IsUnlimited)
-            {
-                Team aiTeam = PlayerTeam == Team.White ? Team.Black : Team.White;
-                SetAIMode(aiTeam, debugAIBetrayalUsage);
-                if (logMoves) Debug.Log($"[GameManager][DEBUG] AI enabled for {aiTeam}, BetrayalUsage={debugAIBetrayalUsage}. Human plays {PlayerTeam}.");
-            }
-
-            // The clock has to exist before TransitionToPhase runs — the phase transition
-            // is what resumes it.
-            InitializeClock();
-
-            // Boot into Starting so the clock stays paused until the presentation layer
-            // signals ready (see StartMatch).
-            _matchDriver.TransitionToPhase(TurnPhase.Starting);
-
-            _gameModeConfiguredChannel?.Raise(_selectedMode);
-
-            // Populate the shared board bridge before raising the event, so listeners that
-            // read the board from the event callback see the live position and not stale data.
-            _sharedBoardState?.Set(LiveBoard);
-            _gameStartedChannel?.Raise();
-
-            if (logMoves)
-            {
-                Debug.Log($"[GameManager] New game started. Player: {PlayerTeam}. Mode: {_selectedMode.Label}. Phase: {CurrentPhase}");
-            }
-        }
-
-        /// <summary>
-        /// Called when the player hits Exit. Clears everything and returns to the main menu,
-        /// resetting the mode since there's no next match to carry it into.
-        /// </summary>
-        private void HandleGameReset()
-        {
-            TearDownCurrentMatch();
-            BroadcastPresentationReset();
-
-            _selectedMode = GameModeConfig.Unlimited;
-            _isAIMode     = false;
-
-            _gameModeConfiguredChannel?.Raise(GameModeConfig.Unlimited);
-
-            if (logMoves)
-            {
-                Debug.Log("[GameManager] Game reset. Phase: GameOver");
-            }
-        }
+        private void HandleGameReset() => _matchFlow.HandleGameReset();
 
         /// <summary>
         /// Called by GameOverUI (via UIManager, through IMatchFlow) when the player dismisses the
@@ -444,74 +375,15 @@ namespace ChessTheBetrayal.App
         /// the prototype binds BackToModeSelectAction, so this always lands on Mode Select, never a
         /// hidden default.
         /// </summary>
-        public void AcknowledgeGameOver()
-        {
-            _postGameAction.Execute(this, _lastMatchResult);
-        }
+        public void AcknowledgeGameOver() => _postGameAction.Execute(this, _matchFlow.LastMatchResult);
 
         #region IMatchFlow
 
-        void IMatchFlow.TearDownCurrentMatch()
-        {
-            TearDownCurrentMatch();
-            BroadcastPresentationReset();
-        }
+        void IMatchFlow.TearDownCurrentMatch() => _matchFlow.TearDownCurrentMatchAndBroadcastReset();
 
-        void IMatchFlow.StartNewMatch(GameModeConfig mode)
-        {
-            _selectedMode = mode;
-            _uiManager.ShowTeamSelection();
-        }
+        void IMatchFlow.StartNewMatch(GameModeConfig mode) => _matchFlow.StartNewMatch(mode);
 
-        void IMatchFlow.ReturnToModeSelect()
-        {
-            _uiManager.ShowGameModeSelection();
-        }
-
-        /// <summary>
-        /// Domain-only teardown: unwires the move executor, stops the clock, and drops the
-        /// state machine into GameOver. Deliberately does NOT touch presentation (camera, shared
-        /// board bridge) — callers that need the view reset too must also call
-        /// BroadcastPresentationReset(), so the two concerns stay separately named even when
-        /// they're sequenced together.
-        /// </summary>
-        private void TearDownCurrentMatch()
-        {
-            if (logMoves && LiveBoard != null && !LiveBoard.IsGameOver)
-            {
-                Debug.Log($"[GameManager] Match exited mid-game. Final position:\n{BoardStateDump.ToAscii(LiveBoard)}");
-                Debug.Log($"[GameManager] Move log at exit ({MoveLog.Entries.Count} plies):\n{MoveLog.DumpToString()}");
-            }
-
-            LiveBoard.Clear();
-            _aiCoordinator.Dispose();
-
-            if (_moveExecutor != null)
-            {
-                _moveExecutor.OnMoveConfirmed -= _matchDriver.PlayMove;
-                _moveExecutor.OnMoveRejected -= OnExecutorMoveRejected;
-                _moveExecutor.OnPromotionRequired -= OnExecutorPromotionRequired;
-                _moveExecutor.OnRetributionSkipConfirmed -= _matchDriver.RequestRetributionSkip;
-                _moveExecutor = null;
-            }
-
-            _clockCoordinator.Deactivate();
-
-            _matchDriver.TransitionToPhase(TurnPhase.GameOver);
-        }
-
-        /// <summary>
-        /// Clears the shared board bridge and raises _gameResetChannel, whose real consumer is
-        /// CameraController (wired in the Inspector) snapping back to its neutral/menu shot.
-        /// This is presentation cleanup, not domain teardown — kept separate from
-        /// TearDownCurrentMatch() so a future domain-only caller (e.g. a headless/server match
-        /// flow) doesn't pull in a View-layer side effect by accident.
-        /// </summary>
-        private void BroadcastPresentationReset()
-        {
-            _sharedBoardState?.Clear();
-            _gameResetChannel?.Raise();
-        }
+        void IMatchFlow.ReturnToModeSelect() => _matchFlow.ReturnToModeSelect();
 
         #endregion
 
@@ -519,27 +391,7 @@ namespace ChessTheBetrayal.App
         /// Called by the presentation layer when all intro animations are finished.
         /// Unlocks the board, allowing pieces to move and starting the active player's clock.
         /// </summary>
-        public void StartMatch()
-        {
-            if (CurrentPhase == TurnPhase.Starting)
-            {
-                _matchDriver.TransitionToPhase(TurnPhase.Normal);
-                if (logMoves) Debug.Log("[GameManager] Match officially started. Clock running.");
-
-                // Human-Black path: no TurnChangedEvent precedes the very first ply, so this is
-                // the only place that can kick off the AI's opening move.
-                _aiCoordinator.TryRequestMove(IsGameActive);
-            }
-        }
-
-        /// <summary>
-        /// Builds the clock via ClockCoordinator and hands it to MatchDriver. Bypassed entirely
-        /// during AI sessions to preserve engine search performance.
-        /// </summary>
-        private void InitializeClock()
-        {
-            _clockCoordinator.Initialize(_selectedMode, _isAIMode, LiveBoard.CurrentTurn, gameObject, _matchDriver);
-        }
+        public void StartMatch() => _matchFlow.StartMatch();
 
         #endregion
 
@@ -549,44 +401,23 @@ namespace ChessTheBetrayal.App
         /// Sends a move request to the executor. The result comes back through events —
         /// either OnMoveExecuted (if legal) or OnMoveRejected (if not).
         /// </summary>
-        public void RequestMove(Vector2Int from, Vector2Int to)
-        {
-            // Allow inputs during standard play, Retribution, and Forced Save phases.
-            if ((CurrentPhase != TurnPhase.Normal && CurrentPhase != TurnPhase.RetributionPending && CurrentPhase != TurnPhase.ForcedSave) || LiveBoard.IsGameOver)
-            {
-                _moveRejectedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveRejectedPayload(from, to));
-                return;
-            }
+        public void RequestMove(Vector2Int from, Vector2Int to) => _matchFlow.RequestMove(from, to);
 
-            _moveExecutor?.RequestMove(from, to);
-        }
-
-        private void HandlePromotionChoice(ChessPieceType chosenType) => _moveExecutor?.RequestPromotion(chosenType);
+        private void HandlePromotionChoice(ChessPieceType chosenType) => _matchFlow.HandlePromotionChoice(chosenType);
 
         /// <summary>
         /// UI entry point for the HUD's Skip button (visible only during RetributionPending).
         /// Sends intent to the executor, which validates the phase before forwarding to
         /// MatchDriver — GameManager never resolves the Betrayal sub-machine itself.
         /// </summary>
-        public void RequestRetributionSkip() => _moveExecutor?.RequestRetributionSkip();
+        public void RequestRetributionSkip() => _matchFlow.RequestRetributionSkip();
 
         /// <summary>
         /// UI entry point for a future practice-mode Undo button. AI-only (per UndoService's own
         /// gating): a no-op in human-vs-human or any future networked session. Cancels an in-flight
         /// AI search BEFORE popping the board — see UndoService.RequestUndo's ordering contract.
         /// </summary>
-        public void RequestUndo()
-        {
-            if (_undoService == null) return;
-
-            bool aiSearchInFlight = _aiCoordinator.IsSearchInFlight;
-            if (aiSearchInFlight)
-            {
-                _aiCoordinator.CancelInFlightSearch();
-            }
-
-            _undoService.RequestUndo(_isAIMode, CurrentPhase, aiSearchInFlight);
-        }
+        public void RequestUndo() => _matchFlow.RequestUndo();
 
         #endregion
 
@@ -606,21 +437,15 @@ namespace ChessTheBetrayal.App
         public bool CanSelectPiece(Vector2Int position) => _matchDriver.CanSelectPiece(position);
 
         /// <summary>
-        /// Configures the session for AI play. AI sessions always run untimed (see InitializeClock).
-        /// Constructs the background-thread search agent via <see cref="_aiCoordinator"/>. Call
-        /// this — and only this — before HandleTeamAnimationComplete/StartMatch run their course;
-        /// _isAIMode/the coordinator's agent being set is what makes TryRequestAIMove (fired from
-        /// StartMatch and every TurnChangedEvent) not a no-op. Calling it late (after StartMatch)
-        /// simply means the AI won't move until the next turn change — there's no unsafe
-        /// half-configured state in between.
+        /// Configures the session for AI play. AI sessions always run untimed (see
+        /// MatchFlowCoordinator.InitializeClock). Call this — and only this — before
+        /// HandleTeamAnimationComplete/StartMatch run their course; the AI coordinator's agent
+        /// being set is what makes TryRequestMove (fired from StartMatch and every TurnChangedEvent)
+        /// not a no-op. Calling it late (after StartMatch) simply means the AI won't move until the
+        /// next turn change — there's no unsafe half-configured state in between.
         /// </summary>
-        public void SetAIMode(Team aiTeam = Team.Black, BetrayalUsage betrayalUsage = BetrayalUsage.Full)
-        {
-            _isAIMode     = true;
-            _selectedMode = GameModeConfig.Unlimited;
-
-            _aiCoordinator.SetAIMode(aiTeam, betrayalUsage);
-        }
+        public void SetAIMode(Team aiTeam = Team.Black, BetrayalUsage betrayalUsage = BetrayalUsage.Full) =>
+            _matchFlow.SetAIMode(aiTeam, betrayalUsage);
 
         /// <summary>
         /// Fires whenever a turn-ending move completes (see MatchDriver.CheckForGameEnd's
@@ -630,6 +455,16 @@ namespace ChessTheBetrayal.App
         /// </summary>
         private void OnTurnChangedForAI(ChessTheBetrayal.Events.Payloads.TurnChangedPayload payload) =>
             _aiCoordinator.TryRequestMove(IsGameActive);
+
+        /// <summary>
+        /// Fires when the match enters a forced Betrayal sub-phase (RetributionPending/ForcedSave)
+        /// where a side owes a mandatory follow-up move without a turn flip — the domain-level
+        /// counterpart to a human being prompted by the UI reacting to the same phase change. Routes
+        /// to the same TryRequestMove gate as a normal turn change; the gate's own
+        /// _board.CurrentTurn == _aiTeam check means this is a no-op whenever the owed move belongs
+        /// to the human, so no team argument needs to be threaded through here.
+        /// </summary>
+        private void OnBetrayalMoveRequiredForAI(Team owedBy) => _aiCoordinator.TryRequestMove(IsGameActive);
 
         #endregion
 
