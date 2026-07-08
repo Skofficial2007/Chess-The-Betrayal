@@ -14,7 +14,7 @@ namespace ChessTheBetrayal.View
     /// The eyes of the game. Spawns and moves piece GameObjects, highlights tiles, and plays animations.
     /// It has no idea how chess rules work — it just listens to GameManager and reacts.
     /// </summary>
-    public class BoardVisuals : MonoBehaviour
+    public class BoardVisuals : MonoBehaviour, IBoardHitTest
     {
         #region Inspector Fields
 
@@ -164,6 +164,7 @@ namespace ChessTheBetrayal.View
         private void Awake()
         {
             ServiceLocator.Instance.Register(this);
+            ServiceLocator.Instance.Register<IBoardHitTest>(this);
 
             ValidateRequiredFields();
 
