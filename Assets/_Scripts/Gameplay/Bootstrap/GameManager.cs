@@ -130,6 +130,10 @@ namespace ChessTheBetrayal.Gameplay
         private GameSetup _setup;
         private MatchDriver _matchDriver;
 
+        // Practice-mode (AI) Undo. Subscribes to _matchDriver.OnTurnCompleted to record each
+        // finished turn; null-safe everywhere since human-vs-human sessions never touch it.
+        private UndoService _undoService;
+
         // Reused across calls so we're not allocating a new list every time someone hovers over a piece.
         private readonly List<MoveCommand> _legalMoves = new List<MoveCommand>(32);
 
@@ -195,6 +199,9 @@ namespace ChessTheBetrayal.Gameplay
                 _betrayalBountyRapidMs,
                 _betrayalBountyRapid15Ms));
 
+            _undoService = new UndoService(_engine, LiveBoard, _matchDriver);
+            _matchDriver.OnTurnCompleted += _undoService.RecordTurn;
+
             _gameOverChannel?.Register(OnGameOverRaised);
             _matchStartRequestedChannel?.Register(StartMatch);
             _turnChangedChannel?.Register(OnTurnChangedForAI);
@@ -224,6 +231,11 @@ namespace ChessTheBetrayal.Gameplay
         private void OnDestroy()
         {
             TearDownAIAgent();
+
+            if (_matchDriver != null && _undoService != null)
+            {
+                _matchDriver.OnTurnCompleted -= _undoService.RecordTurn;
+            }
 
             if (_uiManager != null)
             {
@@ -338,6 +350,8 @@ namespace ChessTheBetrayal.Gameplay
             LiveBoard.Clear();
             _setup.PlaceStandardPieces(LiveBoard, boardSizeX, boardSizeY);
             _matchDriver.MoveLog.Clear();
+            _matchDriver.ResetTurnAccumulator();
+            _undoService?.Clear();
 
             // Tear down the previous executor if one exists (e.g. the player hit Replay).
             if (_moveExecutor != null)
@@ -546,6 +560,24 @@ namespace ChessTheBetrayal.Gameplay
         /// MatchDriver — GameManager never resolves the Betrayal sub-machine itself.
         /// </summary>
         public void RequestRetributionSkip() => _moveExecutor?.RequestRetributionSkip();
+
+        /// <summary>
+        /// UI entry point for a future practice-mode Undo button. AI-only (per UndoService's own
+        /// gating): a no-op in human-vs-human or any future networked session. Cancels an in-flight
+        /// AI search BEFORE popping the board — see UndoService.RequestUndo's ordering contract.
+        /// </summary>
+        public void RequestUndo()
+        {
+            if (_undoService == null) return;
+
+            bool aiSearchInFlight = _aiAgent is AsyncAIAgent asyncAgent && asyncAgent.IsSearching;
+            if (aiSearchInFlight)
+            {
+                (_aiAgent as AsyncAIAgent)?.CancelSearch();
+            }
+
+            _undoService.RequestUndo(_isAIMode, CurrentPhase, aiSearchInFlight);
+        }
 
         #endregion
 

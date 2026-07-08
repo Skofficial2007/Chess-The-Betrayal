@@ -35,6 +35,20 @@ namespace ChessTheBetrayal.AI
         private MoveCommand _pendingResult;
         private CancellationTokenSource _cts;
 
+        /// <summary>
+        /// True from the moment RequestBestMove kicks off a search until either a result is
+        /// consumed via Tick() or the search is cancelled. UndoService reads this to decide
+        /// whether an Undo needs to cancel an in-flight AI reply before popping the board.
+        /// </summary>
+        public bool IsSearching => _cts != null;
+
+        /// <summary>
+        /// Cancels any in-flight search without disposing the agent — distinct from Dispose(),
+        /// which the caller only calls when tearing down the whole match/agent. UndoService calls
+        /// this (never Dispose) so the agent stays usable for the player's very next move.
+        /// </summary>
+        public void CancelSearch() => CancelInFlight();
+
         // TEMP DEBUG : surfaces a worker-thread exception to the
         // main-thread caller instead of letting it vanish into the Task's unobserved-exception
         // path. Remove once the AI flow has been confirmed working end-to-end in-editor.

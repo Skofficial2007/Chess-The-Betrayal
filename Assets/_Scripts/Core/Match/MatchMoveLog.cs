@@ -44,6 +44,19 @@ namespace ChessTheBetrayal.Core.Match
 
         public void Clear() => _entries.Clear();
 
+        /// <summary>
+        /// Removes the last <paramref name="count"/> entries — the log-side half of an Undo. The
+        /// caller (UndoService) is responsible for having already unmade the same moves on the
+        /// board via IChessEngine.UndoMove, in the same reverse order, before or after calling this;
+        /// this method only keeps the log itself in sync, it doesn't touch a board.
+        /// </summary>
+        public void RemoveLast(int count)
+        {
+            if (count <= 0) return;
+            int removeFrom = System.Math.Max(0, _entries.Count - count);
+            _entries.RemoveRange(removeFrom, _entries.Count - removeFrom);
+        }
+
         /// <summary>Full move history as one string, one ply per line — paste this into a bug report.</summary>
         public string DumpToString()
         {

@@ -254,11 +254,11 @@ namespace ChessTheBetrayal.AI
         /// <summary>
         /// True when <paramref name="stage"/> passes the turn to the opponent (Retribution,
         /// DefensiveOverride, and ordinary None moves); false for Act and Defection, which are
-        /// half-moves by the same player. Mirrors ChessEngine.ApplyZobristMove's turn-hash toggle
-        /// and TurnResolver's NextTurn() calls exactly — if that rule ever changes, update both.
+        /// half-moves by the same player. Delegates to the canonical rule on BetrayalStageRules
+        /// (Core) — kept as its own named method here since the search's internal call sites and
+        /// SearchTurnFlipAgreementTests already reference AlphaBetaSearch.StageFlipsTurn by name.
         /// </summary>
-        internal static bool StageFlipsTurn(BetrayalStage stage) =>
-            stage != BetrayalStage.Act && stage != BetrayalStage.Defection;
+        internal static bool StageFlipsTurn(BetrayalStage stage) => BetrayalStageRules.FlipsTurn(stage);
 
         /// <summary>
         /// Quiescence: extends the search through "loud" positions to kill the horizon effect.
