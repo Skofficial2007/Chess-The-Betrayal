@@ -108,6 +108,14 @@ namespace ChessTheBetrayal.AI
         {
             if (!_hasResult) return;
             _hasResult = false;
+
+            // IsSearching must go false once a result is consumed, per its own contract above —
+            // otherwise a completed-and-delivered search reads as still in-flight forever (until
+            // the next RequestBestMove/CancelSearch/Dispose), which would make UndoService pop
+            // only 1 turn instead of 2 on every Undo pressed after the AI's first reply.
+            _cts?.Dispose();
+            _cts = null;
+
             OnMoveDecided?.Invoke(_pendingResult);
         }
 
