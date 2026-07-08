@@ -31,9 +31,9 @@ namespace ChessTheBetrayal.View
         public event Action<Vector2Int> OnTileActivated;
 
         private Camera mainCamera;
-        private UIManager _uiManager;
+        private IUiBlockingState _uiBlockingState;
         private IBoardQuery _gameManager;
-        private BoardVisuals _boardVisuals;
+        private IBoardHitTest _boardHitTest;
 
         // Tracks the tile a press started on, so release can confirm it landed on the same tile.
         private bool _isPressed;
@@ -55,15 +55,15 @@ namespace ChessTheBetrayal.View
 
         private void Start()
         {
-            _uiManager = ServiceLocator.Instance.Resolve<UIManager>();
+            _uiBlockingState = ServiceLocator.Instance.Resolve<IUiBlockingState>();
             _gameManager = ServiceLocator.Instance.Resolve<IBoardQuery>();
-            _boardVisuals = ServiceLocator.Instance.Resolve<BoardVisuals>();
+            _boardHitTest = ServiceLocator.Instance.Resolve<IBoardHitTest>();
         }
 
         private void Update()
         {
             if (mainCamera == null) return;
-            if (_uiManager.IsUIBlocking()) return;
+            if (_uiBlockingState.IsUIBlocking()) return;
             if (!_gameManager.IsGameActive) return;
 
             if (!TryGetPointerPosition(out Vector2 pointerPos)) return;
@@ -107,12 +107,12 @@ namespace ChessTheBetrayal.View
 
             if (hitSomething)
             {
-                hoverIndex = _boardVisuals.GetTileIndexFromTransform(hit.transform);
-                _boardVisuals.UpdateHoverHighlight(hoverIndex);
+                hoverIndex = _boardHitTest.GetTileIndexFromTransform(hit.transform);
+                _boardHitTest.UpdateHoverHighlight(hoverIndex);
             }
             else
             {
-                _boardVisuals.ClearHoverHighlight();
+                _boardHitTest.ClearHoverHighlight();
             }
 
             if (WasPointerPressed())
