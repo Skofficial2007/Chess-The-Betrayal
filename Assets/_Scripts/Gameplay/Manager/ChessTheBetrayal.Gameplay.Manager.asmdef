@@ -1,0 +1,17 @@
+{
+  "name": "ChessTheBetrayal.Gameplay.Manager",
+  "references": [
+    "ChessTheBetrayal.Core",
+    "ChessTheBetrayal.AI",
+    "ChessTheBetrayal.Gameplay.Flow",
+    "ChessTheBetrayal.Events"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": []
+}

@@ -19,6 +19,20 @@ namespace ChessTheBetrayal.Core.Engine
     }
 
     /// <summary>
+    /// Canonical home for the turn-flip invariant: Act and Defection are half-moves by the same
+    /// player and do NOT flip side-to-move; None, Retribution, and DefensiveOverride DO. Mirrored
+    /// inline in ChessEngine.ApplyZobristMove's turn-hash toggle (can't delegate here — it's woven
+    /// into the hash sequence) and delegated to from AlphaBetaSearch.StageFlipsTurn and
+    /// UndoService. If this rule ever changes, update ApplyZobristMove too —
+    /// SearchTurnFlipAgreementTests fails otherwise.
+    /// </summary>
+    public static class BetrayalStageRules
+    {
+        public static bool FlipsTurn(BetrayalStage stage) =>
+            stage != BetrayalStage.Act && stage != BetrayalStage.Defection;
+    }
+
+    /// <summary>
     /// A snapshot of one move — where a piece came from, where it went, what was captured, and any special move type.
     /// Because it's a readonly struct, it's safe to store and pass around without worrying about data being changed underneath you.
     /// </summary>
