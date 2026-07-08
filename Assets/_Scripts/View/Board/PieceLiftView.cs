@@ -3,7 +3,7 @@ using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Events.Payloads;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
-namespace ChessTheBetrayal.UI
+namespace ChessTheBetrayal.View
 {
     /// <summary>
     /// Lifts the selected piece on PieceSelected and lowers it back on SelectionCleared. Pure

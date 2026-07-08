@@ -1,0 +1,16 @@
+{
+  "name": "ChessTheBetrayal.Gameplay.Interaction",
+  "references": [
+    "ChessTheBetrayal.Core",
+    "ChessTheBetrayal.Events",
+    "ChessTheBetrayal.Infrastructure"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": []
+}

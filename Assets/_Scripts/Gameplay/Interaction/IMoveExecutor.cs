@@ -2,7 +2,7 @@ using System;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 
-namespace ChessTheBetrayal.Gameplay
+namespace ChessTheBetrayal.Gameplay.Interaction
 {
     /// <summary>
     /// Defines how a move request travels from the player's input to the game board.

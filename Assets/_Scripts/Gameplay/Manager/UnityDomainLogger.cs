@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using ChessTheBetrayal.Core.Diagnostics;
 
-namespace ChessTheBetrayal.Gameplay
+namespace ChessTheBetrayal.Gameplay.Manager
 {
     /// <summary>
     /// Routes domain diagnostic events to the Unity console.

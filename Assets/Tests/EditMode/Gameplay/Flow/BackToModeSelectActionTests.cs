@@ -28,6 +28,8 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Flow
             }
 
             public void ReturnToModeSelect() => Calls.Add(nameof(ReturnToModeSelect));
+
+            public void AcknowledgeGameOver() => Calls.Add(nameof(AcknowledgeGameOver));
         }
 
         [Test]

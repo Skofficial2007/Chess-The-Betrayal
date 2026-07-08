@@ -4,7 +4,6 @@ using UnityEngine.UI;
 using PrimeTween;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Diagnostics;
-using ChessTheBetrayal.Gameplay;
 using ChessTheBetrayal.Events.Payloads;
 
 namespace ChessTheBetrayal.UI
