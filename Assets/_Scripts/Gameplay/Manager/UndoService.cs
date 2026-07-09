@@ -119,6 +119,14 @@ namespace ChessTheBetrayal.Gameplay.Manager
         /// order, restoring board.CurrentTurn by re-flipping it wherever the original move had
         /// flipped it forward (IChessEngine.UndoMove itself never touches CurrentTurn — see
         /// AlphaBetaSearch.ApplyMoveAndTurn/UndoMoveAndTurn for the identical pattern in search).
+        ///
+        /// BetrayalStageRules.FlipsTurn is a per-Stage rule and is NOT enough on its own for
+        /// Defection: a Defection's Stage is always Defection whether or not it required a
+        /// ForcedSave, but TurnResolver.ResultFromDefectionOutcome only actually passes the turn
+        /// when there is NO ForcedSave — i.e. when the Defection is the last move recorded for
+        /// this turn. When a ForcedSave followed, that DefensiveOverride move is what really
+        /// passes the turn (and BetrayalStageRules.FlipsTurn already says so for that Stage). See
+        /// IsTurnFlippingMove for the combined rule.
         /// </summary>
         private void PopOneTurn()
         {
@@ -129,7 +137,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
             {
                 MoveCommand move = turnMoves[i];
 
-                if (BetrayalStageRules.FlipsTurn(move.Stage))
+                if (IsTurnFlippingMove(move, isLastMoveOfTurn: i == turnMoves.Count - 1))
                 {
                     _board.NextTurn();
                 }
@@ -138,6 +146,21 @@ namespace ChessTheBetrayal.Gameplay.Manager
             }
 
             _matchDriver.MoveLog.RemoveLast(turnMoves.Count);
+        }
+
+        /// <summary>
+        /// True when <paramref name="move"/> actually passed the turn to the opponent at the time it
+        /// was originally applied. Mirrors BetrayalStageRules.FlipsTurn for every stage except
+        /// Defection, whose turn-flip behavior depends on whether a ForcedSave followed it (see
+        /// TurnResolver.ResultFromDefectionOutcome) rather than on the Stage alone — a Defection only
+        /// flips the turn when nothing else in the turn's recorded moves comes after it.
+        /// </summary>
+        private static bool IsTurnFlippingMove(MoveCommand move, bool isLastMoveOfTurn)
+        {
+            if (move.Stage == BetrayalStage.Defection)
+                return isLastMoveOfTurn;
+
+            return BetrayalStageRules.FlipsTurn(move.Stage);
         }
     }
 }

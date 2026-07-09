@@ -415,15 +415,19 @@ namespace ChessTheBetrayal.AI
         ///     mandatory DefensiveOverride (king-save). Pending state stays set and the turn does not
         ///     flip; recurse over GetForcedSaveMoves in the same perspective/window.
         /// On unmake, <see cref="IChessEngine.UndoMove"/> restores PendingBetrayerSquare/
-        /// BetrayalInitiator from the Defection move's Previous* snapshot, so any manual turn-hash/
-        /// CurrentTurn changes made here must be reversed FIRST to keep the round-trip exact.
+        /// BetrayalInitiator from the Defection move's Previous* snapshot and — for a Defection that
+        /// closed its sequence without a ForcedSave — reverses the turn-hash/sub-state hash toggles
+        /// ChessEngine.ResolveDefection performed, symmetrically. Any manual CurrentTurn flip made
+        /// here must still be reversed FIRST, since the move carries no record of it.
         /// </summary>
         private int ResolveForcedDefection(BoardState board, int alpha, int beta,
                                            Team perspectiveTeam, int qply, CancellationToken ct)
         {
             // ResolveFailedRetribution applies the Defection move directly via ChessEngine (bypassing
-            // ApplyMoveAndTurn). Defection itself never flips the turn or toggles the turn-hash, and
-            // never clears the pending fields — that's the domain's job in the tail below.
+            // ApplyMoveAndTurn). A Defection that requires a ForcedSave never flips the turn or
+            // touches the turn-hash; one that doesn't require a ForcedSave already did both (and
+            // cleared the pending fields) inside ChessEngine.ResolveDefection — see the no-ForcedSave
+            // branch below for what's left for the search to do.
             DefectionOutcome outcome = ChessEngine.ResolveFailedRetribution(board);
 
             int score;
@@ -463,42 +467,30 @@ namespace ChessTheBetrayal.AI
             }
             else
             {
-                // No ForcedSave: the Betrayal sequence is fully resolved. Mirror the domain's tail
-                // (TurnResolver.ResultFromDefectionOutcome) — toggle the turn-hash and pass the turn,
-                // and clear the pending fields so the guard above sees a quiet board next ply. This is
-                // the exact fix for the old infinite loop: previously pending stayed set forever.
+                // No ForcedSave: the Betrayal sequence is fully resolved and the turn passes. This is
+                // the exact fix for the old infinite loop: previously the search never flipped, so it
+                // re-entered the same pending-Betrayer branch forever.
                 //
-                // We ALSO toggle the pending-Betrayer sub-state hash off here (the Act toggled it on;
-                // Defection deliberately leaves it, and the domain clears it only on the terminal
-                // Retribution/DefensiveOverride — which never comes for a plain Defection). Doing it
-                // keeps the search's incremental hash exactly consistent with the now-cleared pending
-                // state throughout the recursion, so a mid-search AssertZobristConsistency holds.
-                Vector2Int savedPending = board.PendingBetrayerSquare.Value;
-                Team savedInitiator = board.BetrayalInitiator.Value;
-
-                board.ToggleTurnHash();
+                // ResolveFailedRetribution (via ChessEngine.ResolveDefection) already toggled the
+                // turn-hash AND the pending-Betrayer sub-state hash, and cleared
+                // PendingBetrayerSquare/BetrayalInitiator — atomically, the moment it determined no
+                // ForcedSave was required. UndoMove below replays the stamped DefectionMove through
+                // ApplyZobristMove, which reverses both toggles symmetrically. CurrentTurn is the one
+                // piece of state that's ours to flip — it's per-caller bookkeeping the move doesn't
+                // carry, exactly like TurnResolver.ResultFromDefectionOutcome flips it directly too.
                 board.NextTurn();
-                board.ToggleBetrayalSubStateHash(savedPending, savedInitiator);
-                board.PendingBetrayerSquare = null;
-                board.BetrayalInitiator = null;
 
                 Team childPerspective = perspectiveTeam == Team.White ? Team.Black : Team.White;
                 score = -Quiescence(board, -beta, -alpha, childPerspective, qply - 1, ct);
 
-                // Reverse our manual domain-tail mutations before UndoMove restores the rest, in exact
-                // inverse order. UndoMove would overwrite the pending fields from the move snapshot
-                // anyway, but re-toggling the sub-state hash here is REQUIRED — UndoMove's Defection
-                // path does not touch it, so without this the hash would not round-trip.
-                board.PendingBetrayerSquare = savedPending;
-                board.BetrayalInitiator = savedInitiator;
-                board.ToggleBetrayalSubStateHash(savedPending, savedInitiator);
+                // Reverse our manual CurrentTurn flip before UndoMove restores the rest.
                 board.NextTurn();
-                board.ToggleTurnHash();
             }
 
             // Unmake the Defection. UndoMove restores PendingBetrayerSquare/BetrayalInitiator from the
-            // move's Previous* snapshot and is a turn-hash no-op for Defection, so the board returns to
-            // exactly the pre-resolution state regardless of which sub-case ran above.
+            // move's Previous* snapshot, and — for a stamped (ClosesBetrayalSequence) move — reverses
+            // the turn-hash and sub-state hash toggles ResolveDefection performed above, symmetrically
+            // via ApplyZobristMove. The board returns to exactly the pre-resolution state either way.
             _engine.UndoMove(board, outcome.DefectionMove);
             return score;
         }

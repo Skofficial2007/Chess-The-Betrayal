@@ -206,6 +206,46 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         }
 
         [Test]
+        public void RequestUndo_BetrayalTurnWithForcedDefectionNoSelfCheck_PopsAllPliesAndRestoresTurn()
+        {
+            // Regression: a forced Defection with NO ForcedSave still passes the turn (per
+            // TurnResolver.ResultFromDefectionOutcome) even though BetrayalStage.Defection's own
+            // Stage-based rule (BetrayalStageRules.FlipsTurn) always says "no flip". PopOneTurn must
+            // recognize this specific Defection as the turn's real turn-flipping ply (it's the LAST
+            // move recorded for the turn) or CurrentTurn desyncs from the board after Undo.
+            //
+            // White Knight at h8 (Betrayer) Acts onto the Pawn at f7 (a knight-move away, and far from
+            // White's King at e1). No White piece can reach f7 to execute Retribution, and the
+            // defected Knight doesn't check e1 from f7, so no ForcedSave -> the turn passes.
+            _board.WithPiece("h8", Team.White, ChessPieceType.Knight);
+            _board.WithPiece("f7", Team.White, ChessPieceType.Pawn); // Victim
+            _board.WithBetrayalRight(true);
+            _board.ComputeFullZobristHash();
+            ulong hashBefore = _board.ZobristHash;
+
+            var actMoves = new System.Collections.Generic.List<MoveCommand>();
+            ChessEngine.GetBetrayalTargets(_board, TestBoardSetupUtility.AlgebraicToVector("h8"), actMoves);
+            MoveCommand actMove = actMoves[0];
+            _matchDriver.PlayMove(actMove);
+
+            Assert.That(_matchDriver.CurrentPhase, Is.EqualTo(TurnPhase.Normal),
+                "No legal Retribution and no self-check must fully resolve the sequence in one PlayMove call.");
+            Assert.That(_board.CurrentTurn, Is.EqualTo(Team.Black), "Defection with no ForcedSave must pass the turn.");
+            Assert.That(_board.PendingBetrayerSquare, Is.Null);
+
+            _undoService.RequestUndo(isAIMode: true, currentPhase: _matchDriver.CurrentPhase, aiSearchInFlight: true, aiMovesFirst: false);
+
+            Assert.That(_board.CurrentTurn, Is.EqualTo(Team.White),
+                "Undo must restore White to move — the pre-fix bug left CurrentTurn on Black because " +
+                "the Stage-only rule never recognized this Defection as turn-flipping.");
+            Assert.That(_board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("h8")).Team, Is.EqualTo(Team.White),
+                "Knight must be restored to White before it defected.");
+            Assert.DoesNotThrow(() => _board.AssertZobristConsistency());
+            Assert.That(_board.ZobristHash, Is.EqualTo(hashBefore));
+            Assert.That(_matchDriver.MoveLog.Entries.Count, Is.EqualTo(0));
+        }
+
+        [Test]
         public void CanUndo_MidBetrayalRetributionPending_ReturnsFalse()
         {
             // Clears Setup()'s a2 pawn first — it would block the Rook's a1->a3 Retribution path,

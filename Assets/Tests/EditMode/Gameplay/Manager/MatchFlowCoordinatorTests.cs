@@ -4,6 +4,7 @@ using ChessTheBetrayal.AI;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Core.Match;
+using ChessTheBetrayal.Core.Utils;
 using ChessTheBetrayal.Gameplay.Manager;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
@@ -20,6 +21,17 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
     [TestFixture]
     public class MatchFlowCoordinatorTests
     {
+        // Deterministic stand-in for SystemRandomSource — lets a test pin RollTeams' seat/color
+        // assignment instead of depending on which side the human happens to draw. See
+        // RandomFirstMoverPolicyTests.FakeRandomSource for the identical pattern.
+        private sealed class FixedRandomSource : IRandomSource
+        {
+            private readonly bool _nextBool;
+            public FixedRandomSource(bool nextBool) { _nextBool = nextBool; }
+            public bool NextBool() => _nextBool;
+            public int NextInt(int maxExclusive) => 0;
+        }
+
         private GameObject _host;
         private BoardState _board;
         private MatchDriver _matchDriver;
@@ -156,21 +168,44 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         [Test]
         public void CanUndo_TrueOnlyAfterAPracticeMatchTurnCompletes()
         {
+            // RollTeams randomizes which seat draws White (see HandleTeamRollRequested_..._Test above,
+            // which deliberately covers both outcomes) — but this test only cares about the Undo-stack
+            // bookkeeping once any legal human move completes, so it pins the roll to "human is White"
+            // via a fixed IFirstMoverPolicy/IRandomSource. Without this, the hardcoded White-pawn move
+            // below is illegal (and silently rejected) whenever the roll gives the AI White instead.
+            var deterministicSetup = new GameSetup(logMoves: false, new FixedRandomSource(nextBool: true), new RandomFirstMoverPolicy());
+            var matchFlow = new MatchFlowCoordinator(
+                _board, deterministicSetup, _matchDriver, new ChessEngineAdapter(), _undoService, _aiCoordinator, _clockCoordinator,
+                _host, boardSizeX: 8, boardSizeY: 8, logMoves: false,
+                triggerTeamRoulette: team => _triggeredRouletteTeam = team,
+                showTeamSelection: () => _showTeamSelectionCount++,
+                showGameModeSelection: () => _showGameModeSelectionCount++,
+                showAIMatchSettings: () => _showAIMatchSettingsCount++,
+                onExecutorMoveRejected: (from, to) => _rejectedMove = (from, to),
+                onExecutorPromotionRequired: (_, __, ___) => { },
+                raiseGameModeConfigured: mode => _raisedGameModeConfigured = mode,
+                raiseGameStarted: () => _raisedGameStartedCount++,
+                setSharedBoardState: board => _lastSetSharedBoardState = board,
+                clearSharedBoardState: () => _clearedSharedBoardStateCount++,
+                raiseGameReset: () => _raisedGameResetCount++);
+
             var settings = new PracticeMatchSettings(
                 betrayalEnabled: true, aiDefendOnly: false, retributionSkipAllowed: true, difficulty: AIDifficulty.Normal);
-            _matchFlow.SetPracticeMatchSettings(settings);
+            matchFlow.SetPracticeMatchSettings(settings);
 
-            _matchFlow.HandleTeamRollRequested();
-            _matchFlow.HandleTeamAnimationComplete();
-            _matchFlow.StartMatch();
+            matchFlow.HandleTeamRollRequested();
+            Assert.That(matchFlow.PlayerTeam, Is.EqualTo(Team.White), "Test fixture must pin the human to White.");
 
-            Assert.That(_matchFlow.CanUndo, Is.False, "No turn has completed yet.");
+            matchFlow.HandleTeamAnimationComplete();
+            matchFlow.StartMatch();
+
+            Assert.That(matchFlow.CanUndo, Is.False, "No turn has completed yet.");
 
             var from = new Vector2Int(0, 1);
             var to = new Vector2Int(0, 3);
-            _matchFlow.RequestMove(from, to);
+            matchFlow.RequestMove(from, to);
 
-            Assert.That(_matchFlow.CanUndo, Is.True, "A full turn (the human's opening move) has now completed.");
+            Assert.That(matchFlow.CanUndo, Is.True, "A full turn (the human's opening move) has now completed.");
         }
 
         [Test]
