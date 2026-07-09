@@ -97,6 +97,82 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
+        public void Quiescence_ForcedDefectionNoSelfCheck_ResolvesToFiniteScoreAndRestoresState()
+        {
+            // Regression for the AlphaBetaSearch.Quiescence StackOverflow: a Betrayer is pending with
+            // NO legal Executioner (White King on a1 can't reach the Knight on h8), so quiescence must
+            // drive the forced Defection to resolution. The Knight defects far from the White King, so
+            // no self-check → no ForcedSave → the sequence fully resolves and the turn passes to Black.
+            // Before the fix, this looped forever because the pending state was never cleared.
+            BoardState board = TestBoardSetupUtility.CreateEmpty()
+                .WithPiece("a1", Team.White, ChessPieceType.King)
+                .WithPiece("e8", Team.Black, ChessPieceType.King)
+                .WithPiece("h8", Team.White, ChessPieceType.Knight) // Betrayer, defects far from its King
+                .WithTurn(Team.White)
+                .WithPendingBetrayer("h8", Team.White)
+                .WithComputedHash();
+
+            ulong hashBefore = board.ZobristHash;
+            Vector2Int? pendingBefore = board.PendingBetrayerSquare;
+            Team? initiatorBefore = board.BetrayalInitiator;
+
+            int score = 0;
+            Assert.DoesNotThrow(
+                () => score = _search.RunQuiescenceForTest(board, Team.White, CancellationToken.None),
+                "Quiescence must resolve a no-legal-Retribution Act (forced Defection) without overflowing the stack.");
+
+            Assert.That(score, Is.GreaterThan(-1_000_000).And.LessThan(1_000_000),
+                "Resolved quiescence must return a finite evaluation, not a garbage/overflow value.");
+
+            Assert.DoesNotThrow(() => board.AssertZobristConsistency(),
+                "The forced-Defection make/unmake inside quiescence must leave the incremental hash consistent.");
+            Assert.That(board.ZobristHash, Is.EqualTo(hashBefore),
+                "The live board (including the sub-state hash) must be fully restored after quiescence unwinds.");
+            Assert.That(board.PendingBetrayerSquare, Is.EqualTo(pendingBefore),
+                "PendingBetrayerSquare must be restored to its pre-search value on unmake.");
+            Assert.That(board.BetrayalInitiator, Is.EqualTo(initiatorBefore),
+                "BetrayalInitiator must be restored to its pre-search value on unmake.");
+        }
+
+        [Test]
+        public void Quiescence_ForcedDefectionWithForcedSave_ResolvesTheSaveAndRestoresState()
+        {
+            // The ForcedSave sub-case the old code ignored entirely: no legal Executioner for the Rook
+            // on e4, so it defects to Black and immediately checks its former King on e1 along the open
+            // e-file. That obliges White to play a DefensiveOverride (king-save) — the SAME side moves
+            // again, pending state stays set until the save closes it. Quiescence must explore the save
+            // and still resolve to a finite score with a perfect state round-trip.
+            BoardState board = TestBoardSetupUtility.CreateEmpty()
+                .WithPiece("e1", Team.White, ChessPieceType.King)
+                .WithPiece("e8", Team.Black, ChessPieceType.King)
+                .WithPiece("e4", Team.White, ChessPieceType.Rook) // Betrayer, defects and checks e1
+                .WithTurn(Team.White)
+                .WithPendingBetrayer("e4", Team.White)
+                .WithComputedHash();
+
+            ulong hashBefore = board.ZobristHash;
+            Vector2Int? pendingBefore = board.PendingBetrayerSquare;
+            Team? initiatorBefore = board.BetrayalInitiator;
+
+            int score = 0;
+            Assert.DoesNotThrow(
+                () => score = _search.RunQuiescenceForTest(board, Team.White, CancellationToken.None),
+                "Quiescence must resolve a forced Defection that requires a ForcedSave without overflowing.");
+
+            Assert.That(score, Is.GreaterThan(-1_000_000).And.LessThan(1_000_000),
+                "Resolved quiescence must return a finite evaluation for the ForcedSave line.");
+
+            Assert.DoesNotThrow(() => board.AssertZobristConsistency(),
+                "The Defection + DefensiveOverride make/unmake inside quiescence must keep the hash consistent.");
+            Assert.That(board.ZobristHash, Is.EqualTo(hashBefore),
+                "The live board must be fully restored after the ForcedSave line unwinds.");
+            Assert.That(board.PendingBetrayerSquare, Is.EqualTo(pendingBefore),
+                "PendingBetrayerSquare must be restored after the ForcedSave line.");
+            Assert.That(board.BetrayalInitiator, Is.EqualTo(initiatorBefore),
+                "BetrayalInitiator must be restored after the ForcedSave line.");
+        }
+
+        [Test]
         public void FindBestMove_DefendOnlyMode_NeverChoosesActAtRoot()
         {
             BoardState board = TestBoardSetupUtility.CreateEmpty()
