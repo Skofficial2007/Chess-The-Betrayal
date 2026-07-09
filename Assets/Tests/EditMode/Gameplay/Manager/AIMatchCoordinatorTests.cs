@@ -1,8 +1,10 @@
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 using NUnit.Framework;
 using ChessTheBetrayal.AI;
 using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.Core.Diagnostics;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Gameplay.Manager;
 using ChessTheBetrayal.Tests.Utilities;
@@ -168,6 +170,81 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         }
 
         [Test]
+        public void TryRequestMove_ThenDelivery_EmitsSearchRequestedAndMoveDecided()
+        {
+            var logger = new CapturingLogger();
+            var coordinator = new AIMatchCoordinator(_engine, _board, move => _lastPlayedMove = move, ShallowSettings, logger);
+            _board.CurrentTurn = Team.Black;
+
+            try
+            {
+                coordinator.SetAIMode(Team.Black, BetrayalUsage.Full);
+                coordinator.TryRequestMove(isGameActive: true);
+
+                Assert.That(logger.Codes, Contains.Item(DomainEventCode.AI_SearchRequested),
+                    "Requesting a move must log AI_SearchRequested so the human can see the AI start thinking.");
+
+                var stopwatch = Stopwatch.StartNew();
+                while (!_lastPlayedMove.HasValue && stopwatch.ElapsedMilliseconds < PollTimeoutMs)
+                {
+                    coordinator.Tick();
+                    Thread.Sleep(PollIntervalMs);
+                }
+
+                Assert.That(_lastPlayedMove, Is.Not.Null);
+                Assert.That(logger.Codes, Contains.Item(DomainEventCode.AI_MoveDecided),
+                    "Delivering a move must log AI_MoveDecided (with elapsed ms) so the search cost is visible.");
+            }
+            finally
+            {
+                coordinator.Dispose();
+            }
+        }
+
+        [Test]
+        public void CancelInFlightSearch_WhileSearching_EmitsSearchCancelled()
+        {
+            var logger = new CapturingLogger();
+            // Slow settings so the search is genuinely still in flight when we cancel it.
+            var coordinator = new AIMatchCoordinator(_engine, _board, move => _lastPlayedMove = move, SlowSettings, logger);
+            _board.CurrentTurn = Team.Black;
+
+            try
+            {
+                coordinator.SetAIMode(Team.Black, BetrayalUsage.Full);
+                coordinator.TryRequestMove(isGameActive: true);
+                coordinator.CancelInFlightSearch();
+
+                Assert.That(logger.Codes, Contains.Item(DomainEventCode.AI_SearchCancelled),
+                    "Cancelling an in-flight search (the Undo path) must log AI_SearchCancelled.");
+            }
+            finally
+            {
+                coordinator.Dispose();
+            }
+        }
+
+        [Test]
+        public void CancelInFlightSearch_WithNoSearchRunning_LogsNothing()
+        {
+            var logger = new CapturingLogger();
+            var coordinator = new AIMatchCoordinator(_engine, _board, move => _lastPlayedMove = move, ShallowSettings, logger);
+
+            try
+            {
+                coordinator.SetAIMode(Team.Black, BetrayalUsage.Full);
+                coordinator.CancelInFlightSearch(); // nothing is searching
+
+                Assert.That(logger.Codes, Has.No.Member(DomainEventCode.AI_SearchCancelled),
+                    "Cancelling when no search is in flight must be a silent no-op, not a spurious cancel log.");
+            }
+            finally
+            {
+                coordinator.Dispose();
+            }
+        }
+
+        [Test]
         public void Dispose_StopsFurtherMoveDelivery()
         {
             _board.CurrentTurn = Team.Black;
@@ -181,6 +258,31 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
 
             Assert.That(_lastPlayedMove, Is.Null, "A disposed coordinator must never deliver a move.");
             Assert.That(_coordinator.IsAiMode, Is.False);
+        }
+
+        /// <summary>
+        /// Verbose-on IDomainLogger that records every event code it's handed, so lifecycle-logging
+        /// assertions can check what the coordinator emitted. IsVerbose is true because the
+        /// coordinator gates its LogInfo calls behind it. Locked because a search delivered via
+        /// Tick() and a cancel from the test thread can both call in.
+        /// </summary>
+        private sealed class CapturingLogger : IDomainLogger
+        {
+            private readonly object _lock = new object();
+            private readonly List<DomainEventCode> _codes = new List<DomainEventCode>();
+
+            public bool IsVerbose => true;
+
+            public IReadOnlyList<DomainEventCode> Codes
+            {
+                get { lock (_lock) { return new List<DomainEventCode>(_codes); } }
+            }
+
+            private void Add(DomainLogEvent evt) { lock (_lock) { _codes.Add(evt.Code); } }
+
+            public void LogInfo(DomainLogEvent evt) => Add(evt);
+            public void LogWarning(DomainLogEvent evt) => Add(evt);
+            public void LogError(DomainLogEvent evt) => Add(evt);
         }
     }
 }
