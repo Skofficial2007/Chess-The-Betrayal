@@ -492,6 +492,36 @@ namespace ChessTheBetrayal.Core.Engine
             ApplyMoveToBoard(board, defectionMove);
 
             bool selfCheckAfterDefection = IsKingInCheck(board, initiator);
+
+            // A Defection that does NOT require a ForcedSave fully closes the Betrayal sub-sequence
+            // right here — no further Retribution/DefensiveOverride move is coming to close it out
+            // (that only happens via AdvanceBetrayalState's Retribution/DefensiveOverride branch,
+            // which never runs for a Defection) — AND it passes the turn, which a plain Defection
+            // never does on its own (see ApplyZobristMove's Defection branch and the turn-flip
+            // invariant). Both hash effects of "closing the sequence" — the turn-hash toggle AND the
+            // pending-Betrayer sub-state toggle — MUST happen as one atomic step with clearing the
+            // fields: BoardState.ComputeFullZobristHash's sub-state term is keyed on
+            // PendingBetrayerSquare.HasValue, so toggling either hash bit while the fields still
+            // disagree (or vice versa) desyncs incremental vs. full-recompute for as long as that gap
+            // exists. Doing all three together here — before any caller can observe or undo an
+            // intermediate half-closed state — is what keeps them in lockstep.
+            //
+            // Stamping the move lets UndoMoveOnBoard replaying it later perform the SAME two toggles
+            // again via ApplyZobristMove's Defection branch (self-cancelling), while UndoMoveOnBoard's
+            // own Previous* restore puts PendingBetrayerSquare/BetrayalInitiator back — so the toggles
+            // and the fields all reverse together on undo, exactly mirroring what happens here.
+            // CurrentTurn itself is NOT flipped here — that stays the caller's job (TurnResolver /
+            // AlphaBetaSearch each own their own turn/perspective bookkeeping) — only the hash bit that
+            // must travel symmetrically with this move is handled here.
+            if (!selfCheckAfterDefection)
+            {
+                board.ToggleTurnHash();
+                board.ToggleBetrayalSubStateHash(betrayerSquare, initiator);
+                board.PendingBetrayerSquare = null;
+                board.BetrayalInitiator = null;
+                defectionMove = defectionMove.WithClosesBetrayalSequence(true);
+            }
+
             return new DefectionOutcome(selfCheckAfterDefection, betrayerSquare, defectionMove, reason);
         }
 
@@ -503,8 +533,27 @@ namespace ChessTheBetrayal.Core.Engine
             if (move.Stage == BetrayalStage.Defection)
             {
                 // BoardState.DefectPiece already toggles the piece out under its old team and back in
-                // under its new one (called by ApplyMoveToBoard just before this). Nothing left to do
-                // here — Defection never flips whose turn it is, so no turn-hash toggle either.
+                // under its new one (called by ApplyMoveToBoard just before this). A PLAIN Defection
+                // never flips whose turn it is, so ordinarily no turn-hash toggle either — UNLESS this
+                // is the one Defection that closed its Betrayal sub-sequence without a ForcedSave
+                // (ClosesBetrayalSequence), in which case ChessEngine.ResolveDefection already toggled
+                // the turn-hash AND the pending-Betrayer sub-state hash directly on the live board, in
+                // the same atomic step that determined no ForcedSave applied and cleared the pending
+                // fields (see its doc comment for why that has to happen together).
+                //
+                // This branch never fires that pair of toggles on the FORWARD apply — ResolveDefection
+                // calls ApplyMoveToBoard with the still-UNSTAMPED move (the self-check outcome, and so
+                // ClosesBetrayalSequence, isn't known until after that call returns). It fires only
+                // when UndoMoveOnBoard later replays the STAMPED move that ResolveDefection returned —
+                // reversing both toggles symmetrically, keyed off the move itself rather than live
+                // board state, exactly once for exactly one prior manual toggle. Start==End for a
+                // Defection, so EndPosition/PieceTeam already identify the Betrayer square/initiator;
+                // no Previous* needed.
+                if (move.ClosesBetrayalSequence)
+                {
+                    board.ToggleTurnHash();
+                    board.ToggleBetrayalSubStateHash(move.EndPosition, move.PieceTeam);
+                }
                 return;
             }
 

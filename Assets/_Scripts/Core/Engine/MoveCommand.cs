@@ -81,6 +81,16 @@ namespace ChessTheBetrayal.Core.Engine
         public readonly Vector2Int? PreviousPendingBetrayerSquare;
         public readonly Team? PreviousBetrayalInitiator;
 
+        // True only for a Defection move that resolved WITHOUT a ForcedSave — i.e. the one that
+        // fully closes a Betrayal sub-sequence with no further Retribution/DefensiveOverride move
+        // coming to do it (see TurnResolver.ResultFromDefectionOutcome). ApplyZobristMove's Defection
+        // branch reads this to toggle the pending-Betrayer sub-state hash off/on, so the same toggle
+        // that closes the sequence at resolution time is undone symmetrically by UndoMoveOnBoard —
+        // this flag is what makes that toggle move-driven instead of a manual, unmake-orphaned
+        // mutation. Never set for a Defection that DOES require a ForcedSave (AdvanceBetrayalState's
+        // Retribution/DefensiveOverride branch closes the sequence — and its own sub-state hash — later).
+        public readonly bool ClosesBetrayalSequence;
+
         // Clock snapshot at the moment this move was submitted.
         public readonly long WhiteRemainingMsAtMove;
         public readonly long BlackRemainingMsAtMove;
@@ -144,7 +154,8 @@ namespace ChessTheBetrayal.Core.Engine
             Team? previousBetrayalInitiator = null,
             long whiteRemainingMsAtMove = long.MaxValue,
             long blackRemainingMsAtMove = long.MaxValue,
-            BetrayalStage stage = BetrayalStage.None)
+            BetrayalStage stage = BetrayalStage.None,
+            bool closesBetrayalSequence = false)
         {
             StartPosition = startPosition;
             EndPosition = endPosition;
@@ -194,6 +205,7 @@ namespace ChessTheBetrayal.Core.Engine
             WhiteRemainingMsAtMove = whiteRemainingMsAtMove;
             BlackRemainingMsAtMove = blackRemainingMsAtMove;
             Stage = stage;
+            ClosesBetrayalSequence = closesBetrayalSequence;
         }
 
         #region Factory Methods
@@ -258,7 +270,8 @@ namespace ChessTheBetrayal.Core.Engine
                 PreviousBetrayalRightAvailable, PreviousPendingBetrayerSquare, PreviousBetrayalInitiator,
                 clock.WhiteRemainingMs,
                 clock.BlackRemainingMs,
-                Stage);
+                Stage,
+                ClosesBetrayalSequence);
 
         /// <summary>
         /// Returns a new MoveCommand with the specified BetrayalStage applied.
@@ -274,7 +287,26 @@ namespace ChessTheBetrayal.Core.Engine
                 PreviousBetrayalRightAvailable, PreviousPendingBetrayerSquare, PreviousBetrayalInitiator,
                 WhiteRemainingMsAtMove,
                 BlackRemainingMsAtMove,
-                stage);
+                stage,
+                ClosesBetrayalSequence);
+
+        /// <summary>
+        /// Returns a new MoveCommand with ClosesBetrayalSequence set. Only ever applied to a
+        /// Defection move, once the self-check outcome is known — see ChessEngine.ResolveDefection.
+        /// </summary>
+        public MoveCommand WithClosesBetrayalSequence(bool closesBetrayalSequence) =>
+            new MoveCommand(
+                StartPosition, EndPosition,
+                new PieceData(PieceTeam, PieceType, PieceMoveDirection, 0, PieceHadMoved),
+                CapturedPieceFullState,
+                SpecialMoveType, PromotedTo,
+                RookStartPosition, RookEndPosition, EnPassantCapturePosition,
+                PreviousCastlingMask, PreviousEnPassantFile,
+                PreviousBetrayalRightAvailable, PreviousPendingBetrayerSquare, PreviousBetrayalInitiator,
+                WhiteRemainingMsAtMove,
+                BlackRemainingMsAtMove,
+                Stage,
+                closesBetrayalSequence);
 
         public bool IsCapture => HasCapture;
         public bool IsPromotion => PromotedTo != ChessPieceType.None;

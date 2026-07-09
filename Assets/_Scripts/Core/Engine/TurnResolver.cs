@@ -129,22 +129,14 @@ namespace ChessTheBetrayal.Core.Engine
                     TurnPhase.ForcedSave, true, true, false, outcome.DefectedSquare, outcome.DefectionMove);
             }
 
-            // The Defection move itself never toggles the turn-hash bit (like Act, it's not a
-            // real "turn" on its own — see ApplyZobristMove's Defection branch). Whether the turn
-            // actually passes is only known now, so the toggle has to happen here to stay in sync
-            // with CurrentTurn flipping via NextTurn().
-            board.ToggleTurnHash();
+            // ResolveDefection already toggled the turn-hash AND the pending-Betrayer sub-state hash,
+            // and cleared PendingBetrayerSquare/BetrayalInitiator — atomically, the moment it
+            // determined no ForcedSave was required (see its doc comment for why that has to be one
+            // atomic step). CurrentTurn itself is the one piece of state ResolveDefection deliberately
+            // leaves to the caller (it's per-caller bookkeeping, not something to hang off a move for
+            // undo — TurnResolver flips it directly; AlphaBetaSearch tracks its own perspective).
             board.NextTurn();
 
-            // No ForcedSave means the Betrayal sub-sequence is fully resolved right here — there is
-            // no further Retribution/DefensiveOverride move coming to close it out (that only
-            // happens via AdvanceBetrayalState's Retribution/DefensiveOverride branch, which never
-            // runs for a Defection). Leaving PendingBetrayerSquare/BetrayalInitiator set past this
-            // point permanently short-circuits EvaluateGameState's Betrayal guard to GameState.Normal
-            // for the rest of the game, since PieceData.Empty.Team defaults to Team.White (0) and can
-            // coincidentally equal a White BetrayalInitiator.
-            board.PendingBetrayerSquare = null;
-            board.BetrayalInitiator = null;
             return new TurnAdvanceResult(
                 TurnPhase.Normal, true, false, true, outcome.DefectedSquare, outcome.DefectionMove);
         }
