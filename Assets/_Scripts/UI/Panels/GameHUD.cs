@@ -37,11 +37,20 @@ namespace ChessTheBetrayal.UI
         [SerializeField] private Ease _skipShowEase = Ease.OutBack;
         [SerializeField] private Ease _skipHideEase = Ease.InBack;
 
+        [Header("Undo (Practice/AI matches only)")]
+        [SerializeField] private GameObject undoButtonRoot;
+        [SerializeField] private Button undoButton;
+        [SerializeField] private Image undoButtonGraphic;
+        [SerializeField] private Color _undoActiveColor = new Color(1f, 253f / 255f, 178f / 255f); // #FFFDB2
+        [SerializeField] private Color _undoInactiveColor = new Color(147f / 255f, 147f / 255f, 147f / 255f); // #939393
+
         public event Action OnExitToMenu;
         public event Action OnRetributionSkipClicked;
+        public event Action OnUndoClicked;
 
         private Tween _skipButtonTween;
         private bool _skipButtonVisible;
+        private bool _skipAllowed = true;
 
         private void Awake()
         {
@@ -57,11 +66,24 @@ namespace ChessTheBetrayal.UI
                 skipButton.onClick.AddListener(() => OnRetributionSkipClicked?.Invoke());
             }
 
+            if (undoButton != null)
+            {
+                undoButton.onClick.AddListener(() => OnUndoClicked?.Invoke());
+            }
+
             // Start hidden and inert — no flash-of-visible-button before the first BetrayalPhase event.
             if (skipButtonRoot != null)
             {
                 skipButtonRoot.localScale = Vector3.one * _skipHiddenScale;
                 skipButtonRoot.gameObject.SetActive(false);
+            }
+
+            // Undo only ever applies to AI practice matches — stays hidden and non-interactable
+            // until GameManager explicitly shows it for that session (see SetUndoVisible).
+            SetUndoInteractable(false);
+            if (undoButtonRoot != null)
+            {
+                undoButtonRoot.SetActive(false);
             }
         }
 
@@ -75,6 +97,9 @@ namespace ChessTheBetrayal.UI
             InspectorGuard.Require(_betrayalChannel, nameof(_betrayalChannel), this);
             InspectorGuard.Require(skipButtonRoot, nameof(skipButtonRoot), this);
             InspectorGuard.Require(skipButton, nameof(skipButton), this);
+            InspectorGuard.Require(undoButtonRoot, nameof(undoButtonRoot), this);
+            InspectorGuard.Require(undoButton, nameof(undoButton), this);
+            InspectorGuard.Require(undoButtonGraphic, nameof(undoButtonGraphic), this);
         }
 
         private void OnEnable()
@@ -98,12 +123,22 @@ namespace ChessTheBetrayal.UI
         /// The Skip button is only ever a legal action while resting in RetributionPending — every
         /// other BetrayalPhase (Resolved, DefectionOccurred, ForcedSaveActive) means the sub-machine
         /// has already moved on, so it hides. Initiated is the split-second before RetributionPending
-        /// is raised (see MatchDriver.PlayMove's Act branch), so it hides too.
+        /// is raised (see MatchDriver.PlayMove's Act branch), so it hides too. Also stays hidden
+        /// outright when the match's Practice Setup disabled voluntary skipping (see SetSkipAllowed) —
+        /// the domain-level RequestRetributionSkip is still reachable in that case, but nothing in
+        /// the HUD ever calls it.
         /// </summary>
         private void HandleBetrayalPhaseChanged(BetrayalPayload payload)
         {
-            SetSkipButtonVisible(payload.Phase == BetrayalPhase.RetributionPending);
+            SetSkipButtonVisible(_skipAllowed && payload.Phase == BetrayalPhase.RetributionPending);
         }
+
+        /// <summary>
+        /// Called once per match by GameManager, right after Practice Match Setup is resolved (or
+        /// implicitly true for every non-practice match). Governs only whether the Skip button is
+        /// ever shown — it does not touch domain rules.
+        /// </summary>
+        public void SetSkipAllowed(bool allowed) => _skipAllowed = allowed;
 
         private void SetSkipButtonVisible(bool visible)
         {
@@ -145,6 +180,15 @@ namespace ChessTheBetrayal.UI
                     skipButtonRoot.localScale = Vector3.one * _skipHiddenScale;
                     skipButtonRoot.gameObject.SetActive(false);
                 }
+
+                // Undo is AI-practice-only — reset to hidden/inactive so a fresh human-vs-human
+                // match never inherits the previous practice match's Undo state.
+                SetUndoVisible(false);
+                SetUndoInteractable(false);
+
+                // Reset to the default-allowed state so a fresh match never inherits a previous
+                // practice match's "skip disabled" choice.
+                _skipAllowed = true;
             }
 
             gameObject.SetActive(active);
@@ -158,6 +202,36 @@ namespace ChessTheBetrayal.UI
             if (_clockWidget != null)
             {
                 _clockWidget.gameObject.SetActive(!config.IsUnlimited);
+            }
+        }
+
+        /// <summary>
+        /// Shows or hides the Undo button's GameObject entirely. Called once per match by
+        /// GameManager: true for AI practice sessions, false (the default) for everything else.
+        /// </summary>
+        public void SetUndoVisible(bool visible)
+        {
+            if (undoButtonRoot != null)
+            {
+                undoButtonRoot.SetActive(visible);
+            }
+        }
+
+        /// <summary>
+        /// Drives the Undo button's interactable state and its active/inactive color swap.
+        /// Called by GameManager whenever UndoService.CanUndo changes (e.g. after every move and
+        /// after Undo itself pops the stack empty).
+        /// </summary>
+        public void SetUndoInteractable(bool interactable)
+        {
+            if (undoButton != null)
+            {
+                undoButton.interactable = interactable;
+            }
+
+            if (undoButtonGraphic != null)
+            {
+                undoButtonGraphic.color = interactable ? _undoActiveColor : _undoInactiveColor;
             }
         }
 

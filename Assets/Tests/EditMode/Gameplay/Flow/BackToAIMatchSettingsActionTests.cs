@@ -7,12 +7,13 @@ using ChessTheBetrayal.Gameplay.Flow;
 namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Flow
 {
     /// <summary>
-    /// Validates BackToModeSelectAction against a mock IMatchFlow, independent of GameManager/UIManager.
-    /// This is the prototype's bound IPostGameAction: Replay must tear the finished match down and
-    /// land on Mode Select, never silently start a new match under a hidden default mode.
+    /// Validates BackToAIMatchSettingsAction against a mock IMatchFlow, independent of
+    /// GameManager/UIManager. This is the practice-match IPostGameAction: Replay must tear the
+    /// finished match down and land on the AI Settings screen, never Mode Select — a practice match
+    /// never went through Mode Select in the first place (it's hardcoded Ultimate).
     /// </summary>
     [TestFixture]
-    public class BackToModeSelectActionTests
+    public class BackToAIMatchSettingsActionTests
     {
         private class RecordingMatchFlow : IMatchFlow
         {
@@ -35,32 +36,32 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Flow
         }
 
         [Test]
-        public void Execute_TearsDownMatchBeforeReturningToModeSelect()
+        public void Execute_TearsDownMatchBeforeReturningToAIMatchSettings()
         {
             var flow = new RecordingMatchFlow();
-            var action = new BackToModeSelectAction();
-            var result = new MatchResult(Team.White, isTimeout: false, GameModePresets.Bullet1_0);
+            var action = new BackToAIMatchSettingsAction();
+            var result = new MatchResult(Team.White, isTimeout: false, GameModePresets.Unlimited);
 
             action.Execute(flow, result);
 
             Assert.That(flow.Calls, Is.EqualTo(new[]
             {
                 nameof(IMatchFlow.TearDownCurrentMatch),
-                nameof(IMatchFlow.ReturnToModeSelect)
-            }), "Replay must tear down the finished match before showing Mode Select.");
+                nameof(IMatchFlow.ReturnToAIMatchSettings)
+            }), "Replay for a practice match must tear down the finished match before showing AI Settings.");
         }
 
         [Test]
-        public void Execute_NeverStartsANewMatchDirectly()
+        public void Execute_NeverRoutesThroughModeSelect()
         {
             var flow = new RecordingMatchFlow();
-            var action = new BackToModeSelectAction();
+            var action = new BackToAIMatchSettingsAction();
             var result = new MatchResult(null, isTimeout: false, GameModePresets.Unlimited);
 
             action.Execute(flow, result);
 
-            Assert.That(flow.StartedMode, Is.Null,
-                "The prototype's post-game action must always route through Mode Select, never auto-start a match under a carried-over or default mode.");
+            Assert.That(flow.Calls, Does.Not.Contain(nameof(IMatchFlow.ReturnToModeSelect)),
+                "A practice match never went through Mode Select, so Replay must not send it there either.");
         }
     }
 }

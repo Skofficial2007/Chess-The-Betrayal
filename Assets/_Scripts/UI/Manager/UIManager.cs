@@ -14,6 +14,7 @@ namespace ChessTheBetrayal.UI
     {
         [Header("Panel References")]
         [SerializeField] private GameModeSelectorUI gameModeSelectionUI;
+        [SerializeField] private AIMatchSettingsUI aiMatchSettingsUI;
         [SerializeField] private TeamSelectionUI teamSelectionUI;
         [SerializeField] private PromotionUI promotionUI;
         [SerializeField] private GameOverUI gameOverUI;
@@ -28,12 +29,14 @@ namespace ChessTheBetrayal.UI
 
         // Events
         public event Action<GameModeConfig> OnGameModeSelected;
+        public event Action<PracticeMatchSettings> OnPracticeMatchSettingsConfirmed;
         public event Action OnTeamRollRequested;
         public event Action OnTeamAnimationComplete;
         public event Action<Team> OnTeamSelected;
         public event Action<ChessPieceType> OnPromotionSelected;
         public event Action OnGameReset;
         public event Action OnRetributionSkipRequested;
+        public event Action OnUndoRequested;
 
         private Team _assignedTeam;
 
@@ -53,6 +56,7 @@ namespace ChessTheBetrayal.UI
         private void ValidateRequiredFields()
         {
             InspectorGuard.Require(gameModeSelectionUI, nameof(gameModeSelectionUI), this);
+            InspectorGuard.Require(aiMatchSettingsUI, nameof(aiMatchSettingsUI), this);
             InspectorGuard.Require(teamSelectionUI, nameof(teamSelectionUI), this);
             InspectorGuard.Require(promotionUI, nameof(promotionUI), this);
             InspectorGuard.Require(gameOverUI, nameof(gameOverUI), this);
@@ -69,6 +73,11 @@ namespace ChessTheBetrayal.UI
             if (gameModeSelectionUI != null)
             {
                 gameModeSelectionUI.SetActive(false);
+            }
+
+            if (aiMatchSettingsUI != null)
+            {
+                aiMatchSettingsUI.SetActive(false);
             }
 
             if (teamSelectionUI != null)
@@ -115,6 +124,11 @@ namespace ChessTheBetrayal.UI
                 gameModeSelectionUI.OnModeSelected += HandleGameModeSelected;
             }
 
+            if (aiMatchSettingsUI != null)
+            {
+                aiMatchSettingsUI.OnSettingsConfirmed += HandlePracticeMatchSettingsConfirmed;
+            }
+
             if (teamSelectionUI != null)
             {
                 teamSelectionUI.OnRollRequested += () => OnTeamRollRequested?.Invoke();
@@ -129,6 +143,7 @@ namespace ChessTheBetrayal.UI
             if (mainMenuUI != null)
             {
                 mainMenuUI.OnPlay += HandlePlayGame;
+                mainMenuUI.OnPracticeMatch += HandlePracticeMatchRequested;
                 mainMenuUI.OnExit += HandleExitGame;
             }
 
@@ -136,6 +151,7 @@ namespace ChessTheBetrayal.UI
             {
                 gameHUD.OnExitToMenu += HandleGameExit;
                 gameHUD.OnRetributionSkipClicked += HandleRetributionSkipClicked;
+                gameHUD.OnUndoClicked += HandleUndoClicked;
             }
 
             if (gameOverUI != null)
@@ -152,6 +168,11 @@ namespace ChessTheBetrayal.UI
                 gameModeSelectionUI.OnModeSelected -= HandleGameModeSelected;
             }
 
+            if (aiMatchSettingsUI != null)
+            {
+                aiMatchSettingsUI.OnSettingsConfirmed -= HandlePracticeMatchSettingsConfirmed;
+            }
+
             if (teamSelectionUI != null)
             {
                 teamSelectionUI.OnRollRequested -= () => OnTeamRollRequested?.Invoke();
@@ -166,6 +187,7 @@ namespace ChessTheBetrayal.UI
             if (mainMenuUI != null)
             {
                 mainMenuUI.OnPlay -= HandlePlayGame;
+                mainMenuUI.OnPracticeMatch -= HandlePracticeMatchRequested;
                 mainMenuUI.OnExit -= HandleExitGame;
             }
 
@@ -173,6 +195,7 @@ namespace ChessTheBetrayal.UI
             {
                 gameHUD.OnExitToMenu -= HandleGameExit;
                 gameHUD.OnRetributionSkipClicked -= HandleRetributionSkipClicked;
+                gameHUD.OnUndoClicked -= HandleUndoClicked;
             }
 
             if (gameOverUI != null)
@@ -189,6 +212,11 @@ namespace ChessTheBetrayal.UI
         public bool IsUIBlocking()
         {
             if (gameModeSelectionUI != null && gameModeSelectionUI.gameObject.activeSelf)
+            {
+                return true;
+            }
+
+            if (aiMatchSettingsUI != null && aiMatchSettingsUI.gameObject.activeSelf)
             {
                 return true;
             }
@@ -232,6 +260,11 @@ namespace ChessTheBetrayal.UI
                 gameModeSelectionUI.SetActive(false);
             }
 
+            if (aiMatchSettingsUI != null)
+            {
+                aiMatchSettingsUI.SetActive(false);
+            }
+
             if (teamSelectionUI != null)
             {
                 teamSelectionUI.SetActive(false);
@@ -265,6 +298,54 @@ namespace ChessTheBetrayal.UI
                 mainMenuUI.SetActive(false);
             }
 
+            if (aiMatchSettingsUI != null)
+            {
+                aiMatchSettingsUI.SetActive(false);
+            }
+
+            if (teamSelectionUI != null)
+            {
+                teamSelectionUI.SetActive(false);
+            }
+
+            if (gameHUD != null)
+            {
+                gameHUD.SetActive(false);
+            }
+
+            if (gameOverUI != null)
+            {
+                gameOverUI.SetActive(false);
+            }
+
+            if (promotionUI != null)
+            {
+                promotionUI.SetActive(false);
+            }
+        }
+
+        /// <summary>
+        /// Practice Match's entry screen. Skips the normal Game Mode selector entirely — Practice
+        /// matches are hardcoded to Ultimate mode, so the AI Settings panel is the only screen the
+        /// player needs before Team Selection.
+        /// </summary>
+        public void ShowAIMatchSettings()
+        {
+            if (aiMatchSettingsUI != null)
+            {
+                aiMatchSettingsUI.SetActive(true);
+            }
+
+            if (mainMenuUI != null)
+            {
+                mainMenuUI.SetActive(false);
+            }
+
+            if (gameModeSelectionUI != null)
+            {
+                gameModeSelectionUI.SetActive(false);
+            }
+
             if (teamSelectionUI != null)
             {
                 teamSelectionUI.SetActive(false);
@@ -296,6 +377,11 @@ namespace ChessTheBetrayal.UI
             if (gameModeSelectionUI != null)
             {
                 gameModeSelectionUI.SetActive(false);
+            }
+
+            if (aiMatchSettingsUI != null)
+            {
+                aiMatchSettingsUI.SetActive(false);
             }
 
             if (mainMenuUI != null)
@@ -368,6 +454,15 @@ namespace ChessTheBetrayal.UI
             gameHUD?.ConfigureForMode(config);
         }
 
+        /// <summary>Passthrough to GameHUD — shows/hides the Undo button. GameManager calls this once per match.</summary>
+        public void SetUndoVisible(bool visible) => gameHUD?.SetUndoVisible(visible);
+
+        /// <summary>Passthrough to GameHUD — drives the Undo button's interactable state and color. GameManager calls this whenever UndoService.CanUndo changes.</summary>
+        public void SetUndoInteractable(bool interactable) => gameHUD?.SetUndoInteractable(interactable);
+
+        /// <summary>Passthrough to GameHUD — governs whether the Retribution Skip button is ever shown this match.</summary>
+        public void SetRetributionSkipAllowed(bool allowed) => gameHUD?.SetSkipAllowed(allowed);
+
         public void TriggerTeamRoulette(Team assignedTeam)
         {
             _assignedTeam = assignedTeam;
@@ -385,6 +480,22 @@ namespace ChessTheBetrayal.UI
         private void HandlePlayGame()
         {
             ShowGameModeSelection();
+        }
+
+        private void HandlePracticeMatchRequested()
+        {
+            ShowAIMatchSettings();
+        }
+
+        private void HandlePracticeMatchSettingsConfirmed(PracticeMatchSettings settings)
+        {
+            if (aiMatchSettingsUI != null)
+            {
+                aiMatchSettingsUI.SetActive(false);
+            }
+
+            OnPracticeMatchSettingsConfirmed?.Invoke(settings);
+            ShowTeamSelection();
         }
 
         private void HandleExitGame()
@@ -440,6 +551,11 @@ namespace ChessTheBetrayal.UI
         private void HandleRetributionSkipClicked()
         {
             OnRetributionSkipRequested?.Invoke();
+        }
+
+        private void HandleUndoClicked()
+        {
+            OnUndoRequested?.Invoke();
         }
 
         private void HandleRouletteComplete()

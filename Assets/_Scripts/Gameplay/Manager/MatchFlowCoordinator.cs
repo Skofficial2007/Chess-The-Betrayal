@@ -39,11 +39,11 @@ namespace ChessTheBetrayal.Gameplay.Manager
         private readonly int _boardSizeX;
         private readonly int _boardSizeY;
         private readonly bool _logMoves;
-        private readonly BetrayalUsage _debugAiBetrayalUsage;
 
         private readonly Action<Team> _triggerTeamRoulette;
         private readonly Action _showTeamSelection;
         private readonly Action _showGameModeSelection;
+        private readonly Action _showAIMatchSettings;
         private readonly Action<Vector2Int, Vector2Int> _onExecutorMoveRejected;
         private readonly Action<Vector2Int, Vector2Int, bool> _onExecutorPromotionRequired;
         private readonly Action<GameModeConfig> _raiseGameModeConfigured;
@@ -54,19 +54,45 @@ namespace ChessTheBetrayal.Gameplay.Manager
 
         private IMoveExecutor _moveExecutor;
 
+        // One-shot: set by GameManager (via SetPracticeMatchSettings) after the player confirms the
+        // AI Settings panel, consumed and cleared by the very next HandleTeamAnimationComplete. Null
+        // means "plain match" — Play from the main menu never touches this, so BetrayalRightAvailable
+        // stays at BoardState's own default (true) and SetAIMode is never called.
+        private PracticeMatchSettings? _pendingPracticeSettings;
+
         public GameModeConfig SelectedMode { get; private set; } = GameModeConfig.Unlimited;
         public bool IsAiMode { get; private set; }
         public Team PlayerTeam { get; private set; } = Team.White;
         public MatchResult LastMatchResult { get; private set; }
 
+        // True when the human drew the first-mover seat this match. When false in an AI match, the AI
+        // played the opening move — which, like chess.com, must NOT be undoable (there's no human
+        // move beneath it to take back), so the last Undo lands on the human's first turn.
+        private bool _humanMovesFirst = true;
+
+        /// <summary>True when the AI made the forced opening move this match — its opening is protected from Undo. See UndoService.</summary>
+        private bool AiMovesFirst => IsAiMode && !_humanMovesFirst;
+
+        /// <summary>Whether the HUD should ever offer the Retribution Skip button this match. True
+        /// for every non-practice match (the setting doesn't apply); mirrors the practice match's
+        /// confirmed choice otherwise. Read by GameManager right after HandleTeamAnimationComplete.</summary>
+        public bool RetributionSkipAllowed { get; private set; } = true;
+
         public TurnPhase CurrentPhase => _matchDriver.CurrentPhase;
         public bool IsGameActive => CurrentPhase != TurnPhase.GameOver;
+
+        /// <summary>True once there's at least one full player turn to undo back to. AI-practice-only — see UndoService.CanUndo.</summary>
+        public bool CanUndo => _undoService != null && _undoService.CanUndo(IsAiMode, CurrentPhase, AiMovesFirst);
+
+        /// <summary>How many recorded turns remain on the undo stack (debug logging only; 2 turns = 1 undo press).</summary>
+        public int UndoTurnCount => _undoService?.TurnCount ?? 0;
 
         public MatchFlowCoordinator(
             BoardState board, GameSetup setup, MatchDriver matchDriver, IChessEngine engine,
             UndoService undoService, AIMatchCoordinator aiCoordinator, ClockCoordinator clockCoordinator,
-            GameObject clockHost, int boardSizeX, int boardSizeY, bool logMoves, BetrayalUsage debugAiBetrayalUsage,
+            GameObject clockHost, int boardSizeX, int boardSizeY, bool logMoves,
             Action<Team> triggerTeamRoulette, Action showTeamSelection, Action showGameModeSelection,
+            Action showAIMatchSettings,
             Action<Vector2Int, Vector2Int> onExecutorMoveRejected,
             Action<Vector2Int, Vector2Int, bool> onExecutorPromotionRequired,
             Action<GameModeConfig> raiseGameModeConfigured, Action raiseGameStarted,
@@ -84,11 +110,11 @@ namespace ChessTheBetrayal.Gameplay.Manager
             _boardSizeX = boardSizeX;
             _boardSizeY = boardSizeY;
             _logMoves = logMoves;
-            _debugAiBetrayalUsage = debugAiBetrayalUsage;
 
             _triggerTeamRoulette = triggerTeamRoulette;
             _showTeamSelection = showTeamSelection;
             _showGameModeSelection = showGameModeSelection;
+            _showAIMatchSettings = showAIMatchSettings;
             _onExecutorMoveRejected = onExecutorMoveRejected;
             _onExecutorPromotionRequired = onExecutorPromotionRequired;
             _raiseGameModeConfigured = raiseGameModeConfigured;
@@ -100,6 +126,14 @@ namespace ChessTheBetrayal.Gameplay.Manager
 
         public void HandleGameModeReceived(GameModeConfig config) => SelectedMode = config;
 
+        /// <summary>
+        /// Records the player's confirmed Practice Match Setup choices for the next match to pick
+        /// up. Must be called before HandleTeamRollRequested/HandleTeamAnimationComplete run their
+        /// course for that match — UIManager's flow already guarantees this ordering, since
+        /// AIMatchSettingsUI.OnSettingsConfirmed fires before ShowTeamSelection().
+        /// </summary>
+        public void SetPracticeMatchSettings(PracticeMatchSettings settings) => _pendingPracticeSettings = settings;
+
         /// <summary>Records the outcome of the match that just ended, read back by AcknowledgeGameOver via LastMatchResult.</summary>
         public void RecordMatchResult(Team? winningTeam, bool isTimeout) =>
             LastMatchResult = new MatchResult(winningTeam, isTimeout, SelectedMode);
@@ -110,6 +144,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
             (Team playerTeam, Team firstMover) = _setup.RollTeams();
             PlayerTeam = playerTeam;
             _board.CurrentTurn = firstMover;
+            _humanMovesFirst = playerTeam == firstMover;
 
             _triggerTeamRoulette(PlayerTeam);
         }
@@ -140,14 +175,26 @@ namespace ChessTheBetrayal.Gameplay.Manager
             _moveExecutor.OnPromotionRequired += _onExecutorPromotionRequired;
             _moveExecutor.OnRetributionSkipConfirmed += _matchDriver.RequestRetributionSkip;
 
-            // TEMP DEBUG HOOK (AI-08 manual verification) — remove once a real Settings screen
-            // drives SetAIMode. Ultimate mode only; AI takes whichever side the roulette didn't
-            // give the human.
-            if (SelectedMode.IsUnlimited)
+            // Practice Match Setup was confirmed for this match: apply every board/AI-level choice
+            // now, at the one true match-init seam, then consume the one-shot settings so a
+            // subsequent Replay/plain match never inherits them by accident.
+            if (_pendingPracticeSettings.HasValue)
             {
+                PracticeMatchSettings settings = _pendingPracticeSettings.Value;
+                _pendingPracticeSettings = null;
+
+                _board.BetrayalRightAvailable = settings.BetrayalEnabled;
+                RetributionSkipAllowed = settings.RetributionSkipAllowed;
+
                 Team aiTeam = PlayerTeam == Team.White ? Team.Black : Team.White;
-                SetAIMode(aiTeam, _debugAiBetrayalUsage);
-                if (_logMoves) Debug.Log($"[MatchFlowCoordinator][DEBUG] AI enabled for {aiTeam}, BetrayalUsage={_debugAiBetrayalUsage}. Human plays {PlayerTeam}.");
+                BetrayalUsage aiBetrayalUsage = settings.AiDefendOnly ? BetrayalUsage.DefendOnly : BetrayalUsage.Full;
+                SetAIMode(aiTeam, aiBetrayalUsage);
+
+                if (_logMoves) Debug.Log($"[MatchFlowCoordinator] Practice match started. AI={aiTeam}, BetrayalEnabled={settings.BetrayalEnabled}, AiBetrayalUsage={aiBetrayalUsage}, SkipAllowed={settings.RetributionSkipAllowed}, Difficulty={settings.Difficulty}. Human plays {PlayerTeam}.");
+            }
+            else
+            {
+                RetributionSkipAllowed = true;
             }
 
             // The clock has to exist before TransitionToPhase runs — the phase transition
@@ -179,6 +226,8 @@ namespace ChessTheBetrayal.Gameplay.Manager
 
             SelectedMode = GameModeConfig.Unlimited;
             IsAiMode = false;
+            RetributionSkipAllowed = true;
+            _pendingPracticeSettings = null;
 
             _raiseGameModeConfigured(GameModeConfig.Unlimited);
 
@@ -198,6 +247,9 @@ namespace ChessTheBetrayal.Gameplay.Manager
         }
 
         public void ReturnToModeSelect() => _showGameModeSelection();
+
+        /// <summary>Replay destination for AI practice matches — see BackToAIMatchSettingsAction.</summary>
+        public void ReturnToAIMatchSettings() => _showAIMatchSettings();
 
         /// <summary>
         /// Domain-only teardown: unwires the move executor, stops the clock, and drops the
@@ -273,6 +325,23 @@ namespace ChessTheBetrayal.Gameplay.Manager
             _moveExecutor?.RequestMove(from, to);
         }
 
+        /// <summary>
+        /// Whether the human may select the piece at this square. Wraps MatchDriver's phase/turn/
+        /// ownership check with the Practice-mode rule: in an AI match the human controls ONLY their
+        /// own team, so a piece belonging to the AI's side is never selectable even on the AI's turn.
+        /// In non-AI matches this is a straight passthrough (hot-seat: whoever's turn it is may move),
+        /// so nothing changes for plain Play mode. MatchDriver already confirmed the piece belongs to
+        /// the side to move, so comparing that piece's team to PlayerTeam is sufficient — no need to
+        /// re-read the board here.
+        /// </summary>
+        public bool CanSelectPiece(Vector2Int position)
+        {
+            if (!_matchDriver.CanSelectPiece(position)) return false;
+            if (!IsAiMode) return true;
+
+            return _board.GetPiece(position).Team == PlayerTeam;
+        }
+
         public void HandlePromotionChoice(ChessPieceType chosenType) => _moveExecutor?.RequestPromotion(chosenType);
 
         public void RequestRetributionSkip() => _moveExecutor?.RequestRetributionSkip();
@@ -281,13 +350,28 @@ namespace ChessTheBetrayal.Gameplay.Manager
         {
             if (_undoService == null) return;
 
+            // Read CanUndo BEFORE popping so we only re-broadcast the board (an expensive full View
+            // rebuild) when an undo actually happened — a press with nothing to undo is a no-op both
+            // in UndoService and here. Note the search-cancel below must NOT gate on this: it's fine
+            // to run either way, and CanUndo doesn't depend on whether a search is in flight.
+            if (!CanUndo) return;
+
             bool aiSearchInFlight = _aiCoordinator.IsSearchInFlight;
             if (aiSearchInFlight)
             {
                 _aiCoordinator.CancelInFlightSearch();
             }
 
-            _undoService.RequestUndo(IsAiMode, CurrentPhase, aiSearchInFlight);
+            _undoService.RequestUndo(IsAiMode, CurrentPhase, aiSearchInFlight, AiMovesFirst);
+
+            // The undo mutated only the domain board (pieces unmade, captures restored). BoardVisuals
+            // is a purely incremental animator driven by per-move events — it has no idea an undo
+            // happened — so without this it keeps showing the post-move position. Re-point the shared
+            // board bridge at the reverted board and re-raise game-started, which drives BoardVisuals'
+            // one full-rebuild path (HandleGameStarted: ClearAllVisuals + SpawnAllPieces). Pieces snap
+            // to the reverted position; there's no reverse animation, which is acceptable for undo.
+            _setSharedBoardState(_board);
+            _raiseGameStarted();
         }
 
         /// <summary>
