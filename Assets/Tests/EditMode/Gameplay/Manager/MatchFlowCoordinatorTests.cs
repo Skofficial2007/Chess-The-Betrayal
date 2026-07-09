@@ -31,6 +31,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         private Team? _triggeredRouletteTeam;
         private int _showTeamSelectionCount;
         private int _showGameModeSelectionCount;
+        private int _showAIMatchSettingsCount;
         private (Vector2Int from, Vector2Int to)? _rejectedMove;
         private GameModeConfig? _raisedGameModeConfigured;
         private int _raisedGameStartedCount;
@@ -58,6 +59,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             _triggeredRouletteTeam = null;
             _showTeamSelectionCount = 0;
             _showGameModeSelectionCount = 0;
+            _showAIMatchSettingsCount = 0;
             _rejectedMove = null;
             _raisedGameModeConfigured = null;
             _raisedGameStartedCount = 0;
@@ -67,10 +69,11 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
 
             _matchFlow = new MatchFlowCoordinator(
                 _board, new GameSetup(logMoves: false), _matchDriver, engine, _undoService, _aiCoordinator, _clockCoordinator,
-                _host, boardSizeX: 8, boardSizeY: 8, logMoves: false, BetrayalUsage.Full,
+                _host, boardSizeX: 8, boardSizeY: 8, logMoves: false,
                 triggerTeamRoulette: team => _triggeredRouletteTeam = team,
                 showTeamSelection: () => _showTeamSelectionCount++,
                 showGameModeSelection: () => _showGameModeSelectionCount++,
+                showAIMatchSettings: () => _showAIMatchSettingsCount++,
                 onExecutorMoveRejected: (from, to) => _rejectedMove = (from, to),
                 onExecutorPromotionRequired: (_, __, ___) => { },
                 raiseGameModeConfigured: mode => _raisedGameModeConfigured = mode,
@@ -113,14 +116,61 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         }
 
         [Test]
-        public void HandleTeamAnimationComplete_UnlimitedMode_EnablesAiForTheOppositeTeam()
+        public void HandleTeamAnimationComplete_PlainMatch_NeverEnablesAi()
         {
             _matchFlow.HandleTeamRollRequested();
 
             _matchFlow.HandleTeamAnimationComplete();
 
-            Assert.That(_matchFlow.IsAiMode, Is.True,
-                "The TEMP debug hook enables AI whenever SelectedMode is Unlimited (default at construction).");
+            Assert.That(_matchFlow.IsAiMode, Is.False,
+                "Plain Play (no SetPracticeMatchSettings call) must never activate the AI.");
+            Assert.That(_matchFlow.RetributionSkipAllowed, Is.True,
+                "Skip stays allowed by default outside of Practice matches.");
+            Assert.That(_board.BetrayalRightAvailable, Is.True,
+                "Board-level Betrayal stays at BoardState's own default when no practice settings were set.");
+        }
+
+        [Test]
+        public void HandleTeamAnimationComplete_WithPendingPracticeSettings_AppliesEveryChoiceAndConsumesItOnce()
+        {
+            var settings = new PracticeMatchSettings(
+                betrayalEnabled: false, aiDefendOnly: true, retributionSkipAllowed: false, difficulty: AIDifficulty.Hard);
+            _matchFlow.SetPracticeMatchSettings(settings);
+
+            _matchFlow.HandleTeamRollRequested();
+            _matchFlow.HandleTeamAnimationComplete();
+
+            Assert.That(_matchFlow.IsAiMode, Is.True);
+            Assert.That(_board.BetrayalRightAvailable, Is.False);
+            Assert.That(_matchFlow.RetributionSkipAllowed, Is.False);
+
+            // One-shot: a second match (e.g. Replay) must not inherit these settings.
+            _matchFlow.HandleGameReset();
+            _matchFlow.HandleTeamRollRequested();
+            _matchFlow.HandleTeamAnimationComplete();
+
+            Assert.That(_matchFlow.IsAiMode, Is.False,
+                "SetPracticeMatchSettings is one-shot and must not leak into the next match.");
+        }
+
+        [Test]
+        public void CanUndo_TrueOnlyAfterAPracticeMatchTurnCompletes()
+        {
+            var settings = new PracticeMatchSettings(
+                betrayalEnabled: true, aiDefendOnly: false, retributionSkipAllowed: true, difficulty: AIDifficulty.Normal);
+            _matchFlow.SetPracticeMatchSettings(settings);
+
+            _matchFlow.HandleTeamRollRequested();
+            _matchFlow.HandleTeamAnimationComplete();
+            _matchFlow.StartMatch();
+
+            Assert.That(_matchFlow.CanUndo, Is.False, "No turn has completed yet.");
+
+            var from = new Vector2Int(0, 1);
+            var to = new Vector2Int(0, 3);
+            _matchFlow.RequestMove(from, to);
+
+            Assert.That(_matchFlow.CanUndo, Is.True, "A full turn (the human's opening move) has now completed.");
         }
 
         [Test]
@@ -208,12 +258,68 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         }
 
         [Test]
+        public void ReturnToAIMatchSettings_ShowsAIMatchSettings()
+        {
+            _matchFlow.ReturnToAIMatchSettings();
+
+            Assert.That(_showAIMatchSettingsCount, Is.EqualTo(1));
+        }
+
+        [Test]
         public void RecordMatchResult_ThenAcknowledgeReadableViaLastMatchResult()
         {
             _matchFlow.RecordMatchResult(Team.White, isTimeout: false);
 
             Assert.That(_matchFlow.LastMatchResult.WinningTeam, Is.EqualTo(Team.White));
             Assert.That(_matchFlow.LastMatchResult.IsTimeout, Is.False);
+        }
+
+        [Test]
+        public void CanSelectPiece_NonAiMatch_AllowsWhicheverSideIsToMove()
+        {
+            // Plain hot-seat Play: no practice settings, so IsAiMode stays false and the human may
+            // move BOTH sides in turn — the prototype behavior that must not regress.
+            _matchFlow.HandleTeamRollRequested();
+            _matchFlow.HandleTeamAnimationComplete();
+            _matchFlow.StartMatch();
+
+            // White to move: a White pawn is selectable.
+            Assert.That(_matchFlow.CanSelectPiece(new Vector2Int(0, 1)), Is.True);
+
+            // Advance to Black's turn; a Black pawn is now selectable too (hot-seat).
+            _matchFlow.RequestMove(new Vector2Int(0, 1), new Vector2Int(0, 3));
+            Assert.That(_board.CurrentTurn, Is.EqualTo(Team.Black));
+            Assert.That(_matchFlow.CanSelectPiece(new Vector2Int(0, 6)), Is.True,
+                "In a non-AI match the human controls whichever side is to move.");
+        }
+
+        [Test]
+        public void CanSelectPiece_AiMatch_HumanControlsOnlyTheirOwnTeam()
+        {
+            var settings = new PracticeMatchSettings(
+                betrayalEnabled: true, aiDefendOnly: false, retributionSkipAllowed: true, difficulty: AIDifficulty.Normal);
+            _matchFlow.SetPracticeMatchSettings(settings);
+            _matchFlow.HandleTeamRollRequested();
+            _matchFlow.HandleTeamAnimationComplete();
+            _matchFlow.StartMatch();
+
+            Assert.That(_matchFlow.IsAiMode, Is.True);
+
+            Team human = _matchFlow.PlayerTeam;
+            Team ai = human == Team.White ? Team.Black : Team.White;
+
+            // Put the board on the AI's turn and try to select one of the AI's pieces — must fail,
+            // even though it IS that side's turn (MatchDriver alone would have allowed it).
+            _board.CurrentTurn = ai;
+            Vector2Int aiPawn = ai == Team.White ? new Vector2Int(0, 1) : new Vector2Int(0, 6);
+            Assert.That(_matchFlow.CanSelectPiece(aiPawn), Is.False,
+                "In a Practice/AI match the human must never be able to select the AI's pieces.");
+
+            // On the human's own turn, their own pawn is selectable as normal.
+            _board.CurrentTurn = human;
+            Vector2Int humanPawn = human == Team.White ? new Vector2Int(0, 1) : new Vector2Int(0, 6);
+            Assert.That(_matchFlow.CanSelectPiece(humanPawn), Is.True,
+                "The human must still be able to select their own pieces on their own turn.");
         }
 
         [Test]

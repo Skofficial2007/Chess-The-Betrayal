@@ -54,12 +54,6 @@ namespace ChessTheBetrayal.App
         [Header("Debug")]
         [SerializeField] private bool logMoves = true;
 
-        // TEMP DEBUG FIELD (AI-11): lets the debug AI hook in MatchFlowCoordinator.HandleTeamAnimationComplete
-        // actually exercise DefendOnly, since there's no Settings screen yet to drive SetAIMode's
-        // betrayalUsage parameter (see ai-sprint-settings-not-yet-built memory). Remove alongside
-        // the rest of the TEMP debug hook once a real Settings screen exists.
-        [SerializeField] private BetrayalUsage debugAIBetrayalUsage = BetrayalUsage.Full;
-
         [Header("Betrayal Time Bounty (milliseconds)")]
         [SerializeField] private long _betrayalBountyBulletMs = 3_000L;   // Bullet 1|0
         [SerializeField] private long _betrayalBountyBullet2Ms = 5_000L;   // Bullet 2|1
@@ -154,9 +148,13 @@ namespace ChessTheBetrayal.App
 
         private UnityDomainLogger _domainLogger;
 
-        // Composition root binding: this is the only line that changes between the prototype,
-        // AI, and multiplayer game-contexts. UI never branches on which one is active.
-        private readonly IPostGameAction _postGameAction = new BackToModeSelectAction();
+        // Composition root binding: the pair that changes between game-contexts. Picked per-match
+        // in AcknowledgeGameOver based on MatchFlowCoordinator.IsAiMode, since a single session can
+        // play both a plain match (Mode Select origin) and a practice match (AI Settings origin) —
+        // it's a runtime fact, not something fixed once at construction like the prototype's old
+        // single _postGameAction binding.
+        private readonly IPostGameAction _backToModeSelect = new BackToModeSelectAction();
+        private readonly IPostGameAction _backToAIMatchSettings = new BackToAIMatchSettingsAction();
 
         // Resolved once in Start() — every consumer here reads it from an event callback or a
         // later lifecycle method, all of which run after every MonoBehaviour's Awake() (see
@@ -216,8 +214,9 @@ namespace ChessTheBetrayal.App
 
             _undoService = new UndoService(_engine, LiveBoard, _matchDriver);
             _matchDriver.OnTurnCompleted += _undoService.RecordTurn;
+            _matchDriver.OnTurnCompleted += OnTurnCompletedForUndo;
 
-            _aiCoordinator = new AIMatchCoordinator(_engine, LiveBoard, _matchDriver.PlayMove);
+            _aiCoordinator = new AIMatchCoordinator(_engine, LiveBoard, _matchDriver.PlayMove, _domainLogger);
             _aiCoordinator.OnSearchException += HandleAISearchException;
 
             // Continue the AI through its own forced Betrayal sub-sequence (Act -> Retribution, or
@@ -229,10 +228,11 @@ namespace ChessTheBetrayal.App
 
             _matchFlow = new MatchFlowCoordinator(
                 LiveBoard, _setup, _matchDriver, _engine, _undoService, _aiCoordinator, _clockCoordinator,
-                gameObject, boardSizeX, boardSizeY, logMoves, debugAIBetrayalUsage,
+                gameObject, boardSizeX, boardSizeY, logMoves,
                 triggerTeamRoulette: team => _uiManager.TriggerTeamRoulette(team),
                 showTeamSelection: () => _uiManager.ShowTeamSelection(),
                 showGameModeSelection: () => _uiManager.ShowGameModeSelection(),
+                showAIMatchSettings: () => _uiManager.ShowAIMatchSettings(),
                 onExecutorMoveRejected: OnExecutorMoveRejected,
                 onExecutorPromotionRequired: OnExecutorPromotionRequired,
                 raiseGameModeConfigured: mode => _gameModeConfiguredChannel?.Raise(mode),
@@ -259,7 +259,9 @@ namespace ChessTheBetrayal.App
             _uiManager.OnGameReset += HandleGameReset;
             _uiManager.OnPromotionSelected += HandlePromotionChoice;
             _uiManager.OnGameModeSelected += HandleGameModeReceived;
+            _uiManager.OnPracticeMatchSettingsConfirmed += HandlePracticeMatchSettingsConfirmed;
             _uiManager.OnRetributionSkipRequested += RequestRetributionSkip;
+            _uiManager.OnUndoRequested += HandleUndoRequested;
 
             if (logMoves)
             {
@@ -278,6 +280,7 @@ namespace ChessTheBetrayal.App
             if (_matchDriver != null && _undoService != null)
             {
                 _matchDriver.OnTurnCompleted -= _undoService.RecordTurn;
+                _matchDriver.OnTurnCompleted -= OnTurnCompletedForUndo;
             }
 
             if (_matchDriver != null)
@@ -292,7 +295,9 @@ namespace ChessTheBetrayal.App
                 _uiManager.OnGameReset -= HandleGameReset;
                 _uiManager.OnPromotionSelected -= HandlePromotionChoice;
                 _uiManager.OnGameModeSelected -= HandleGameModeReceived;
+                _uiManager.OnPracticeMatchSettingsConfirmed -= HandlePracticeMatchSettingsConfirmed;
                 _uiManager.OnRetributionSkipRequested -= RequestRetributionSkip;
+                _uiManager.OnUndoRequested -= HandleUndoRequested;
             }
 
             _gameOverChannel?.Unregister(OnGameOverRaised);
@@ -363,19 +368,44 @@ namespace ChessTheBetrayal.App
 
         private void HandleGameModeReceived(GameModeConfig config) => _matchFlow.HandleGameModeReceived(config);
 
+        /// <summary>
+        /// UI entry point for the Practice Match Setup panel's Done button. Stashes the confirmed
+        /// choices on MatchFlowCoordinator — consumed the moment the very next
+        /// HandleTeamAnimationComplete runs (see MatchFlowCoordinator.SetPracticeMatchSettings),
+        /// which UIManager's flow always sequences after this (OnSettingsConfirmed fires before
+        /// ShowTeamSelection, and only then can the roulette/animation sequence reach
+        /// OnTeamAnimationComplete).
+        /// </summary>
+        private void HandlePracticeMatchSettingsConfirmed(PracticeMatchSettings settings) =>
+            _matchFlow.SetPracticeMatchSettings(settings);
+
         private void HandleTeamRollRequested() => _matchFlow.HandleTeamRollRequested();
 
-        private void HandleTeamAnimationComplete() => _matchFlow.HandleTeamAnimationComplete();
+        private void HandleTeamAnimationComplete()
+        {
+            _matchFlow.HandleTeamAnimationComplete();
+
+            // Push the settled per-match HUD state now that MatchFlowCoordinator has consumed any
+            // pending Practice Match settings — IsAiMode/RetributionSkipAllowed/CanUndo are only
+            // meaningful after HandleTeamAnimationComplete returns.
+            _uiManager.SetRetributionSkipAllowed(_matchFlow.RetributionSkipAllowed);
+            _uiManager.SetUndoVisible(_matchFlow.IsAiMode);
+            RefreshUndoInteractable();
+        }
 
         private void HandleGameReset() => _matchFlow.HandleGameReset();
 
         /// <summary>
         /// Called by GameOverUI (via UIManager, through IMatchFlow) when the player dismisses the
-        /// Game Over screen. Delegates to whichever IPostGameAction is bound for this game-context —
-        /// the prototype binds BackToModeSelectAction, so this always lands on Mode Select, never a
-        /// hidden default.
+        /// Game Over screen. Picks the post-game action by what kind of match just ended: an AI
+        /// practice match returns to AI Settings (it never went through Mode Select), everything
+        /// else returns to Mode Select — never a hidden default either way.
         /// </summary>
-        public void AcknowledgeGameOver() => _postGameAction.Execute(this, _matchFlow.LastMatchResult);
+        public void AcknowledgeGameOver()
+        {
+            IPostGameAction postGameAction = _matchFlow.IsAiMode ? _backToAIMatchSettings : _backToModeSelect;
+            postGameAction.Execute(this, _matchFlow.LastMatchResult);
+        }
 
         #region IMatchFlow
 
@@ -384,6 +414,8 @@ namespace ChessTheBetrayal.App
         void IMatchFlow.StartNewMatch(GameModeConfig mode) => _matchFlow.StartNewMatch(mode);
 
         void IMatchFlow.ReturnToModeSelect() => _matchFlow.ReturnToModeSelect();
+
+        void IMatchFlow.ReturnToAIMatchSettings() => _matchFlow.ReturnToAIMatchSettings();
 
         #endregion
 
@@ -413,11 +445,44 @@ namespace ChessTheBetrayal.App
         public void RequestRetributionSkip() => _matchFlow.RequestRetributionSkip();
 
         /// <summary>
-        /// UI entry point for a future practice-mode Undo button. AI-only (per UndoService's own
-        /// gating): a no-op in human-vs-human or any future networked session. Cancels an in-flight
-        /// AI search BEFORE popping the board — see UndoService.RequestUndo's ordering contract.
+        /// UI entry point for the HUD's Undo button (visible only in AI practice matches). AI-only
+        /// (per UndoService's own gating): a no-op in human-vs-human or any future networked
+        /// session. Cancels an in-flight AI search BEFORE popping the board — see
+        /// UndoService.RequestUndo's ordering contract.
         /// </summary>
         public void RequestUndo() => _matchFlow.RequestUndo();
+
+        /// <summary>
+        /// Wired to UIManager.OnUndoRequested. Performs the undo, then immediately refreshes the
+        /// button's interactable state — CanUndo can flip false the moment the stack empties out.
+        /// </summary>
+        private void HandleUndoRequested()
+        {
+            RequestUndo();
+            RefreshUndoInteractable();
+
+            if (logMoves)
+            {
+                // One clean line per press: whose turn it is now and how many undos remain
+                // (2 recorded turns = 1 more press). Easy to grep as "[Undo]".
+                Debug.Log($"[Undo] Undone. Now {LiveBoard.CurrentTurn} to move. {_matchFlow.UndoTurnCount} turn(s) left on stack.");
+            }
+        }
+
+        /// <summary>
+        /// Pushes MatchFlowCoordinator.CanUndo to the HUD. Called after every turn completes (a
+        /// turn was just recorded, so CanUndo may have flipped true) and after Undo itself runs (the
+        /// stack may have just emptied out). A no-op push in non-AI matches: SetUndoVisible(false)
+        /// already hid the button, so the interactable flag underneath is inert.
+        /// </summary>
+        private void RefreshUndoInteractable() => _uiManager.SetUndoInteractable(_matchFlow.CanUndo);
+
+        /// <summary>
+        /// MatchDriver.OnTurnCompleted handler, subscribed alongside UndoService.RecordTurn in
+        /// Awake(). _uiManager is only resolved in Start(), but OnTurnCompleted never fires before a
+        /// match is actually running (long after Start()), so this ordering is safe.
+        /// </summary>
+        private void OnTurnCompletedForUndo(IReadOnlyList<MoveCommand> turnMoves) => RefreshUndoInteractable();
 
         #endregion
 
@@ -434,7 +499,7 @@ namespace ChessTheBetrayal.App
             return _legalMoves;
         }
 
-        public bool CanSelectPiece(Vector2Int position) => _matchDriver.CanSelectPiece(position);
+        public bool CanSelectPiece(Vector2Int position) => _matchFlow.CanSelectPiece(position);
 
         /// <summary>
         /// Configures the session for AI play. AI sessions always run untimed (see

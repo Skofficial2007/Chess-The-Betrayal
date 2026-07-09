@@ -12,5 +12,5 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9014dfa3790e8c0419b44ab76908668c, type: 3}
   m_Name: PieceSelectedEvent
   m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Events.PieceSelectedEventChannel
-  DebugTrace: 1
+  DebugTrace: 0
   _debugLog: []
