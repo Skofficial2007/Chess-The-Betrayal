@@ -35,6 +35,13 @@ namespace ChessTheBetrayal.AI
         private const int Infinity = 1_000_000;
         private const int MateScore = 900_000;
 
+        // Hard backstop for quiescence recursion. A Betrayal sub-phase (Act -> Retribution/Defection
+        // -> optional DefensiveOverride) is at most a handful of plies for one turn, and captures
+        // fizzle out fast, so a real quiescence line is short. This cap exists purely so that a future
+        // Betrayal-state edge case can never StackOverflow the worker thread the way the unresolved
+        // forced-Defection loop once did — if we ever hit it we stand pat rather than recurse forever.
+        private const int MaxQuiescencePly = 64;
+
         private readonly IChessEngine _engine;
         private readonly IPositionEvaluator _evaluator;
 
@@ -43,6 +50,15 @@ namespace ChessTheBetrayal.AI
         private readonly List<MoveCommand>[] _moveBuffers;
         private readonly List<MoveCommand> _rootMoves = new List<MoveCommand>(64);
 
+        // One move buffer per quiescence recursion level, indexed by the qply budget. Quiescence is
+        // reached from Search(depth 0), so it must NOT borrow a depth-indexed _moveBuffers slot — the
+        // ancestor Search frames at depth 1..N are still iterating their own _moveBuffers[depth] lists.
+        // And a SINGLE shared quiescence buffer is not enough either: a Retribution/DefensiveOverride
+        // loop holds its buffer across a -Quiescence(...) recursion that can itself open a new Betrayal
+        // sub-phase, which would clobber the parent's list mid-iteration. Keying by qply gives every
+        // nested quiescence ply its own buffer with zero per-node allocation (pool built once here).
+        private readonly List<MoveCommand>[] _quiescenceBuffers;
+
         public AlphaBetaSearch(IChessEngine engine, IPositionEvaluator evaluator, int maxSupportedDepth = 32)
         {
             _engine = engine;
@@ -50,6 +66,20 @@ namespace ChessTheBetrayal.AI
             _moveBuffers = new List<MoveCommand>[maxSupportedDepth + 1];
             for (int i = 0; i < _moveBuffers.Length; i++)
                 _moveBuffers[i] = new List<MoveCommand>(64);
+
+            // One buffer per possible qply value (0..MaxQuiescencePly inclusive). Indexed by the live
+            // qply so each nested quiescence frame has a private list — see the field comment above.
+            _quiescenceBuffers = new List<MoveCommand>[MaxQuiescencePly + 1];
+            for (int i = 0; i < _quiescenceBuffers.Length; i++)
+                _quiescenceBuffers[i] = new List<MoveCommand>(48);
+        }
+
+        /// <summary>The private per-ply quiescence move buffer for the given qply budget.</summary>
+        private List<MoveCommand> QuiescenceBuffer(int qply)
+        {
+            List<MoveCommand> buffer = _quiescenceBuffers[qply];
+            buffer.Clear();
+            return buffer;
         }
 
         /// <summary>
@@ -152,7 +182,7 @@ namespace ChessTheBetrayal.AI
             // Terminal / horizon: drop into quiescence so we never evaluate mid-capture or,
             // critically, mid-Retribution (see Quiescence).
             if (depth <= 0)
-                return Quiescence(board, alpha, beta, perspectiveTeam, ct);
+                return Quiescence(board, alpha, beta, perspectiveTeam, MaxQuiescencePly, ct);
 
             List<MoveCommand> moves = _moveBuffers[depth];
             moves.Clear();
@@ -265,9 +295,17 @@ namespace ChessTheBetrayal.AI
         /// BETRAYAL-CRITICAL: if we hit the depth limit while a Betrayer is still pending (Act
         /// played, not yet resolved), the position is NOT quiet — standing pat here would evaluate
         /// a board mid-defection and return garbage (the report's "illusion of material loss").
-        /// We must resolve the Retribution/Defection sub-phase before we're allowed to stand pat.
+        /// We must resolve the Retribution/Defection/ForcedSave sub-phase before we're allowed to
+        /// stand pat, driving it through exactly the same rule the domain uses in
+        /// TurnResolver.ResultFromDefectionOutcome (clear pending + pass the turn on a plain
+        /// Defection; keep pending + let the SAME side owe a DefensiveOverride on a ForcedSave).
+        ///
+        /// <paramref name="qply"/> is a hard recursion budget (defense-in-depth): a Betrayal
+        /// sub-phase and capture chains are short, so a genuine line never approaches it — it exists
+        /// only so no future Betrayal-state edge case can StackOverflow the way an unresolved forced
+        /// Defection once did. When it runs out we stand pat rather than recurse further.
         /// </summary>
-        private int Quiescence(BoardState board, int alpha, int beta, Team perspectiveTeam, CancellationToken ct)
+        private int Quiescence(BoardState board, int alpha, int beta, Team perspectiveTeam, int qply, CancellationToken ct)
         {
             if (ct.IsCancellationRequested) return 0;
 
@@ -279,26 +317,19 @@ namespace ChessTheBetrayal.AI
 
             if (betrayerPending)
             {
-                // Force resolution: generate Retribution moves; if none, the engine's Defection path
-                // will resolve it. Either way we recurse one more ply into the resolved position.
-                List<MoveCommand> retribution = _moveBuffers[0];
-                retribution.Clear();
+                // Backstop: if we've somehow burned the whole quiescence budget while still mid-
+                // Betrayal, stop recursing and evaluate in place rather than risk a StackOverflow.
+                if (qply <= 0)
+                    return _evaluator.Evaluate(board, perspectiveTeam);
+
+                // Force resolution: generate Retribution moves; if none, the domain's Defection path
+                // resolves it. Either way we recurse one more ply into the resolved position.
+                List<MoveCommand> retribution = QuiescenceBuffer(qply);
                 _engine.GetRetributionMoves(board, board.CurrentTurn,
                                             board.PendingBetrayerSquare.Value, retribution);
 
                 if (retribution.Count == 0)
-                {
-                    // No legal executioner => forced Defection (side-switch). Apply it, evaluate the
-                    // resolved board, unmake. This is where the AI actually "sees" the double-swing:
-                    // the defected piece now counts for the opponent in the resolved material sum.
-                    DefectionOutcome outcome = ChessEngine.ResolveFailedRetribution(board);
-                    int resolvedScore = Quiescence(board, alpha, beta, perspectiveTeam, ct);
-                    // ResolveFailedRetribution applies the Defection move directly via ChessEngine,
-                    // bypassing our ApplyMoveAndTurn wrapper — but Defection never flips the turn
-                    // (StageFlipsTurn is false for it), so a plain UndoMove is correct here too.
-                    _engine.UndoMove(board, outcome.DefectionMove);
-                    return resolvedScore;
-                }
+                    return ResolveForcedDefection(board, alpha, beta, perspectiveTeam, qply, ct);
 
                 OrderMoves(retribution);
                 int best = -Infinity;
@@ -308,7 +339,7 @@ namespace ChessTheBetrayal.AI
                     ApplyMoveAndTurn(board, move);
                     // Retribution flips the turn, so negate.
                     Team childPerspective = perspectiveTeam == Team.White ? Team.Black : Team.White;
-                    int score = -Quiescence(board, -beta, -alpha, childPerspective, ct);
+                    int score = -Quiescence(board, -beta, -alpha, childPerspective, qply - 1, ct);
                     UndoMoveAndTurn(board, move);
                     if (score > best) best = score;
                     if (best > alpha) alpha = best;
@@ -322,10 +353,11 @@ namespace ChessTheBetrayal.AI
             if (standPat >= beta) return beta;
             if (standPat > alpha) alpha = standPat;
 
+            if (qply <= 0) return alpha; // out of budget: stand pat on the quiet-ish position.
+
             // Search captures only (loud moves) plus Act, which the loop below explicitly keeps —
-            // reuse a buffer; filter happens per-move just below.
-            List<MoveCommand> moves = _moveBuffers[0];
-            moves.Clear();
+            // reuse this ply's private buffer; filter happens per-move just below.
+            List<MoveCommand> moves = QuiescenceBuffer(qply);
             _engine.GetAllLegalMovesIncludingBetrayal(board, board.CurrentTurn, moves);
             OrderMoves(moves);
 
@@ -335,7 +367,20 @@ namespace ChessTheBetrayal.AI
                 if (!move.IsCapture && move.Stage != BetrayalStage.Act) continue; // quiet move, skip
 
                 ApplyMoveAndTurn(board, move);
-                int score = ScoreChild(board, move, 0, alpha, beta, perspectiveTeam, ct);
+                // Recurse within quiescence (not back into Search) so the qply budget carries through
+                // capture/Act chains — an Act keeps the same side to move and leaves a Betrayer
+                // pending, so the same-perspective recurse re-enters the guard above; a capture flips
+                // the turn and negates like a normal ply. Mirrors ScoreChild's flip rule.
+                int score;
+                if (StageFlipsTurn(move.Stage))
+                {
+                    Team childPerspective = perspectiveTeam == Team.White ? Team.Black : Team.White;
+                    score = -Quiescence(board, -beta, -alpha, childPerspective, qply - 1, ct);
+                }
+                else
+                {
+                    score = Quiescence(board, alpha, beta, perspectiveTeam, qply - 1, ct);
+                }
                 UndoMoveAndTurn(board, move);
 
                 if (score >= beta) return beta;
@@ -343,6 +388,119 @@ namespace ChessTheBetrayal.AI
             }
 
             return alpha;
+        }
+
+        /// <summary>
+        /// Test seam: run a full quiescence evaluation from <paramref name="board"/> for
+        /// <paramref name="perspectiveTeam"/>, using the standard open window and ply budget. Lets
+        /// SearchCorrectnessTests drive the Betrayal forced-Defection/ForcedSave branches directly on
+        /// a crafted pending-Betrayer position, rather than having to engineer a full search tree that
+        /// happens to hit the horizon exactly on that state. Not part of the search's own control flow.
+        /// </summary>
+        internal int RunQuiescenceForTest(BoardState board, Team perspectiveTeam, CancellationToken ct) =>
+            Quiescence(board, -Infinity, Infinity, perspectiveTeam, MaxQuiescencePly, ct);
+
+        /// <summary>
+        /// The forced-Defection branch of quiescence: no legal Executioner exists, so the Betrayer
+        /// defects (Resolution B). This mirrors <see cref="TurnResolver.ResultFromDefectionOutcome"/>
+        /// exactly — the reason the old code StackOverflowed is that it recursed WITHOUT reproducing
+        /// that resolution, so the pending-Betrayer state was never cleared and the same branch
+        /// re-entered on the same square forever.
+        ///
+        /// Two sub-cases, split on <see cref="DefectionOutcome.RequiresForcedSave"/>:
+        ///   - No ForcedSave: the sequence is fully resolved. Clear the pending state and PASS THE
+        ///     TURN (toggle turn-hash + flip perspective + swap/negate the window), just like a
+        ///     normal turn-flipping ply, then recurse into the opponent's reply.
+        ///   - ForcedSave: the defected piece checks its former King, so the SAME side owes a
+        ///     mandatory DefensiveOverride (king-save). Pending state stays set and the turn does not
+        ///     flip; recurse over GetForcedSaveMoves in the same perspective/window.
+        /// On unmake, <see cref="IChessEngine.UndoMove"/> restores PendingBetrayerSquare/
+        /// BetrayalInitiator from the Defection move's Previous* snapshot, so any manual turn-hash/
+        /// CurrentTurn changes made here must be reversed FIRST to keep the round-trip exact.
+        /// </summary>
+        private int ResolveForcedDefection(BoardState board, int alpha, int beta,
+                                           Team perspectiveTeam, int qply, CancellationToken ct)
+        {
+            // ResolveFailedRetribution applies the Defection move directly via ChessEngine (bypassing
+            // ApplyMoveAndTurn). Defection itself never flips the turn or toggles the turn-hash, and
+            // never clears the pending fields — that's the domain's job in the tail below.
+            DefectionOutcome outcome = ChessEngine.ResolveFailedRetribution(board);
+
+            int score;
+            if (outcome.RequiresForcedSave)
+            {
+                // ForcedSave: same side owes a DefensiveOverride, pending state stays set, no turn flip.
+                // Safe to reuse this ply's buffer — the retribution list that shared it was already
+                // consumed (count==0) before we got here, and the save loop below only recurses into
+                // Quiescence(qply-1), which owns a different buffer.
+                List<MoveCommand> saves = QuiescenceBuffer(qply);
+                _engine.GetForcedSaveMoves(board, board.CurrentTurn, saves);
+
+                if (saves.Count == 0)
+                {
+                    // No legal king-save after the self-check: this side is mated inside the
+                    // Betrayal sequence. Score it as a mate against the side to move, in perspective.
+                    score = board.CurrentTurn == perspectiveTeam ? -MateScore : MateScore;
+                }
+                else
+                {
+                    OrderMoves(saves);
+                    int best = -Infinity;
+                    for (int i = 0; i < saves.Count; i++)
+                    {
+                        MoveCommand save = saves[i];
+                        ApplyMoveAndTurn(board, save);
+                        // DefensiveOverride flips the turn, so negate and swap the window.
+                        Team childPerspective = perspectiveTeam == Team.White ? Team.Black : Team.White;
+                        int childScore = -Quiescence(board, -beta, -alpha, childPerspective, qply - 1, ct);
+                        UndoMoveAndTurn(board, save);
+                        if (childScore > best) best = childScore;
+                        if (best > alpha) alpha = best;
+                        if (alpha >= beta) break;
+                    }
+                    score = best;
+                }
+            }
+            else
+            {
+                // No ForcedSave: the Betrayal sequence is fully resolved. Mirror the domain's tail
+                // (TurnResolver.ResultFromDefectionOutcome) — toggle the turn-hash and pass the turn,
+                // and clear the pending fields so the guard above sees a quiet board next ply. This is
+                // the exact fix for the old infinite loop: previously pending stayed set forever.
+                //
+                // We ALSO toggle the pending-Betrayer sub-state hash off here (the Act toggled it on;
+                // Defection deliberately leaves it, and the domain clears it only on the terminal
+                // Retribution/DefensiveOverride — which never comes for a plain Defection). Doing it
+                // keeps the search's incremental hash exactly consistent with the now-cleared pending
+                // state throughout the recursion, so a mid-search AssertZobristConsistency holds.
+                Vector2Int savedPending = board.PendingBetrayerSquare.Value;
+                Team savedInitiator = board.BetrayalInitiator.Value;
+
+                board.ToggleTurnHash();
+                board.NextTurn();
+                board.ToggleBetrayalSubStateHash(savedPending, savedInitiator);
+                board.PendingBetrayerSquare = null;
+                board.BetrayalInitiator = null;
+
+                Team childPerspective = perspectiveTeam == Team.White ? Team.Black : Team.White;
+                score = -Quiescence(board, -beta, -alpha, childPerspective, qply - 1, ct);
+
+                // Reverse our manual domain-tail mutations before UndoMove restores the rest, in exact
+                // inverse order. UndoMove would overwrite the pending fields from the move snapshot
+                // anyway, but re-toggling the sub-state hash here is REQUIRED — UndoMove's Defection
+                // path does not touch it, so without this the hash would not round-trip.
+                board.PendingBetrayerSquare = savedPending;
+                board.BetrayalInitiator = savedInitiator;
+                board.ToggleBetrayalSubStateHash(savedPending, savedInitiator);
+                board.NextTurn();
+                board.ToggleTurnHash();
+            }
+
+            // Unmake the Defection. UndoMove restores PendingBetrayerSquare/BetrayalInitiator from the
+            // move's Previous* snapshot and is a turn-hash no-op for Defection, so the board returns to
+            // exactly the pre-resolution state regardless of which sub-case ran above.
+            _engine.UndoMove(board, outcome.DefectionMove);
+            return score;
         }
 
         /// <summary>
