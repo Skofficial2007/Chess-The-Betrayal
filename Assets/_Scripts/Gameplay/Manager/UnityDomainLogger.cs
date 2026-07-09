@@ -37,6 +37,9 @@ namespace ChessTheBetrayal.Gameplay.Manager
             { DomainEventCode.AI_TranspositionHashCollision,   "[AI] Transposition table hash collision at ply" },
             { DomainEventCode.AI_SearchDepthExceeded,          "[AI] Search depth exceeded maximum budget at ply" },
             { DomainEventCode.AI_BetrayalBranchExpansion,      "[AI] Betrayal branch expansion factor at node" },
+            { DomainEventCode.AI_SearchRequested,              "[AI] Search requested — depth" },
+            { DomainEventCode.AI_MoveDecided,                  "[AI] Move decided — elapsed ms" },
+            { DomainEventCode.AI_SearchCancelled,              "[AI] Search cancelled (undo)" },
         };
 
         public UnityDomainLogger(bool verbose = false, Action<DomainLogEvent> onFatalError = null)

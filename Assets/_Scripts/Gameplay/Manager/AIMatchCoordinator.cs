@@ -1,6 +1,8 @@
 using System;
+using System.Diagnostics;
 using ChessTheBetrayal.AI;
 using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.Core.Diagnostics;
 using ChessTheBetrayal.Core.Engine;
 
 namespace ChessTheBetrayal.Gameplay.Manager
@@ -24,8 +26,22 @@ namespace ChessTheBetrayal.Gameplay.Manager
         private readonly Action<MoveCommand> _playMove;
         private readonly Func<BetrayalUsage, AISearchSettings> _searchSettingsFactory;
 
+        // Optional — null in most tests. Verbose-gated AI-lifecycle logging so a human can tell the
+        // background search is actually running (and how long it took) instead of guessing. Never
+        // an error surface — that's the separate ConsumeLastSearchException path.
+        private readonly IDomainLogger _logger;
+
         private IAIAgent _aiAgent;
         private Team _aiTeam;
+
+        // The MaxDepth of the settings the current agent was built with — captured in SetAIMode so
+        // AI_SearchRequested can report the configured search depth without re-invoking the factory.
+        private int _configuredDepth;
+
+        // Times a single search from request to main-thread delivery, so AI_MoveDecided can report
+        // elapsed ms. Stopwatch (not Time.*) because it must be readable independent of the Unity
+        // main-thread clock; started in TryRequestMove, read in HandleMoveDecided.
+        private readonly Stopwatch _searchStopwatch = new Stopwatch();
 
         /// <summary>True once <see cref="SetAIMode"/> has constructed an agent for this session.</summary>
         public bool IsAiMode => _aiAgent != null;
@@ -36,8 +52,8 @@ namespace ChessTheBetrayal.Gameplay.Manager
         /// <summary>Fires when the AI's background search worker throws. TEMP debug surface (see AsyncAIAgent) — GameManager routes it to Debug.LogError.</summary>
         public event Action<string> OnSearchException;
 
-        public AIMatchCoordinator(IChessEngine engine, BoardState board, Action<MoveCommand> playMove)
-            : this(engine, board, playMove, AISearchSettings.Ultimate)
+        public AIMatchCoordinator(IChessEngine engine, BoardState board, Action<MoveCommand> playMove, IDomainLogger logger = null)
+            : this(engine, board, playMove, AISearchSettings.Ultimate, logger)
         {
         }
 
@@ -50,12 +66,13 @@ namespace ChessTheBetrayal.Gameplay.Manager
         /// </summary>
         public AIMatchCoordinator(
             IChessEngine engine, BoardState board, Action<MoveCommand> playMove,
-            Func<BetrayalUsage, AISearchSettings> searchSettingsFactory)
+            Func<BetrayalUsage, AISearchSettings> searchSettingsFactory, IDomainLogger logger = null)
         {
             _engine = engine;
             _board = board;
             _playMove = playMove;
             _searchSettingsFactory = searchSettingsFactory;
+            _logger = logger;
         }
 
         /// <summary>
@@ -68,10 +85,13 @@ namespace ChessTheBetrayal.Gameplay.Manager
 
             TearDownAgent();
 
+            AISearchSettings settings = _searchSettingsFactory(betrayalUsage);
+            _configuredDepth = settings.MaxDepth;
+
             var agent = new AsyncAIAgent(
                 _engine,
                 new BetrayalAwareEvaluator(),
-                _searchSettingsFactory(betrayalUsage));
+                settings);
 
             agent.OnMoveDecided += HandleMoveDecided;
             _aiAgent = agent;
@@ -81,11 +101,29 @@ namespace ChessTheBetrayal.Gameplay.Manager
         public void TryRequestMove(bool isGameActive)
         {
             if (!AITurnGate.ShouldRequestMove(_aiAgent != null, _board.CurrentTurn, _aiTeam, isGameActive)) return;
+
+            if (_logger != null && _logger.IsVerbose)
+            {
+                _logger.LogInfo(new DomainLogEvent(DomainEventCode.AI_SearchRequested, message: $"{_aiTeam} to move", auxInt: _configuredDepth));
+            }
+
+            _searchStopwatch.Restart();
             _aiAgent.RequestBestMove(_board, _aiTeam);
         }
 
         /// <summary>Cancels an in-flight search without tearing down the agent — used by Undo's cancel-before-pop ordering, so the agent stays usable for the player's very next move.</summary>
-        public void CancelInFlightSearch() => (_aiAgent as AsyncAIAgent)?.CancelSearch();
+        public void CancelInFlightSearch()
+        {
+            if (_aiAgent is not AsyncAIAgent asyncAgent || !asyncAgent.IsSearching) return;
+
+            asyncAgent.CancelSearch();
+            _searchStopwatch.Reset();
+
+            if (_logger != null && _logger.IsVerbose)
+            {
+                _logger.LogInfo(new DomainLogEvent(DomainEventCode.AI_SearchCancelled, message: $"{_aiTeam} search cancelled before it replied"));
+            }
+        }
 
         /// <summary>Pumps the background agent so a completed search hands its move back on the main thread. Call from a MonoBehaviour Update().</summary>
         public void Tick()
@@ -106,7 +144,21 @@ namespace ChessTheBetrayal.Gameplay.Manager
         /// never gets a special-cased execution path. Runs on the main thread: AsyncAIAgent.Tick()
         /// only raises this from Tick() above.
         /// </summary>
-        private void HandleMoveDecided(MoveCommand move) => _playMove(move);
+        private void HandleMoveDecided(MoveCommand move)
+        {
+            if (_searchStopwatch.IsRunning) _searchStopwatch.Stop();
+
+            if (_logger != null && _logger.IsVerbose)
+            {
+                // ElapsedMilliseconds is a long; clamp into the int AuxInt payload. A search that
+                // somehow ran >24 days to overflow int is a bug worth seeing pinned at int.MaxValue.
+                long elapsedMs = _searchStopwatch.ElapsedMilliseconds;
+                int auxMs = elapsedMs > int.MaxValue ? int.MaxValue : (int)elapsedMs;
+                _logger.LogInfo(new DomainLogEvent(DomainEventCode.AI_MoveDecided, message: $"{_aiTeam} plays {move}", auxInt: auxMs));
+            }
+
+            _playMove(move);
+        }
 
         private void TearDownAgent()
         {
