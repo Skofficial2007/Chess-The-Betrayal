@@ -290,13 +290,34 @@ namespace ChessTheBetrayal.AI
                 int searchDepth = reduce ? depth - 2 : depth - 1;
 
                 ApplyMoveAndTurn(board, move);
-                int score = ScoreChild(board, move, searchDepth, plyFromRoot + 1, alpha, beta, perspectiveTeam, ct);
 
-                // Reduced search beat alpha: the reduction may have hidden real strength. Re-search
-                // at full depth (still same window — PVS's null-window ladder is AI-20) before
-                // trusting the score.
-                if (reduce && score > alpha)
-                    score = ScoreChild(board, move, depth - 1, plyFromRoot + 1, alpha, beta, perspectiveTeam, ct);
+                int score;
+                if (i == 0)
+                {
+                    // PV move (first child, typically the TT/ordering pick): full window. Its score
+                    // sets the working alpha every later sibling is scouted against.
+                    score = ScoreChild(board, move, searchDepth, plyFromRoot + 1, alpha, beta, perspectiveTeam, ct);
+                }
+                else
+                {
+                    // Null-window scout — ScoreChild passes (alpha, alpha+1) straight through for a
+                    // non-flipping Act/Defection child (same maximizer frame) and negates it to
+                    // (-alpha-1, -alpha) for a flipping child. Proves "can this beat alpha?" cheaply;
+                    // a fail-low here is a real cutoff regardless of whether depth was reduced.
+                    score = ScoreChild(board, move, searchDepth, plyFromRoot + 1, alpha, alpha + 1, perspectiveTeam, ct);
+
+                    // LMR fail-high — the reduction may have hidden real strength. Re-search at full
+                    // depth, STILL null-window, before deciding whether a full-window re-search is
+                    // even warranted.
+                    if (reduce && score > alpha)
+                        score = ScoreChild(board, move, depth - 1, plyFromRoot + 1, alpha, alpha + 1, perspectiveTeam, ct);
+
+                    // PVS fail-high — the null-window scout can only prove "not worse than alpha",
+                    // not the true score. Only a genuine alpha<score<beta result needs the full-window
+                    // re-search; a score >= beta is already a valid cutoff via the null window alone.
+                    if (score > alpha && score < beta)
+                        score = ScoreChild(board, move, depth - 1, plyFromRoot + 1, alpha, beta, perspectiveTeam, ct);
+                }
 
                 UndoMoveAndTurn(board, move);
 
