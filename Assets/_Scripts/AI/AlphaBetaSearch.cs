@@ -44,6 +44,7 @@ namespace ChessTheBetrayal.AI
 
         private readonly IChessEngine _engine;
         private readonly IPositionEvaluator _evaluator;
+        private readonly TranspositionTable _tt;
 
         // Reused across the whole search — one buffer per depth level to avoid clobbering a
         // parent's move list while recursing. Grown lazily; never freed. No per-node allocation.
@@ -59,10 +60,12 @@ namespace ChessTheBetrayal.AI
         // nested quiescence ply its own buffer with zero per-node allocation (pool built once here).
         private readonly List<MoveCommand>[] _quiescenceBuffers;
 
-        public AlphaBetaSearch(IChessEngine engine, IPositionEvaluator evaluator, int maxSupportedDepth = 32)
+        public AlphaBetaSearch(IChessEngine engine, IPositionEvaluator evaluator, int maxSupportedDepth = 32,
+                                TranspositionTable transpositionTable = null)
         {
             _engine = engine;
             _evaluator = evaluator;
+            _tt = transpositionTable ?? new TranspositionTable(log2Size: 16);
             _moveBuffers = new List<MoveCommand>[maxSupportedDepth + 1];
             for (int i = 0; i < _moveBuffers.Length; i++)
                 _moveBuffers[i] = new List<MoveCommand>(64);
@@ -90,8 +93,18 @@ namespace ChessTheBetrayal.AI
         {
             Team rootTeam = board.CurrentTurn;
 
+            _tt.NewSearch();
+
             // Build the root move list ONCE. This is where the agent-level Betrayal policy applies.
             BuildRootMoves(board, rootTeam, settings.BetrayalUsage);
+
+            // TT informs root ORDERING ONLY — never a short-circuit. The root list carries the
+            // BetrayalUsage.DefendOnly filter and MoveToFront's PV bookkeeping; a TT cutoff here
+            // would bypass both. One probe before the depth loop; a packed-move match sorts first.
+            uint rootTTMove = 0;
+            if (_tt.Probe(board.ZobristHash, out _, out uint probedRootMove, out _, out _))
+                rootTTMove = probedRootMove;
+            MoveToFrontByPackedMove(rootTTMove);
 
             MoveCommand bestMove = _rootMoves.Count > 0 ? _rootMoves[0] : default;
 
@@ -118,7 +131,7 @@ namespace ChessTheBetrayal.AI
 
                     // Root moves are always the current player's own choices. An Act or Defection
                     // at the root keeps the SAME player to move, so we recurse without negation.
-                    int score = ScoreChild(board, move, depth - 1, alpha, beta, rootTeam, ct);
+                    int score = ScoreChild(board, move, depth - 1, 1, alpha, beta, rootTeam, ct);
 
                     UndoMoveAndTurn(board, move);
 
@@ -175,14 +188,33 @@ namespace ChessTheBetrayal.AI
         /// Recursive negamax. 'perspectiveTeam' is whichever side we're currently scoring FOR
         /// (it changes only when the turn actually flips). alpha/beta are always in perspectiveTeam's frame.
         /// </summary>
-        private int Search(BoardState board, int depth, int alpha, int beta, Team perspectiveTeam, CancellationToken ct)
+        private int Search(BoardState board, int depth, int plyFromRoot, int alpha, int beta, Team perspectiveTeam, CancellationToken ct)
         {
             if (ct.IsCancellationRequested) return 0;
 
             // Terminal / horizon: drop into quiescence so we never evaluate mid-capture or,
-            // critically, mid-Retribution (see Quiescence).
+            // critically, mid-Retribution (see Quiescence). Quiescence does not probe/store the TT
+            // this pass — qsearch entries thrash the table (revisit post-AI-21 telemetry).
             if (depth <= 0)
                 return Quiescence(board, alpha, beta, perspectiveTeam, MaxQuiescencePly, ct);
+
+            int alphaOriginal = alpha;
+            uint ttMove = 0;
+
+            if (_tt.Probe(board.ZobristHash, out int ttScore, out uint ttPackedMove, out int ttDepth, out TTFlag ttFlag))
+            {
+                // Always harvested for ordering, even on a depth-insufficient hit.
+                ttMove = ttPackedMove;
+
+                if (ttDepth >= depth)
+                {
+                    int s = UnadjustMateScore(ttScore, plyFromRoot);
+                    if (ttFlag == TTFlag.Exact) return s;
+                    if (ttFlag == TTFlag.LowerBound && s > alpha) alpha = s;
+                    if (ttFlag == TTFlag.UpperBound && s < beta) beta = s;
+                    if (alpha >= beta) return s;
+                }
+            }
 
             List<MoveCommand> moves = _moveBuffers[depth];
             moves.Clear();
@@ -209,19 +241,24 @@ namespace ChessTheBetrayal.AI
                 return 0; // stalemate
             }
 
-            OrderMoves(moves);
+            OrderMoves(moves, ttMove);
 
             int best = -Infinity;
+            uint bestPackedMove = 0;
             for (int i = 0; i < moves.Count; i++)
             {
                 if (ct.IsCancellationRequested) return best;
 
                 MoveCommand move = moves[i];
                 ApplyMoveAndTurn(board, move);
-                int score = ScoreChild(board, move, depth - 1, alpha, beta, perspectiveTeam, ct);
+                int score = ScoreChild(board, move, depth - 1, plyFromRoot + 1, alpha, beta, perspectiveTeam, ct);
                 UndoMoveAndTurn(board, move);
 
-                if (score > best) best = score;
+                if (score > best)
+                {
+                    best = score;
+                    bestPackedMove = PackMove(move);
+                }
                 if (best > alpha) alpha = best;
 
                 // Beta cutoff. Valid across the Retribution sub-phase precisely because the
@@ -230,7 +267,36 @@ namespace ChessTheBetrayal.AI
                 if (alpha >= beta) break;
             }
 
+            // Never store a cancelled node — its 'best' is a partial, garbage result, not a proof.
+            if (!ct.IsCancellationRequested)
+            {
+                TTFlag flag = best <= alphaOriginal ? TTFlag.UpperBound
+                            : best >= beta ? TTFlag.LowerBound
+                            : TTFlag.Exact;
+                _tt.Store(board.ZobristHash, AdjustMateScore(best, plyFromRoot), bestPackedMove, depth, flag);
+            }
+
             return best;
+        }
+
+        /// <summary>
+        /// Mate scores are stored ply-from-THIS-node, so a hit at a different plyFromRoot still
+        /// reports the correct distance-to-mate from the ROOT. Store subtracts plyFromRoot (moving
+        /// the mate closer to root, i.e. a larger magnitude away from the horizon); probe adds it
+        /// back. Non-mate scores are unaffected in practice (magnitude stays well under the mate band).
+        /// </summary>
+        private static int AdjustMateScore(int score, int plyFromRoot)
+        {
+            if (score >= MateScore - 1000) return score + plyFromRoot;
+            if (score <= -(MateScore - 1000)) return score - plyFromRoot;
+            return score;
+        }
+
+        private static int UnadjustMateScore(int score, int plyFromRoot)
+        {
+            if (score >= MateScore - 1000) return score - plyFromRoot;
+            if (score <= -(MateScore - 1000)) return score + plyFromRoot;
+            return score;
         }
 
         /// <summary>
@@ -262,14 +328,14 @@ namespace ChessTheBetrayal.AI
         ///     negation and WITHOUT swapping the window. perspectiveTeam is unchanged.
         /// This is the exact mirror of Core's ApplyZobristMove turn-hash rule.
         /// </summary>
-        private int ScoreChild(BoardState board, MoveCommand move, int childDepth,
+        private int ScoreChild(BoardState board, MoveCommand move, int childDepth, int plyFromRoot,
                                int alpha, int beta, Team perspectiveTeam, CancellationToken ct)
         {
             if (StageFlipsTurn(move.Stage))
             {
                 // Standard negamax step: opponent to move, minimize from our view => negate.
                 Team childPerspective = perspectiveTeam == Team.White ? Team.Black : Team.White;
-                return -Search(board, childDepth, -beta, -alpha, childPerspective, ct);
+                return -Search(board, childDepth, plyFromRoot, -beta, -alpha, childPerspective, ct);
             }
             else
             {
@@ -277,7 +343,7 @@ namespace ChessTheBetrayal.AI
                 // NOTE: we do NOT decrement depth differently here — an Act followed by a forced
                 // Retribution is two plies of one turn; letting each consume a ply keeps the depth
                 // budget honest and prevents infinite non-flipping recursion.
-                return Search(board, childDepth, alpha, beta, perspectiveTeam, ct);
+                return Search(board, childDepth, plyFromRoot, alpha, beta, perspectiveTeam, ct);
             }
         }
 
@@ -500,16 +566,23 @@ namespace ChessTheBetrayal.AI
         /// instead of b^d. Betrayal Act moves are searched early because they're high-variance and
         /// most likely to cause cutoffs (or refutations) — we want them near the front.
         /// </summary>
-        private static void OrderMoves(List<MoveCommand> moves)
+        private static void OrderMoves(List<MoveCommand> moves) => OrderMoves(moves, 0);
+
+        /// <summary>
+        /// MVV-LVA-ish ordering + Act-first, with the TT move (if any) sorted to the very front.
+        /// Good ordering is what makes alpha-beta cut ~b^(d/2) instead of b^d — a TT-move hit from a
+        /// prior iteration/turn is the single best predictor of the true best move at a node.
+        /// </summary>
+        private static void OrderMoves(List<MoveCommand> moves, uint ttMove)
         {
             // Simple insertion-sort by a cheap score key; move lists are small (<~45), so this is
             // faster than allocating a comparer/delegate and avoids GC.
             for (int i = 1; i < moves.Count; i++)
             {
                 MoveCommand key = moves[i];
-                int keyScore = OrderScore(key);
+                int keyScore = OrderScore(key, ttMove);
                 int j = i - 1;
-                while (j >= 0 && OrderScore(moves[j]) < keyScore)
+                while (j >= 0 && OrderScore(moves[j], ttMove) < keyScore)
                 {
                     moves[j + 1] = moves[j];
                     j--;
@@ -518,13 +591,29 @@ namespace ChessTheBetrayal.AI
             }
         }
 
-        private static int OrderScore(MoveCommand m)
+        private static int OrderScore(MoveCommand m, uint ttMove)
         {
+            if (ttMove != 0 && PackMove(m) == ttMove) return 100_000;  // Tier 0: TT/PV move
             int s = 0;
             if (m.Stage == BetrayalStage.Act) s += 5000;           // explore betrayals early
             if (m.IsCapture) s += 1000 + PieceRank(m.CapturedType) * 10 - PieceRank(m.PieceType);
             if (m.IsPromotion) s += 800;
             return s;
+        }
+
+        /// <summary>
+        /// Packs the fields OrderScore's TT-move comparison needs into 19 bits: From(6) | To(6) |
+        /// PromotedTo(4) | Stage(3). Search-internal only — never rehydrated into a MoveCommand, and
+        /// only ever matched against the freshly generated legal list, so a stale/collided entry can
+        /// mis-order a node but never inject an illegal move (see TranspositionTable's ADR note).
+        /// </summary>
+        private static uint PackMove(MoveCommand m)
+        {
+            uint from = (uint)(m.StartPosition.y * 8 + m.StartPosition.x) & 0x3F;
+            uint to = (uint)(m.EndPosition.y * 8 + m.EndPosition.x) & 0x3F;
+            uint promo = (uint)m.PromotedTo & 0xF;
+            uint stage = (uint)m.Stage & 0x7;
+            return from | (to << 6) | (promo << 12) | (stage << 16);
         }
 
         private static int PieceRank(ChessPieceType t) => t switch
@@ -544,6 +633,22 @@ namespace ChessTheBetrayal.AI
             MoveCommand move = _rootMoves[index];
             _rootMoves.RemoveAt(index);
             _rootMoves.Insert(0, move);
+        }
+
+        /// <summary>Root-only TT ordering hint (see FindBestMove) — finds the root move matching the
+        /// probed packed move, if any, and moves it to the front. A miss (0 or no match) is a no-op.</summary>
+        private void MoveToFrontByPackedMove(uint packedMove)
+        {
+            if (packedMove == 0) return;
+
+            for (int i = 0; i < _rootMoves.Count; i++)
+            {
+                if (PackMove(_rootMoves[i]) == packedMove)
+                {
+                    MoveToFront(i);
+                    return;
+                }
+            }
         }
     }
 }

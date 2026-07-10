@@ -30,6 +30,7 @@ namespace ChessTheBetrayal.AI
 
         private readonly AlphaBetaSearch _search;
         private readonly AISearchSettings _settings;
+        private readonly TranspositionTable _tt;
 
         private volatile bool _hasResult;
         private MoveCommand _pendingResult;
@@ -62,7 +63,12 @@ namespace ChessTheBetrayal.AI
 
         public AsyncAIAgent(IChessEngine engine, IPositionEvaluator evaluator, AISearchSettings settings)
         {
-            _search = new AlphaBetaSearch(engine, evaluator);
+            // Owned here (not by AlphaBetaSearch) so it PERSISTS across FindBestMove calls within a
+            // match — this is what attacks the successive-turn escalation the TT is built for.
+            // A fresh AsyncAIAgent (one per match, via AIMatchCoordinator.SetAIMode) gets a fresh
+            // table for free; there is no need to clear it mid-match.
+            _tt = new TranspositionTable(log2Size: 20); // ~16 MB desktop; mobile sizing TBD via settings
+            _search = new AlphaBetaSearch(engine, evaluator, transpositionTable: _tt);
             _settings = settings;
         }
 
