@@ -63,6 +63,12 @@ namespace ChessTheBetrayal.AI
         private readonly ulong _indexMask;
         private uint _generation;
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        /// <summary>Telemetry only (AI-21) — every counter lives behind this symbol so a release
+        /// build pays nothing for tracking it. Reset by the owning AlphaBetaSearch per FindBestMove.</summary>
+        public SearchStats Stats;
+#endif
+
         /// <summary>entryCount = 1 &lt;&lt; log2Size. Desktop: 20 (~16 MB); mobile: 18 (~4 MB).</summary>
         public TranspositionTable(int log2Size)
         {
@@ -75,11 +81,19 @@ namespace ChessTheBetrayal.AI
         /// <summary>Packs a search result into a slot. Returns false on a torn/collided/empty read.</summary>
         public bool Probe(ulong hash, out int score, out uint packedMove, out int depth, out TTFlag flag)
         {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            Stats.TTProbes++;
+#endif
             int index = (int)(hash & _indexMask);
-            ulong data = _entries[index].DataLane;
+            TTEntry entry = _entries[index];
 
-            if ((_entries[index].KeyLane ^ data) != hash)
+            if ((entry.KeyLane ^ entry.DataLane) != hash)
             {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                bool wasEverWritten = entry.KeyLane != 0 || entry.DataLane != 0;
+                if (wasEverWritten) Stats.TTVerificationMisses++; // index collision or torn write
+                else Stats.TTEmptyMisses++;
+#endif
                 score = 0;
                 packedMove = 0;
                 depth = 0;
@@ -87,6 +101,10 @@ namespace ChessTheBetrayal.AI
                 return false;
             }
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            Stats.TTHits++;
+#endif
+            ulong data = entry.DataLane;
             score = UnpackScore(data);
             packedMove = (uint)((data >> MoveShift) & MoveMask);
             depth = (int)((data >> DepthShift) & DepthMask);
@@ -100,8 +118,9 @@ namespace ChessTheBetrayal.AI
         {
             int index = (int)(hash & _indexMask);
             TTEntry existing = _entries[index];
+            bool wasOccupied = existing.KeyLane != 0 || existing.DataLane != 0;
 
-            if (existing.KeyLane != 0 || existing.DataLane != 0)
+            if (wasOccupied)
             {
                 ulong existingData = existing.DataLane;
                 uint existingGeneration = (uint)((existingData >> GenerationShift) & GenerationMask);
@@ -124,6 +143,11 @@ namespace ChessTheBetrayal.AI
                 KeyLane = hash ^ data,
                 DataLane = data
             };
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            Stats.TTStores++;
+            if (wasOccupied) Stats.TTReplacements++;
+#endif
         }
 
         /// <summary>Bumps the replacement generation. Call once per FindBestMove, before the depth loop.</summary>

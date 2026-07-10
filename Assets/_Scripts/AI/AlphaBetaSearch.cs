@@ -92,6 +92,17 @@ namespace ChessTheBetrayal.AI
             return buffer;
         }
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        /// <summary>
+        /// Telemetry for the most recently completed FindBestMove call (AI-21). Lives on the shared
+        /// TranspositionTable rather than a second bag, since every AlphaBetaSearch already owns one
+        /// TT reference and the TT's own counters (probe/hit/store/replace) need to live there
+        /// anyway. Reset at the top of FindBestMove, so a mid-search read (there isn't one — this is
+        /// read after the call returns) would otherwise see a stale previous-call snapshot.
+        /// </summary>
+        public ref SearchStats Stats => ref _tt.Stats;
+#endif
+
         /// <summary>
         /// Iterative deepening entry point. Returns the best move for board.CurrentTurn.
         /// Caller runs this on a worker thread against a cloned board (see AsyncAIAgent).
@@ -100,6 +111,9 @@ namespace ChessTheBetrayal.AI
         {
             Team rootTeam = board.CurrentTurn;
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            _tt.Stats.Reset();
+#endif
             _tt.NewSearch();
 
             // Build the root move list ONCE. This is where the agent-level Betrayal policy applies.
@@ -199,9 +213,15 @@ namespace ChessTheBetrayal.AI
         {
             if (ct.IsCancellationRequested) return 0;
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            _tt.Stats.NodesVisited++;
+#endif
+
             // Terminal / horizon: drop into quiescence so we never evaluate mid-capture or,
             // critically, mid-Retribution (see Quiescence). Quiescence does not probe/store the TT
-            // this pass — qsearch entries thrash the table (revisit post-AI-21 telemetry).
+            // (qsearch entries would thrash the table) and its nodes are deliberately excluded from
+            // NodesVisited — that counter tracks the pruned tree the TT/NMP/LMR/PVS multipliers act
+            // on, not the quiescence tail, which is a separate, per-design-unbounded-by-depth cost.
             if (depth <= 0)
                 return Quiescence(board, alpha, beta, perspectiveTeam, MaxQuiescencePly, ct);
 
@@ -237,12 +257,21 @@ namespace ChessTheBetrayal.AI
                 && HasNonPawnMaterial(board, board.CurrentTurn)
                 && beta < MateScore - _maxSupportedDepth)
             {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                _tt.Stats.NullMoveAttempts++;
+#endif
                 MakeNullMove(board, out int? savedEnPassantFile);
                 Team opponent = perspectiveTeam == Team.White ? Team.Black : Team.White;
                 int nullScore = -Search(board, depth - 1 - NullMoveReduction, plyFromRoot + 1, -beta, -beta + 1, opponent, ct, parentWasNull: true);
                 UndoNullMove(board, savedEnPassantFile);
 
-                if (nullScore >= beta) return beta; // fail-hard cutoff
+                if (nullScore >= beta)
+                {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                    _tt.Stats.NullMoveCutoffs++;
+#endif
+                    return beta; // fail-hard cutoff
+                }
             }
 
             List<MoveCommand> moves = _moveBuffers[depth];
@@ -286,6 +315,9 @@ namespace ChessTheBetrayal.AI
                 MoveCommand move = moves[i];
 
                 bool reduce = nodeAllowsReduction && i >= 3 && IsReducibleMove(move, ttMove);
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                if (reduce) _tt.Stats.LmrReductions++;
+#endif
 
                 int searchDepth = reduce ? depth - 2 : depth - 1;
 
@@ -300,6 +332,9 @@ namespace ChessTheBetrayal.AI
                 }
                 else
                 {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                    _tt.Stats.PvsScouts++;
+#endif
                     // Null-window scout — ScoreChild passes (alpha, alpha+1) straight through for a
                     // non-flipping Act/Defection child (same maximizer frame) and negates it to
                     // (-alpha-1, -alpha) for a flipping child. Proves "can this beat alpha?" cheaply;
@@ -310,13 +345,23 @@ namespace ChessTheBetrayal.AI
                     // depth, STILL null-window, before deciding whether a full-window re-search is
                     // even warranted.
                     if (reduce && score > alpha)
+                    {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                        _tt.Stats.LmrReSearches++;
+#endif
                         score = ScoreChild(board, move, depth - 1, plyFromRoot + 1, alpha, alpha + 1, perspectiveTeam, ct);
+                    }
 
                     // PVS fail-high — the null-window scout can only prove "not worse than alpha",
                     // not the true score. Only a genuine alpha<score<beta result needs the full-window
                     // re-search; a score >= beta is already a valid cutoff via the null window alone.
                     if (score > alpha && score < beta)
+                    {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                        _tt.Stats.PvsReSearches++;
+#endif
                         score = ScoreChild(board, move, depth - 1, plyFromRoot + 1, alpha, beta, perspectiveTeam, ct);
+                    }
                 }
 
                 UndoMoveAndTurn(board, move);
