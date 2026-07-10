@@ -35,6 +35,11 @@ namespace ChessTheBetrayal.AI
         private const int Infinity = 1_000_000;
         private const int MateScore = 900_000;
 
+        // Null Move Pruning constants (ADR Sec 1.2/2.3). R is the fixed reduction this pass —
+        // adaptive R (2 + depth/6) is telemetry-gated future work, not part of AI-18.
+        private const int NullMoveReduction = 2;
+        private const int NullMoveMinDepth = NullMoveReduction + 2; // guard 3: depth >= R + 2
+
         // Hard backstop for quiescence recursion. A Betrayal sub-phase (Act -> Retribution/Defection
         // -> optional DefensiveOverride) is at most a handful of plies for one turn, and captures
         // fizzle out fast, so a real quiescence line is short. This cap exists purely so that a future
@@ -45,6 +50,7 @@ namespace ChessTheBetrayal.AI
         private readonly IChessEngine _engine;
         private readonly IPositionEvaluator _evaluator;
         private readonly TranspositionTable _tt;
+        private readonly int _maxSupportedDepth;
 
         // Reused across the whole search — one buffer per depth level to avoid clobbering a
         // parent's move list while recursing. Grown lazily; never freed. No per-node allocation.
@@ -66,6 +72,7 @@ namespace ChessTheBetrayal.AI
             _engine = engine;
             _evaluator = evaluator;
             _tt = transpositionTable ?? new TranspositionTable(log2Size: 16);
+            _maxSupportedDepth = maxSupportedDepth;
             _moveBuffers = new List<MoveCommand>[maxSupportedDepth + 1];
             for (int i = 0; i < _moveBuffers.Length; i++)
                 _moveBuffers[i] = new List<MoveCommand>(64);
@@ -188,7 +195,7 @@ namespace ChessTheBetrayal.AI
         /// Recursive negamax. 'perspectiveTeam' is whichever side we're currently scoring FOR
         /// (it changes only when the turn actually flips). alpha/beta are always in perspectiveTeam's frame.
         /// </summary>
-        private int Search(BoardState board, int depth, int plyFromRoot, int alpha, int beta, Team perspectiveTeam, CancellationToken ct)
+        private int Search(BoardState board, int depth, int plyFromRoot, int alpha, int beta, Team perspectiveTeam, CancellationToken ct, bool parentWasNull = false)
         {
             if (ct.IsCancellationRequested) return 0;
 
@@ -214,6 +221,28 @@ namespace ChessTheBetrayal.AI
                     if (ttFlag == TTFlag.UpperBound && s < beta) beta = s;
                     if (alpha >= beta) return s;
                 }
+            }
+
+            // Null Move Pruning — sits after the TT probe, before movegen (v1 stays post-check,
+            // pre-movegen per ADR Sec 2.3; a full guard set must pass before we ever touch the board).
+            // Guard 1 is the corrected guard from the ADR: PendingBetrayerSquare covers Act-pending,
+            // Retribution-pending, AND ForcedSave-pending alike, not just the Retribution-only case —
+            // a null move mid-sequence would flip CurrentTurn while the domain mandates the SAME
+            // player continues, corrupting move generation, the TT hash, and the alpha-beta frame
+            // simultaneously (see the ADR's "what corrupts if guard 1 is skipped" note).
+            if (depth >= NullMoveMinDepth
+                && !board.PendingBetrayerSquare.HasValue
+                && !parentWasNull
+                && !_engine.IsKingInCheck(board, board.CurrentTurn)
+                && HasNonPawnMaterial(board, board.CurrentTurn)
+                && beta < MateScore - _maxSupportedDepth)
+            {
+                MakeNullMove(board, out int? savedEnPassantFile);
+                Team opponent = perspectiveTeam == Team.White ? Team.Black : Team.White;
+                int nullScore = -Search(board, depth - 1 - NullMoveReduction, plyFromRoot + 1, -beta, -beta + 1, opponent, ct, parentWasNull: true);
+                UndoNullMove(board, savedEnPassantFile);
+
+                if (nullScore >= beta) return beta; // fail-hard cutoff
             }
 
             List<MoveCommand> moves = _moveBuffers[depth];
@@ -318,6 +347,59 @@ namespace ChessTheBetrayal.AI
         {
             if (StageFlipsTurn(move.Stage)) board.NextTurn();
             _engine.UndoMove(board, move);
+        }
+
+        /// <summary>
+        /// "I pass; opponent moves" — no seam exists on IChessEngine for this (a null move isn't a
+        /// real move), so the search does it directly: pass the turn, toggle the turn-hash, and
+        /// clear any en-passant right (EP doesn't survive a passed turn — the file must be un-hashed
+        /// here and restored by UndoNullMove, mirroring ApplyZobristMove's own EP toggle pattern).
+        /// </summary>
+        internal void MakeNullMove(BoardState board, out int? savedEnPassantFile)
+        {
+            savedEnPassantFile = board.EnPassantFile;
+            if (savedEnPassantFile.HasValue)
+            {
+                board.ToggleEnPassantHash(savedEnPassantFile.Value);
+                board.EnPassantFile = null;
+            }
+
+            board.ToggleTurnHash();
+            board.NextTurn();
+        }
+
+        /// <summary>Mirror of <see cref="MakeNullMove"/> — restores EnPassantFile and its hash
+        /// contribution, then reverses the turn pass, in the exact opposite order.</summary>
+        internal void UndoNullMove(BoardState board, int? savedEnPassantFile)
+        {
+            board.NextTurn();
+            board.ToggleTurnHash();
+
+            if (savedEnPassantFile.HasValue)
+            {
+                board.EnPassantFile = savedEnPassantFile;
+                board.ToggleEnPassantHash(savedEnPassantFile.Value);
+            }
+        }
+
+        /// <summary>
+        /// Zugzwang heuristic (NMP guard 5): side to move needs at least one non-pawn, non-king
+        /// piece, else null-move pruning is unsound (a pass can look safe purely because the side
+        /// has nothing but pawn/king moves to make, not because the position is actually quiet).
+        /// No material-count query exists on IBoardQuery, so this is a cheap piece-index scan —
+        /// bounded by a team's piece count (<=16), not the board, so it's search-loop-cheap.
+        /// </summary>
+        private static bool HasNonPawnMaterial(BoardState board, Team team)
+        {
+            List<int> indices = board.GetPieceIndices(team);
+            for (int i = 0; i < indices.Count; i++)
+            {
+                int square = indices[i];
+                ChessPieceType type = board.GetPiece(square % board.TileCountX, square / board.TileCountX).Type;
+                if (type != ChessPieceType.Pawn && type != ChessPieceType.King)
+                    return true;
+            }
+            return false;
         }
 
         /// <summary>
