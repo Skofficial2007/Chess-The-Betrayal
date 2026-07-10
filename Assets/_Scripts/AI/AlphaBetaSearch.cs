@@ -272,6 +272,11 @@ namespace ChessTheBetrayal.AI
 
             OrderMoves(moves, ttMove);
 
+            // LMR eligibility for THIS node is fixed once, before the loop: a pending Betrayer means
+            // every child here is part of a forced tactical sequence (see the ADR's guard note —
+            // identical to NMP's guard 1), so nothing at this node may ever be reduced.
+            bool nodeAllowsReduction = depth >= 3 && !board.PendingBetrayerSquare.HasValue;
+
             int best = -Infinity;
             uint bestPackedMove = 0;
             for (int i = 0; i < moves.Count; i++)
@@ -279,8 +284,20 @@ namespace ChessTheBetrayal.AI
                 if (ct.IsCancellationRequested) return best;
 
                 MoveCommand move = moves[i];
+
+                bool reduce = nodeAllowsReduction && i >= 3 && IsReducibleMove(move, ttMove);
+
+                int searchDepth = reduce ? depth - 2 : depth - 1;
+
                 ApplyMoveAndTurn(board, move);
-                int score = ScoreChild(board, move, depth - 1, plyFromRoot + 1, alpha, beta, perspectiveTeam, ct);
+                int score = ScoreChild(board, move, searchDepth, plyFromRoot + 1, alpha, beta, perspectiveTeam, ct);
+
+                // Reduced search beat alpha: the reduction may have hidden real strength. Re-search
+                // at full depth (still same window — PVS's null-window ladder is AI-20) before
+                // trusting the score.
+                if (reduce && score > alpha)
+                    score = ScoreChild(board, move, depth - 1, plyFromRoot + 1, alpha, beta, perspectiveTeam, ct);
+
                 UndoMoveAndTurn(board, move);
 
                 if (score > best)
@@ -672,6 +689,16 @@ namespace ChessTheBetrayal.AI
                 moves[j + 1] = key;
             }
         }
+
+        /// <summary>
+        /// LMR exemption predicate (ADR Sec 1.3/2.4), keyed on move SEMANTICS rather than sort
+        /// position: a capture, a promotion, the TT/PV move, or any Betrayal-stage move (Act,
+        /// Retribution, DefensiveOverride, Defection) is never reduced. The per-node depth/pending-
+        /// Betrayer/index gates live in Search's loop, since those need node-level state this
+        /// predicate doesn't have.
+        /// </summary>
+        internal static bool IsReducibleMove(MoveCommand m, uint ttMove) =>
+            !m.IsCapture && !m.IsPromotion && m.Stage == BetrayalStage.None && PackMove(m) != ttMove;
 
         /// <summary>
         /// Concrete tier bands (ADR Sec 2.2). Ordering only — never changes which move wins the
