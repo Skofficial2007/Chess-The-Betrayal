@@ -591,14 +591,35 @@ namespace ChessTheBetrayal.AI
             }
         }
 
-        private static int OrderScore(MoveCommand m, uint ttMove)
+        /// <summary>
+        /// Concrete tier bands (ADR Sec 2.2). Ordering only — never changes which move wins the
+        /// node, only how fast alpha-beta gets there. Act is Tier 3 (below captures/promo, above
+        /// quiets): demoted from the old flat +5000 so a cheaper cutoff gets a chance to fire
+        /// before the search pays Retribution's branching cost by exploring an Act first.
+        /// </summary>
+        internal static int OrderScore(MoveCommand m, uint ttMove)
         {
             if (ttMove != 0 && PackMove(m) == ttMove) return 100_000;  // Tier 0: TT/PV move
-            int s = 0;
-            if (m.Stage == BetrayalStage.Act) s += 5000;           // explore betrayals early
-            if (m.IsCapture) s += 1000 + PieceRank(m.CapturedType) * 10 - PieceRank(m.PieceType);
-            if (m.IsPromotion) s += 800;
-            return s;
+
+            int capturedRank = PieceRank(m.CapturedType);
+            int pieceRank = PieceRank(m.PieceType);
+
+            if (m.IsCapture && capturedRank > pieceRank)
+                return 30_000 + capturedRank * 10 - pieceRank;         // Tier 1: winning capture
+
+            if (m.IsPromotion)
+                return 20_500;                                        // Tier 2: promo (>= equal capture)
+
+            if (m.IsCapture && capturedRank == pieceRank)
+                return 20_000;                                        // Tier 2: equal capture
+
+            if (m.Stage == BetrayalStage.Act)
+                return 10_000;                                        // Tier 3: explore betrayals
+
+            if (m.IsCapture)
+                return capturedRank * 10 - pieceRank;                  // Tier 4: losing capture
+
+            return 0;                                                  // Tier 4: quiet
         }
 
         /// <summary>
@@ -607,7 +628,7 @@ namespace ChessTheBetrayal.AI
         /// only ever matched against the freshly generated legal list, so a stale/collided entry can
         /// mis-order a node but never inject an illegal move (see TranspositionTable's ADR note).
         /// </summary>
-        private static uint PackMove(MoveCommand m)
+        internal static uint PackMove(MoveCommand m)
         {
             uint from = (uint)(m.StartPosition.y * 8 + m.StartPosition.x) & 0x3F;
             uint to = (uint)(m.EndPosition.y * 8 + m.EndPosition.x) & 0x3F;
