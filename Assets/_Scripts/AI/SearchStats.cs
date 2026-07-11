@@ -1,11 +1,11 @@
 namespace ChessTheBetrayal.AI
 {
     /// <summary>
-    /// Search telemetry (ADR Sec "Step 3", AI-21). Plain counters, no allocation, reset once per
-    /// FindBestMove — exists purely to prove each pruning mechanism's node-count multiplier against
-    /// the Depth-7 Definition of Done on fixed regression positions. Conditional-compiled: every
-    /// counter increment lives behind AI_SEARCH_TELEMETRY, so a release build pays zero cost (not
-    /// even a branch) for tracking it. See AlphaBetaSearch/TranspositionTable's #if sites.
+    /// Search telemetry. Plain counters, no allocation, reset once per FindBestMove — exists purely
+    /// to measure each pruning mechanism's node-count impact on fixed regression positions.
+    /// Conditional-compiled: every counter increment lives behind the editor/development-build
+    /// guard, so a release build pays zero cost (not even a branch) for tracking it. See
+    /// AlphaBetaSearch/TranspositionTable's #if sites.
     /// </summary>
     public struct SearchStats
     {
@@ -15,7 +15,7 @@ namespace ChessTheBetrayal.AI
         public long TTEmptyMisses;        // slot had never been written (both lanes zero)
         public long TTVerificationMisses; // occupied slot whose KeyLane/DataLane XOR didn't match —
                                            // an index collision or a torn write; the XOR check can't
-                                           // tell which, so (per the ADR) they're counted together
+                                           // tell which apart, so they're counted together
         public long TTStores;
         public long TTReplacements;       // a Store that overwrote an existing, non-empty slot
         public long NullMoveAttempts;
@@ -25,15 +25,15 @@ namespace ChessTheBetrayal.AI
         public long PvsScouts;
         public long PvsReSearches;    // null-window scout landed inside (alpha, beta) and was re-searched
 
-        // ADR_AI16b (Phase 1 extension) — quiescence node-count diagnostic. NodesVisited above counts
-        // ONLY main-search (Search) nodes; Quiescence() increments nothing there by design. These
-        // fields fill that gap so the qtree's size and shape can finally be measured directly instead
-        // of inferred from wall-clock/NodesVisited arithmetic.
+        // Quiescence node-count breakdown. NodesVisited above counts ONLY main-search (Search)
+        // nodes; Quiescence() increments nothing there by design. These fields fill that gap so the
+        // qtree's size and shape can be measured directly instead of inferred from wall-clock/
+        // NodesVisited arithmetic.
         public long QNodesVisited;             // every Quiescence() entry — the qtree/main-tree split
         public long QBetrayalResolutionNodes;   // qnodes spent inside the betrayerPending forced-sequence branch
         public long QActExpansions;             // qsearch-loop moves surviving the filter with Stage == Act
-        public long QMovesGenerated;            // total moves returned by GetAllLegalMovesIncludingBetrayal per standard qnode
-        public long QMovesSearched;             // of those, how many survived the capture-or-Act (+delta-prune) filter
+        public long QMovesGenerated;            // total moves returned by the captures/Acts generator per standard qnode
+        public long QMovesSearched;             // of those, how many survived the delta-prune filter
 
         // Per-depth cumulative node count (main + quiescence) at the moment each iterative-deepening
         // depth FULLY completes — the effective-branching-factor curve. Index 0 unused (depths are 1-7).
@@ -51,8 +51,8 @@ namespace ChessTheBetrayal.AI
         }
 
         /// <summary>Records the running node total (NodesVisited + QNodesVisited) at the moment a
-        /// depth in 1..7 fully completes. Depths beyond 7 are not tracked (the ADR's DoD is fixed to
-        /// a depth-7 benchmark) — silently ignored rather than throwing, since search settings can
+        /// depth in 1..7 fully completes. Depths beyond 7 are not tracked (the benchmark this feeds
+        /// is fixed to depth 7) — silently ignored rather than throwing, since search settings can
         /// legitimately go deeper than 7 outside the benchmark.</summary>
         public void AssignNodesAfterDepth(int depth, long totalNodes)
         {

@@ -223,6 +223,94 @@ namespace ChessTheBetrayal.Core.Engine
         }
 
         /// <summary>
+        /// Same result set as filtering <see cref="GetAllLegalMovesIncludingBetrayal"/> down to
+        /// captures and Acts, but cheaper: quiet pseudo-legal moves are dropped before the
+        /// expensive <see cref="DoesMoveLeaveKingInCheck"/> check runs on them instead of after,
+        /// since that check is what actually costs anything per move. Built for quiescence search,
+        /// which only ever wants captures and Acts and was previously paying full legality-checked
+        /// movegen on every node just to throw most of it away.
+        /// </summary>
+        public static void GetCapturesAndActsOnly(BoardState board, Team team, List<MoveCommand> masterBuffer)
+        {
+            masterBuffer.Clear();
+
+            if (board.PendingBetrayerSquare.HasValue && board.BetrayalInitiator.HasValue)
+            {
+                PieceData betrayer = board.GetPiece(board.PendingBetrayerSquare.Value);
+
+                if (betrayer.Team == board.BetrayalInitiator.Value)
+                {
+                    GetRetributionMoves(board, team, board.PendingBetrayerSquare.Value, masterBuffer);
+                    return;
+                }
+            }
+
+            int[] indicesSnapshot = SnapshotIndices(board.GetPieceIndices(team), ref _indexScratchBuffer, out int indexCount);
+
+            for (int i = 0; i < indexCount; i++)
+            {
+                int idx = indicesSnapshot[i];
+                Vector2Int pos = new Vector2Int(idx % board.TileCountX, idx / board.TileCountX);
+
+                GetCaptureMoves(board, pos, MoveGenBuffer, team);
+                masterBuffer.AddRange(MoveGenBuffer);
+
+                GetBetrayalTargets(board, pos, masterBuffer);
+            }
+        }
+
+        /// <summary>
+        /// Pseudo-legal-then-filter mirror of the private <see cref="GetLegalMoves(BoardState,Vector2Int,List{MoveCommand},Team)"/>
+        /// overload, except the capture/promotion filter runs BEFORE <see cref="DoesMoveLeaveKingInCheck"/>
+        /// instead of after — that check is the expensive part of move generation, so skipping it for
+        /// quiet moves is the entire point of this method existing.
+        /// </summary>
+        private static void GetCaptureMoves(BoardState board, Vector2Int position, List<MoveCommand> output, Team team)
+        {
+            output.Clear();
+            PieceData piece = board.GetPiece(position);
+
+            if (piece.IsEmpty || piece.Team != team)
+            {
+                return;
+            }
+
+            IPieceMovement strategy = MovementFactory.GetStrategy(piece.Type);
+            if (strategy == null)
+            {
+                return;
+            }
+
+            List<MoveCommand> raw = BetrayalLocalBuffer;
+            raw.Clear();
+            strategy.GetRawMoves(board, piece, position, raw);
+
+            bool isKing = piece.Type == ChessPieceType.King;
+            bool isCurrentlyInCheck = false;
+            Team enemyTeam = piece.Team == Team.White ? Team.Black : Team.White;
+
+            if (isKing)
+            {
+                isCurrentlyInCheck = IsSquareUnderAttack(board, position, enemyTeam);
+            }
+
+            for (int i = 0; i < raw.Count; i++)
+            {
+                MoveCommand move = raw[i];
+
+                // A quiet, non-promoting move can never be a quiescence target — drop it before
+                // paying for the legality check at all. Castling is always quiet, so it's dropped
+                // here too (quiescence has no use for it).
+                if (!move.HasCapture && !move.IsPromotion) continue;
+
+                if (!DoesMoveLeaveKingInCheck(board, move))
+                {
+                    output.Add(move);
+                }
+            }
+        }
+
+        /// <summary>
         /// Appends every legal Betrayal <see cref="BetrayalStage.Act"/> move for the piece at
         /// <paramref name="betrayerPos"/>: the betrayer "captures" one of its own pieces as if that
         /// friendly piece were an enemy.
