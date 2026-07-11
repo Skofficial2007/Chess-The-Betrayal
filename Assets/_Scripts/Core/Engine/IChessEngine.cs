@@ -26,6 +26,14 @@ namespace ChessTheBetrayal.Core.Engine
         /// </summary>
         void GetAllLegalMovesIncludingBetrayal(BoardState board, Team team, List<MoveCommand> masterBuffer);
 
+        /// <summary>
+        /// Same legal set as filtering <see cref="GetAllLegalMovesIncludingBetrayal"/> down to
+        /// captures, promotions, and Acts, but generated directly at that cost — built for
+        /// quiescence search, which only ever explores this subset and previously paid full
+        /// movegen cost on every node just to filter it down afterward.
+        /// </summary>
+        void GetCapturesAndActsOnly(BoardState board, Team team, List<MoveCommand> masterBuffer);
+
         void GetRetributionMoves(BoardState board, Team executionerTeam, Vector2Int betrayerSquare, List<MoveCommand> output);
         void GetForcedSaveMoves(BoardState board, Team team, List<MoveCommand> output);
         bool IsKingInCheck(BoardState board, Team team);

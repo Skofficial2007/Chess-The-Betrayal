@@ -35,10 +35,13 @@ namespace ChessTheBetrayal.AI
         private const int Infinity = 1_000_000;
         private const int MateScore = 900_000;
 
-        // Null Move Pruning constants (ADR Sec 1.2/2.3). R is the fixed reduction this pass —
-        // adaptive R (2 + depth/6) is telemetry-gated future work, not part of AI-18.
-        private const int NullMoveReduction = 2;
-        private const int NullMoveMinDepth = NullMoveReduction + 2; // guard 3: depth >= R + 2
+        // Null Move Pruning: the reduction grows with depth so a deep node skips more of the
+        // opponent's reply before deciding a null move is safe, while a shallow node stays
+        // conservative. Minimum search depth to even attempt it scales the same way, so the
+        // recursive null-move search itself is never asked to search below depth 0.
+        private const int NullMoveBaseReduction = 2;
+        private static int NullMoveReduction(int depth) => NullMoveBaseReduction + depth / 6;
+        private static int NullMoveMinDepth(int depth) => NullMoveReduction(depth) + 2; // guard 3: depth >= R + 2
 
         // Hard backstop for quiescence recursion. A Betrayal sub-phase (Act -> Retribution/Defection
         // -> optional DefensiveOverride) is at most a handful of plies for one turn, and captures
@@ -247,14 +250,12 @@ namespace ChessTheBetrayal.AI
                 }
             }
 
-            // Null Move Pruning — sits after the TT probe, before movegen (v1 stays post-check,
-            // pre-movegen per ADR Sec 2.3; a full guard set must pass before we ever touch the board).
-            // Guard 1 is the corrected guard from the ADR: PendingBetrayerSquare covers Act-pending,
-            // Retribution-pending, AND ForcedSave-pending alike, not just the Retribution-only case —
-            // a null move mid-sequence would flip CurrentTurn while the domain mandates the SAME
-            // player continues, corrupting move generation, the TT hash, and the alpha-beta frame
-            // simultaneously (see the ADR's "what corrupts if guard 1 is skipped" note).
-            if (depth >= NullMoveMinDepth
+            // Null Move Pruning — sits after the TT probe, before movegen; the full guard set below
+            // must pass before we ever touch the board. PendingBetrayerSquare covers Act-pending,
+            // Retribution-pending, AND ForcedSave-pending alike, not just Retribution — a null move
+            // mid-sequence would flip CurrentTurn while the domain mandates the SAME player
+            // continues, corrupting move generation, the TT hash, and the alpha-beta frame at once.
+            if (depth >= NullMoveMinDepth(depth)
                 && !board.PendingBetrayerSquare.HasValue
                 && !parentWasNull
                 && !_engine.IsKingInCheck(board, board.CurrentTurn)
@@ -266,7 +267,7 @@ namespace ChessTheBetrayal.AI
 #endif
                 MakeNullMove(board, out int? savedEnPassantFile);
                 Team opponent = perspectiveTeam == Team.White ? Team.Black : Team.White;
-                int nullScore = -Search(board, depth - 1 - NullMoveReduction, plyFromRoot + 1, -beta, -beta + 1, opponent, ct, parentWasNull: true);
+                int nullScore = -Search(board, depth - 1 - NullMoveReduction(depth), plyFromRoot + 1, -beta, -beta + 1, opponent, ct, parentWasNull: true);
                 UndoNullMove(board, savedEnPassantFile);
 
                 if (nullScore >= beta)
@@ -306,8 +307,8 @@ namespace ChessTheBetrayal.AI
             OrderMoves(moves, ttMove);
 
             // LMR eligibility for THIS node is fixed once, before the loop: a pending Betrayer means
-            // every child here is part of a forced tactical sequence (see the ADR's guard note —
-            // identical to NMP's guard 1), so nothing at this node may ever be reduced.
+            // every child here is part of a forced tactical sequence (same reasoning as the null-move
+            // guard above), so nothing at this node may ever be reduced.
             bool nodeAllowsReduction = depth >= 3 && !board.PendingBetrayerSquare.HasValue;
 
             int best = -Infinity;
@@ -318,7 +319,7 @@ namespace ChessTheBetrayal.AI
 
                 MoveCommand move = moves[i];
 
-                bool reduce = nodeAllowsReduction && i >= 3 && IsReducibleMove(move, ttMove);
+                bool reduce = nodeAllowsReduction && i >= 2 && IsReducibleMove(move, ttMove);
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                 if (reduce) _tt.Stats.LmrReductions++;
 #endif
@@ -540,8 +541,8 @@ namespace ChessTheBetrayal.AI
         /// only so no future Betrayal-state edge case can StackOverflow the way an unresolved forced
         /// Defection once did. When it runs out we stand pat rather than recurse further.
         ///
-        /// <paramref name="plyFromRoot"/> (ADR_AI16b Path A1) threads the same root-distance Search
-        /// already tracks into quiescence, purely so a TT store from inside qsearch can mate-adjust
+        /// <paramref name="plyFromRoot"/> threads the same root-distance Search already tracks into
+        /// quiescence, purely so a TT store from inside qsearch can mate-adjust
         /// exactly like Search's does (see AdjustMateScore/UnadjustMateScore) — ResolveForcedDefection
         /// can return a raw +/-MateScore from inside quiescence (a forced-mate-in-the-sequence), and
         /// storing that un-adjusted would corrupt mate-distance reporting for any future probe at a
@@ -599,10 +600,10 @@ namespace ChessTheBetrayal.AI
             }
 
             // --- Standard quiescence ---
-            // Qsearch TT probe (ADR_AI16b Path A1). Reuses the SAME table Search uses, storing at
-            // depth 0 — the existing depth-preferred replacement rule (TranspositionTable.Store) means
-            // a depth-0 entry can never evict a Search entry of depth >= 1, so there is no second table
-            // and no pollution risk beyond what depth-0-vs-depth-0 entries already tolerate.
+            // Qsearch TT probe. Reuses the SAME table Search uses, storing at depth 0 — the existing
+            // depth-preferred replacement rule (TranspositionTable.Store) means a depth-0 entry can
+            // never evict a Search entry of depth >= 1, so there is no second table and no pollution
+            // risk beyond what depth-0-vs-depth-0 entries already tolerate.
             int alphaOriginal = alpha;
             if (_tt.Probe(board.ZobristHash, out int ttScore, out _, out _, out TTFlag ttFlag))
             {
@@ -613,23 +614,23 @@ namespace ChessTheBetrayal.AI
                 if (alpha >= beta) return s;
             }
 
-            // NOTE (ADR_AI16b Path A1 side effect): quiescence's cutoff return changed from fail-hard
-            // (return beta immediately) to fail-soft (fall through, return the tightest 'best' found)
-            // so there is exactly one TT-store site after the loop, mirroring Search's own pattern —
-            // duplicating the store at every early-return site would be needless surface area. Fail-
-            // soft is the more standard alpha-beta convention (Search itself already returns 'best',
-            // not 'beta') and is provably still a valid cutoff (best >= beta here); pinned by
-            // SearchCorrectnessTests/QuiescenceDeltaPruningTests staying green on the fixed suites.
+            // Quiescence's cutoff return is fail-soft (fall through, return the tightest 'best'
+            // found) rather than fail-hard (return beta immediately), so there is exactly one
+            // TT-store site after the loop, mirroring Search's own pattern — duplicating the store
+            // at every early-return site would be needless surface area. Fail-soft is the more
+            // standard alpha-beta convention (Search itself already returns 'best', not 'beta') and
+            // is provably still a valid cutoff (best >= beta here).
             int standPat = _evaluator.Evaluate(board, perspectiveTeam);
             if (standPat >= beta) return standPat;
             if (standPat > alpha) alpha = standPat;
 
             if (qply <= 0) return alpha; // out of budget: stand pat on the quiet-ish position.
 
-            // Search captures only (loud moves) plus Act, which the loop below explicitly keeps —
-            // reuse this ply's private buffer; filter happens per-move just below.
+            // Generate captures/promotions/Acts directly rather than the full legal move list —
+            // quiescence only ever wants this subset, and full movegen was spending most of its
+            // cost legality-checking quiet moves that would just get filtered out below anyway.
             List<MoveCommand> moves = QuiescenceBuffer(qply);
-            _engine.GetAllLegalMovesIncludingBetrayal(board, board.CurrentTurn, moves);
+            _engine.GetCapturesAndActsOnly(board, board.CurrentTurn, moves);
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             _tt.Stats.QMovesGenerated += moves.Count;
 #endif
@@ -639,16 +640,14 @@ namespace ChessTheBetrayal.AI
             for (int i = 0; i < moves.Count; i++)
             {
                 MoveCommand move = moves[i];
-                if (!move.IsCapture && move.Stage != BetrayalStage.Act) continue; // quiet move, skip
 
-                // ADR_AI16b Path A2: bound Act re-expansion to the FIRST quiescence ply only (the
-                // horizon's immediate next ply, qply == MaxQuiescencePly). Standing pat mid-sequence
-                // stays forbidden everywhere (untouched, sacred — see the betrayerPending branch
-                // above) — this gate only decides whether quiescence may INITIATE a new Act. Beyond
-                // the first ply, an Act line is skipped here rather than explored, which is what
-                // actually changes the qtree's branching factor rather than just its per-node cost:
-                // Step B's telemetry showed actExp=181144 (~32% of qnodes) driven by exactly this
-                // unbounded re-fan. The horizon still sees one ply of imminent Betrayal threat.
+                // Bound Act re-expansion to the FIRST quiescence ply only (the horizon's immediate
+                // next ply, qply == MaxQuiescencePly). Standing pat mid-sequence stays forbidden
+                // everywhere (untouched, sacred — see the betrayerPending branch above); this gate
+                // only decides whether quiescence may INITIATE a new Act. Beyond the first ply, an
+                // Act line is skipped rather than explored, since an unbounded Act re-fan out of
+                // every quiescence node was the single largest driver of qtree size. The horizon
+                // still sees one ply of imminent Betrayal threat.
                 if (move.Stage == BetrayalStage.Act && qply != MaxQuiescencePly) continue;
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -689,12 +688,11 @@ namespace ChessTheBetrayal.AI
                 if (alpha >= beta) break;
             }
 
-            // Qsearch TT store (ADR_AI16b Path A1) — single store site after the loop, mirroring
-            // Search's own pattern exactly. Always at depth 0, packedMove 0 (qsearch doesn't do
-            // ordering-hint harvesting the way Search's TT-move does; the ADR scopes this pass to the
-            // probe/store proof only). No cancellation guard needed here the way Search has one:
-            // Quiescence's only cancellation check is the top-of-function early-out, so reaching this
-            // line means the node completed normally.
+            // Qsearch TT store — single store site after the loop, mirroring Search's own pattern
+            // exactly. Always at depth 0, packedMove 0 (qsearch doesn't do the ordering-hint
+            // harvesting Search's TT-move does). No cancellation guard needed here the way Search
+            // has one: Quiescence's only cancellation check is the top-of-function early-out, so
+            // reaching this line means the node completed normally.
             TTFlag flag = best <= alphaOriginal ? TTFlag.UpperBound
                         : best >= beta ? TTFlag.LowerBound
                         : TTFlag.Exact;
@@ -838,7 +836,7 @@ namespace ChessTheBetrayal.AI
         }
 
         /// <summary>
-        /// LMR exemption predicate (ADR Sec 1.3/2.4), keyed on move SEMANTICS rather than sort
+        /// LMR exemption predicate, keyed on move SEMANTICS rather than sort
         /// position: a capture, a promotion, the TT/PV move, or any Betrayal-stage move (Act,
         /// Retribution, DefensiveOverride, Defection) is never reduced. The per-node depth/pending-
         /// Betrayer/index gates live in Search's loop, since those need node-level state this
@@ -848,7 +846,7 @@ namespace ChessTheBetrayal.AI
             !m.IsCapture && !m.IsPromotion && m.Stage == BetrayalStage.None && PackMove(m) != ttMove;
 
         /// <summary>
-        /// Concrete tier bands (ADR Sec 2.2). Ordering only — never changes which move wins the
+        /// Concrete tier bands. Ordering only — never changes which move wins the
         /// node, only how fast alpha-beta gets there. Act is Tier 3 (below captures/promo, above
         /// quiets): demoted from the old flat +5000 so a cheaper cutoff gets a chance to fire
         /// before the search pays Retribution's branching cost by exploring an Act first.
@@ -882,7 +880,7 @@ namespace ChessTheBetrayal.AI
         /// Packs the fields OrderScore's TT-move comparison needs into 19 bits: From(6) | To(6) |
         /// PromotedTo(4) | Stage(3). Search-internal only — never rehydrated into a MoveCommand, and
         /// only ever matched against the freshly generated legal list, so a stale/collided entry can
-        /// mis-order a node but never inject an illegal move (see TranspositionTable's ADR note).
+        /// mis-order a node but never inject an illegal move.
         /// </summary>
         internal static uint PackMove(MoveCommand m)
         {
