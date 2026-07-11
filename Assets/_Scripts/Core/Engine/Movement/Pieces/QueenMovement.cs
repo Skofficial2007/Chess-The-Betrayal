@@ -63,5 +63,28 @@ namespace ChessTheBetrayal.Core.Movement
                 }
             }
         }
+
+        public void GetAttackedSquares(BoardState board, PieceData piece, Vector2Int pos, List<Vector2Int> buffer)
+        {
+            // Queen = Rook + Bishop: along each of the 8 rays, every square up to AND INCLUDING the
+            // first occupied square is attacked; nothing past the blocker. See
+            // IPieceMovement.GetAttackedSquares for the full attack-map contract.
+            for (int d = 0; d < Directions.GetLength(0); d++)
+            {
+                int stepX = Directions[d, 0];
+                int stepY = Directions[d, 1];
+
+                for (int step = 1; ; step++)
+                {
+                    Vector2Int target = new Vector2Int(pos.x + stepX * step, pos.y + stepY * step);
+
+                    if (!board.IsValidIndex(target)) break;
+
+                    buffer.Add(target);
+
+                    if (!board.GetPiece(target).IsEmpty) break;
+                }
+            }
+        }
     }
 }

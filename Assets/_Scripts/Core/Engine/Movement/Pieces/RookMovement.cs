@@ -56,5 +56,29 @@ namespace ChessTheBetrayal.Core.Movement
                 }
             }
         }
+
+        public void GetAttackedSquares(BoardState board, PieceData piece, Vector2Int pos, List<Vector2Int> buffer)
+        {
+            // Along each ray, every square up to AND INCLUDING the first occupied square is attacked
+            // (the piece could capture whatever sits there); nothing past the blocker. The blocker's
+            // team is irrelevant to what is *attacked* — that distinction only matters when the attack
+            // is turned into a legal move.
+            for (int d = 0; d < Directions.GetLength(0); d++)
+            {
+                int stepX = Directions[d, 0];
+                int stepY = Directions[d, 1];
+
+                for (int step = 1; ; step++)
+                {
+                    Vector2Int target = new Vector2Int(pos.x + stepX * step, pos.y + stepY * step);
+
+                    if (!board.IsValidIndex(target)) break;
+
+                    buffer.Add(target);
+
+                    if (!board.GetPiece(target).IsEmpty) break;
+                }
+            }
+        }
     }
 }

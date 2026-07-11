@@ -597,6 +597,17 @@ namespace ChessTheBetrayal.AI
                 MoveCommand move = moves[i];
                 if (!move.IsCapture && move.Stage != BetrayalStage.Act) continue; // quiet move, skip
 
+                // Delta pruning: even winning this capture outright can't raise alpha, so it's not
+                // worth exploring. Margin covers promotion potential + evaluator noise so a genuine
+                // improving line is never mis-pruned. Act is exempt — it isn't a material capture,
+                // and the Betrayal-critical rule above requires we never skip resolving a pending
+                // sequence, so pruning Act here would risk standing pat mid-Retribution.
+                if (move.IsCapture && move.Stage != BetrayalStage.Act)
+                {
+                    int optimisticGain = CapturedPieceValue(move.CapturedType) + DeltaPruningMargin;
+                    if (standPat + optimisticGain <= alpha) continue;
+                }
+
                 ApplyMoveAndTurn(board, move);
                 // Recurse within quiescence (not back into Search) so the qply budget carries through
                 // capture/Act chains — an Act keeps the same side to move and leaves a Betrayer
@@ -819,6 +830,25 @@ namespace ChessTheBetrayal.AI
             ChessPieceType.Bishop => 3,
             ChessPieceType.Knight => 3,
             ChessPieceType.Pawn => 1,
+            _ => 0
+        };
+
+        // Quiescence delta-pruning margin, in the evaluator's centipawn scale (BetrayalAwareEvaluator:
+        // P=100..Q=975). Covers promotion upside on a capturing pawn push plus general evaluator
+        // noise, so a capture that's only borderline-hopeless is never wrongly pruned before it's
+        // tried. This is the standard "even best case can't help" quiescence cut — it only skips
+        // moves whose absolute best-case outcome still can't reach alpha, so it can never change
+        // which move quiescence ultimately reports as best, only how many hopeless captures it
+        // bothers exploring on the way there.
+        private const int DeltaPruningMargin = 200;
+
+        private static int CapturedPieceValue(ChessPieceType t) => t switch
+        {
+            ChessPieceType.Queen => 975,
+            ChessPieceType.Rook => 500,
+            ChessPieceType.Bishop => 325,
+            ChessPieceType.Knight => 320,
+            ChessPieceType.Pawn => 100,
             _ => 0
         };
 

@@ -14,12 +14,14 @@ namespace ChessTheBetrayal.Core.Engine
     /// Nothing in here touches Unity — it's pure chess logic that can run on any thread.
     ///
     /// THREADING INVARIANT: a given BoardState instance is never touched by more than one thread
-    /// concurrently. Move generation (GetBetrayalTargets, GetRetributionMoves) briefly mutates the
-    /// board in place — the "disguise trick" that flips a candidate victim's team, probes raw moves,
-    /// then restores it (now in a try/finally, so a throw mid-probe can't leave it stuck). That
-    /// window is safe only because each thread owns its own BoardState: the main thread owns the
-    /// live board, and a background search thread owns a private clone taken once up front via
-    /// BoardState.CloneForSnapshot (see AsyncAIAgent). Never hand the same BoardState to two threads.
+    /// concurrently. GetRetributionMoves briefly mutates the board in place — the "disguise trick"
+    /// that flips the betrayer's team, probes each executioner's raw moves, then restores it (in a
+    /// try/finally, so a throw mid-probe can't leave it stuck). That window is safe only because each
+    /// thread owns its own BoardState: the main thread owns the live board, and a background search
+    /// thread owns a private clone taken once up front via BoardState.CloneForSnapshot (see
+    /// AsyncAIAgent). Never hand the same BoardState to two threads. (Act-target generation —
+    /// GetBetrayalTargets — no longer mutates the board at all; it reads a per-piece attack map. Only
+    /// the rarer pending-Retribution path retains the disguise trick.)
     /// </summary>
     public static class ChessEngine
     {
@@ -35,16 +37,25 @@ namespace ChessTheBetrayal.Core.Engine
         public const int MaxMovesPerPosition = 218;
 
         [System.ThreadStatic]
-        private static List<MoveCommand> _attackCheckBuffer;
-        private static List<MoveCommand> AttackCheckBuffer => _attackCheckBuffer ??= new List<MoveCommand>(64);
-
-        [System.ThreadStatic]
         private static List<MoveCommand> _moveGenBuffer;
         private static List<MoveCommand> MoveGenBuffer => _moveGenBuffer ??= new List<MoveCommand>(64);
 
         [System.ThreadStatic]
         private static List<MoveCommand> _betrayalLocalBuffer;
         private static List<MoveCommand> BetrayalLocalBuffer => _betrayalLocalBuffer ??= new List<MoveCommand>(32);
+
+        // Attacked-square scratch for Betrayal Act-target generation (GetBetrayalTargets). Kept in its
+        // own slot because GetBetrayalTargets calls DoesMoveLeaveKingInCheck → IsSquareUnderAttack,
+        // which fills AttackCheckSquareBuffer; the two must not clobber each other mid-scan.
+        [System.ThreadStatic]
+        private static List<Vector2Int> _attackSquareBuffer;
+        private static List<Vector2Int> AttackSquareBuffer => _attackSquareBuffer ??= new List<Vector2Int>(32);
+
+        // Attacked-square scratch for check detection (IsSquareUnderAttack), distinct from the Act
+        // path's buffer above for the reentrancy reason noted there.
+        [System.ThreadStatic]
+        private static List<Vector2Int> _attackCheckSquareBuffer;
+        private static List<Vector2Int> AttackCheckSquareBuffer => _attackCheckSquareBuffer ??= new List<Vector2Int>(64);
 
         [System.ThreadStatic]
         private static int[] _indexScratchBuffer;
@@ -211,6 +222,22 @@ namespace ChessTheBetrayal.Core.Engine
             }
         }
 
+        /// <summary>
+        /// Appends every legal Betrayal <see cref="BetrayalStage.Act"/> move for the piece at
+        /// <paramref name="betrayerPos"/>: the betrayer "captures" one of its own pieces as if that
+        /// friendly piece were an enemy.
+        ///
+        /// A friendly piece is a valid victim exactly when the betrayer <em>attacks</em> its square —
+        /// i.e. could capture an enemy sitting there — which is a pure function of the betrayer's
+        /// movement geometry and the board's occupancy, and does NOT depend on the victim's team. So
+        /// this generates the betrayer's attack map ONCE (see <see cref="IPieceMovement.GetAttackedSquares"/>)
+        /// and keeps the attacked squares that hold a friendly non-King piece. That replaces the old
+        /// O(friendly-pieces²)-per-node "disguise trick" — which, for each of the O(pieces) friendly
+        /// candidates, flipped that candidate to the enemy team, re-ran the betrayer's full raw-move
+        /// generation, then restored the board — with a single O(pieces) geometry scan and no board
+        /// mutation at all. That per-node cost multiplier was what stalled depth-7 search while the
+        /// once-per-match Betrayal right was still available (i.e. most of every real game).
+        /// </summary>
         public static void GetBetrayalTargets(BoardState board, Vector2Int betrayerPos, List<MoveCommand> output)
         {
             PieceData piece = board.GetPiece(betrayerPos);
@@ -220,48 +247,31 @@ namespace ChessTheBetrayal.Core.Engine
             IPieceMovement strategy = MovementFactory.GetStrategy(piece.Type);
             if (strategy == null) return;
 
-            Team enemyTeam = piece.Team == Team.White ? Team.Black : Team.White;
-            int[] friendlyIndices = SnapshotIndices(board.GetPieceIndices(piece.Team), ref _betrayalIndexBuffer, out int friendlyCount);
+            List<Vector2Int> attackedSquares = AttackSquareBuffer;
+            attackedSquares.Clear();
+            strategy.GetAttackedSquares(board, piece, betrayerPos, attackedSquares);
 
-            List<MoveCommand> localBuffer = BetrayalLocalBuffer;
-
-            for (int i = 0; i < friendlyCount; i++)
+            for (int i = 0; i < attackedSquares.Count; i++)
             {
-                int idx = friendlyIndices[i];
-                Vector2Int candidateTargetPos = new Vector2Int(idx % board.TileCountX, idx / board.TileCountX);
+                Vector2Int candidateTargetPos = attackedSquares[i];
                 PieceData candidateVictim = board.GetPiece(candidateTargetPos);
 
-                if (candidateVictim.Type == ChessPieceType.King || candidateTargetPos == betrayerPos) continue;
-
-                // Disguise-restore MUST be exception-safe: GetRawMoves runs arbitrary piece-strategy
-                // code, and an early return/throw mid-disguise would leave the board permanently
-                // wrong for every caller after this one (including a concurrent search thread's own
-                // clone, if move-gen is ever invoked reentrantly on it).
-                board.SetPiece(candidateVictim.WithTeam(enemyTeam), candidateTargetPos.x, candidateTargetPos.y);
-                try
+                // Only a friendly, non-King piece can be betrayed. Empty attacked squares and enemy
+                // pieces on the attack map are ordinary moves/captures, not Acts, and the King is
+                // immune from being targeted as a Victim.
+                if (candidateVictim.IsEmpty ||
+                    candidateVictim.Team != piece.Team ||
+                    candidateVictim.Type == ChessPieceType.King)
                 {
-                    localBuffer.Clear();
-                    strategy.GetRawMoves(board, piece, betrayerPos, localBuffer);
-                }
-                finally
-                {
-                    board.SetPiece(candidateVictim, candidateTargetPos.x, candidateTargetPos.y);
+                    continue;
                 }
 
-                for (int j = 0; j < localBuffer.Count; j++)
+                MoveCommand actMove = MoveCommand.CreateStandardMove(betrayerPos, candidateTargetPos, piece, candidateVictim, board)
+                                                 .WithStage(BetrayalStage.Act);
+
+                if (!DoesMoveLeaveKingInCheck(board, actMove))
                 {
-                    if (localBuffer[j].EndPosition == candidateTargetPos)
-                    {
-                        MoveCommand actMove = MoveCommand.CreateStandardMove(betrayerPos, candidateTargetPos, piece, candidateVictim, board)
-                                                         .WithStage(BetrayalStage.Act);
-
-                        if (!DoesMoveLeaveKingInCheck(board, actMove))
-                        {
-                            output.Add(actMove);
-                        }
-
-                        break;
-                    }
+                    output.Add(actMove);
                 }
             }
         }
@@ -379,6 +389,8 @@ namespace ChessTheBetrayal.Core.Engine
         {
             int[] indicesSnapshot = SnapshotIndices(board.GetPieceIndices(attackerTeam), ref _attackCheckIndexBuffer, out int indexCount);
 
+            List<Vector2Int> attackedSquares = AttackCheckSquareBuffer;
+
             for (int i = 0; i < indexCount; i++)
             {
                 int idx = indicesSnapshot[i];
@@ -390,12 +402,16 @@ namespace ChessTheBetrayal.Core.Engine
                 IPieceMovement strategy = MovementFactory.GetStrategy(attacker.Type);
                 if (strategy == null) continue;
 
-                AttackCheckBuffer.Clear();
-                strategy.GetRawMoves(board, attacker, attackerPos, AttackCheckBuffer);
+                // Attack squares — not raw moves. A raw-move scan only reports a pawn's diagonal
+                // when an enemy already occupies it, so it would miss a pawn guarding an EMPTY square
+                // (e.g. a King's would-be escape or a castling pass-through). The attack map reports
+                // the diagonal unconditionally, which is the correct definition of "under attack".
+                attackedSquares.Clear();
+                strategy.GetAttackedSquares(board, attacker, attackerPos, attackedSquares);
 
-                for (int j = 0; j < AttackCheckBuffer.Count; j++)
+                for (int j = 0; j < attackedSquares.Count; j++)
                 {
-                    if (AttackCheckBuffer[j].EndPosition == targetSquare)
+                    if (attackedSquares[j] == targetSquare)
                         return true;
                 }
             }
