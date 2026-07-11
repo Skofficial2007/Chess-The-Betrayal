@@ -67,6 +67,22 @@ namespace ChessTheBetrayal.Core.Movement
             }
         }
 
+        public void GetAttackedSquares(BoardState board, PieceData piece, Vector2Int pos, List<Vector2Int> buffer)
+        {
+            // The King attacks its 8 adjacent squares. Castling is a move, never a capture, so it
+            // has no place in an attack map — omitting it is what keeps check detection correct
+            // (a King never "attacks" the square it would castle to).
+            for (int i = 0; i < Offsets.GetLength(0); i++)
+            {
+                Vector2Int target = new Vector2Int(pos.x + Offsets[i, 0], pos.y + Offsets[i, 1]);
+
+                if (board.IsValidIndex(target))
+                {
+                    buffer.Add(target);
+                }
+            }
+        }
+
         private void TryAddCastling(
             BoardState board,
             List<MoveCommand> buffer,

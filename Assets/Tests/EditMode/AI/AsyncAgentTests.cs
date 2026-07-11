@@ -121,6 +121,51 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
+        public void RequestBestMove_SoftTimeBudgetExpires_StillFiresOnMoveDecided()
+        {
+            // Regression guard: AsyncAIAgent.CancelAfter(SoftTimeBudgetMs) arms a CancellationTokenSource
+            // to bound iterative deepening, and FindBestMove correctly returns the best move from the
+            // last fully-completed depth when that timer fires — a NORMAL, successful outcome, not an
+            // abort. A prior bug checked token.IsCancellationRequested after the search returned, which
+            // is ALSO true in this exact case (the token that legitimately expired), so the result was
+            // silently discarded and OnMoveDecided never fired — the AI would sit forever, never
+            // playing a move, even though the search itself completed correctly. Only a genuinely
+            // superseded/aborted search (RequestBestMove called again, CancelSearch, Dispose) may ever
+            // discard a result.
+            var budgetedAgent = new AsyncAIAgent(
+                new ChessEngineAdapter(),
+                new BetrayalAwareEvaluator(),
+                // Deep enough that depth-32 iterative deepening cannot possibly finish naturally on a
+                // starting position before the tiny budget below expires — forces CancelAfter to fire
+                // mid-search, exactly like a hard position hitting its real-game budget.
+                new AISearchSettings(maxDepth: 32, softTimeBudgetMs: 150, BetrayalUsage.Full));
+
+            try
+            {
+                BoardState board = TestBoardSetupUtility.CreateStandard();
+                MoveCommand? delivered = null;
+                budgetedAgent.OnMoveDecided += move => delivered = move;
+
+                budgetedAgent.RequestBestMove(board, Team.White);
+
+                var stopwatch = Stopwatch.StartNew();
+                while (!delivered.HasValue && stopwatch.ElapsedMilliseconds < PollTimeoutMs)
+                {
+                    budgetedAgent.Tick();
+                    Thread.Sleep(PollIntervalMs);
+                }
+
+                Assert.That(delivered, Is.Not.Null,
+                    "A search that hits its own SoftTimeBudgetMs must still deliver its best-move-so-far via OnMoveDecided, not silently vanish.");
+                Assert.That(delivered.Value.PieceTeam, Is.EqualTo(Team.White));
+            }
+            finally
+            {
+                budgetedAgent.Dispose();
+            }
+        }
+
+        [Test]
         public void RequestBestMove_NewRequestCancelsPriorInFlightSearch()
         {
             // A second RequestBestMove before the first resolves must cancel the first — only the

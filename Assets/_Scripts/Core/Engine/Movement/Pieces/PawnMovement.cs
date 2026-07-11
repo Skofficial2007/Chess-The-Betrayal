@@ -40,6 +40,27 @@ namespace ChessTheBetrayal.Core.Movement
             TryAddEnPassant(board, buffer, piece, pos, dir);
         }
 
+        public void GetAttackedSquares(BoardState board, PieceData piece, Vector2Int pos, List<Vector2Int> buffer)
+        {
+            // A pawn attacks only its two diagonal-forward squares, occupied or not. Forward pushes
+            // (single/double) are moves but never captures, and en passant is a move onto an EMPTY
+            // square (the captured pawn sits beside it), so neither belongs in an attack map. This is
+            // what makes the pawn's Betrayal Act-targets and its contribution to check detection line
+            // up with real capture geometry. See IPieceMovement.GetAttackedSquares.
+            int dir = piece.MoveDirection;
+
+            AddIfValid(board, buffer, new Vector2Int(pos.x - 1, pos.y + dir));
+            AddIfValid(board, buffer, new Vector2Int(pos.x + 1, pos.y + dir));
+        }
+
+        private static void AddIfValid(BoardState board, List<Vector2Int> buffer, Vector2Int target)
+        {
+            if (board.IsValidIndex(target))
+            {
+                buffer.Add(target);
+            }
+        }
+
         /// <summary>
         /// Checks if a diagonal square contains an enemy piece and adds the capture move.
         /// </summary>
