@@ -80,7 +80,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             _raisedGameResetCount = 0;
 
             _matchFlow = new MatchFlowCoordinator(
-                _board, new GameSetup(logMoves: false), _matchDriver, engine, _undoService, _aiCoordinator, _clockCoordinator,
+                _board, new GameSetup(logMoves: false), _matchDriver, _matchDriver.PlayMove, engine, _undoService, _aiCoordinator, _clockCoordinator,
                 _host, boardSizeX: 8, boardSizeY: 8, logMoves: false,
                 triggerTeamRoulette: team => _triggeredRouletteTeam = team,
                 showTeamSelection: () => _showTeamSelectionCount++,
@@ -175,7 +175,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             // below is illegal (and silently rejected) whenever the roll gives the AI White instead.
             var deterministicSetup = new GameSetup(logMoves: false, new FixedRandomSource(nextBool: true), new RandomFirstMoverPolicy());
             var matchFlow = new MatchFlowCoordinator(
-                _board, deterministicSetup, _matchDriver, new ChessEngineAdapter(), _undoService, _aiCoordinator, _clockCoordinator,
+                _board, deterministicSetup, _matchDriver, _matchDriver.PlayMove, new ChessEngineAdapter(), _undoService, _aiCoordinator, _clockCoordinator,
                 _host, boardSizeX: 8, boardSizeY: 8, logMoves: false,
                 triggerTeamRoulette: team => _triggeredRouletteTeam = team,
                 showTeamSelection: () => _showTeamSelectionCount++,

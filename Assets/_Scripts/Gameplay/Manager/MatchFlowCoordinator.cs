@@ -30,6 +30,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
         private readonly BoardState _board;
         private readonly GameSetup _setup;
         private readonly MatchDriver _matchDriver;
+        private readonly Action<MoveCommand> _playMove;
         private readonly IChessEngine _engine;
         private readonly UndoService _undoService;
         private readonly AIMatchCoordinator _aiCoordinator;
@@ -88,7 +89,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
         public int UndoTurnCount => _undoService?.TurnCount ?? 0;
 
         public MatchFlowCoordinator(
-            BoardState board, GameSetup setup, MatchDriver matchDriver, IChessEngine engine,
+            BoardState board, GameSetup setup, MatchDriver matchDriver, Action<MoveCommand> playMove, IChessEngine engine,
             UndoService undoService, AIMatchCoordinator aiCoordinator, ClockCoordinator clockCoordinator,
             GameObject clockHost, int boardSizeX, int boardSizeY, bool logMoves,
             Action<Team> triggerTeamRoulette, Action showTeamSelection, Action showGameModeSelection,
@@ -101,6 +102,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
             _board = board;
             _setup = setup;
             _matchDriver = matchDriver;
+            _playMove = playMove;
             _engine = engine;
             _undoService = undoService;
             _aiCoordinator = aiCoordinator;
@@ -161,7 +163,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
             // Tear down the previous executor if one exists (e.g. the player hit Replay).
             if (_moveExecutor != null)
             {
-                _moveExecutor.OnMoveConfirmed -= _matchDriver.PlayMove;
+                _moveExecutor.OnMoveConfirmed -= _playMove;
                 _moveExecutor.OnMoveRejected -= _onExecutorMoveRejected;
                 _moveExecutor.OnPromotionRequired -= _onExecutorPromotionRequired;
                 _moveExecutor.OnRetributionSkipConfirmed -= _matchDriver.RequestRetributionSkip;
@@ -170,7 +172,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
 
             _moveExecutor = new LocalMoveExecutor(_board, _engine, () => CurrentPhase, _clockCoordinator, _logMoves);
 
-            _moveExecutor.OnMoveConfirmed += _matchDriver.PlayMove;
+            _moveExecutor.OnMoveConfirmed += _playMove;
             _moveExecutor.OnMoveRejected += _onExecutorMoveRejected;
             _moveExecutor.OnPromotionRequired += _onExecutorPromotionRequired;
             _moveExecutor.OnRetributionSkipConfirmed += _matchDriver.RequestRetributionSkip;
@@ -271,7 +273,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
 
             if (_moveExecutor != null)
             {
-                _moveExecutor.OnMoveConfirmed -= _matchDriver.PlayMove;
+                _moveExecutor.OnMoveConfirmed -= _playMove;
                 _moveExecutor.OnMoveRejected -= _onExecutorMoveRejected;
                 _moveExecutor.OnPromotionRequired -= _onExecutorPromotionRequired;
                 _moveExecutor.OnRetributionSkipConfirmed -= _matchDriver.RequestRetributionSkip;

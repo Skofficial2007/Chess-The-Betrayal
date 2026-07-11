@@ -388,9 +388,15 @@ namespace ChessTheBetrayal.View
             // same instant, with startDelay = 0), then the same InOutCubic "travel = weight"
             // easing every other board glide uses. PlaySettleBob at the end is the "tucks in"
             // beat — a barely-there bob rather than the overshoot-heavy selection lift, since this
-            // is a piece arriving, not a piece being picked up.
-            _castleSequence = Sequence.Create(useUnscaledTime: true)
-                .Chain(Tween.Delay(startDelay, useUnscaledTime: true))
+            // is a piece arriving, not a piece being picked up. The king's own call always passes
+            // startDelay = 0 — skip the Delay chain step entirely in that case rather than
+            // chaining a zero-length one, which PrimeTween's warnZeroDuration flags as a mistake.
+            _castleSequence = Sequence.Create(useUnscaledTime: true);
+            if (startDelay > 0f)
+            {
+                _castleSequence.Chain(Tween.Delay(startDelay, useUnscaledTime: true));
+            }
+            _castleSequence
                 .Chain(Tween.Position(_transform, worldPos, CastleRookMoveDuration, BoardMoveEase, useUnscaledTime: true))
                 .ChainCallback(() =>
                 {
