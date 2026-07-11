@@ -227,7 +227,7 @@ namespace ChessTheBetrayal.AI
             // NodesVisited — that counter tracks the pruned tree the TT/NMP/LMR/PVS multipliers act
             // on, not the quiescence tail, which is a separate, per-design-unbounded-by-depth cost.
             if (depth <= 0)
-                return Quiescence(board, alpha, beta, perspectiveTeam, MaxQuiescencePly, ct);
+                return Quiescence(board, alpha, beta, perspectiveTeam, plyFromRoot, MaxQuiescencePly, ct);
 
             int alphaOriginal = alpha;
             uint ttMove = 0;
@@ -539,8 +539,16 @@ namespace ChessTheBetrayal.AI
         /// sub-phase and capture chains are short, so a genuine line never approaches it — it exists
         /// only so no future Betrayal-state edge case can StackOverflow the way an unresolved forced
         /// Defection once did. When it runs out we stand pat rather than recurse further.
+        ///
+        /// <paramref name="plyFromRoot"/> (ADR_AI16b Path A1) threads the same root-distance Search
+        /// already tracks into quiescence, purely so a TT store from inside qsearch can mate-adjust
+        /// exactly like Search's does (see AdjustMateScore/UnadjustMateScore) — ResolveForcedDefection
+        /// can return a raw +/-MateScore from inside quiescence (a forced-mate-in-the-sequence), and
+        /// storing that un-adjusted would corrupt mate-distance reporting for any future probe at a
+        /// different plyFromRoot. It increments by exactly the same amount Search's plyFromRoot would
+        /// have, on every recursive step (flipping or not), keeping the two counters in lockstep.
         /// </summary>
-        private int Quiescence(BoardState board, int alpha, int beta, Team perspectiveTeam, int qply, CancellationToken ct)
+        private int Quiescence(BoardState board, int alpha, int beta, Team perspectiveTeam, int plyFromRoot, int qply, CancellationToken ct)
         {
             if (ct.IsCancellationRequested) return 0;
 
@@ -571,28 +579,49 @@ namespace ChessTheBetrayal.AI
                                             board.PendingBetrayerSquare.Value, retribution);
 
                 if (retribution.Count == 0)
-                    return ResolveForcedDefection(board, alpha, beta, perspectiveTeam, qply, ct);
+                    return ResolveForcedDefection(board, alpha, beta, perspectiveTeam, plyFromRoot, qply, ct);
 
                 OrderMoves(retribution);
-                int best = -Infinity;
+                int bestRetribution = -Infinity;
                 for (int i = 0; i < retribution.Count; i++)
                 {
                     MoveCommand move = retribution[i];
                     ApplyMoveAndTurn(board, move);
                     // Retribution flips the turn, so negate.
                     Team childPerspective = perspectiveTeam == Team.White ? Team.Black : Team.White;
-                    int score = -Quiescence(board, -beta, -alpha, childPerspective, qply - 1, ct);
+                    int score = -Quiescence(board, -beta, -alpha, childPerspective, plyFromRoot + 1, qply - 1, ct);
                     UndoMoveAndTurn(board, move);
-                    if (score > best) best = score;
-                    if (best > alpha) alpha = best;
+                    if (score > bestRetribution) bestRetribution = score;
+                    if (bestRetribution > alpha) alpha = bestRetribution;
                     if (alpha >= beta) break;
                 }
-                return best;
+                return bestRetribution;
             }
 
             // --- Standard quiescence ---
+            // Qsearch TT probe (ADR_AI16b Path A1). Reuses the SAME table Search uses, storing at
+            // depth 0 — the existing depth-preferred replacement rule (TranspositionTable.Store) means
+            // a depth-0 entry can never evict a Search entry of depth >= 1, so there is no second table
+            // and no pollution risk beyond what depth-0-vs-depth-0 entries already tolerate.
+            int alphaOriginal = alpha;
+            if (_tt.Probe(board.ZobristHash, out int ttScore, out _, out _, out TTFlag ttFlag))
+            {
+                int s = UnadjustMateScore(ttScore, plyFromRoot);
+                if (ttFlag == TTFlag.Exact) return s;
+                if (ttFlag == TTFlag.LowerBound && s > alpha) alpha = s;
+                if (ttFlag == TTFlag.UpperBound && s < beta) beta = s;
+                if (alpha >= beta) return s;
+            }
+
+            // NOTE (ADR_AI16b Path A1 side effect): quiescence's cutoff return changed from fail-hard
+            // (return beta immediately) to fail-soft (fall through, return the tightest 'best' found)
+            // so there is exactly one TT-store site after the loop, mirroring Search's own pattern —
+            // duplicating the store at every early-return site would be needless surface area. Fail-
+            // soft is the more standard alpha-beta convention (Search itself already returns 'best',
+            // not 'beta') and is provably still a valid cutoff (best >= beta here); pinned by
+            // SearchCorrectnessTests/QuiescenceDeltaPruningTests staying green on the fixed suites.
             int standPat = _evaluator.Evaluate(board, perspectiveTeam);
-            if (standPat >= beta) return beta;
+            if (standPat >= beta) return standPat;
             if (standPat > alpha) alpha = standPat;
 
             if (qply <= 0) return alpha; // out of budget: stand pat on the quiet-ish position.
@@ -606,10 +635,21 @@ namespace ChessTheBetrayal.AI
 #endif
             OrderMoves(moves);
 
+            int best = standPat;
             for (int i = 0; i < moves.Count; i++)
             {
                 MoveCommand move = moves[i];
                 if (!move.IsCapture && move.Stage != BetrayalStage.Act) continue; // quiet move, skip
+
+                // ADR_AI16b Path A2: bound Act re-expansion to the FIRST quiescence ply only (the
+                // horizon's immediate next ply, qply == MaxQuiescencePly). Standing pat mid-sequence
+                // stays forbidden everywhere (untouched, sacred — see the betrayerPending branch
+                // above) — this gate only decides whether quiescence may INITIATE a new Act. Beyond
+                // the first ply, an Act line is skipped here rather than explored, which is what
+                // actually changes the qtree's branching factor rather than just its per-node cost:
+                // Step B's telemetry showed actExp=181144 (~32% of qnodes) driven by exactly this
+                // unbounded re-fan. The horizon still sees one ply of imminent Betrayal threat.
+                if (move.Stage == BetrayalStage.Act && qply != MaxQuiescencePly) continue;
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                 _tt.Stats.QMovesSearched++;
@@ -636,19 +676,30 @@ namespace ChessTheBetrayal.AI
                 if (StageFlipsTurn(move.Stage))
                 {
                     Team childPerspective = perspectiveTeam == Team.White ? Team.Black : Team.White;
-                    score = -Quiescence(board, -beta, -alpha, childPerspective, qply - 1, ct);
+                    score = -Quiescence(board, -beta, -alpha, childPerspective, plyFromRoot + 1, qply - 1, ct);
                 }
                 else
                 {
-                    score = Quiescence(board, alpha, beta, perspectiveTeam, qply - 1, ct);
+                    score = Quiescence(board, alpha, beta, perspectiveTeam, plyFromRoot + 1, qply - 1, ct);
                 }
                 UndoMoveAndTurn(board, move);
 
-                if (score >= beta) return beta;
-                if (score > alpha) alpha = score;
+                if (score > best) best = score;
+                if (best > alpha) alpha = best;
+                if (alpha >= beta) break;
             }
 
-            return alpha;
+            // Qsearch TT store (ADR_AI16b Path A1) — single store site after the loop, mirroring
+            // Search's own pattern exactly. Always at depth 0, packedMove 0 (qsearch doesn't do
+            // ordering-hint harvesting the way Search's TT-move does; the ADR scopes this pass to the
+            // probe/store proof only). No cancellation guard needed here the way Search has one:
+            // Quiescence's only cancellation check is the top-of-function early-out, so reaching this
+            // line means the node completed normally.
+            TTFlag flag = best <= alphaOriginal ? TTFlag.UpperBound
+                        : best >= beta ? TTFlag.LowerBound
+                        : TTFlag.Exact;
+            _tt.Store(board.ZobristHash, AdjustMateScore(best, plyFromRoot), packedMove: 0, depth: 0, flag);
+            return best;
         }
 
         /// <summary>
@@ -659,7 +710,7 @@ namespace ChessTheBetrayal.AI
         /// happens to hit the horizon exactly on that state. Not part of the search's own control flow.
         /// </summary>
         internal int RunQuiescenceForTest(BoardState board, Team perspectiveTeam, CancellationToken ct) =>
-            Quiescence(board, -Infinity, Infinity, perspectiveTeam, MaxQuiescencePly, ct);
+            Quiescence(board, -Infinity, Infinity, perspectiveTeam, plyFromRoot: 0, MaxQuiescencePly, ct);
 
         /// <summary>
         /// The forced-Defection branch of quiescence: no legal Executioner exists, so the Betrayer
@@ -682,7 +733,7 @@ namespace ChessTheBetrayal.AI
         /// here must still be reversed FIRST, since the move carries no record of it.
         /// </summary>
         private int ResolveForcedDefection(BoardState board, int alpha, int beta,
-                                           Team perspectiveTeam, int qply, CancellationToken ct)
+                                           Team perspectiveTeam, int plyFromRoot, int qply, CancellationToken ct)
         {
             // ResolveFailedRetribution applies the Defection move directly via ChessEngine (bypassing
             // ApplyMoveAndTurn). A Defection that requires a ForcedSave never flips the turn or
@@ -717,7 +768,7 @@ namespace ChessTheBetrayal.AI
                         ApplyMoveAndTurn(board, save);
                         // DefensiveOverride flips the turn, so negate and swap the window.
                         Team childPerspective = perspectiveTeam == Team.White ? Team.Black : Team.White;
-                        int childScore = -Quiescence(board, -beta, -alpha, childPerspective, qply - 1, ct);
+                        int childScore = -Quiescence(board, -beta, -alpha, childPerspective, plyFromRoot + 1, qply - 1, ct);
                         UndoMoveAndTurn(board, save);
                         if (childScore > best) best = childScore;
                         if (best > alpha) alpha = best;
@@ -742,7 +793,7 @@ namespace ChessTheBetrayal.AI
                 board.NextTurn();
 
                 Team childPerspective = perspectiveTeam == Team.White ? Team.Black : Team.White;
-                score = -Quiescence(board, -beta, -alpha, childPerspective, qply - 1, ct);
+                score = -Quiescence(board, -beta, -alpha, childPerspective, plyFromRoot + 1, qply - 1, ct);
 
                 // Reverse our manual CurrentTurn flip before UndoMove restores the rest.
                 board.NextTurn();
