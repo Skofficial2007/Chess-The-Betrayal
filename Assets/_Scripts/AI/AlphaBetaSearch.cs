@@ -173,6 +173,10 @@ namespace ChessTheBetrayal.AI
                     // lookup here would box through the reflection-based ValueType.Equals fallback.
                     MoveToFront(bestIndexThisDepth);
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                    _tt.Stats.AssignNodesAfterDepth(depth, _tt.Stats.NodesVisited + _tt.Stats.QNodesVisited);
+#endif
+
                     // Early exit on forced mate found — no deeper search changes the decision.
                     if (bestScore >= MateScore) break;
                 }
@@ -540,6 +544,10 @@ namespace ChessTheBetrayal.AI
         {
             if (ct.IsCancellationRequested) return 0;
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            _tt.Stats.QNodesVisited++;
+#endif
+
             // --- Betrayal quiescence guard ---
             bool betrayerPending =
                 board.PendingBetrayerSquare.HasValue &&
@@ -548,6 +556,9 @@ namespace ChessTheBetrayal.AI
 
             if (betrayerPending)
             {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                _tt.Stats.QBetrayalResolutionNodes++;
+#endif
                 // Backstop: if we've somehow burned the whole quiescence budget while still mid-
                 // Betrayal, stop recursing and evaluate in place rather than risk a StackOverflow.
                 if (qply <= 0)
@@ -590,12 +601,20 @@ namespace ChessTheBetrayal.AI
             // reuse this ply's private buffer; filter happens per-move just below.
             List<MoveCommand> moves = QuiescenceBuffer(qply);
             _engine.GetAllLegalMovesIncludingBetrayal(board, board.CurrentTurn, moves);
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            _tt.Stats.QMovesGenerated += moves.Count;
+#endif
             OrderMoves(moves);
 
             for (int i = 0; i < moves.Count; i++)
             {
                 MoveCommand move = moves[i];
                 if (!move.IsCapture && move.Stage != BetrayalStage.Act) continue; // quiet move, skip
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                _tt.Stats.QMovesSearched++;
+                if (move.Stage == BetrayalStage.Act) _tt.Stats.QActExpansions++;
+#endif
 
                 // Delta pruning: even winning this capture outright can't raise alpha, so it's not
                 // worth exploring. Margin covers promotion potential + evaluator noise so a genuine

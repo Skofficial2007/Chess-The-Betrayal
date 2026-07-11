@@ -25,13 +25,53 @@ namespace ChessTheBetrayal.AI
         public long PvsScouts;
         public long PvsReSearches;    // null-window scout landed inside (alpha, beta) and was re-searched
 
+        // ADR_AI16b (Phase 1 extension) — quiescence node-count diagnostic. NodesVisited above counts
+        // ONLY main-search (Search) nodes; Quiescence() increments nothing there by design. These
+        // fields fill that gap so the qtree's size and shape can finally be measured directly instead
+        // of inferred from wall-clock/NodesVisited arithmetic.
+        public long QNodesVisited;             // every Quiescence() entry — the qtree/main-tree split
+        public long QBetrayalResolutionNodes;   // qnodes spent inside the betrayerPending forced-sequence branch
+        public long QActExpansions;             // qsearch-loop moves surviving the filter with Stage == Act
+        public long QMovesGenerated;            // total moves returned by GetAllLegalMovesIncludingBetrayal per standard qnode
+        public long QMovesSearched;             // of those, how many survived the capture-or-Act (+delta-prune) filter
+
+        // Per-depth cumulative node count (main + quiescence) at the moment each iterative-deepening
+        // depth FULLY completes — the effective-branching-factor curve. Index 0 unused (depths are 1-7).
+        public long NodesAfterDepth1;
+        public long NodesAfterDepth2;
+        public long NodesAfterDepth3;
+        public long NodesAfterDepth4;
+        public long NodesAfterDepth5;
+        public long NodesAfterDepth6;
+        public long NodesAfterDepth7;
+
         public void Reset()
         {
             this = default;
         }
 
+        /// <summary>Records the running node total (NodesVisited + QNodesVisited) at the moment a
+        /// depth in 1..7 fully completes. Depths beyond 7 are not tracked (the ADR's DoD is fixed to
+        /// a depth-7 benchmark) — silently ignored rather than throwing, since search settings can
+        /// legitimately go deeper than 7 outside the benchmark.</summary>
+        public void AssignNodesAfterDepth(int depth, long totalNodes)
+        {
+            switch (depth)
+            {
+                case 1: NodesAfterDepth1 = totalNodes; break;
+                case 2: NodesAfterDepth2 = totalNodes; break;
+                case 3: NodesAfterDepth3 = totalNodes; break;
+                case 4: NodesAfterDepth4 = totalNodes; break;
+                case 5: NodesAfterDepth5 = totalNodes; break;
+                case 6: NodesAfterDepth6 = totalNodes; break;
+                case 7: NodesAfterDepth7 = totalNodes; break;
+            }
+        }
+
         public override string ToString() =>
             $"nodes={NodesVisited} tt(probe={TTProbes} hit={TTHits} emptyMiss={TTEmptyMisses} verifyMiss={TTVerificationMisses} store={TTStores} replace={TTReplacements}) " +
-            $"null(try={NullMoveAttempts} cut={NullMoveCutoffs}) lmr(reduce={LmrReductions} research={LmrReSearches}) pvs(scout={PvsScouts} research={PvsReSearches})";
+            $"null(try={NullMoveAttempts} cut={NullMoveCutoffs}) lmr(reduce={LmrReductions} research={LmrReSearches}) pvs(scout={PvsScouts} research={PvsReSearches}) " +
+            $"q(nodes={QNodesVisited} betrayalRes={QBetrayalResolutionNodes} actExp={QActExpansions} gen={QMovesGenerated} searched={QMovesSearched}) " +
+            $"depthCurve(d1={NodesAfterDepth1} d2={NodesAfterDepth2} d3={NodesAfterDepth3} d4={NodesAfterDepth4} d5={NodesAfterDepth5} d6={NodesAfterDepth6} d7={NodesAfterDepth7})";
     }
 }
