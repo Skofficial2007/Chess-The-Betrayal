@@ -129,6 +129,44 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
+        public void FindBestMove_CaptureRichPosition_RecordsQNodesGreaterThanZero()
+        {
+            // ADR_AI16b Step A: a position with immediate captures available must drive the search
+            // into quiescence at the horizon, so QNodesVisited (previously never incremented anywhere)
+            // must be positive — the headline number the whole diagnostic is built on.
+            BoardState board = TestBoardSetupUtility.CreateEmpty()
+                .WithPiece("e1", Team.White, ChessPieceType.King)
+                .WithPiece("e8", Team.Black, ChessPieceType.King)
+                .WithPiece("d4", Team.White, ChessPieceType.Queen)
+                .WithPiece("d5", Team.Black, ChessPieceType.Pawn)
+                .WithTurn(Team.White)
+                .WithComputedHash();
+            var settings = new AISearchSettings(maxDepth: 3, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+
+            _search.FindBestMove(board, settings, CancellationToken.None);
+
+            Assert.That(_search.Stats.QNodesVisited, Is.GreaterThan(0));
+        }
+
+        [Test]
+        public void FindBestMove_PerDepthNodeCounts_AreMonotonicallyNonDecreasing()
+        {
+            // NodesAfterDepthN is a running cumulative total (NodesVisited + QNodesVisited) sampled at
+            // each completed depth — a deeper completed iteration can never report fewer total nodes
+            // than a shallower one.
+            BoardState board = TestBoardSetupUtility.CreateStandard();
+            var settings = new AISearchSettings(maxDepth: 4, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+
+            _search.FindBestMove(board, settings, CancellationToken.None);
+
+            SearchStats stats = _search.Stats;
+            Assert.That(stats.NodesAfterDepth1, Is.GreaterThan(0));
+            Assert.That(stats.NodesAfterDepth2, Is.GreaterThanOrEqualTo(stats.NodesAfterDepth1));
+            Assert.That(stats.NodesAfterDepth3, Is.GreaterThanOrEqualTo(stats.NodesAfterDepth2));
+            Assert.That(stats.NodesAfterDepth4, Is.GreaterThanOrEqualTo(stats.NodesAfterDepth3));
+        }
+
+        [Test]
         public void FindBestMove_FixedPosition_StillAllocatesNoManagedMemory()
         {
             // Re-confirms SearchAllocationTests' contract now that every telemetry increment lives
