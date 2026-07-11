@@ -134,6 +134,11 @@ namespace ChessTheBetrayal.App
         private GameSetup _setup;
         private MatchDriver _matchDriver;
 
+        // Every move (human, AI, and eventually network) is enqueued here instead of calling
+        // _matchDriver.PlayMove directly, so a move only ever plays once the previous one has had
+        // time to finish animating — see MoveVisualPacingGate's class doc for why.
+        private MoveVisualPacingGate _moveVisualPacingGate;
+
         // Practice-mode (AI) Undo. Subscribes to _matchDriver.OnTurnCompleted to record each
         // finished turn; null-safe everywhere since human-vs-human sessions never touch it.
         private UndoService _undoService;
@@ -216,7 +221,9 @@ namespace ChessTheBetrayal.App
             _matchDriver.OnTurnCompleted += _undoService.RecordTurn;
             _matchDriver.OnTurnCompleted += OnTurnCompletedForUndo;
 
-            _aiCoordinator = new AIMatchCoordinator(_engine, LiveBoard, _matchDriver.PlayMove, _domainLogger);
+            _moveVisualPacingGate = new MoveVisualPacingGate(_matchDriver.PlayMove, ChessTheBetrayal.Core.Match.MoveVisualDurationEstimator.EstimateSeconds);
+
+            _aiCoordinator = new AIMatchCoordinator(_engine, LiveBoard, _moveVisualPacingGate.Enqueue, _domainLogger);
             _aiCoordinator.OnSearchException += HandleAISearchException;
 
             // Continue the AI through its own forced Betrayal sub-sequence (Act -> Retribution, or
@@ -227,7 +234,7 @@ namespace ChessTheBetrayal.App
             _clockCoordinator = new ClockCoordinator(_setup, OnClockTimeout, OnLowTimeWarning);
 
             _matchFlow = new MatchFlowCoordinator(
-                LiveBoard, _setup, _matchDriver, _engine, _undoService, _aiCoordinator, _clockCoordinator,
+                LiveBoard, _setup, _matchDriver, _moveVisualPacingGate.Enqueue, _engine, _undoService, _aiCoordinator, _clockCoordinator,
                 gameObject, boardSizeX, boardSizeY, logMoves,
                 triggerTeamRoulette: team => _uiManager.TriggerTeamRoulette(team),
                 showTeamSelection: () => _uiManager.ShowTeamSelection(),
@@ -347,6 +354,9 @@ namespace ChessTheBetrayal.App
             // on the main thread. No-op until SetAIMode() constructs an agent and something starts
             // calling TryRequestAIMove() at the right turn boundary.
             _aiCoordinator.Tick();
+
+            // Drain any move that arrived while the previous one was still animating.
+            _moveVisualPacingGate.Tick(Time.deltaTime);
         }
 
         // TEMP DEBUG (AI-08 manual verification): surface any worker-thread exception.
