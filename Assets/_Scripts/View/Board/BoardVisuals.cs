@@ -63,6 +63,7 @@ namespace ChessTheBetrayal.View
         [Header("Event Channels")]
         [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _gameStartedChannel;
         [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _gameResetChannel;
+        [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _boardResyncRequiredChannel;
         [SerializeField] private ChessTheBetrayal.Events.MoveExecutedEventChannel _moveExecutedChannel;
         [SerializeField] private ChessTheBetrayal.Events.MoveRejectedEventChannel _moveRejectedChannel;
         [SerializeField] private ChessTheBetrayal.Events.SelectionRejectedEventChannel _selectionRejectedChannel;
@@ -184,6 +185,7 @@ namespace ChessTheBetrayal.View
             InspectorGuard.Require(_sharedBoardState, nameof(_sharedBoardState), this);
             InspectorGuard.Require(_gameStartedChannel, nameof(_gameStartedChannel), this);
             InspectorGuard.Require(_gameResetChannel, nameof(_gameResetChannel), this);
+            InspectorGuard.Require(_boardResyncRequiredChannel, nameof(_boardResyncRequiredChannel), this);
             InspectorGuard.Require(_moveExecutedChannel, nameof(_moveExecutedChannel), this);
             InspectorGuard.Require(_moveRejectedChannel, nameof(_moveRejectedChannel), this);
             InspectorGuard.Require(_selectionRejectedChannel, nameof(_selectionRejectedChannel), this);
@@ -218,6 +220,7 @@ namespace ChessTheBetrayal.View
         {
             _gameStartedChannel?.Register(HandleGameStarted);
             _gameResetChannel?.Register(ClearAllVisuals);
+            _boardResyncRequiredChannel?.Register(HandleGameStarted);
             _moveExecutedChannel?.Register(AnimateMove);
             _moveRejectedChannel?.Register(HandleMoveRejected);
             _selectionRejectedChannel?.Register(HandleSelectionRejected);
@@ -229,6 +232,7 @@ namespace ChessTheBetrayal.View
         {
             _gameStartedChannel?.Unregister(HandleGameStarted);
             _gameResetChannel?.Unregister(ClearAllVisuals);
+            _boardResyncRequiredChannel?.Unregister(HandleGameStarted);
             _moveExecutedChannel?.Unregister(AnimateMove);
             _moveRejectedChannel?.Unregister(HandleMoveRejected);
             _selectionRejectedChannel?.Unregister(HandleSelectionRejected);
@@ -570,17 +574,29 @@ namespace ChessTheBetrayal.View
 
             for (int i = 0; i < _destroyQueue.Count; i++)
             {
-                if (_destroyQueue[i] != null) Destroy(_destroyQueue[i].gameObject);
+                if (_destroyQueue[i] != null)
+                {
+                    _destroyQueue[i].StopAllAnimations();
+                    Destroy(_destroyQueue[i].gameObject);
+                }
             }
 
             for (int i = 0; i < _deadWhitePieces.Count; i++)
             {
-                if (_deadWhitePieces[i] != null) Destroy(_deadWhitePieces[i].gameObject);
+                if (_deadWhitePieces[i] != null)
+                {
+                    _deadWhitePieces[i].StopAllAnimations();
+                    Destroy(_deadWhitePieces[i].gameObject);
+                }
             }
 
             for (int i = 0; i < _deadBlackPieces.Count; i++)
             {
-                if (_deadBlackPieces[i] != null) Destroy(_deadBlackPieces[i].gameObject);
+                if (_deadBlackPieces[i] != null)
+                {
+                    _deadBlackPieces[i].StopAllAnimations();
+                    Destroy(_deadBlackPieces[i].gameObject);
+                }
             }
 
             // Clear collections
