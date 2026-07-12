@@ -5,6 +5,7 @@ using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("ChessTheBetrayal.Tests.EditMode")]
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("ChessTheBetrayal.EditorTools")]
 
 namespace ChessTheBetrayal.AI
 {
@@ -978,9 +979,11 @@ namespace ChessTheBetrayal.AI
 
         /// <summary>
         /// Packs the fields OrderScore's TT-move comparison needs into 19 bits: From(6) | To(6) |
-        /// PromotedTo(4) | Stage(3). Search-internal only — never rehydrated into a MoveCommand, and
-        /// only ever matched against the freshly generated legal list, so a stale/collided entry can
-        /// mis-order a node but never inject an illegal move.
+        /// PromotedTo(4) | Stage(3). Never rehydrated back into a MoveCommand — a caller only ever
+        /// matches this against the packed form of a freshly generated legal move, so a
+        /// stale/collided value can mis-order a node (or miss an opening-book entry) but can never
+        /// inject an illegal move. Also used by the opening book compiler, which stores this same
+        /// packing alongside each position's Zobrist hash.
         /// </summary>
         internal static uint PackMove(MoveCommand m)
         {

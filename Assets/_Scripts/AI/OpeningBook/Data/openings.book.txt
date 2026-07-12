@@ -1,0 +1,34 @@
+# Sample opening lines, in coordinate notation (same style UCI engines use: fromSquare +
+# toSquare, plus a lowercase promotion letter for a pawn reaching the last rank).
+# One line per variation. "| w=N" sets that line's weight (higher = more likely to be chosen
+# when a position has more than one known reply); omitted weight defaults to 1.
+
+# Italian Game
+e2e4 e7e5 g1f3 b8c6 f1c4 | w=4
+
+# Ruy Lopez
+e2e4 e7e5 g1f3 b8c6 f1b5 | w=5
+
+# Sicilian Defense, Open
+e2e4 c7c5 g1f3 d7d6 | w=5
+
+# Sicilian Defense, Najdorf
+e2e4 c7c5 g1f3 d7d6 d2d4 c5d4 f3d4 g8f6 b1c3 a7a6 | w=3
+
+# French Defense
+e2e4 e7e6 d2d4 d7d5 | w=3
+
+# Caro-Kann Defense
+e2e4 c7c6 d2d4 d7d5 | w=2
+
+# Queen's Gambit
+d2d4 d7d5 c2c4 | w=4
+
+# Queen's Gambit Declined
+d2d4 d7d5 c2c4 e7e6 | w=3
+
+# King's Indian Defense
+d2d4 g8f6 c2c4 g7g6 | w=3
+
+# English Opening
+c2c4 e7e5 | w=2
