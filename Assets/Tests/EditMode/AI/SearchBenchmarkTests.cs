@@ -1,9 +1,13 @@
 using System.Diagnostics;
 using System.Threading;
 using NUnit.Framework;
+using UnityEngine;
 using ChessTheBetrayal.AI;
+using ChessTheBetrayal.AI.OpeningBook;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
+using ChessTheBetrayal.Core.Utils;
+using ChessTheBetrayal.EditorTools.OpeningBook;
 using ChessTheBetrayal.Tests.Utilities;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI
@@ -113,6 +117,46 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             Assert.That(search.Stats.TTHits, Is.GreaterThan(0), "A depth-7 search must re-visit transposed positions.");
             Assert.That(search.Stats.NullMoveAttempts, Is.GreaterThan(0), "NMP's depth>=4 guard should fire repeatedly at this depth.");
             Assert.That(search.Stats.PvsScouts, Is.GreaterThan(0), "Every non-PV sibling should be scouted with a null window.");
+        }
+
+        /// <summary>Always returns 0 — deterministic weighted-pick for a benchmark that only cares
+        /// about wall-clock cost, not which candidate the book picks.</summary>
+        private sealed class ZeroRandomSource : IRandomSource
+        {
+            public bool NextBool() => false;
+            public int NextInt(int maxExclusive) => 0;
+            public float NextFloat() => 0f;
+        }
+
+        [Test]
+        public void OpeningBookLookup_Hit_IsOrdersOfMagnitudeFasterThanDepth7Search()
+        {
+            // The whole point of the opening book is to skip the search entirely for known
+            // theory — this proves the lookup path actually delivers that, not just that it
+            // returns a legal move. A generous 200ms ceiling (vs. seconds for a real search)
+            // leaves headroom for CI/dev-machine jitter while still catching a regression where
+            // the book lookup accidentally falls through to a full search.
+            OpeningBookAsset book = CompileStartingBook();
+            BoardState board = OpeningBookCompiler.CreateStandardStartingPosition();
+
+            var stopwatch = Stopwatch.StartNew();
+            MoveCommand? bookMove = OpeningBookLookup.TryGetBookMove(book, board, _engine, new ZeroRandomSource());
+            stopwatch.Stop();
+
+            System.Console.WriteLine($"Opening-book lookup: {stopwatch.Elapsed.TotalMilliseconds:F2}ms, move={bookMove}");
+
+            Assert.That(bookMove, Is.Not.Null);
+            Assert.That(stopwatch.Elapsed.TotalMilliseconds, Is.LessThan(200),
+                $"Opening-book lookup took {stopwatch.Elapsed.TotalMilliseconds:F2}ms — expected well under 200ms; " +
+                "exceeding this suggests the lookup fell through to a real search instead of answering instantly.");
+        }
+
+        private static OpeningBookAsset CompileStartingBook()
+        {
+            var (keys, packedMoves, weights, schemeVersion) = OpeningBookCompiler.Compile("e2e4 e7e5 g1f3 b8c6");
+            var asset = ScriptableObject.CreateInstance<OpeningBookAsset>();
+            asset.SetEntries(keys, packedMoves, weights, schemeVersion);
+            return asset;
         }
     }
 }
