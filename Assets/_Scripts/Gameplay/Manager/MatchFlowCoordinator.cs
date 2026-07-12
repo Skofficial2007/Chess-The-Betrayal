@@ -64,6 +64,12 @@ namespace ChessTheBetrayal.Gameplay.Manager
 
         public GameModeConfig SelectedMode { get; private set; } = GameModeConfig.Unlimited;
         public bool IsAiMode { get; private set; }
+
+        /// <summary>Set once by GameManager after construction from its Inspector-serialized field.
+        /// Null skips opening-book play entirely — matches pre-AI-28 behavior. Read by both
+        /// SetAIMode call sites (the public one below and the Practice-match auto-configure path
+        /// in BeginPlay) so either entry point into AI play gets book support.</summary>
+        public ChessTheBetrayal.AI.OpeningBook.OpeningBookAsset OpeningBook { get; set; }
         public Team PlayerTeam { get; private set; } = Team.White;
         public MatchResult LastMatchResult { get; private set; }
 
@@ -414,7 +420,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
             IsAiMode = true;
             SelectedMode = GameModeConfig.Unlimited;
 
-            _aiCoordinator.SetAIMode(aiTeam, betrayalUsage, aiProfileId);
+            _aiCoordinator.SetAIMode(aiTeam, betrayalUsage, aiProfileId, OpeningBook);
         }
     }
 }

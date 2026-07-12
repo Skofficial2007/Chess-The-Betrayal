@@ -40,6 +40,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
             { DomainEventCode.AI_SearchRequested,              "[AI] Search requested — depth" },
             { DomainEventCode.AI_MoveDecided,                  "[AI] Move decided — elapsed ms" },
             { DomainEventCode.AI_SearchCancelled,              "[AI] Search cancelled (undo)" },
+            { DomainEventCode.AI_BookMovePlayed,               "[AI] Opening book move played" },
         };
 
         public UnityDomainLogger(bool verbose = false, Action<DomainLogEvent> onFatalError = null)
