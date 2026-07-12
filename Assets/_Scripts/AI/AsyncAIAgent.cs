@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using ChessTheBetrayal.AI.OpeningBook;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Core.Utils;
@@ -29,14 +30,22 @@ namespace ChessTheBetrayal.AI
     {
         public event Action<MoveCommand> OnMoveDecided;
 
+        /// <summary>Fires alongside OnMoveDecided specifically when the move came from the opening
+        /// book instead of a search — AIMatchCoordinator uses this to emit AI_BookMovePlayed instead
+        /// of the usual AI_MoveDecided/elapsed-ms telemetry, since a book hit has no search time.</summary>
+        public event Action<MoveCommand> OnBookMovePlayed;
+
+        private readonly IChessEngine _engine;
         private readonly AlphaBetaSearch _search;
         private readonly AISearchSettings _settings;
         private readonly TranspositionTable _tt;
         private readonly AIProfile _profile;
         private readonly IRandomSource _rng;
+        private readonly OpeningBookAsset _openingBook;
         private readonly MoveSelectionPolicy _selectionPolicy = new MoveSelectionPolicy();
 
         private volatile bool _hasResult;
+        private volatile bool _pendingResultFromBook;
         private MoveCommand _pendingResult;
         private CancellationTokenSource _cts;
 
@@ -70,7 +79,7 @@ namespace ChessTheBetrayal.AI
         /// (tests exercising raw search behavior). Production always goes through the full
         /// constructor below via AIMatchCoordinator.</summary>
         public AsyncAIAgent(IChessEngine engine, IPositionEvaluator evaluator, AISearchSettings settings)
-            : this(engine, evaluator, settings, AIProfile.None, null)
+            : this(engine, evaluator, settings, AIProfile.None, null, null)
         {
         }
 
@@ -84,16 +93,29 @@ namespace ChessTheBetrayal.AI
         /// </summary>
         public AsyncAIAgent(IChessEngine engine, IPositionEvaluator evaluator, AISearchSettings settings,
             AIProfile profile, IRandomSource rng)
+            : this(engine, evaluator, settings, profile, rng, null)
+        {
+        }
+
+        /// <summary>
+        /// openingBook is optional (null skips book lookup entirely) and only ever consulted when
+        /// profile.UseOpeningBook is true — a profile that opts out of the book plays search moves
+        /// from move one, matching the pre-AI-28 behavior for that profile.
+        /// </summary>
+        public AsyncAIAgent(IChessEngine engine, IPositionEvaluator evaluator, AISearchSettings settings,
+            AIProfile profile, IRandomSource rng, OpeningBookAsset openingBook)
         {
             // Owned here (not by AlphaBetaSearch) so it PERSISTS across FindBestMove calls within a
             // match — this is what attacks the successive-turn escalation the TT is built for.
             // A fresh AsyncAIAgent (one per match, via AIMatchCoordinator.SetAIMode) gets a fresh
             // table for free; there is no need to clear it mid-match.
             _tt = new TranspositionTable(log2Size: 20); // ~16 MB desktop; mobile sizing TBD via settings
+            _engine = engine;
             _search = new AlphaBetaSearch(engine, evaluator, transpositionTable: _tt);
             _settings = settings;
             _profile = profile;
             _rng = rng;
+            _openingBook = openingBook;
         }
 
         /// <summary>
@@ -103,6 +125,21 @@ namespace ChessTheBetrayal.AI
         public void RequestBestMove(BoardState board, Team team, CancellationToken cancellation = default)
         {
             CancelInFlight();
+
+            // Book lookup runs synchronously, on the calling (main) thread, against the LIVE board —
+            // it's a binary search plus a legal-move regeneration, not a tree search, so it's cheap
+            // enough to never need a worker thread or a clone. A hit skips FindBestMove entirely.
+            if (_profile.UseOpeningBook && _openingBook != null)
+            {
+                MoveCommand? bookMove = OpeningBook.OpeningBookLookup.TryGetBookMove(_openingBook, board, _engine, _rng);
+                if (bookMove != null)
+                {
+                    _pendingResult = bookMove.Value;
+                    _pendingResultFromBook = true;
+                    _hasResult = true;
+                    return;
+                }
+            }
 
             // Clone on the main thread — snapshot is now owned exclusively by the worker.
             BoardState isolated = board.CloneForSnapshot();
@@ -187,7 +224,13 @@ namespace ChessTheBetrayal.AI
             _cts?.Dispose();
             _cts = null;
 
-            OnMoveDecided?.Invoke(_pendingResult);
+            bool fromBook = _pendingResultFromBook;
+            _pendingResultFromBook = false;
+
+            if (fromBook)
+                OnBookMovePlayed?.Invoke(_pendingResult);
+            else
+                OnMoveDecided?.Invoke(_pendingResult);
         }
 
         private void CancelInFlight()

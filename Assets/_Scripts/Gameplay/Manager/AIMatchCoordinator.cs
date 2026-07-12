@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using ChessTheBetrayal.AI;
+using ChessTheBetrayal.AI.OpeningBook;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Diagnostics;
 using ChessTheBetrayal.Core.Engine;
@@ -98,8 +99,10 @@ namespace ChessTheBetrayal.Gameplay.Manager
         /// <summary>
         /// Configures the session for AI play and constructs the background-thread search agent.
         /// AI sessions always run untimed — the caller is responsible for bypassing clock setup.
+        /// openingBook is optional (null skips opening-book play entirely, matching pre-AI-28
+        /// behavior) — GameManager supplies its compiled OpeningBookAsset via the Inspector.
         /// </summary>
-        public void SetAIMode(Team aiTeam, BetrayalUsage betrayalUsage, string aiProfileId)
+        public void SetAIMode(Team aiTeam, BetrayalUsage betrayalUsage, string aiProfileId, OpeningBookAsset openingBook = null)
         {
             _aiTeam = aiTeam;
 
@@ -116,9 +119,11 @@ namespace ChessTheBetrayal.Gameplay.Manager
                 new BetrayalAwareEvaluator(weights),
                 settings,
                 profile,
-                new SystemRandomSource());
+                new SystemRandomSource(),
+                openingBook);
 
             agent.OnMoveDecided += HandleMoveDecided;
+            agent.OnBookMovePlayed += HandleBookMovePlayed;
             _aiAgent = agent;
         }
 
@@ -189,11 +194,31 @@ namespace ChessTheBetrayal.Gameplay.Manager
             Activity = AgentActivity.Idle;
         }
 
+        /// <summary>
+        /// Same hand-off as HandleMoveDecided, but for a move the opening book answered instantly
+        /// with no search — logged as AI_BookMovePlayed instead of AI_MoveDecided since there is no
+        /// search elapsed-time to report.
+        /// </summary>
+        private void HandleBookMovePlayed(MoveCommand move)
+        {
+            if (_searchStopwatch.IsRunning) _searchStopwatch.Stop();
+            Activity = AgentActivity.ResultReady;
+
+            if (_logger != null && _logger.IsVerbose)
+            {
+                _logger.LogInfo(new DomainLogEvent(DomainEventCode.AI_BookMovePlayed, message: $"{_aiTeam} plays {move}"));
+            }
+
+            _playMove(move);
+            Activity = AgentActivity.Idle;
+        }
+
         private void TearDownAgent()
         {
             if (_aiAgent is AsyncAIAgent asyncAgent)
             {
                 asyncAgent.OnMoveDecided -= HandleMoveDecided;
+                asyncAgent.OnBookMovePlayed -= HandleBookMovePlayed;
                 asyncAgent.Dispose();
             }
             _aiAgent = null;

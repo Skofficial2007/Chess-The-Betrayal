@@ -54,6 +54,9 @@ namespace ChessTheBetrayal.App
         [Header("Debug")]
         [SerializeField] private bool logMoves = true;
 
+        [Header("AI")]
+        [SerializeField] private ChessTheBetrayal.AI.OpeningBook.OpeningBookAsset _openingBook;
+
         [Header("Betrayal Time Bounty (milliseconds)")]
         [SerializeField] private long _betrayalBountyBulletMs = 3_000L;   // Bullet 1|0
         [SerializeField] private long _betrayalBountyBullet2Ms = 5_000L;   // Bullet 2|1
@@ -249,6 +252,7 @@ namespace ChessTheBetrayal.App
                 setSharedBoardState: board => _sharedBoardState?.Set(board),
                 clearSharedBoardState: () => _sharedBoardState?.Clear(),
                 raiseGameReset: () => _gameResetChannel?.Raise());
+            _matchFlow.OpeningBook = _openingBook;
 
             _gameOverChannel?.Register(OnGameOverRaised);
             _matchStartRequestedChannel?.Register(BeginPlay);
