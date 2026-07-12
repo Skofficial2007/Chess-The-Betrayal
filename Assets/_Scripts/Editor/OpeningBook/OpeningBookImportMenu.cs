@@ -12,7 +12,7 @@ namespace ChessTheBetrayal.EditorTools.OpeningBook
     /// </summary>
     public static class OpeningBookImportMenu
     {
-        [MenuItem("Chess/AI/Compile Opening Book...")]
+        [MenuItem("Chess: The Betrayal/AI/Compile Opening Book...")]
         private static void CompileFromMenu()
         {
             string sourcePath = EditorUtility.OpenFilePanel(
