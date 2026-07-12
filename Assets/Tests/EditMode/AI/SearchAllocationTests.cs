@@ -105,5 +105,29 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             Assert.That(after - before, Is.EqualTo(0L),
                 "MoveSelectionPolicy.SelectFinalMove must not allocate managed memory on a warmed-up instance.");
         }
+
+        [Test]
+        public void FindBestMove_NonIdentityWeightedEvaluator_AllocatesNoManagedMemory()
+        {
+            var weights = new EvaluationWeights(attackScale: 1.5f, defenseScale: 0.5f, betrayalOptionScale: 1.35f);
+            var weightedSearch = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator(weights));
+
+            BoardState warmup = TestBoardSetupUtility.CreateStandard();
+            var settings = new AISearchSettings(maxDepth: 3, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            weightedSearch.FindBestMove(warmup, settings, CancellationToken.None);
+
+            BoardState board = TestBoardSetupUtility.CreateStandard();
+
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            weightedSearch.FindBestMove(board, settings, CancellationToken.None);
+            long after = GC.GetAllocatedBytesForCurrentThread();
+
+            Assert.That(after - before, Is.EqualTo(0L),
+                "AI-25's weighted evaluator (non-identity EvaluationWeights, including the new king-shelter term) must not allocate managed memory during a real search.");
+        }
     }
 }
