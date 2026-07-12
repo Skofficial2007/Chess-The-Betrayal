@@ -24,5 +24,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
         public bool NextBool() => _random.Next(2) == 0;
 
         public int NextInt(int maxExclusive) => _random.Next(maxExclusive);
+
+        public float NextFloat() => (float)_random.NextDouble();
     }
 }

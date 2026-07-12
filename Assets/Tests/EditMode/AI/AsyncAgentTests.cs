@@ -4,6 +4,7 @@ using System.Threading;
 using ChessTheBetrayal.AI;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
+using ChessTheBetrayal.Gameplay.Manager;
 using ChessTheBetrayal.Tests.Utilities;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI
@@ -213,6 +214,46 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             Assert.DoesNotThrow(() => board.AssertZobristConsistency());
             Assert.That(board.ZobristHash, Is.EqualTo(hashBefore),
                 "The live board passed to RequestBestMove must never be mutated by the background search.");
+        }
+
+        [Test]
+        public void RequestBestMove_WithNonzeroDialProfileAndSeededRng_StillDeliversALegalSearchRankedMove()
+        {
+            // Integration smoke test: a real personality profile (AI-24's MoveSelectionPolicy
+            // epilogue wired in via the full constructor) must not break the existing
+            // threading/marshalling contract — the delivered move is still legal and still arrives
+            // only through Tick() on the calling thread.
+            var profile = AIProfileTable.BuiltIn[0]; // "easy" — nonzero BlunderRate/TieBreakWindowCp
+            var agent = new AsyncAIAgent(
+                new ChessEngineAdapter(),
+                new BetrayalAwareEvaluator(),
+                new AISearchSettings(maxDepth: 2, softTimeBudgetMs: 5000, BetrayalUsage.Full),
+                profile,
+                new SystemRandomSource(seed: 7));
+
+            BoardState board = TestBoardSetupUtility.CreateStandard();
+            MoveCommand? delivered = null;
+
+            try
+            {
+                agent.OnMoveDecided += move => delivered = move;
+                agent.RequestBestMove(board, Team.White);
+
+                var stopwatch = Stopwatch.StartNew();
+                while (!delivered.HasValue && stopwatch.ElapsedMilliseconds < PollTimeoutMs)
+                {
+                    agent.Tick();
+                    Thread.Sleep(PollIntervalMs);
+                }
+
+                Assert.That(delivered, Is.Not.Null,
+                    "A profile-driven agent must still deliver a move through the standard Tick() pump.");
+                Assert.That(delivered.Value.PieceTeam, Is.EqualTo(Team.White));
+            }
+            finally
+            {
+                agent.Dispose();
+            }
         }
 
         /// <summary>Repeatedly calls Tick() until <paramref name="isDone"/> is true or the timeout

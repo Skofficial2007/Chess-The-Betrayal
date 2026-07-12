@@ -6,9 +6,12 @@ namespace ChessTheBetrayal.AI
     /// <see cref="AIProfileTable"/> (or a new <see cref="AIProfileDefinition"/> asset later) —
     /// never a code change. See ADR_AI23_Profile_EventStream_OpeningBook.md Section 1.
     ///
-    /// Only <see cref="MaxDepth"/>/<see cref="SoftTimeBudgetMs"/> are consumed by search today
-    /// (via AISearchSettings.FromProfile). The remaining dials are carried as inert data for the
-    /// selection-policy and weighted-evaluator tickets that follow.
+    /// <see cref="MaxDepth"/>/<see cref="SoftTimeBudgetMs"/> shape the search itself (via
+    /// AISearchSettings.FromProfile); <see cref="BlunderRate"/>/<see cref="BlunderMarginCp"/>/
+    /// <see cref="TieBreakWindowCp"/>/<see cref="BetrayalAggression"/> shape which of the search's
+    /// own ranked root moves gets picked (via MoveSelectionPolicy). <see cref="AttackDefenseBias"/>
+    /// and <see cref="UseOpeningBook"/> remain inert data for the evaluator-weighting and
+    /// opening-book tickets that follow.
     /// </summary>
     public readonly struct AIProfile
     {
@@ -43,5 +46,13 @@ namespace ChessTheBetrayal.AI
             TieBreakWindowCp = tieBreakWindowCp;
             UseOpeningBook = useOpeningBook;
         }
+
+        /// <summary>Zero-dial sentinel used where no AI personality is being modeled (e.g. a bare
+        /// AsyncAIAgent construction with no profile injected). MoveSelectionPolicy's zero-dial
+        /// fast path returns the search's own best move for this, unconditionally.</summary>
+        public static readonly AIProfile None = new AIProfile(
+            id: "none", maxDepth: 1, softTimeBudgetMs: 1000,
+            blunderRate: 0f, blunderMarginCp: 0, betrayalAggression: 0f,
+            attackDefenseBias: 1.0f, tieBreakWindowCp: 0, useOpeningBook: false);
     }
 }

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using ChessTheBetrayal.Core.Data;
@@ -60,6 +61,17 @@ namespace ChessTheBetrayal.AI
         private readonly List<MoveCommand>[] _moveBuffers;
         private readonly List<MoveCommand> _rootMoves = new List<MoveCommand>(64);
 
+        // Parallel to _rootMoves by index — every root move's score at the last FULLY COMPLETED
+        // depth (see FindBestMove's completed-gated commit). _rootScoresScratch is the per-depth
+        // working copy written unconditionally during the loop; _rootScores only receives a copy
+        // from it once a depth actually completes, so a cancelled/partial depth's scores never
+        // leak into the externally-visible array. Sized comfortably above realistic
+        // Betrayal-inclusive root branching; grown lazily (mirrors _moveBuffers' own policy) so a
+        // pathological position can never index out of bounds without violating steady-state
+        // zero-GC in the common case. MoveSelectionPolicy.MaxRootMoves must match this sizing.
+        private int[] _rootScores = new int[128];
+        private int[] _rootScoresScratch = new int[128];
+
         // One move buffer per quiescence recursion level, indexed by the qply budget. Quiescence is
         // reached from Search(depth 0), so it must NOT borrow a depth-indexed _moveBuffers slot — the
         // ancestor Search frames at depth 1..N are still iterating their own _moveBuffers[depth] lists.
@@ -106,11 +118,37 @@ namespace ChessTheBetrayal.AI
         public ref SearchStats Stats => ref _tt.Stats;
 #endif
 
+        /// <summary>Ranked root moves from the most recent FindBestMove call, parallel to
+        /// <see cref="RootScores"/> by index. Read only after FindBestMove returns and before the
+        /// next call reuses the buffer — see MoveSelectionPolicy, the sole external consumer.</summary>
+        public IReadOnlyList<MoveCommand> RootMoves => _rootMoves;
+
+        /// <summary>Score of RootMoves[i] at the last FULLY COMPLETED depth (exact where the
+        /// bounded candidate re-search ran, an alpha-beta upper bound otherwise — see
+        /// FindBestMove's candidateRescoreMarginCp). Only indices [0, RootMoveCount) are valid.</summary>
+        public int[] RootScores => _rootScores;
+
+        public int RootMoveCount => _rootMoves.Count;
+
+        /// <summary>Index into RootMoves/RootScores of the search's own best move. Always 0 after a
+        /// completed depth — MoveToFront(bestIndexThisDepth) puts the committed best there.</summary>
+        public int BestRootIndex { get; private set; }
+
         /// <summary>
         /// Iterative deepening entry point. Returns the best move for board.CurrentTurn.
         /// Caller runs this on a worker thread against a cloned board (see AsyncAIAgent).
+        ///
+        /// candidateRescoreMarginCp: when > 0, after the final completed depth, every root move
+        /// within this margin of the best (excluding the best itself, already exact by
+        /// construction) is re-searched at the same depth with a FULL (-Infinity, +Infinity)
+        /// window instead of the tightened alpha-beta window it was found under — this fixes the
+        /// "later root moves may only carry an upper-bound score" caveat (see MoveSelectionPolicy)
+        /// for the handful of candidates a personality-driven selection might actually pick.
+        /// TT-warmed (every node was already visited this search), so it's cheap. Defaults to 0 —
+        /// today's exact pre-AI-24 behavior, zero overhead — for callers that don't need it.
         /// </summary>
-        public MoveCommand FindBestMove(BoardState board, AISearchSettings settings, CancellationToken ct)
+        public MoveCommand FindBestMove(BoardState board, AISearchSettings settings, CancellationToken ct,
+            int candidateRescoreMarginCp = 0)
         {
             Team rootTeam = board.CurrentTurn;
 
@@ -121,16 +159,22 @@ namespace ChessTheBetrayal.AI
 
             // Build the root move list ONCE. This is where the agent-level Betrayal policy applies.
             BuildRootMoves(board, rootTeam, settings.BetrayalUsage);
+            EnsureRootScoreCapacity(_rootMoves.Count);
 
             // TT informs root ORDERING ONLY — never a short-circuit. The root list carries the
             // BetrayalUsage.DefendOnly filter and MoveToFront's PV bookkeeping; a TT cutoff here
             // would bypass both. One probe before the depth loop; a packed-move match sorts first.
+            // NOTE: this MoveToFront call runs before _rootScores has been populated for THIS
+            // search — it permutes stale data left over from the previous call. Harmless: the
+            // first completed depth below unconditionally overwrites _rootScores from
+            // _rootScoresScratch (in that depth's own index order) before anything reads it.
             uint rootTTMove = 0;
             if (_tt.Probe(board.ZobristHash, out _, out uint probedRootMove, out _, out _))
                 rootTTMove = probedRootMove;
             MoveToFrontByPackedMove(rootTTMove);
 
             MoveCommand bestMove = _rootMoves.Count > 0 ? _rootMoves[0] : default;
+            int lastCompletedDepth = 0;
 
             // Iterative deepening: search depth 1, 2, 3... keeping the best move from the last
             // FULLY COMPLETED depth. If cancelled or over-budget mid-depth, we discard that
@@ -159,6 +203,12 @@ namespace ChessTheBetrayal.AI
 
                     UndoMoveAndTurn(board, move);
 
+                    // Every candidate's score is recorded here (not just the running best) — this
+                    // scratch write is unconditional so MoveSelectionPolicy can later rank/bias
+                    // among ALL root moves, not only the single winner. Committed into the
+                    // externally-visible _rootScores only if this depth completes (below).
+                    _rootScoresScratch[i] = score;
+
                     if (score > bestScore)
                     {
                         bestScore = score;
@@ -171,10 +221,18 @@ namespace ChessTheBetrayal.AI
                 if (completed)
                 {
                     bestMove = bestThisDepth;
+                    lastCompletedDepth = depth;
+
+                    // Commit BEFORE MoveToFront, in the pre-permutation index order the scratch
+                    // array was just written in — MoveToFront below then shuffles _rootScores in
+                    // lockstep with _rootMoves so the two stay aligned as parallel arrays.
+                    Array.Copy(_rootScoresScratch, _rootScores, _rootMoves.Count);
+
                     // Move ordering payoff: put the best move first next iteration for max cutoffs.
                     // Uses the index found above — MoveCommand has no IEquatable, so an IndexOf(move)
                     // lookup here would box through the reflection-based ValueType.Equals fallback.
                     MoveToFront(bestIndexThisDepth);
+                    BestRootIndex = 0; // MoveToFront always puts the committed best at index 0
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                     _tt.Stats.AssignNodesAfterDepth(depth, _tt.Stats.NodesVisited + _tt.Stats.QNodesVisited);
@@ -185,7 +243,49 @@ namespace ChessTheBetrayal.AI
                 }
             }
 
+            RescoreCandidatesWithFullWindow(board, rootTeam, lastCompletedDepth, candidateRescoreMarginCp, ct);
+
             return bestMove;
+        }
+
+        /// <summary>
+        /// Un-biases the tightened-alpha-beta-window scores of the handful of root moves close
+        /// enough to the best that a personality-driven MoveSelectionPolicy might actually pick —
+        /// see FindBestMove's candidateRescoreMarginCp doc comment. No-op when the margin is 0 (the
+        /// common case for zero-personality callers) or there's nothing to compare against.
+        /// </summary>
+        private void RescoreCandidatesWithFullWindow(BoardState board, Team rootTeam, int lastCompletedDepth,
+            int candidateRescoreMarginCp, CancellationToken ct)
+        {
+            if (candidateRescoreMarginCp <= 0 || _rootMoves.Count == 0 || lastCompletedDepth <= 0) return;
+
+            int threshold = _rootScores[0] - candidateRescoreMarginCp; // BestRootIndex == 0
+            for (int i = 1; i < _rootMoves.Count; i++) // index 0 is already exact-enough by construction
+            {
+                // Safe degrade: leave any not-yet-rescored entry at its tightened-window value —
+                // still "acceptable by direction" per the ADR's own caveat, never a torn write.
+                if (ct.IsCancellationRequested) break;
+                if (_rootScores[i] < threshold) continue;
+
+                MoveCommand move = _rootMoves[i];
+                ApplyMoveAndTurn(board, move);
+                int exactScore = ScoreChild(board, move, lastCompletedDepth - 1, 1, -Infinity, Infinity, rootTeam, ct);
+                UndoMoveAndTurn(board, move);
+
+                _rootScores[i] = exactScore;
+            }
+        }
+
+        /// <summary>Grows the root-score buffers to fit a pathological branching root, mirroring
+        /// _moveBuffers' own "grown lazily, never freed" policy. A no-op (and therefore zero-GC)
+        /// for every position within the initial 128-move capacity.</summary>
+        private void EnsureRootScoreCapacity(int requiredCount)
+        {
+            if (_rootScores.Length >= requiredCount) return;
+
+            int newSize = requiredCount * 2;
+            Array.Resize(ref _rootScores, newSize);
+            Array.Resize(ref _rootScoresScratch, newSize);
         }
 
         /// <summary>
@@ -920,6 +1020,13 @@ namespace ChessTheBetrayal.AI
             _ => 0
         };
 
+        /// <summary>
+        /// Moves _rootMoves[index] to the front, shifting [0, index) up by one — and permutes
+        /// _rootScores identically in lockstep, so _rootScores[i] always stays the committed score
+        /// for _rootMoves[i] (see FindBestMove's completed-gated commit). Safe to call before
+        /// _rootScores has been populated for the current search (see the pre-depth-loop TT-hint
+        /// call site) — it just shuffles stale data that gets fully overwritten before first read.
+        /// </summary>
         private void MoveToFront(int index)
         {
             if (index <= 0) return;
@@ -927,6 +1034,10 @@ namespace ChessTheBetrayal.AI
             MoveCommand move = _rootMoves[index];
             _rootMoves.RemoveAt(index);
             _rootMoves.Insert(0, move);
+
+            int score = _rootScores[index];
+            Array.Copy(_rootScores, 0, _rootScores, 1, index);
+            _rootScores[0] = score;
         }
 
         /// <summary>Root-only TT ordering hint (see FindBestMove) — finds the root move matching the

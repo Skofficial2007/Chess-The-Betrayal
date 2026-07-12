@@ -96,7 +96,9 @@ namespace ChessTheBetrayal.Gameplay.Manager
             var agent = new AsyncAIAgent(
                 _engine,
                 new BetrayalAwareEvaluator(),
-                settings);
+                settings,
+                profile,
+                new SystemRandomSource());
 
             agent.OnMoveDecided += HandleMoveDecided;
             _aiAgent = agent;

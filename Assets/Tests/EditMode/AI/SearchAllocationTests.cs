@@ -4,6 +4,7 @@ using System.Threading;
 using ChessTheBetrayal.AI;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
+using ChessTheBetrayal.Gameplay.Manager;
 using ChessTheBetrayal.Tests.Utilities;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI
@@ -51,6 +52,58 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             Assert.That(after - before, Is.EqualTo(0L),
                 "FindBestMove must not allocate managed memory once its buffers are warmed up — " +
                 "any delta here means a per-node allocation snuck into the search loop.");
+        }
+
+        [Test]
+        public void FindBestMove_WithRescoreMargin_AllocatesNoManagedMemory()
+        {
+            BoardState board = TestBoardSetupUtility.CreateStandard();
+            var settings = new AISearchSettings(maxDepth: 3, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+
+            // Warm up the bounded-rescore path too — its own pooled arrays are already sized in the
+            // constructor, but the first call still needs to JIT the new code path outside the
+            // measured window.
+            _search.FindBestMove(board, settings, CancellationToken.None, candidateRescoreMarginCp: 50);
+
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            _search.FindBestMove(board, settings, CancellationToken.None, candidateRescoreMarginCp: 50);
+            long after = GC.GetAllocatedBytesForCurrentThread();
+
+            Assert.That(after - before, Is.EqualTo(0L),
+                "The bounded candidate re-search (AI-24) must not allocate managed memory either — " +
+                "only in-place array writes and ScoreChild calls, no new lists/arrays.");
+        }
+
+        [Test]
+        public void SelectFinalMove_RepeatedCalls_AllocateNoManagedMemory()
+        {
+            BoardState board = TestBoardSetupUtility.CreateStandard();
+            var settings = new AISearchSettings(maxDepth: 2, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var profile = new AIProfile("test", maxDepth: 2, softTimeBudgetMs: 5000,
+                blunderRate: 0.2f, blunderMarginCp: 50, betrayalAggression: 0.5f,
+                attackDefenseBias: 1f, tieBreakWindowCp: 30, useOpeningBook: false);
+            var rng = new SystemRandomSource(seed: 42);
+            var policy = new MoveSelectionPolicy();
+
+            _search.FindBestMove(board, settings, CancellationToken.None, candidateRescoreMarginCp: 50);
+
+            // Warm up SelectFinalMove itself outside the measured window.
+            policy.SelectFinalMove(_search.RootMoves, _search.RootScores, _search.RootMoveCount, _search.BestRootIndex, profile, rng);
+
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            policy.SelectFinalMove(_search.RootMoves, _search.RootScores, _search.RootMoveCount, _search.BestRootIndex, profile, rng);
+            long after = GC.GetAllocatedBytesForCurrentThread();
+
+            Assert.That(after - before, Is.EqualTo(0L),
+                "MoveSelectionPolicy.SelectFinalMove must not allocate managed memory on a warmed-up instance.");
         }
     }
 }
