@@ -24,7 +24,8 @@ namespace ChessTheBetrayal.Gameplay.Manager
         private readonly IChessEngine _engine;
         private readonly BoardState _board;
         private readonly Action<MoveCommand> _playMove;
-        private readonly Func<BetrayalUsage, AISearchSettings> _searchSettingsFactory;
+        private readonly Func<BetrayalUsage, AIProfile, AISearchSettings> _searchSettingsFactory;
+        private readonly IAIProfileProvider _profileProvider;
 
         // Optional — null in most tests. Verbose-gated AI-lifecycle logging so a human can tell the
         // background search is actually running (and how long it took) instead of guessing. Never
@@ -53,25 +54,28 @@ namespace ChessTheBetrayal.Gameplay.Manager
         public event Action<string> OnSearchException;
 
         public AIMatchCoordinator(IChessEngine engine, BoardState board, Action<MoveCommand> playMove, IDomainLogger logger = null)
-            : this(engine, board, playMove, AISearchSettings.Ultimate, logger)
+            : this(engine, board, playMove, AISearchSettings.FromProfile, new AIProfileTableProvider(), logger)
         {
         }
 
         /// <summary>
         /// Lets a caller substitute a shallow/fast <see cref="AISearchSettings"/> factory (e.g.
-        /// maxDepth: 1) instead of the production <see cref="AISearchSettings.Ultimate"/> depth-7
-        /// search — used by tests so search-lifecycle assertions (cancellation, delivery,
-        /// IsSearchInFlight) don't have to wait out a full-depth search. GameManager's composition
-        /// root always uses the single-argument constructor above.
+        /// maxDepth: 1) and/or profile provider instead of the production
+        /// <see cref="AISearchSettings.FromProfile"/> mapping — used by tests so search-lifecycle
+        /// assertions (cancellation, delivery, IsSearchInFlight) don't have to wait out a
+        /// full-depth search. GameManager's composition root always uses the single-argument
+        /// constructor above.
         /// </summary>
         public AIMatchCoordinator(
             IChessEngine engine, BoardState board, Action<MoveCommand> playMove,
-            Func<BetrayalUsage, AISearchSettings> searchSettingsFactory, IDomainLogger logger = null)
+            Func<BetrayalUsage, AIProfile, AISearchSettings> searchSettingsFactory,
+            IAIProfileProvider profileProvider, IDomainLogger logger = null)
         {
             _engine = engine;
             _board = board;
             _playMove = playMove;
             _searchSettingsFactory = searchSettingsFactory;
+            _profileProvider = profileProvider ?? new AIProfileTableProvider();
             _logger = logger;
         }
 
@@ -79,13 +83,14 @@ namespace ChessTheBetrayal.Gameplay.Manager
         /// Configures the session for AI play and constructs the background-thread search agent.
         /// AI sessions always run untimed — the caller is responsible for bypassing clock setup.
         /// </summary>
-        public void SetAIMode(Team aiTeam, BetrayalUsage betrayalUsage)
+        public void SetAIMode(Team aiTeam, BetrayalUsage betrayalUsage, string aiProfileId)
         {
             _aiTeam = aiTeam;
 
             TearDownAgent();
 
-            AISearchSettings settings = _searchSettingsFactory(betrayalUsage);
+            AIProfile profile = _profileProvider.Resolve(aiProfileId);
+            AISearchSettings settings = _searchSettingsFactory(betrayalUsage, profile);
             _configuredDepth = settings.MaxDepth;
 
             var agent = new AsyncAIAgent(

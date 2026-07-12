@@ -519,8 +519,8 @@ namespace ChessTheBetrayal.App
         /// not a no-op. Calling it late (after StartMatch) simply means the AI won't move until the
         /// next turn change — there's no unsafe half-configured state in between.
         /// </summary>
-        public void SetAIMode(Team aiTeam = Team.Black, BetrayalUsage betrayalUsage = BetrayalUsage.Full) =>
-            _matchFlow.SetAIMode(aiTeam, betrayalUsage);
+        public void SetAIMode(Team aiTeam = Team.Black, BetrayalUsage betrayalUsage = BetrayalUsage.Full, string aiProfileId = "normal") =>
+            _matchFlow.SetAIMode(aiTeam, betrayalUsage, aiProfileId);
 
         /// <summary>
         /// Fires whenever a turn-ending move completes (see MatchDriver.CheckForGameEnd's

@@ -3,6 +3,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using PrimeTween;
+using ChessTheBetrayal.AI;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Diagnostics;
 
@@ -31,9 +32,8 @@ namespace ChessTheBetrayal.UI
 
         [Header("Difficulty Row")]
         [SerializeField] private RectTransform _levelsMask;
-        [SerializeField] private RectTransform _labelEasy;
-        [SerializeField] private RectTransform _labelNormal;
-        [SerializeField] private RectTransform _labelHard;
+        [Tooltip("Index-parallel to AIProfileTable.BuiltIn — one label per tier, in the same order (easy, normal, hard, aggressive, extreme, impossible).")]
+        [SerializeField] private RectTransform[] _difficultyLabels;
         [SerializeField] private Button _difficultyPrevBtn;
         [SerializeField] private Button _difficultyNextBtn;
 
@@ -55,8 +55,6 @@ namespace ChessTheBetrayal.UI
         [Header("Controls")]
         [SerializeField] private Button _doneButton;
 
-        // Index-parallel to AIDifficulty (Easy=0, Normal=1, Hard=2).
-        private RectTransform[] _difficultyLabels;
         private TMP_Text[] _difficultyLabelTexts;
         private int _difficultyIndex = 1; // Normal by default
 
@@ -74,7 +72,11 @@ namespace ChessTheBetrayal.UI
 
         private void Start()
         {
-            _difficultyLabels = new[] { _labelEasy, _labelNormal, _labelHard };
+            if (_difficultyLabels.Length != AIProfileTable.BuiltIn.Count)
+            {
+                Debug.LogError($"[{nameof(AIMatchSettingsUI)}] {nameof(_difficultyLabels)} has {_difficultyLabels.Length} entries, expected {AIProfileTable.BuiltIn.Count} (one per AIProfileTable.BuiltIn row).", this);
+            }
+
             _difficultyLabelTexts = new TMP_Text[_difficultyLabels.Length];
             for (int i = 0; i < _difficultyLabels.Length; i++)
             {
@@ -82,7 +84,7 @@ namespace ChessTheBetrayal.UI
                 InspectorGuard.Require(_difficultyLabelTexts[i], $"{nameof(_difficultyLabels)}[{i}].TMP_Text", this);
             }
 
-            _difficultyLabelHomePosition = _labelNormal.anchoredPosition;
+            _difficultyLabelHomePosition = _difficultyLabels[_difficultyIndex].anchoredPosition;
 
             _difficultyPrevBtn.onClick.AddListener(() => StepDifficulty(-1));
             _difficultyNextBtn.onClick.AddListener(() => StepDifficulty(1));
@@ -115,7 +117,21 @@ namespace ChessTheBetrayal.UI
             _skipOn.isOn = settings.RetributionSkipAllowed;
             _skipOff.isOn = !settings.RetributionSkipAllowed;
 
-            _difficultyIndex = (int)settings.Difficulty;
+            _difficultyIndex = IndexForProfileId(settings.AiProfileId);
+        }
+
+        private static int IndexForProfileId(string id)
+        {
+            var table = AIProfileTable.BuiltIn;
+            for (int i = 0; i < table.Count; i++)
+            {
+                if (string.Equals(table[i].Id, id, StringComparison.OrdinalIgnoreCase)) return i;
+            }
+            for (int i = 0; i < table.Count; i++)
+            {
+                if (string.Equals(table[i].Id, AIProfileTable.DefaultId, StringComparison.OrdinalIgnoreCase)) return i;
+            }
+            return 0;
         }
 
         private void OnDisable()
@@ -134,9 +150,10 @@ namespace ChessTheBetrayal.UI
             InspectorGuard.Require(_skipOn, nameof(_skipOn), this);
             InspectorGuard.Require(_skipOff, nameof(_skipOff), this);
             InspectorGuard.Require(_levelsMask, nameof(_levelsMask), this);
-            InspectorGuard.Require(_labelEasy, nameof(_labelEasy), this);
-            InspectorGuard.Require(_labelNormal, nameof(_labelNormal), this);
-            InspectorGuard.Require(_labelHard, nameof(_labelHard), this);
+            for (int i = 0; i < _difficultyLabels.Length; i++)
+            {
+                InspectorGuard.Require(_difficultyLabels[i], $"{nameof(_difficultyLabels)}[{i}]", this);
+            }
             InspectorGuard.Require(_difficultyPrevBtn, nameof(_difficultyPrevBtn), this);
             InspectorGuard.Require(_difficultyNextBtn, nameof(_difficultyNextBtn), this);
             InspectorGuard.Require(_doneButton, nameof(_doneButton), this);
@@ -248,7 +265,7 @@ namespace ChessTheBetrayal.UI
                 betrayalEnabled: _betrayalOn.isOn,
                 aiDefendOnly: _defendOnlyOn.isOn,
                 retributionSkipAllowed: _skipOn.isOn,
-                difficulty: (AIDifficulty)_difficultyIndex);
+                aiProfileId: AIProfileTable.BuiltIn[_difficultyIndex].Id);
 
             PracticeMatchSettingsStorage.Save(settings);
             OnSettingsConfirmed?.Invoke(settings);

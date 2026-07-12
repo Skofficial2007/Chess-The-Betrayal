@@ -190,9 +190,9 @@ namespace ChessTheBetrayal.Gameplay.Manager
 
                 Team aiTeam = PlayerTeam == Team.White ? Team.Black : Team.White;
                 BetrayalUsage aiBetrayalUsage = settings.AiDefendOnly ? BetrayalUsage.DefendOnly : BetrayalUsage.Full;
-                SetAIMode(aiTeam, aiBetrayalUsage);
+                SetAIMode(aiTeam, aiBetrayalUsage, settings.AiProfileId);
 
-                if (_logMoves) Debug.Log($"[MatchFlowCoordinator] Practice match started. AI={aiTeam}, BetrayalEnabled={settings.BetrayalEnabled}, AiBetrayalUsage={aiBetrayalUsage}, SkipAllowed={settings.RetributionSkipAllowed}, Difficulty={settings.Difficulty}. Human plays {PlayerTeam}.");
+                if (_logMoves) Debug.Log($"[MatchFlowCoordinator] Practice match started. AI={aiTeam}, BetrayalEnabled={settings.BetrayalEnabled}, AiBetrayalUsage={aiBetrayalUsage}, SkipAllowed={settings.RetributionSkipAllowed}, AiProfileId={settings.AiProfileId}. Human plays {PlayerTeam}.");
             }
             else
             {
@@ -384,12 +384,12 @@ namespace ChessTheBetrayal.Gameplay.Manager
         /// StartMatch) simply means the AI won't move until the next turn change — there's no
         /// unsafe half-configured state in between.
         /// </summary>
-        public void SetAIMode(Team aiTeam, BetrayalUsage betrayalUsage)
+        public void SetAIMode(Team aiTeam, BetrayalUsage betrayalUsage, string aiProfileId)
         {
             IsAiMode = true;
             SelectedMode = GameModeConfig.Unlimited;
 
-            _aiCoordinator.SetAIMode(aiTeam, betrayalUsage);
+            _aiCoordinator.SetAIMode(aiTeam, betrayalUsage, aiProfileId);
         }
     }
 }

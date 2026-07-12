@@ -51,7 +51,7 @@ namespace ChessTheBetrayal.AI
             BetrayalUsage = betrayalUsage;
         }
 
-        public static AISearchSettings Ultimate(BetrayalUsage usage) =>
-            new AISearchSettings(maxDepth: 7, softTimeBudgetMs: 5000, usage);
+        public static AISearchSettings FromProfile(BetrayalUsage usage, AIProfile profile) =>
+            new AISearchSettings(profile.MaxDepth, profile.SoftTimeBudgetMs, usage);
     }
 }

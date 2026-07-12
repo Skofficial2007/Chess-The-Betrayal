@@ -24,13 +24,15 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         private const int PollIntervalMs = 10;
 
         // Shallow/fast settings for delivery/cancellation tests — mirrors AsyncAgentTests' own
-        // depth-1 override, so these tests don't have to wait out a full Ultimate (depth-7) search.
-        private static AISearchSettings ShallowSettings(BetrayalUsage usage) =>
+        // depth-1 override, so these tests don't have to wait out a full deep search.
+        private static AISearchSettings ShallowSettings(BetrayalUsage usage, AIProfile profile) =>
             new AISearchSettings(maxDepth: 1, softTimeBudgetMs: 5000, usage);
 
         // Deep/slow settings, used only where a test needs a wide cancellation window.
-        private static AISearchSettings SlowSettings(BetrayalUsage usage) =>
+        private static AISearchSettings SlowSettings(BetrayalUsage usage, AIProfile profile) =>
             new AISearchSettings(maxDepth: 32, softTimeBudgetMs: 30_000, usage);
+
+        private static readonly IAIProfileProvider ProfileProvider = new AIProfileTableProvider();
 
         private ChessEngineAdapter _engine;
         private BoardState _board;
@@ -44,7 +46,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             _board = TestBoardSetupUtility.CreateStandard();
             _lastPlayedMove = null;
 
-            _coordinator = new AIMatchCoordinator(_engine, _board, move => _lastPlayedMove = move, ShallowSettings);
+            _coordinator = new AIMatchCoordinator(_engine, _board, move => _lastPlayedMove = move, ShallowSettings, ProfileProvider);
         }
 
         [TearDown]
@@ -68,7 +70,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         {
             Assert.That(_coordinator.IsAiMode, Is.False);
 
-            _coordinator.SetAIMode(Team.Black, BetrayalUsage.Full);
+            _coordinator.SetAIMode(Team.Black, BetrayalUsage.Full, "normal");
 
             Assert.That(_coordinator.IsAiMode, Is.True);
         }
@@ -77,7 +79,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         public void TryRequestMove_NotAiTeamsTurn_NeverPlaysAMove()
         {
             _board.CurrentTurn = Team.White;
-            _coordinator.SetAIMode(Team.Black, BetrayalUsage.Full);
+            _coordinator.SetAIMode(Team.Black, BetrayalUsage.Full, "normal");
 
             _coordinator.TryRequestMove(isGameActive: true);
             Thread.Sleep(200);
@@ -90,7 +92,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         public void TryRequestMove_GameNotActive_NeverPlaysAMove()
         {
             _board.CurrentTurn = Team.Black;
-            _coordinator.SetAIMode(Team.Black, BetrayalUsage.Full);
+            _coordinator.SetAIMode(Team.Black, BetrayalUsage.Full, "normal");
 
             _coordinator.TryRequestMove(isGameActive: false);
             Thread.Sleep(200);
@@ -103,7 +105,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         public void TryRequestMove_AiTeamsTurnAndGameActive_EventuallyPlaysAMoveThroughTheDelegate()
         {
             _board.CurrentTurn = Team.Black;
-            _coordinator.SetAIMode(Team.Black, BetrayalUsage.Full);
+            _coordinator.SetAIMode(Team.Black, BetrayalUsage.Full, "normal");
 
             _coordinator.TryRequestMove(isGameActive: true);
             PumpTickUntil(() => _lastPlayedMove.HasValue);
@@ -116,7 +118,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         public void IsSearchInFlight_TrueWhileSearching_FalseAfterDelivery()
         {
             _board.CurrentTurn = Team.Black;
-            _coordinator.SetAIMode(Team.Black, BetrayalUsage.Full);
+            _coordinator.SetAIMode(Team.Black, BetrayalUsage.Full, "normal");
 
             _coordinator.TryRequestMove(isGameActive: true);
             Assert.That(_coordinator.IsSearchInFlight, Is.True);
@@ -130,12 +132,12 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         public void CancelInFlightSearch_PreventsTheInFlightSearchFromEverPlayingAMove()
         {
             // Deep/slow search settings so cancellation has a wide window to land inside.
-            var slowCoordinator = new AIMatchCoordinator(_engine, _board, move => _lastPlayedMove = move, SlowSettings);
+            var slowCoordinator = new AIMatchCoordinator(_engine, _board, move => _lastPlayedMove = move, SlowSettings, ProfileProvider);
             _board.CurrentTurn = Team.Black;
 
             try
             {
-                slowCoordinator.SetAIMode(Team.Black, BetrayalUsage.Full);
+                slowCoordinator.SetAIMode(Team.Black, BetrayalUsage.Full, "normal");
                 slowCoordinator.TryRequestMove(isGameActive: true);
                 slowCoordinator.CancelInFlightSearch();
 
@@ -160,10 +162,10 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             // Reconfiguring for AI play (e.g. a new match) must not leak the previous agent's
             // OnMoveDecided subscription or leave two agents racing to deliver a move.
             _board.CurrentTurn = Team.Black;
-            _coordinator.SetAIMode(Team.Black, BetrayalUsage.Full);
+            _coordinator.SetAIMode(Team.Black, BetrayalUsage.Full, "normal");
             _coordinator.TryRequestMove(isGameActive: true);
 
-            _coordinator.SetAIMode(Team.Black, BetrayalUsage.Full);
+            _coordinator.SetAIMode(Team.Black, BetrayalUsage.Full, "normal");
 
             Assert.That(_coordinator.IsSearchInFlight, Is.False,
                 "Reconfiguring via SetAIMode must cancel/replace the prior agent, not run both.");
@@ -173,12 +175,12 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         public void TryRequestMove_ThenDelivery_EmitsSearchRequestedAndMoveDecided()
         {
             var logger = new CapturingLogger();
-            var coordinator = new AIMatchCoordinator(_engine, _board, move => _lastPlayedMove = move, ShallowSettings, logger);
+            var coordinator = new AIMatchCoordinator(_engine, _board, move => _lastPlayedMove = move, ShallowSettings, ProfileProvider, logger);
             _board.CurrentTurn = Team.Black;
 
             try
             {
-                coordinator.SetAIMode(Team.Black, BetrayalUsage.Full);
+                coordinator.SetAIMode(Team.Black, BetrayalUsage.Full, "normal");
                 coordinator.TryRequestMove(isGameActive: true);
 
                 Assert.That(logger.Codes, Contains.Item(DomainEventCode.AI_SearchRequested),
@@ -206,12 +208,12 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         {
             var logger = new CapturingLogger();
             // Slow settings so the search is genuinely still in flight when we cancel it.
-            var coordinator = new AIMatchCoordinator(_engine, _board, move => _lastPlayedMove = move, SlowSettings, logger);
+            var coordinator = new AIMatchCoordinator(_engine, _board, move => _lastPlayedMove = move, SlowSettings, ProfileProvider, logger);
             _board.CurrentTurn = Team.Black;
 
             try
             {
-                coordinator.SetAIMode(Team.Black, BetrayalUsage.Full);
+                coordinator.SetAIMode(Team.Black, BetrayalUsage.Full, "normal");
                 coordinator.TryRequestMove(isGameActive: true);
                 coordinator.CancelInFlightSearch();
 
@@ -228,11 +230,11 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         public void CancelInFlightSearch_WithNoSearchRunning_LogsNothing()
         {
             var logger = new CapturingLogger();
-            var coordinator = new AIMatchCoordinator(_engine, _board, move => _lastPlayedMove = move, ShallowSettings, logger);
+            var coordinator = new AIMatchCoordinator(_engine, _board, move => _lastPlayedMove = move, ShallowSettings, ProfileProvider, logger);
 
             try
             {
-                coordinator.SetAIMode(Team.Black, BetrayalUsage.Full);
+                coordinator.SetAIMode(Team.Black, BetrayalUsage.Full, "normal");
                 coordinator.CancelInFlightSearch(); // nothing is searching
 
                 Assert.That(logger.Codes, Has.No.Member(DomainEventCode.AI_SearchCancelled),
@@ -248,7 +250,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         public void Dispose_StopsFurtherMoveDelivery()
         {
             _board.CurrentTurn = Team.Black;
-            _coordinator.SetAIMode(Team.Black, BetrayalUsage.Full);
+            _coordinator.SetAIMode(Team.Black, BetrayalUsage.Full, "normal");
             _coordinator.TryRequestMove(isGameActive: true);
 
             _coordinator.Dispose();
