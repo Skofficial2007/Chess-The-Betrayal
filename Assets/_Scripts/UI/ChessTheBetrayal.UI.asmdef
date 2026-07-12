@@ -2,6 +2,7 @@
   "name": "ChessTheBetrayal.UI",
   "references": [
     "ChessTheBetrayal.Core",
+    "ChessTheBetrayal.AI",
     "ChessTheBetrayal.Events",
     "ChessTheBetrayal.Infrastructure",
     "Unity.TextMeshPro",

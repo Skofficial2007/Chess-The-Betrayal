@@ -146,7 +146,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         public void HandleTeamAnimationComplete_WithPendingPracticeSettings_AppliesEveryChoiceAndConsumesItOnce()
         {
             var settings = new PracticeMatchSettings(
-                betrayalEnabled: false, aiDefendOnly: true, retributionSkipAllowed: false, difficulty: AIDifficulty.Hard);
+                betrayalEnabled: false, aiDefendOnly: true, retributionSkipAllowed: false, aiProfileId: "hard");
             _matchFlow.SetPracticeMatchSettings(settings);
 
             _matchFlow.HandleTeamRollRequested();
@@ -190,7 +190,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
                 raiseGameReset: () => _raisedGameResetCount++);
 
             var settings = new PracticeMatchSettings(
-                betrayalEnabled: true, aiDefendOnly: false, retributionSkipAllowed: true, difficulty: AIDifficulty.Normal);
+                betrayalEnabled: true, aiDefendOnly: false, retributionSkipAllowed: true, aiProfileId: "normal");
             matchFlow.SetPracticeMatchSettings(settings);
 
             matchFlow.HandleTeamRollRequested();
@@ -332,7 +332,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         public void CanSelectPiece_AiMatch_HumanControlsOnlyTheirOwnTeam()
         {
             var settings = new PracticeMatchSettings(
-                betrayalEnabled: true, aiDefendOnly: false, retributionSkipAllowed: true, difficulty: AIDifficulty.Normal);
+                betrayalEnabled: true, aiDefendOnly: false, retributionSkipAllowed: true, aiProfileId: "normal");
             _matchFlow.SetPracticeMatchSettings(settings);
             _matchFlow.HandleTeamRollRequested();
             _matchFlow.HandleTeamAnimationComplete();
@@ -363,7 +363,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             var mode = new GameModeConfig("Blitz 5|0", baseTimeMs: 5 * 60_000L, incrementMs: 0);
             _matchFlow.HandleGameModeReceived(mode);
 
-            _matchFlow.SetAIMode(Team.Black, BetrayalUsage.Full);
+            _matchFlow.SetAIMode(Team.Black, BetrayalUsage.Full, "normal");
 
             Assert.That(_matchFlow.IsAiMode, Is.True);
             Assert.That(_matchFlow.SelectedMode.IsUnlimited, Is.True,

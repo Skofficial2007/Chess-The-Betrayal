@@ -1,4 +1,5 @@
 using UnityEngine;
+using ChessTheBetrayal.AI;
 using ChessTheBetrayal.Core.Data;
 
 namespace ChessTheBetrayal.UI
@@ -14,7 +15,7 @@ namespace ChessTheBetrayal.UI
         private const string KeyBetrayalEnabled = "PracticeMatch.BetrayalEnabled";
         private const string KeyAiDefendOnly = "PracticeMatch.AiDefendOnly";
         private const string KeyRetributionSkipAllowed = "PracticeMatch.RetributionSkipAllowed";
-        private const string KeyDifficulty = "PracticeMatch.Difficulty";
+        private const string KeyAiProfileId = "PracticeMatch.AiProfileId";
 
         /// <summary>Returns the last saved settings, or PracticeMatchSettings.Default if none were ever saved.</summary>
         public static PracticeMatchSettings Load()
@@ -28,7 +29,7 @@ namespace ChessTheBetrayal.UI
                 betrayalEnabled: PlayerPrefs.GetInt(KeyBetrayalEnabled, 1) != 0,
                 aiDefendOnly: PlayerPrefs.GetInt(KeyAiDefendOnly, 0) != 0,
                 retributionSkipAllowed: PlayerPrefs.GetInt(KeyRetributionSkipAllowed, 1) != 0,
-                difficulty: (AIDifficulty)PlayerPrefs.GetInt(KeyDifficulty, (int)AIDifficulty.Normal));
+                aiProfileId: PlayerPrefs.GetString(KeyAiProfileId, AIProfileTable.DefaultId));
         }
 
         public static void Save(PracticeMatchSettings settings)
@@ -36,7 +37,7 @@ namespace ChessTheBetrayal.UI
             PlayerPrefs.SetInt(KeyBetrayalEnabled, settings.BetrayalEnabled ? 1 : 0);
             PlayerPrefs.SetInt(KeyAiDefendOnly, settings.AiDefendOnly ? 1 : 0);
             PlayerPrefs.SetInt(KeyRetributionSkipAllowed, settings.RetributionSkipAllowed ? 1 : 0);
-            PlayerPrefs.SetInt(KeyDifficulty, (int)settings.Difficulty);
+            PlayerPrefs.SetString(KeyAiProfileId, settings.AiProfileId);
             PlayerPrefs.Save();
         }
     }
