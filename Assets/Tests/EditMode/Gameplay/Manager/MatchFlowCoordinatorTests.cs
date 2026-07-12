@@ -30,6 +30,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             public FixedRandomSource(bool nextBool) { _nextBool = nextBool; }
             public bool NextBool() => _nextBool;
             public int NextInt(int maxExclusive) => 0;
+            public float NextFloat() => 0f;
         }
 
         private GameObject _host;

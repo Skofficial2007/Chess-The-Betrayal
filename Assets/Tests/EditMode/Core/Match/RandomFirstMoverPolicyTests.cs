@@ -25,6 +25,8 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Match
             public bool NextBool() => _nextBool;
 
             public int NextInt(int maxExclusive) => 0;
+
+            public float NextFloat() => 0f;
         }
 
         private RandomFirstMoverPolicy _policy;

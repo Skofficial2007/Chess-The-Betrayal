@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
+using ChessTheBetrayal.Core.Utils;
 
 namespace ChessTheBetrayal.AI
 {
@@ -31,6 +32,9 @@ namespace ChessTheBetrayal.AI
         private readonly AlphaBetaSearch _search;
         private readonly AISearchSettings _settings;
         private readonly TranspositionTable _tt;
+        private readonly AIProfile _profile;
+        private readonly IRandomSource _rng;
+        private readonly MoveSelectionPolicy _selectionPolicy = new MoveSelectionPolicy();
 
         private volatile bool _hasResult;
         private MoveCommand _pendingResult;
@@ -61,7 +65,25 @@ namespace ChessTheBetrayal.AI
             return ex;
         }
 
+        /// <summary>Convenience constructor with no AI personality — the search's own best move is
+        /// always returned, with zero RNG calls. Used by callers that don't model AIProfile at all
+        /// (tests exercising raw search behavior). Production always goes through the full
+        /// constructor below via AIMatchCoordinator.</summary>
         public AsyncAIAgent(IChessEngine engine, IPositionEvaluator evaluator, AISearchSettings settings)
+            : this(engine, evaluator, settings, AIProfile.None, null)
+        {
+        }
+
+        /// <summary>
+        /// profile/rng feed MoveSelectionPolicy's blunder-roll/tie-break/Betrayal-aggression
+        /// selection, applied to the search's own ranked root-move output once FindBestMove
+        /// completes (see RequestBestMove's worker-thread epilogue) — never inventing a move,
+        /// only choosing among the search's own legal, ranked candidates. rng == null skips
+        /// selection entirely and returns the search's exact best move, matching the convenience
+        /// constructor above byte-for-byte.
+        /// </summary>
+        public AsyncAIAgent(IChessEngine engine, IPositionEvaluator evaluator, AISearchSettings settings,
+            AIProfile profile, IRandomSource rng)
         {
             // Owned here (not by AlphaBetaSearch) so it PERSISTS across FindBestMove calls within a
             // match — this is what attacks the successive-turn escalation the TT is built for.
@@ -70,6 +92,8 @@ namespace ChessTheBetrayal.AI
             _tt = new TranspositionTable(log2Size: 20); // ~16 MB desktop; mobile sizing TBD via settings
             _search = new AlphaBetaSearch(engine, evaluator, transpositionTable: _tt);
             _settings = settings;
+            _profile = profile;
+            _rng = rng;
         }
 
         /// <summary>
@@ -100,7 +124,24 @@ namespace ChessTheBetrayal.AI
             {
                 try
                 {
-                    MoveCommand best = _search.FindBestMove(isolated, _settings, token);
+                    // rescoreMargin > 0 only for a personality-driven profile (BlunderMarginCp or
+                    // TieBreakWindowCp nonzero) — un-biases the alpha-beta-tightened scores of the
+                    // handful of candidates SelectFinalMove might actually pick. Zero for the
+                    // convenience-ctor/zero-dial (Impossible tier) path, matching pre-AI-24 cost.
+                    int rescoreMargin = Math.Max(_profile.BlunderMarginCp, _profile.TieBreakWindowCp);
+                    MoveCommand best = _search.FindBestMove(isolated, _settings, token, rescoreMargin);
+
+                    // MoveSelectionPolicy applies AIProfile's personality dials to the search's own
+                    // ranked root-move output — still on THIS worker thread, before the result ever
+                    // crosses to the main thread. rng == null (convenience ctor) or a fully zero-dial
+                    // profile both skip this entirely, returning FindBestMove's own best move
+                    // unchanged — byte-identical to pre-AI-24 behavior.
+                    if (_rng != null && (_profile.BlunderRate > 0f || _profile.TieBreakWindowCp > 0))
+                    {
+                        best = _selectionPolicy.SelectFinalMove(
+                            _search.RootMoves, _search.RootScores, _search.RootMoveCount, _search.BestRootIndex,
+                            _profile, _rng);
+                    }
 
                     // A budget-expiry cancellation is the EXPECTED, successful outcome of iterative
                     // deepening — FindBestMove already returns the best move from the last fully
