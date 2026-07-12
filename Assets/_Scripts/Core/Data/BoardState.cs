@@ -33,6 +33,36 @@ namespace ChessTheBetrayal.Core.Data
         public ulong ZobristHash { get; set; }
 
         /// <summary>
+        /// A fingerprint of the random key tables every ZobristHash is built from. The keys are
+        /// deterministic (fixed seed) so this stays stable across runs on the same code, but it
+        /// changes if the key-generation shape ever changes (a new key table, a different table
+        /// size, a different seed). Anything that persists a Zobrist hash across a code change —
+        /// the opening book being the first example — should stamp this value alongside the hash
+        /// and refuse to trust a hash stamped with a different one, rather than silently treating
+        /// two different key schemes as if they produced comparable hashes.
+        /// </summary>
+        private static ulong? _zobristSchemeVersion;
+
+        public static ulong ZobristSchemeVersion =>
+            _zobristSchemeVersion ??= ComputeZobristSchemeVersion();
+
+        private static ulong ComputeZobristSchemeVersion()
+        {
+            ulong fingerprint = 0;
+            fingerprint ^= PieceKeys[0, 1, 0];
+            fingerprint ^= PieceKeys[1, 6, 63];
+            fingerprint ^= BlackToMoveKey;
+            fingerprint ^= CastlingKeys[15];
+            fingerprint ^= EnPassantKeys[7];
+            fingerprint ^= BetrayalPhaseKey;
+            fingerprint ^= PendingBetrayerSquareKeys[63];
+            fingerprint ^= BetrayalInitiatorIsBlackKey;
+            fingerprint ^= (ulong)PieceKeys.Length;
+            fingerprint ^= ((ulong)CastlingKeys.Length << 32) | (uint)EnPassantKeys.Length;
+            return fingerprint;
+        }
+
+        /// <summary>
         /// 4-bit mask tracking available castling rights.
         /// Bit 0: White Kingside, Bit 1: White Queenside, Bit 2: Black Kingside, Bit 3: Black Queenside
         /// </summary>

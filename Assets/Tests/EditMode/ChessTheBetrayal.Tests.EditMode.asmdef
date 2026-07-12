@@ -6,7 +6,8 @@
     "ChessTheBetrayal.Gameplay.Manager",
     "ChessTheBetrayal.AI",
     "ChessTheBetrayal.Events",
-    "ChessTheBetrayal.Tests.Utilities"
+    "ChessTheBetrayal.Tests.Utilities",
+    "ChessTheBetrayal.EditorTools"
   ],
   "includePlatforms": ["Editor"],
   "excludePlatforms": [],

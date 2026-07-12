@@ -1,6 +1,7 @@
 {
   "name": "ChessTheBetrayal.EditorTools",
   "references": [
+    "ChessTheBetrayal.AI",
     "ChessTheBetrayal.Core",
     "ChessTheBetrayal.Events",
     "ChessTheBetrayal.Infrastructure",

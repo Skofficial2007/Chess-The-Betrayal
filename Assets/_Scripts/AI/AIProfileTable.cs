@@ -4,13 +4,16 @@ namespace ChessTheBetrayal.AI
 {
     /// <summary>
     /// Built-in fallback roster of <see cref="AIProfile"/> rows. Ships in the AI assembly so
-    /// EditMode tests and a missing/corrupt asset provider always have a valid source of truth —
-    /// see ADR_AI23_Profile_EventStream_OpeningBook.md Section 1.4.
+    /// EditMode tests and a missing/corrupt asset provider always have a valid roster to fall
+    /// back on.
     /// </summary>
     public static class AIProfileTable
     {
         public const string DefaultId = "normal";
 
+        // Time budgets above 3000ms are a temporary placeholder. The real target for every
+        // difficulty tier is an AI move under 3 seconds — "hard" and above will need to come
+        // down once the remaining search performance work lands.
         public static readonly IReadOnlyList<AIProfile> BuiltIn = new[]
         {
             new AIProfile("easy",       maxDepth: 3,  softTimeBudgetMs: 800,  blunderRate: 0.30f, blunderMarginCp: 120, betrayalAggression: 0f,    attackDefenseBias: 1.0f, tieBreakWindowCp: 30, useOpeningBook: true),
