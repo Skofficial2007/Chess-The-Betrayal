@@ -93,9 +93,11 @@ namespace ChessTheBetrayal.Gameplay.Manager
             AISearchSettings settings = _searchSettingsFactory(betrayalUsage, profile);
             _configuredDepth = settings.MaxDepth;
 
+            EvaluationWeights weights = EvaluationWeights.FromProfile(profile);
+
             var agent = new AsyncAIAgent(
                 _engine,
-                new BetrayalAwareEvaluator(),
+                new BetrayalAwareEvaluator(weights),
                 settings,
                 profile,
                 new SystemRandomSource());
