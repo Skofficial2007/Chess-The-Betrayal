@@ -53,6 +53,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
                 onExecutorPromotionRequired: (_, __, ___) => { },
                 raiseGameModeConfigured: _ => { },
                 raiseGameStarted: () => { },
+                raiseBoardResyncRequired: () => { },
                 setSharedBoardState: _ => { },
                 clearSharedBoardState: () => { },
                 raiseGameReset: () => { });
