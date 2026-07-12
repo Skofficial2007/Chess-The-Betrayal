@@ -197,5 +197,16 @@ namespace ChessTheBetrayal.View
         /// left to ease into. LowerDeselect is for the normal deselect path; this is for teardown.
         /// </summary>
         void CancelSelectionAnimation();
+
+        /// <summary>
+        /// Immediately stops every tween this animator owns — move, scale, shake, outline,
+        /// dissolve, transition, stamp, lift/bob — with no completion callbacks and no attempt to
+        /// restore the transform. Callers must invoke this before destroying the piece's
+        /// GameObject: PrimeTween keeps driving a live tween's onValueChange callback for the
+        /// remainder of the frame even after Destroy() is called (destruction is deferred to
+        /// end-of-frame), so a Transform write from an in-flight tween can hit an already-destroyed
+        /// object and throw MissingReferenceException.
+        /// </summary>
+        void StopAllAnimations();
     }
 }

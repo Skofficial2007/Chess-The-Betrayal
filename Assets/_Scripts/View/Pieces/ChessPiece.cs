@@ -256,13 +256,21 @@ namespace ChessTheBetrayal.View
         }
 
         /// <summary>
-        /// PrimeTween already no-ops safely against a tween whose target was destroyed (see the
-        /// class doc on PrimeTweenPieceAnimator), so this isn't strictly required for correctness —
-        /// but the idle bob loop started by LiftSelect runs indefinitely (cycles: -1) while a piece
-        /// is selected, and stopping it explicitly the instant this GameObject is destroyed (e.g.
-        /// captured mid-lift by a fast Betrayal) is cheap, obviously correct, and avoids relying
-        /// solely on library behavior for a tween with no natural end.
+        /// Stops every tween this piece's animator owns. Unity's Destroy() is deferred to the end
+        /// of the current frame, not synchronous — a tween can still fire its onValueChange
+        /// callback against this Transform on that same frame after Destroy() is called but before
+        /// the object is actually gone, and once it IS gone that callback throws
+        /// MissingReferenceException. Callers that destroy a piece's GameObject directly (rather
+        /// than going through PlayTransitionOut/PlayStompedDeath/PlayEnPassantDeath, which already
+        /// resolve their own tweens before invoking their completion callback) must call this
+        /// first. OnDestroy() is too late for this purpose — it can run after the tween has already
+        /// ticked once against the half-destroyed object this same frame.
         /// </summary>
+        public void StopAllAnimations()
+        {
+            _animator?.StopAllAnimations();
+        }
+
         private void OnDestroy()
         {
             _animator?.CancelSelectionAnimation();

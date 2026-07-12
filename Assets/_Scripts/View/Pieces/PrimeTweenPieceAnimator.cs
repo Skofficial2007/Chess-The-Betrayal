@@ -972,6 +972,21 @@ namespace ChessTheBetrayal.View
             HideSelectionOutline(instant: true);
         }
 
+        /// <summary>
+        /// Stops every tween/sequence this animator can have live, regardless of which field holds
+        /// it. Tween.StopAll(onTarget) covers every tween created against a given target object —
+        /// this class's tweens are split between targeting `this` (the Tween.Custom ones driving
+        /// shake/dissolve/outline) and `_transform` (the Tween.Position/Scale ones) — so both
+        /// targets need a StopAll pass. Individual .Stop() calls on each field would be equivalent
+        /// but require updating this method every time a new tween field is added; StopAll(target)
+        /// is self-maintaining against that drift.
+        /// </summary>
+        public void StopAllAnimations()
+        {
+            Tween.StopAll(onTarget: this);
+            Tween.StopAll(onTarget: _transform);
+        }
+
         private void StartBobLoop()
         {
             // A very subtle infinite up/down drift while the piece stays selected — 2-3mm of travel

@@ -104,5 +104,8 @@ namespace ChessTheBetrayal.View
         // No tween is ever running here, so cancelling is just forgetting the remembered rest
         // position — there's nothing to stop.
         public void CancelSelectionAnimation() => _restPosition = null;
+
+        // No tween ever exists in headless/AI play — nothing to stop.
+        public void StopAllAnimations() { }
     }
 }
