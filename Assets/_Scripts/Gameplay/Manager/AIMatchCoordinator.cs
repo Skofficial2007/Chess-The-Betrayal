@@ -8,6 +8,19 @@ using ChessTheBetrayal.Core.Engine;
 namespace ChessTheBetrayal.Gameplay.Manager
 {
     /// <summary>
+    /// Local-AI-only presentation state for the background search agent, driven entirely by
+    /// AIMatchCoordinator on the main thread (the worker thread only sets AsyncAIAgent's own
+    /// volatile completion flag; Tick() is what observes it and advances this machine). Idle is
+    /// the rest state; Searching starts the instant TryRequestMove hands work to the agent;
+    /// ResultReady is a one-tick pulse the instant Tick() observes a completed search, then the
+    /// machine falls straight back to Idle once HandleMoveDecided has fed the move through
+    /// _playMove — nothing external needs to observe ResultReady, so it's transient by design,
+    /// not a state a caller can get stuck polling. CancelInFlightSearch takes Searching straight
+    /// back to Idle without ever visiting ResultReady.
+    /// </summary>
+    public enum AgentActivity { Idle, Searching, ResultReady }
+
+    /// <summary>
     /// Owns the background-thread AI agent's lifecycle: constructing it for a session, deciding
     /// when to ask it for a move, pumping its main-thread result delivery, and tearing it down.
     /// Extracted from GameManager (AI-13) so the AI-specific slice of match orchestration is a
@@ -47,8 +60,11 @@ namespace ChessTheBetrayal.Gameplay.Manager
         /// <summary>True once <see cref="SetAIMode"/> has constructed an agent for this session.</summary>
         public bool IsAiMode => _aiAgent != null;
 
+        /// <summary>Current step of the search-lifecycle state machine — see <see cref="AgentActivity"/>.</summary>
+        public AgentActivity Activity { get; private set; } = AgentActivity.Idle;
+
         /// <summary>True while a background search is in flight — UndoService's cancel-before-pop ordering reads this.</summary>
-        public bool IsSearchInFlight => _aiAgent is AsyncAIAgent asyncAgent && asyncAgent.IsSearching;
+        public bool IsSearchInFlight => Activity == AgentActivity.Searching;
 
         /// <summary>Fires when the AI's background search worker throws. TEMP debug surface (see AsyncAIAgent) — GameManager routes it to Debug.LogError.</summary>
         public event Action<string> OnSearchException;
@@ -117,6 +133,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
             }
 
             _searchStopwatch.Restart();
+            Activity = AgentActivity.Searching;
             _aiAgent.RequestBestMove(_board, _aiTeam);
         }
 
@@ -127,6 +144,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
 
             asyncAgent.CancelSearch();
             _searchStopwatch.Reset();
+            Activity = AgentActivity.Idle;
 
             if (_logger != null && _logger.IsVerbose)
             {
@@ -156,6 +174,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
         private void HandleMoveDecided(MoveCommand move)
         {
             if (_searchStopwatch.IsRunning) _searchStopwatch.Stop();
+            Activity = AgentActivity.ResultReady;
 
             if (_logger != null && _logger.IsVerbose)
             {
@@ -167,6 +186,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
             }
 
             _playMove(move);
+            Activity = AgentActivity.Idle;
         }
 
         private void TearDownAgent()
@@ -177,6 +197,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
                 asyncAgent.Dispose();
             }
             _aiAgent = null;
+            Activity = AgentActivity.Idle;
         }
 
         public void Dispose() => TearDownAgent();

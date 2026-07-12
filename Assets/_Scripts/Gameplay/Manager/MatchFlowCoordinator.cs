@@ -49,6 +49,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
         private readonly Action<Vector2Int, Vector2Int, bool> _onExecutorPromotionRequired;
         private readonly Action<GameModeConfig> _raiseGameModeConfigured;
         private readonly Action _raiseGameStarted;
+        private readonly Action _raiseBoardResyncRequired;
         private readonly Action<BoardState> _setSharedBoardState;
         private readonly Action _clearSharedBoardState;
         private readonly Action _raiseGameReset;
@@ -96,7 +97,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
             Action showAIMatchSettings,
             Action<Vector2Int, Vector2Int> onExecutorMoveRejected,
             Action<Vector2Int, Vector2Int, bool> onExecutorPromotionRequired,
-            Action<GameModeConfig> raiseGameModeConfigured, Action raiseGameStarted,
+            Action<GameModeConfig> raiseGameModeConfigured, Action raiseGameStarted, Action raiseBoardResyncRequired,
             Action<BoardState> setSharedBoardState, Action clearSharedBoardState, Action raiseGameReset)
         {
             _board = board;
@@ -121,6 +122,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
             _onExecutorPromotionRequired = onExecutorPromotionRequired;
             _raiseGameModeConfigured = raiseGameModeConfigured;
             _raiseGameStarted = raiseGameStarted;
+            _raiseBoardResyncRequired = raiseBoardResyncRequired;
             _setSharedBoardState = setSharedBoardState;
             _clearSharedBoardState = clearSharedBoardState;
             _raiseGameReset = raiseGameReset;
@@ -151,8 +153,38 @@ namespace ChessTheBetrayal.Gameplay.Manager
             _triggerTeamRoulette(PlayerTeam);
         }
 
-        /// <summary>The View finished its 4-second animation. Now we actually build the game state.</summary>
+        /// <summary>
+        /// The View finished its 4-second animation. Now we actually build the game state, then
+        /// tell the view about it. Thin view-triggered adapter over ConfigureMatch: forwards the
+        /// one-shot pending Practice settings and performs the two presentation-facing raises that
+        /// only the local-play flow needs (a future server-authoritative caller invokes
+        /// ConfigureMatch directly and decides its own readiness/broadcast timing instead).
+        /// </summary>
         public void HandleTeamAnimationComplete()
+        {
+            PracticeMatchSettings? settings = _pendingPracticeSettings;
+            _pendingPracticeSettings = null;
+
+            ConfigureMatch(settings);
+
+            _raiseGameModeConfigured(SelectedMode);
+
+            // Populate the shared board bridge before raising the event, so listeners that
+            // read the board from the event callback see the live position and not stale data.
+            _setSharedBoardState(_board);
+            _raiseGameStarted();
+        }
+
+        /// <summary>
+        /// Pure domain half of match initialization: rolls the board back to the standard
+        /// position, rebuilds the move executor, applies the given Practice settings (if any),
+        /// and boots the turn state machine into Starting (clock paused, waiting for
+        /// BeginPlay). Raises no view-facing events and touches no shared-state bridge — a
+        /// future server-authoritative caller can invoke this directly and decide its own
+        /// readiness/broadcast timing instead of inheriting the local-play UI sequencing that
+        /// HandleTeamAnimationComplete layers on top.
+        /// </summary>
+        public void ConfigureMatch(PracticeMatchSettings? settings)
         {
             _board.Clear();
             _setup.PlaceStandardPieces(_board, _boardSizeX, _boardSizeY);
@@ -178,21 +210,19 @@ namespace ChessTheBetrayal.Gameplay.Manager
             _moveExecutor.OnRetributionSkipConfirmed += _matchDriver.RequestRetributionSkip;
 
             // Practice Match Setup was confirmed for this match: apply every board/AI-level choice
-            // now, at the one true match-init seam, then consume the one-shot settings so a
-            // subsequent Replay/plain match never inherits them by accident.
-            if (_pendingPracticeSettings.HasValue)
+            // now, at the one true match-init seam.
+            if (settings.HasValue)
             {
-                PracticeMatchSettings settings = _pendingPracticeSettings.Value;
-                _pendingPracticeSettings = null;
+                PracticeMatchSettings confirmedSettings = settings.Value;
 
-                _board.BetrayalRightAvailable = settings.BetrayalEnabled;
-                RetributionSkipAllowed = settings.RetributionSkipAllowed;
+                _board.BetrayalRightAvailable = confirmedSettings.BetrayalEnabled;
+                RetributionSkipAllowed = confirmedSettings.RetributionSkipAllowed;
 
                 Team aiTeam = PlayerTeam == Team.White ? Team.Black : Team.White;
-                BetrayalUsage aiBetrayalUsage = settings.AiDefendOnly ? BetrayalUsage.DefendOnly : BetrayalUsage.Full;
-                SetAIMode(aiTeam, aiBetrayalUsage, settings.AiProfileId);
+                BetrayalUsage aiBetrayalUsage = confirmedSettings.AiDefendOnly ? BetrayalUsage.DefendOnly : BetrayalUsage.Full;
+                SetAIMode(aiTeam, aiBetrayalUsage, confirmedSettings.AiProfileId);
 
-                if (_logMoves) Debug.Log($"[MatchFlowCoordinator] Practice match started. AI={aiTeam}, BetrayalEnabled={settings.BetrayalEnabled}, AiBetrayalUsage={aiBetrayalUsage}, SkipAllowed={settings.RetributionSkipAllowed}, AiProfileId={settings.AiProfileId}. Human plays {PlayerTeam}.");
+                if (_logMoves) Debug.Log($"[MatchFlowCoordinator] Practice match started. AI={aiTeam}, BetrayalEnabled={confirmedSettings.BetrayalEnabled}, AiBetrayalUsage={aiBetrayalUsage}, SkipAllowed={confirmedSettings.RetributionSkipAllowed}, AiProfileId={confirmedSettings.AiProfileId}. Human plays {PlayerTeam}.");
             }
             else
             {
@@ -204,19 +234,12 @@ namespace ChessTheBetrayal.Gameplay.Manager
             InitializeClock();
 
             // Boot into Starting so the clock stays paused until the presentation layer
-            // signals ready (see StartMatch).
+            // signals ready (see BeginPlay).
             _matchDriver.TransitionToPhase(TurnPhase.Starting);
-
-            _raiseGameModeConfigured(SelectedMode);
-
-            // Populate the shared board bridge before raising the event, so listeners that
-            // read the board from the event callback see the live position and not stale data.
-            _setSharedBoardState(_board);
-            _raiseGameStarted();
 
             if (_logMoves)
             {
-                Debug.Log($"[MatchFlowCoordinator] New game started. Player: {PlayerTeam}. Mode: {SelectedMode.Label}. Phase: {CurrentPhase}");
+                Debug.Log($"[MatchFlowCoordinator] New game configured. Player: {PlayerTeam}. Mode: {SelectedMode.Label}. Phase: {CurrentPhase}");
             }
         }
 
@@ -299,7 +322,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
         }
 
         /// <summary>Called by the presentation layer when all intro animations are finished. Unlocks the board, allowing pieces to move and starting the active player's clock.</summary>
-        public void StartMatch()
+        public void BeginPlay()
         {
             if (CurrentPhase != TurnPhase.Starting) return;
 
@@ -369,19 +392,21 @@ namespace ChessTheBetrayal.Gameplay.Manager
             // The undo mutated only the domain board (pieces unmade, captures restored). BoardVisuals
             // is a purely incremental animator driven by per-move events — it has no idea an undo
             // happened — so without this it keeps showing the post-move position. Re-point the shared
-            // board bridge at the reverted board and re-raise game-started, which drives BoardVisuals'
-            // one full-rebuild path (HandleGameStarted: ClearAllVisuals + SpawnAllPieces). Pieces snap
-            // to the reverted position; there's no reverse animation, which is acceptable for undo.
+            // board bridge at the reverted board and raise BoardResyncRequired, which drives
+            // BoardVisuals' full-rebuild path (ClearAllVisuals + SpawnAllPieces). Pieces snap to the
+            // reverted position; there's no reverse animation, which is acceptable for undo. A
+            // distinct signal from game-started so "game started" stays a true lifecycle fact a
+            // network reconnect can also rely on, instead of being overloaded to also mean "resync."
             _setSharedBoardState(_board);
-            _raiseGameStarted();
+            _raiseBoardResyncRequired();
         }
 
         /// <summary>
         /// Configures the session for AI play. AI sessions always run untimed (see InitializeClock).
-        /// Call this — and only this — before HandleTeamAnimationComplete/StartMatch run their
+        /// Call this — and only this — before HandleTeamAnimationComplete/BeginPlay run their
         /// course; IsAiMode/the coordinator's agent being set is what makes TryRequestMove (fired
-        /// from StartMatch and every TurnChangedEvent) not a no-op. Calling it late (after
-        /// StartMatch) simply means the AI won't move until the next turn change — there's no
+        /// from BeginPlay and every TurnChangedEvent) not a no-op. Calling it late (after
+        /// BeginPlay) simply means the AI won't move until the next turn change — there's no
         /// unsafe half-configured state in between.
         /// </summary>
         public void SetAIMode(Team aiTeam, BetrayalUsage betrayalUsage, string aiProfileId)

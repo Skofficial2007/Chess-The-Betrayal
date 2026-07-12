@@ -13,7 +13,7 @@ namespace ChessTheBetrayal.Events
         private void RaiseDebug()
         {
             if (!Application.isPlaying) return;
-            Raise(new MoveExecutedPayload(default, 0, _debugIsCheck));
+            Raise(new MoveExecutedPayload(default, 0, _debugIsCheck, 0));
         }
     }
 }

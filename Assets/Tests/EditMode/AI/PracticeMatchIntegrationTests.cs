@@ -114,7 +114,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         [Test]
         public void FullMatch_HumanDrawsBlack_AiMovesFirstBeforeAnyHumanInput()
         {
-            // Mirrors GameManager.StartMatch's human-Black path: no preceding TurnChangedEvent
+            // Mirrors GameManager.BeginPlay's human-Black path: no preceding TurnChangedEvent
             // exists for the very first ply, so the caller must request the AI's move directly.
             _board.CurrentTurn = Team.White;
             ConstructAgent(BetrayalUsage.Full);
