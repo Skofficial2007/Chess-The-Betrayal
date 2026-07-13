@@ -214,6 +214,41 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
+        public void SelectFinalMove_BlunderRollFires_ReportsTrueViaOutParam()
+        {
+            var rootMoves = new List<MoveCommand>
+            {
+                Move(0, 1, 0, 2), // best, score 100
+                Move(1, 1, 1, 3), // score 80, within a 30cp margin
+            };
+            int[] rootScores = { 100, 80 };
+            var profile = ProfileWith(blunderRate: 1f, blunderMarginCp: 30); // always rolls the blunder
+
+            var policy = new MoveSelectionPolicy();
+            var rng = new ZeroRandomSource();
+
+            policy.SelectFinalMove(rootMoves, rootScores, rootMoves.Count, 0, profile, rng, out bool blunderRollFired);
+
+            Assert.That(blunderRollFired, Is.True);
+        }
+
+        [Test]
+        public void SelectFinalMove_BlunderRollNeverOffered_ReportsFalseViaOutParam()
+        {
+            var rootMoves = new List<MoveCommand> { Move(0, 1, 0, 2), Move(1, 1, 1, 3) };
+            int[] rootScores = { 100, 90 };
+            var profile = ProfileWith(blunderRate: 0f, tieBreakWindowCp: 20); // blunder roll never even attempted
+
+            var policy = new MoveSelectionPolicy();
+            var rng = new ZeroRandomSource();
+
+            policy.SelectFinalMove(rootMoves, rootScores, rootMoves.Count, 0, profile, rng, out bool blunderRollFired);
+
+            Assert.That(blunderRollFired, Is.False,
+                "The tie-break window can also return a non-best move (e.g. via Betrayal-aggression) — that must never be mistaken for a fired blunder roll.");
+        }
+
+        [Test]
         public void SelectFinalMove_NullRandomSource_ReturnsExactBestMove()
         {
             var rootMoves = new List<MoveCommand> { Move(0, 1, 0, 2), Move(1, 1, 1, 3) };
