@@ -27,8 +27,22 @@ namespace ChessTheBetrayal.AI
 
         public MoveCommand SelectFinalMove(
             IReadOnlyList<MoveCommand> rootMoves, int[] rootScores, int rootMoveCount, int bestIndex,
-            AIProfile profile, IRandomSource rng)
+            AIProfile profile, IRandomSource rng) =>
+            SelectFinalMove(rootMoves, rootScores, rootMoveCount, bestIndex, profile, rng, out _);
+
+        /// <summary>
+        /// Same selection as the four-argument overload, but also reports whether the blunder roll
+        /// actually fired (rolled under BlunderRate AND found a candidate within margin) — a caller
+        /// measuring how often a profile's configured BlunderRate translates into a real blunder
+        /// needs this distinguished from the tie-break window returning a non-best move for an
+        /// unrelated reason (a Betrayal-aggression reweight can do that too, at BlunderRate == 0).
+        /// </summary>
+        public MoveCommand SelectFinalMove(
+            IReadOnlyList<MoveCommand> rootMoves, int[] rootScores, int rootMoveCount, int bestIndex,
+            AIProfile profile, IRandomSource rng, out bool blunderRollFired)
         {
+            blunderRollFired = false;
+
             if (rootMoveCount == 0) return default;
             if (rng == null) return rootMoves[bestIndex];
 
@@ -53,6 +67,7 @@ namespace ChessTheBetrayal.AI
                 if (count > 0)
                 {
                     int pickPos = rng.NextInt(count);
+                    blunderRollFired = true;
                     return rootMoves[_candidateIndices[pickPos]];
                 }
                 // No candidate within margin (e.g. a lone legal move) — fall through rather than

@@ -31,6 +31,59 @@ namespace ChessTheBetrayal.Tests.Utilities
     }
 
     /// <summary>
+    /// Search telemetry summed across every move one side made in a game — a benchmark run cares
+    /// about a tier's typical cost per move, not any single move's numbers, so this divides the
+    /// interesting counters back out to a per-move mean rather than reporting the raw totals.
+    /// </summary>
+    public readonly struct MatchSideStats
+    {
+        public readonly int MoveCount;
+        public readonly long TotalNodesVisited;
+        public readonly long TotalQNodesVisited;
+        public readonly int DeepestCompletedDepth;
+        public readonly double TotalElapsedMs;
+
+        /// <summary>How many of this side's moves rolled a real blunder (see
+        /// MoveSelectionPolicy.SelectFinalMove's blunderRollFired out param) versus how many moves
+        /// had a nonzero chance to (BlunderRate &gt; 0). A tier whose observed rate drifts far from
+        /// its configured BlunderRate means the roll isn't expressing at the probability the preset
+        /// table claims.</summary>
+        public readonly int BlunderRollOffered;
+        public readonly int BlunderRollFired;
+
+        public MatchSideStats(int moveCount, long totalNodesVisited, long totalQNodesVisited,
+            int deepestCompletedDepth, double totalElapsedMs, int blunderRollOffered, int blunderRollFired)
+        {
+            MoveCount = moveCount;
+            TotalNodesVisited = totalNodesVisited;
+            TotalQNodesVisited = totalQNodesVisited;
+            DeepestCompletedDepth = deepestCompletedDepth;
+            TotalElapsedMs = totalElapsedMs;
+            BlunderRollOffered = blunderRollOffered;
+            BlunderRollFired = blunderRollFired;
+        }
+
+        public double MeanNodesPerMove => MoveCount == 0 ? 0 : (double)(TotalNodesVisited + TotalQNodesVisited) / MoveCount;
+        public double MeanMsPerMove => MoveCount == 0 ? 0 : TotalElapsedMs / MoveCount;
+        public float ObservedBlunderActuationRate => BlunderRollOffered == 0 ? 0f : (float)BlunderRollFired / BlunderRollOffered;
+    }
+
+    /// <summary>A completed game plus each side's aggregated search telemetry for it.</summary>
+    public readonly struct MatchStatsResult
+    {
+        public readonly MatchResult Result;
+        public readonly MatchSideStats WhiteStats;
+        public readonly MatchSideStats BlackStats;
+
+        public MatchStatsResult(MatchResult result, MatchSideStats whiteStats, MatchSideStats blackStats)
+        {
+            Result = result;
+            WhiteStats = whiteStats;
+            BlackStats = blackStats;
+        }
+    }
+
+    /// <summary>
     /// Plays one full game between two AIProfile-driven sides, entirely synchronously and off the
     /// worker-thread path AsyncAIAgent normally uses — there is no benefit to threading here and it
     /// would only add nondeterministic scheduling to what needs to be a bit-reproducible tournament.
@@ -65,6 +118,31 @@ namespace ChessTheBetrayal.Tests.Utilities
             BoardState startingPosition, AIProfile whiteProfile, AIProfile blackProfile,
             int rngSeedWhite, int rngSeedBlack, int plyCap = DefaultPlyCap)
         {
+            return PlayGameCore(startingPosition, whiteProfile, blackProfile, rngSeedWhite, rngSeedBlack, plyCap,
+                out _, out _);
+        }
+
+        /// <summary>
+        /// Same game as <see cref="PlayGame"/>, but also returns each side's search telemetry
+        /// summed across every move it made — the benchmark suite's whole reason for existing is
+        /// to capture strength drift and performance drift from the SAME tournament pass, since a
+        /// move-ordering or TT change usually shifts both node counts and game outcomes together.
+        /// </summary>
+        public MatchStatsResult PlayGameWithStats(
+            BoardState startingPosition, AIProfile whiteProfile, AIProfile blackProfile,
+            int rngSeedWhite, int rngSeedBlack, int plyCap = DefaultPlyCap)
+        {
+            MatchResult result = PlayGameCore(startingPosition, whiteProfile, blackProfile, rngSeedWhite, rngSeedBlack, plyCap,
+                out MatchSideStats whiteStats, out MatchSideStats blackStats);
+
+            return new MatchStatsResult(result, whiteStats, blackStats);
+        }
+
+        private MatchResult PlayGameCore(
+            BoardState startingPosition, AIProfile whiteProfile, AIProfile blackProfile,
+            int rngSeedWhite, int rngSeedBlack, int plyCap,
+            out MatchSideStats whiteStats, out MatchSideStats blackStats)
+        {
             BoardState board = startingPosition.CloneForSnapshot();
 
             var matchDriver = new MatchDriver(_engine, board, logMoves: false, domainLogger: null,
@@ -79,6 +157,9 @@ namespace ChessTheBetrayal.Tests.Utilities
             IRandomSource whiteRng = new SystemRandomSource(rngSeedWhite);
             IRandomSource blackRng = new SystemRandomSource(rngSeedBlack);
 
+            var whiteAccumulator = new SideStatsAccumulator();
+            var blackAccumulator = new SideStatsAccumulator();
+
             int ply = 0;
             for (; ply < plyCap && !board.IsGameOver; ply++)
             {
@@ -89,21 +170,30 @@ namespace ChessTheBetrayal.Tests.Utilities
                 AlphaBetaSearch search = isWhite ? whiteSearch : blackSearch;
                 MoveSelectionPolicy policy = isWhite ? whitePolicy : blackPolicy;
                 IRandomSource rng = isWhite ? whiteRng : blackRng;
+                SideStatsAccumulator accumulator = isWhite ? whiteAccumulator : blackAccumulator;
 
                 var settings = AISearchSettings.FromProfile(BetrayalUsage.Full, profile);
                 int rescoreMargin = Math.Max(profile.BlunderMarginCp, profile.TieBreakWindowCp);
 
+                var moveStopwatch = System.Diagnostics.Stopwatch.StartNew();
                 MoveCommand move = search.FindBestMove(board, settings, System.Threading.CancellationToken.None, rescoreMargin);
 
+                bool blunderRollFired = false;
                 if (profile.BlunderRate > 0f || profile.TieBreakWindowCp > 0)
                 {
                     move = policy.SelectFinalMove(
                         search.RootMoves, search.RootScores, search.RootMoveCount, search.BestRootIndex,
-                        profile, rng);
+                        profile, rng, out blunderRollFired);
                 }
+                moveStopwatch.Stop();
+
+                accumulator.Record(search.Stats, moveStopwatch.Elapsed.TotalMilliseconds, profile.BlunderRate > 0f, blunderRollFired);
 
                 matchDriver.PlayMove(move);
             }
+
+            whiteStats = whiteAccumulator.ToStats();
+            blackStats = blackAccumulator.ToStats();
 
             if (board.IsGameOver)
             {
@@ -117,6 +207,35 @@ namespace ChessTheBetrayal.Tests.Utilities
             }
 
             return new MatchResult(AdjudicateByMargin(board), ply, reachedPlyCap: true);
+        }
+
+        /// <summary>Sums one side's SearchStats across every move it made this game — a plain
+        /// mutable accumulator kept private since MatchSideStats itself stays an immutable result.</summary>
+        private sealed class SideStatsAccumulator
+        {
+            private int _moveCount;
+            private long _totalNodesVisited;
+            private long _totalQNodesVisited;
+            private int _deepestCompletedDepth;
+            private double _totalElapsedMs;
+            private int _blunderRollOffered;
+            private int _blunderRollFired;
+
+            public void Record(SearchStats stats, double elapsedMs, bool blunderRollOffered, bool blunderRollFired)
+            {
+                _moveCount++;
+                _totalNodesVisited += stats.NodesVisited;
+                _totalQNodesVisited += stats.QNodesVisited;
+                if (stats.LastCompletedDepth > _deepestCompletedDepth)
+                    _deepestCompletedDepth = stats.LastCompletedDepth;
+                _totalElapsedMs += elapsedMs;
+                if (blunderRollOffered) _blunderRollOffered++;
+                if (blunderRollFired) _blunderRollFired++;
+            }
+
+            public MatchSideStats ToStats() => new MatchSideStats(
+                _moveCount, _totalNodesVisited, _totalQNodesVisited, _deepestCompletedDepth,
+                _totalElapsedMs, _blunderRollOffered, _blunderRollFired);
         }
 
         /// <summary>

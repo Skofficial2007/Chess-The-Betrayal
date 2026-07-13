@@ -6,7 +6,8 @@
     "ChessTheBetrayal.Events",
     "ChessTheBetrayal.Infrastructure",
     "ChessTheBetrayal.UI",
-    "ChessTheBetrayal.View"
+    "ChessTheBetrayal.View",
+    "ChessTheBetrayal.Tests.Utilities"
   ],
   "includePlatforms": [
     "Editor"
