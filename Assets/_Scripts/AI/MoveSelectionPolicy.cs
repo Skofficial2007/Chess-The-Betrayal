@@ -84,6 +84,12 @@ namespace ChessTheBetrayal.AI
                 totalWeight += _weights[w];
             }
 
+            // A window made up entirely of Act moves at BetrayalAggression == -1 zeroes every
+            // weight, leaving nothing for the roll below to land on. Fall back to the best-scored
+            // move in the window rather than let the loop's own rounding fallback silently pick
+            // whatever happens to be last in candidate order.
+            if (totalWeight <= 0f) return best;
+
             float roll = rng.NextFloat() * totalWeight;
             float cumulative = 0f;
             for (int w = 0; w < windowCount; w++)
