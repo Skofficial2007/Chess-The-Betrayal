@@ -35,6 +35,15 @@ namespace ChessTheBetrayal.AI
         public long QMovesGenerated;            // total moves returned by the captures/Acts generator per standard qnode
         public long QMovesSearched;             // of those, how many survived the delta-prune filter
 
+        /// <summary>The deepest iterative-deepening depth FindBestMove fully completed before
+        /// returning — via a soft-time-budget cancellation, MaxDepth being reached, or an early
+        /// mate-found exit. Lets a caller distinguish "the search finished on its own" from "it
+        /// got cut off partway" without changing FindBestMove's return type, and is the only way
+        /// to compare search throughput across two runs that both hit the same wall-clock budget
+        /// cap (e.g. two devices both capped at a profile's SoftTimeBudgetMs) — the elapsed time
+        /// alone is identical in that case, but the depth reached is not.</summary>
+        public int LastCompletedDepth;
+
         // Per-depth cumulative node count (main + quiescence) at the moment each iterative-deepening
         // depth FULLY completes — the effective-branching-factor curve. Index 0 unused (depths are 1-7).
         public long NodesAfterDepth1;
@@ -69,7 +78,7 @@ namespace ChessTheBetrayal.AI
         }
 
         public override string ToString() =>
-            $"nodes={NodesVisited} tt(probe={TTProbes} hit={TTHits} emptyMiss={TTEmptyMisses} verifyMiss={TTVerificationMisses} store={TTStores} replace={TTReplacements}) " +
+            $"depth={LastCompletedDepth} nodes={NodesVisited} tt(probe={TTProbes} hit={TTHits} emptyMiss={TTEmptyMisses} verifyMiss={TTVerificationMisses} store={TTStores} replace={TTReplacements}) " +
             $"null(try={NullMoveAttempts} cut={NullMoveCutoffs}) lmr(reduce={LmrReductions} research={LmrReSearches}) pvs(scout={PvsScouts} research={PvsReSearches}) " +
             $"q(nodes={QNodesVisited} betrayalRes={QBetrayalResolutionNodes} actExp={QActExpansions} gen={QMovesGenerated} searched={QMovesSearched}) " +
             $"depthCurve(d1={NodesAfterDepth1} d2={NodesAfterDepth2} d3={NodesAfterDepth3} d4={NodesAfterDepth4} d5={NodesAfterDepth5} d6={NodesAfterDepth6} d7={NodesAfterDepth7})";
