@@ -12,13 +12,13 @@ namespace ChessTheBetrayal.AI
             for (int i = 0; i < table.Count; i++)
             {
                 if (string.Equals(table[i].Id, id, StringComparison.OrdinalIgnoreCase))
-                    return table[i];
+                    return AIProfileGuardrails.Apply(table[i]);
             }
 
             for (int i = 0; i < table.Count; i++)
             {
                 if (string.Equals(table[i].Id, AIProfileTable.DefaultId, StringComparison.OrdinalIgnoreCase))
-                    return table[i];
+                    return AIProfileGuardrails.Apply(table[i]);
             }
 
             throw new InvalidOperationException("AIProfileTable.BuiltIn must contain the DefaultId row.");
