@@ -223,6 +223,9 @@ namespace ChessTheBetrayal.AI
                 {
                     bestMove = bestThisDepth;
                     lastCompletedDepth = depth;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                    _tt.Stats.LastCompletedDepth = depth;
+#endif
 
                     // Commit BEFORE MoveToFront, in the pre-permutation index order the scratch
                     // array was just written in — MoveToFront below then shuffles _rootScores in
