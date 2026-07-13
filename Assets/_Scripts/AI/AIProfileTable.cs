@@ -11,6 +11,10 @@ namespace ChessTheBetrayal.AI
     {
         public const string DefaultId = "normal";
 
+        // PROVISIONAL — these six rows are pre-validation estimates. They'll be checked against
+        // real AI-vs-AI results and a manual playtest pass, and this note removed once that's
+        // happened and the numbers below reflect what was actually measured rather than a guess.
+        //
         // Time budgets above 3000ms are a temporary placeholder. The real target for every
         // difficulty tier is an AI move under 3 seconds — "hard" and above will need to come
         // down once the remaining search performance work lands.
