@@ -173,6 +173,36 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
+        public void FindBestMove_BoardArrivesAlreadyForcedSavePending_DoesNotThrow()
+        {
+            // Regression: unlike the test above (where quiescence discovers and resolves the ForcedSave
+            // itself, defecting the piece as part of the same call), this board is handed to
+            // FindBestMove ALREADY in the post-defection ForcedSave state — exactly what a real
+            // multi-ply game leaves behind on the next ply after a self-checking Defection resolves
+            // (see MatchDriver.PlayMove / TurnResolver.Advance). GetAllLegalMovesIncludingBetrayal used
+            // to have no branch for this and silently generated ordinary moves instead of the mandatory
+            // DefensiveOverride, which downstream corrupted search state and threw
+            // Betrayal_ForcedSaveInvariantViolated deep inside quiescence on a real multi-game run.
+            BoardState board = TestBoardSetupUtility.CreateEmpty()
+                .WithPiece("e1", Team.White, ChessPieceType.King)
+                .WithPiece("e8", Team.Black, ChessPieceType.King)
+                .WithPiece("e4", Team.Black, ChessPieceType.Rook) // already defected: now Black
+                .WithPiece("h4", Team.White, ChessPieceType.Rook) // legal DefensiveOverride: captures on e4
+                .WithTurn(Team.White)
+                .WithPendingBetrayer("e4", Team.White)
+                .WithComputedHash();
+
+            var settings = new AISearchSettings(maxDepth: 3, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+
+            MoveCommand best = default;
+            Assert.DoesNotThrow(() => best = _search.FindBestMove(board, settings, CancellationToken.None),
+                "FindBestMove must not throw when handed a board that's already ForcedSave-pending on entry.");
+
+            Assert.That(best.Stage, Is.EqualTo(BetrayalStage.DefensiveOverride),
+                "The only legal root move on a ForcedSave-pending board is a DefensiveOverride.");
+        }
+
+        [Test]
         public void FindBestMove_DefendOnlyMode_NeverChoosesActAtRoot()
         {
             BoardState board = TestBoardSetupUtility.CreateEmpty()

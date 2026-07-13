@@ -662,12 +662,17 @@ namespace ChessTheBetrayal.AI
 #endif
 
             // --- Betrayal quiescence guard ---
-            bool betrayerPending =
-                board.PendingBetrayerSquare.HasValue &&
-                board.BetrayalInitiator.HasValue &&
+            // A pending Betrayer can leave the board in one of two states an ordinary quiescence node
+            // must never treat as "quiet": still on the initiator's team (Retribution owed) or already
+            // flipped by a prior Defection that left the initiator's own king in check (ForcedSave
+            // owed — see ChessEngine.ResolveDefection's doc comment for why the pending fields stay
+            // set across that transition). Both must resolve before we're allowed to stand pat.
+            bool pendingBetrayer = board.PendingBetrayerSquare.HasValue && board.BetrayalInitiator.HasValue;
+            bool retributionPending = pendingBetrayer &&
                 board.GetPiece(board.PendingBetrayerSquare.Value).Team == board.BetrayalInitiator.Value;
+            bool forcedSavePending = pendingBetrayer && !retributionPending;
 
-            if (betrayerPending)
+            if (retributionPending)
             {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                 _tt.Stats.QBetrayalResolutionNodes++;
@@ -701,6 +706,20 @@ namespace ChessTheBetrayal.AI
                     if (alpha >= beta) break;
                 }
                 return bestRetribution;
+            }
+
+            if (forcedSavePending)
+            {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                _tt.Stats.QBetrayalResolutionNodes++;
+#endif
+                if (qply <= 0)
+                    return _evaluator.Evaluate(board, perspectiveTeam);
+
+                // The board already arrived here mid-ForcedSave (a prior ply's Defection left this
+                // exact obligation open) — resolve it the same way ResolveForcedDefection's own
+                // ForcedSave branch does when it discovers the obligation fresh.
+                return PlayForcedSaveMoves(board, alpha, beta, perspectiveTeam, plyFromRoot, qply, ct);
             }
 
             // --- Standard quiescence ---
@@ -848,36 +867,7 @@ namespace ChessTheBetrayal.AI
             if (outcome.RequiresForcedSave)
             {
                 // ForcedSave: same side owes a DefensiveOverride, pending state stays set, no turn flip.
-                // Safe to reuse this ply's buffer — the retribution list that shared it was already
-                // consumed (count==0) before we got here, and the save loop below only recurses into
-                // Quiescence(qply-1), which owns a different buffer.
-                List<MoveCommand> saves = QuiescenceBuffer(qply);
-                _engine.GetForcedSaveMoves(board, board.CurrentTurn, saves);
-
-                if (saves.Count == 0)
-                {
-                    // No legal king-save after the self-check: this side is mated inside the
-                    // Betrayal sequence. Score it as a mate against the side to move, in perspective.
-                    score = board.CurrentTurn == perspectiveTeam ? -MateScore : MateScore;
-                }
-                else
-                {
-                    OrderMoves(saves);
-                    int best = -Infinity;
-                    for (int i = 0; i < saves.Count; i++)
-                    {
-                        MoveCommand save = saves[i];
-                        ApplyMoveAndTurn(board, save);
-                        // DefensiveOverride flips the turn, so negate and swap the window.
-                        Team childPerspective = perspectiveTeam == Team.White ? Team.Black : Team.White;
-                        int childScore = -Quiescence(board, -beta, -alpha, childPerspective, plyFromRoot + 1, qply - 1, ct);
-                        UndoMoveAndTurn(board, save);
-                        if (childScore > best) best = childScore;
-                        if (best > alpha) alpha = best;
-                        if (alpha >= beta) break;
-                    }
-                    score = best;
-                }
+                score = PlayForcedSaveMoves(board, alpha, beta, perspectiveTeam, plyFromRoot, qply, ct);
             }
             else
             {
@@ -907,6 +897,44 @@ namespace ChessTheBetrayal.AI
             // via ApplyZobristMove. The board returns to exactly the pre-resolution state either way.
             _engine.UndoMove(board, outcome.DefectionMove);
             return score;
+        }
+
+        /// <summary>
+        /// Plays out the mandatory king-save obligation on a board that's already ForcedSave-pending
+        /// — whether that obligation was just discovered this instant (ResolveForcedDefection, right
+        /// after the Defection that created it) or the board arrived here already carrying it from a
+        /// prior ply (Quiescence's own top-level ForcedSavePending branch). Same side to move, no
+        /// turn flip on the way in; a chosen DefensiveOverride move (or the absence of any legal one)
+        /// is what finally resolves the sequence.
+        /// </summary>
+        private int PlayForcedSaveMoves(BoardState board, int alpha, int beta,
+                                        Team perspectiveTeam, int plyFromRoot, int qply, CancellationToken ct)
+        {
+            List<MoveCommand> saves = QuiescenceBuffer(qply);
+            _engine.GetForcedSaveMoves(board, board.CurrentTurn, saves);
+
+            if (saves.Count == 0)
+            {
+                // No legal king-save after the self-check: this side is mated inside the Betrayal
+                // sequence. Score it as a mate against the side to move, in perspective.
+                return board.CurrentTurn == perspectiveTeam ? -MateScore : MateScore;
+            }
+
+            OrderMoves(saves);
+            int best = -Infinity;
+            for (int i = 0; i < saves.Count; i++)
+            {
+                MoveCommand save = saves[i];
+                ApplyMoveAndTurn(board, save);
+                // DefensiveOverride flips the turn, so negate and swap the window.
+                Team childPerspective = perspectiveTeam == Team.White ? Team.Black : Team.White;
+                int childScore = -Quiescence(board, -beta, -alpha, childPerspective, plyFromRoot + 1, qply - 1, ct);
+                UndoMoveAndTurn(board, save);
+                if (childScore > best) best = childScore;
+                if (best > alpha) alpha = best;
+                if (alpha >= beta) break;
+            }
+            return best;
         }
 
         /// <summary>

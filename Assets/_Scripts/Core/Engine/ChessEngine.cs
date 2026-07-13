@@ -151,21 +151,62 @@ namespace ChessTheBetrayal.Core.Engine
             }
         }
 
+        /// <summary>
+        /// Which of the three states a pending Betrayal sub-sequence can leave the board in, as far
+        /// as move generation is concerned. Both GetAllLegalMoves and GetAllLegalMovesIncludingBetrayal
+        /// need to route to a different generator for each — sharing this one check keeps them from
+        /// drifting out of agreement the way they did before ForcedSave was added here.
+        /// </summary>
+        private enum BetrayalMoveGenState
+        {
+            None,
+            RetributionPending,
+            ForcedSavePending
+        }
+
+        private static BetrayalMoveGenState GetBetrayalMoveGenState(BoardState board)
+        {
+            if (!board.PendingBetrayerSquare.HasValue || !board.BetrayalInitiator.HasValue)
+                return BetrayalMoveGenState.None;
+
+            PieceData betrayer = board.GetPiece(board.PendingBetrayerSquare.Value);
+
+            // Still on the initiator's team: the Betrayer hasn't defected yet, so an executioner
+            // owes Retribution. Already flipped: the Defection already happened and left the
+            // initiator's own king in check, so the SAME side now owes a mandatory king-save
+            // instead (ForcedSave) — see ChessEngine.ResolveDefection's doc comment for why the
+            // pending fields deliberately stay set across that transition.
+            return betrayer.Team == board.BetrayalInitiator.Value
+                ? BetrayalMoveGenState.RetributionPending
+                : BetrayalMoveGenState.ForcedSavePending;
+        }
+
         public static void GetAllLegalMoves(BoardState board, Team team, List<MoveCommand> masterBuffer)
         {
             masterBuffer.Clear();
 
-            if (board.PendingBetrayerSquare.HasValue && board.BetrayalInitiator.HasValue)
+            switch (GetBetrayalMoveGenState(board))
             {
-                PieceData betrayer = board.GetPiece(board.PendingBetrayerSquare.Value);
-
-                if (betrayer.Team == board.BetrayalInitiator.Value)
-                {
+                case BetrayalMoveGenState.RetributionPending:
                     GetRetributionMoves(board, team, board.PendingBetrayerSquare.Value, masterBuffer);
                     return;
-                }
+                case BetrayalMoveGenState.ForcedSavePending:
+                    GetForcedSaveMoves(board, team, masterBuffer);
+                    return;
             }
 
+            GenerateRawLegalMoves(board, team, masterBuffer);
+        }
+
+        /// <summary>
+        /// The plain "every piece's legal moves, no Betrayal special-casing" loop GetAllLegalMoves
+        /// falls through to once it's ruled out both pending-Betrayal states — also what
+        /// GetForcedSaveMoves itself needs once IT has confirmed ForcedSave applies, which is why
+        /// this is split out rather than inlined: GetForcedSaveMoves calling back into
+        /// GetAllLegalMoves would just re-enter its own ForcedSavePending branch forever.
+        /// </summary>
+        private static void GenerateRawLegalMoves(BoardState board, Team team, List<MoveCommand> masterBuffer)
+        {
             if (masterBuffer.Capacity < MaxMovesPerPosition)
             {
                 masterBuffer.Capacity = MaxMovesPerPosition;
@@ -194,15 +235,14 @@ namespace ChessTheBetrayal.Core.Engine
         {
             masterBuffer.Clear();
 
-            if (board.PendingBetrayerSquare.HasValue && board.BetrayalInitiator.HasValue)
+            switch (GetBetrayalMoveGenState(board))
             {
-                PieceData betrayer = board.GetPiece(board.PendingBetrayerSquare.Value);
-
-                if (betrayer.Team == board.BetrayalInitiator.Value)
-                {
+                case BetrayalMoveGenState.RetributionPending:
                     GetRetributionMoves(board, team, board.PendingBetrayerSquare.Value, masterBuffer);
                     return;
-                }
+                case BetrayalMoveGenState.ForcedSavePending:
+                    GetForcedSaveMoves(board, team, masterBuffer);
+                    return;
             }
 
             if (masterBuffer.Capacity < MaxMovesPerPosition)
@@ -423,25 +463,21 @@ namespace ChessTheBetrayal.Core.Engine
 
         public static void GetForcedSaveMoves(BoardState board, Team team, List<MoveCommand> output)
         {
-            // ForcedSave only makes sense once the Betrayer has already defected (changed teams).
-            // GetAllLegalMoves() falls through to plain legal-move generation for exactly this
-            // reason, but that fallthrough is an implicit side effect of the team-flip check —
-            // assert the invariant explicitly here so a stale PendingBetrayerSquare/BetrayalInitiator
-            // can never silently reroute this call into GetRetributionMoves instead.
-            if (board.PendingBetrayerSquare.HasValue && board.BetrayalInitiator.HasValue)
+            // ForcedSave only makes sense once the Betrayer has already defected (changed teams) —
+            // assert the invariant explicitly so a stale PendingBetrayerSquare/BetrayalInitiator can
+            // never silently produce ForcedSave moves for a Retribution that hasn't happened yet.
+            if (GetBetrayalMoveGenState(board) == BetrayalMoveGenState.RetributionPending)
             {
-                PieceData betrayer = board.GetPiece(board.PendingBetrayerSquare.Value);
-                if (betrayer.Team == board.BetrayalInitiator.Value)
-                {
-                    throw new DomainException(
-                        DomainEventCode.Betrayal_ForcedSaveInvariantViolated,
-                        "GetForcedSaveMoves was called while the Betrayer still belongs to the initiator's team. " +
-                        "ForcedSave requires the Betrayer to have already defected.");
-                }
+                throw new DomainException(
+                    DomainEventCode.Betrayal_ForcedSaveInvariantViolated,
+                    "GetForcedSaveMoves was called while the Betrayer still belongs to the initiator's team. " +
+                    "ForcedSave requires the Betrayer to have already defected.");
             }
 
             output.Clear();
-            GetAllLegalMoves(board, team, output);
+            // Raw generation, not GetAllLegalMoves — that would recognize this same ForcedSave state
+            // and route straight back here, looping forever.
+            GenerateRawLegalMoves(board, team, output);
 
             for (int i = 0; i < output.Count; i++)
             {
@@ -546,13 +582,13 @@ namespace ChessTheBetrayal.Core.Engine
                 return GameState.Timeout;
             }
 
-            if (board.PendingBetrayerSquare.HasValue && board.BetrayalInitiator.HasValue)
+            // Mid-Betrayal-sequence (either the pre-defection Retribution wait or the post-defection
+            // ForcedSave wait): the turn hasn't resolved yet, so this isn't a real checkmate/stalemate
+            // check point — report Normal and let the sub-sequence play out. Ordinary HasAnyLegalMoves
+            // below only ever looks at plain moves, which is meaningless while either sub-phase is open.
+            if (GetBetrayalMoveGenState(board) != BetrayalMoveGenState.None)
             {
-                PieceData betrayer = board.GetPiece(board.PendingBetrayerSquare.Value);
-                if (betrayer.Team == board.BetrayalInitiator.Value)
-                {
-                    return GameState.Normal;
-                }
+                return GameState.Normal;
             }
 
             bool hasLegalMoves = HasAnyLegalMoves(board, team);
