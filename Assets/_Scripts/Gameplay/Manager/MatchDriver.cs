@@ -39,7 +39,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
 
         private GameModeConfig _selectedMode = GameModeConfig.Unlimited;
         private ChessClock _clock;
-        private GameClockController _clockController;
+        private IClockSnapshotSource _clockSnapshotSource;
         private BetrayalBountyConfig _bountyConfig;
 
         // Captured once when an Act move starts a Betrayal sub-sequence, and reused for every
@@ -128,21 +128,19 @@ namespace ChessTheBetrayal.Gameplay.Manager
         /// Attaches the clock and game mode for this match. Call after GameSetup.InitializeClock —
         /// MatchDriver only ever reads the clock (increments, bounties, snapshots), it never
         /// constructs one. Both may be null (Unlimited/AI mode), in which case clock-dependent
-        /// behavior (increments, bounties, timeout checks) becomes a no-op throughout.
+        /// behavior (increments, bounties, timeout checks) becomes a no-op throughout. Depending on
+        /// IClockSnapshotSource rather than the concrete GameClockController keeps MatchDriver free
+        /// of any MonoBehaviour-typed field, so it can run in a headless/non-Unity host.
         /// </summary>
-        public void AttachClock(ChessClock clock, GameClockController clockController, GameModeConfig selectedMode)
+        public void AttachClock(ChessClock clock, IClockSnapshotSource clockSnapshotSource, GameModeConfig selectedMode)
         {
             _clock = clock;
-            _clockController = clockController;
+            _clockSnapshotSource = clockSnapshotSource;
             _selectedMode = selectedMode;
         }
 
         /// <summary>Returns a value-type snapshot of the clock state, or null if untimed/AI mode.</summary>
-        public ClockState? GetCurrentClockSnapshot()
-        {
-            if (_clockController == null) return null;
-            return _clockController.CurrentState;
-        }
+        public ClockState? GetCurrentClockSnapshot() => _clockSnapshotSource?.Current;
 
         /// <summary>
         /// Applies a validated move to the board and tells everyone who needs to know about it.

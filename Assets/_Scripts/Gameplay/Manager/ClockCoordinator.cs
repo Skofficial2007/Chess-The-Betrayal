@@ -50,7 +50,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
             (_clock, _clockController) = _setup.InitializeClock(
                 selectedMode, isAiMode, initialActiveSide, this, host, _clockController);
 
-            matchDriver.AttachClock(_clock, _clockController, selectedMode);
+            matchDriver.AttachClock(_clock, this, selectedMode);
         }
 
         /// <summary>Stops the active clock controller and drops the clock reference. Safe to call with no clock active.</summary>
