@@ -82,6 +82,27 @@ namespace ChessTheBetrayal.AI
         // nested quiescence ply its own buffer with zero per-node allocation (pool built once here).
         private readonly List<MoveCommand>[] _quiescenceBuffers;
 
+        // Quiet-move ordering memory, both allocated once here and reused for the whole search —
+        // same zero-per-node-allocation discipline as _moveBuffers/_quiescenceBuffers above.
+        //
+        // History: for a quiet move that caused a beta cutoff, remember it by [piece type][target
+        // square] so the same kind of move gets tried earlier next time it's legal somewhere else in
+        // the tree. Indexed by ChessPieceType (0..6) and by the 64 board squares (EndPosition.y * 8 +
+        // EndPosition.x). Only ever touched for moves with Stage == BetrayalStage.None — a Betrayal
+        // Act/Retribution/DefensiveOverride/Defection move is never "just a quiet developing move" in
+        // the sense this heuristic is trying to capture, so mixing its stats in would blur the signal
+        // for ordinary positions without helping Betrayal ones either.
+        private readonly int[,] _historyScores = new int[7, 64];
+
+        // Killers: the two most recent quiet moves that caused a beta cutoff AT THIS EXACT PLY FROM
+        // ROOT, tried right after the TT move and winning captures. Keyed by plyFromRoot rather than
+        // by whose turn it is, because Search already increments plyFromRoot on every single
+        // recursive descent — including the non-flipping Act/Retribution steps inside a Betrayal
+        // sequence — so an Act at ply k and its forced Retribution at ply k+1 land in different slots
+        // automatically. Keying by side-to-move instead would be wrong here, since Betrayal doesn't
+        // flip the mover every ply the way ordinary chess does.
+        private readonly uint[,] _killerMoves;
+
         public AlphaBetaSearch(IChessEngine engine, IPositionEvaluator evaluator, int maxSupportedDepth = 32,
                                 TranspositionTable transpositionTable = null)
         {
@@ -98,6 +119,11 @@ namespace ChessTheBetrayal.AI
             _quiescenceBuffers = new List<MoveCommand>[MaxQuiescencePly + 1];
             for (int i = 0; i < _quiescenceBuffers.Length; i++)
                 _quiescenceBuffers[i] = new List<MoveCommand>(48);
+
+            // Two killer slots per ply from root, indexed 0..maxSupportedDepth (a null-move-reduced
+            // or extended line can in principle exceed the nominal search depth, so the buffer is
+            // sized against the same maxSupportedDepth ceiling _moveBuffers already trusts).
+            _killerMoves = new uint[maxSupportedDepth + 1, 2];
         }
 
         /// <summary>The private per-ply quiescence move buffer for the given qply budget.</summary>
@@ -157,6 +183,7 @@ namespace ChessTheBetrayal.AI
             _tt.Stats.Reset();
 #endif
             _tt.NewSearch();
+            Array.Clear(_historyScores, 0, _historyScores.Length);
 
             // Build the root move list ONCE. This is where the agent-level Betrayal policy applies.
             BuildRootMoves(board, rootTeam, settings.BetrayalUsage);
@@ -183,6 +210,11 @@ namespace ChessTheBetrayal.AI
             for (int depth = 1; depth <= settings.MaxDepth; depth++)
             {
                 if (ct.IsCancellationRequested) break;
+
+                // Killers are a per-iteration hint (last depth's cutoff-causing quiet moves), not a
+                // cross-iteration guarantee — clearing them each time keeps a stale slot from a
+                // shallower, since-refuted line from lingering and mis-ordering a deeper one.
+                Array.Clear(_killerMoves, 0, _killerMoves.Length);
 
                 int alpha = -Infinity;
                 int beta = Infinity;
@@ -408,7 +440,7 @@ namespace ChessTheBetrayal.AI
                 return 0; // stalemate
             }
 
-            OrderMoves(moves, ttMove);
+            OrderMoves(moves, ttMove, plyFromRoot);
 
             // LMR eligibility for THIS node is fixed once, before the loop: a pending Betrayer means
             // every child here is part of a forced tactical sequence (same reasoning as the null-move
@@ -485,7 +517,11 @@ namespace ChessTheBetrayal.AI
                 // Beta cutoff. Valid across the Retribution sub-phase precisely because the
                 // non-flipping plies don't swap the alpha/beta frame — so a cutoff proven inside
                 // a betrayal sequence is still a cutoff for the same maximizer that owns this node.
-                if (alpha >= beta) break;
+                if (alpha >= beta)
+                {
+                    RecordQuietCutoff(move, depth, plyFromRoot);
+                    break;
+                }
             }
 
             // Never store a cancelled node — its 'best' is a partial, garbage result, not a proof.
@@ -940,25 +976,29 @@ namespace ChessTheBetrayal.AI
         /// <summary>
         /// MVV-LVA-ish ordering + Act-first. Good ordering is what makes alpha-beta cut ~b^(d/2)
         /// instead of b^d. Betrayal Act moves are searched early because they're high-variance and
-        /// most likely to cause cutoffs (or refutations) — we want them near the front.
+        /// most likely to cause cutoffs (or refutations) — we want them near the front. No
+        /// plyFromRoot to key killers against at this call site (quiescence has no ply-indexed
+        /// killer table of its own), so quiet moves fall back to history only.
         /// </summary>
-        private static void OrderMoves(List<MoveCommand> moves) => OrderMoves(moves, 0);
+        private void OrderMoves(List<MoveCommand> moves) => OrderMoves(moves, 0, plyFromRoot: -1);
 
         /// <summary>
         /// MVV-LVA-ish ordering + Act-first, with the TT move (if any) sorted to the very front.
         /// Good ordering is what makes alpha-beta cut ~b^(d/2) instead of b^d — a TT-move hit from a
         /// prior iteration/turn is the single best predictor of the true best move at a node.
+        /// plyFromRoot: -1 opts out of the killer lookup (used by quiescence, which has no
+        /// ply-indexed killer table of its own).
         /// </summary>
-        private static void OrderMoves(List<MoveCommand> moves, uint ttMove)
+        private void OrderMoves(List<MoveCommand> moves, uint ttMove, int plyFromRoot)
         {
             // Simple insertion-sort by a cheap score key; move lists are small (<~45), so this is
             // faster than allocating a comparer/delegate and avoids GC.
             for (int i = 1; i < moves.Count; i++)
             {
                 MoveCommand key = moves[i];
-                int keyScore = OrderScore(key, ttMove);
+                int keyScore = OrderScore(key, ttMove, plyFromRoot);
                 int j = i - 1;
-                while (j >= 0 && OrderScore(moves[j], ttMove) < keyScore)
+                while (j >= 0 && OrderScore(moves[j], ttMove, plyFromRoot) < keyScore)
                 {
                     moves[j + 1] = moves[j];
                     j--;
@@ -978,13 +1018,36 @@ namespace ChessTheBetrayal.AI
             !m.IsCapture && !m.IsPromotion && m.Stage == BetrayalStage.None && PackMove(m) != ttMove;
 
         /// <summary>
+        /// Concrete tier bands, ignoring killer/history (see the 3-arg overload below for the
+        /// version Search actually orders with). Kept as its own static entry point since
+        /// MoveOrderingTierTests pins the tier bands in isolation, independent of any particular
+        /// search's accumulated killer/history state.
+        /// </summary>
+        internal static int OrderScore(MoveCommand m, uint ttMove) => OrderScoreCore(m, ttMove, out _);
+
+        /// <summary>
         /// Concrete tier bands. Ordering only — never changes which move wins the
         /// node, only how fast alpha-beta gets there. Act is Tier 3 (below captures/promo, above
         /// quiets): demoted from the old flat +5000 so a cheaper cutoff gets a chance to fire
         /// before the search pays Retribution's branching cost by exploring an Act first.
+        ///
+        /// The quiet band (Tier 4, previously a flat 0) now carries a killer/history sub-score so
+        /// quiet moves that have caused cutoffs before get tried before ones that never have —
+        /// still strictly below every capture/promo/Act tier above it, so this only reorders WITHIN
+        /// the quiet band, never promotes a quiet move ahead of a tactical one.
         /// </summary>
-        internal static int OrderScore(MoveCommand m, uint ttMove)
+        private int OrderScore(MoveCommand m, uint ttMove, int plyFromRoot)
         {
+            int tierScore = OrderScoreCore(m, ttMove, out bool isQuiet);
+            return isQuiet ? QuietMoveOrderScore(m, plyFromRoot) : tierScore;
+        }
+
+        /// <summary>Shared tier-band logic for both OrderScore overloads. isQuiet reports whether
+        /// the move fell all the way through to the quiet band, so the ply-aware caller knows to
+        /// layer a killer/history sub-score on top instead of using the (always 0) tier value.</summary>
+        private static int OrderScoreCore(MoveCommand m, uint ttMove, out bool isQuiet)
+        {
+            isQuiet = false;
             if (ttMove != 0 && PackMove(m) == ttMove) return 100_000;  // Tier 0: TT/PV move
 
             int capturedRank = PieceRank(m.CapturedType);
@@ -1005,7 +1068,76 @@ namespace ChessTheBetrayal.AI
             if (m.IsCapture)
                 return capturedRank * 10 - pieceRank;                  // Tier 4: losing capture
 
+            isQuiet = true;
             return 0;                                                  // Tier 4: quiet
+        }
+
+        /// <summary>
+        /// Killer bonus (this ply's remembered cutoff moves) plus history bonus (this piece/square
+        /// pair's accumulated cutoff weight). Both are clamped so their sum stays well under the
+        /// Act tier band above — a losing capture already scores as low as 1 in the existing tier
+        /// bands, so this doesn't try to outrank captures in general, only the tier immediately
+        /// above the shared quiet/losing-capture region. Only meaningful for Stage == None moves —
+        /// history is never recorded for a Betrayal-stage move (see the update site in Search), so
+        /// this always resolves to 0 for one and the killer check below simply won't match either.
+        /// </summary>
+        private int QuietMoveOrderScore(MoveCommand m, int plyFromRoot)
+        {
+            uint packed = PackMove(m);
+            int killerBonus = 0;
+            if (plyFromRoot >= 0 && plyFromRoot < _killerMoves.GetLength(0))
+            {
+                if (packed == _killerMoves[plyFromRoot, 0]) killerBonus = 9000;
+                else if (packed == _killerMoves[plyFromRoot, 1]) killerBonus = 8000;
+            }
+
+            // Already clamped to 999 at the write site (RecordQuietCutoff) — combined with
+            // killerBonus's 9000 ceiling, the sum can never approach the Act tier at 10_000.
+            int historyBonus = m.Stage == BetrayalStage.None
+                ? _historyScores[(int)m.PieceType, SquareIndex(m.EndPosition)]
+                : 0;
+
+            return killerBonus + historyBonus;
+        }
+
+        private static int SquareIndex(Vector2Int square) => square.y * 8 + square.x;
+
+        /// <summary>
+        /// Called once per beta cutoff, right where Search's move loop breaks. Only a QUIET move
+        /// (not a capture, not a promotion, not any Betrayal-stage move) updates history/killers —
+        /// a capture or Act already sorts ahead of the whole quiet band via OrderScore's tier
+        /// bands, so remembering it here would never change its own ordering and would only risk
+        /// crowding out genuinely useful quiet-move memory.
+        /// </summary>
+        /// <summary>Test seam: exercises the exact same update RecordQuietCutoff performs from
+        /// inside Search's move loop, without needing to engineer a full search tree that happens
+        /// to produce a cutoff at a specific ply. Not part of the search's own control flow.</summary>
+        internal void RecordQuietCutoffForTest(MoveCommand move, int depth, int plyFromRoot) =>
+            RecordQuietCutoff(move, depth, plyFromRoot);
+
+        /// <summary>Test seam: reads back the ordering score OrderMoves would have used for this
+        /// move at this ply, including any killer/history bonus recorded so far.</summary>
+        internal int OrderScoreForTest(MoveCommand move, uint ttMove, int plyFromRoot) =>
+            OrderScore(move, ttMove, plyFromRoot);
+
+        private void RecordQuietCutoff(MoveCommand move, int depth, int plyFromRoot)
+        {
+            if (move.IsCapture || move.IsPromotion || move.Stage != BetrayalStage.None) return;
+
+            // Depth-weighted so a cutoff found deep in the tree (a stronger, more expensive proof)
+            // outweighs one found shallow. Clamped well under QuietMoveOrderScore's killer bonus
+            // (9000/8000) so history can nudge ordering among non-killer quiet moves but never adds
+            // up to enough to compete with an actual killer-slot match, let alone the Act tier above it.
+            ref int score = ref _historyScores[(int)move.PieceType, SquareIndex(move.EndPosition)];
+            score = Math.Min(score + depth * depth, 999);
+
+            if (plyFromRoot < 0 || plyFromRoot >= _killerMoves.GetLength(0)) return;
+
+            uint packed = PackMove(move);
+            if (packed == _killerMoves[plyFromRoot, 0]) return; // already the top killer here
+
+            _killerMoves[plyFromRoot, 1] = _killerMoves[plyFromRoot, 0];
+            _killerMoves[plyFromRoot, 0] = packed;
         }
 
         /// <summary>
