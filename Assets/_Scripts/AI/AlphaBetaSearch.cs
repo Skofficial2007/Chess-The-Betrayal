@@ -130,6 +130,15 @@ namespace ChessTheBetrayal.AI
         // flip the mover every ply the way ordinary chess does.
         private readonly uint[,] _killerMoves;
 
+        // Capture ordering's SEE cache, one slot per move-list index — filled once, up front, by
+        // OrderMoves' pre-pass, then read (never recomputed) for every comparison the insertion
+        // sort makes below. SEE walks every piece on the board, so calling it fresh on each of the
+        // O(n^2) comparisons an insertion sort can make would be far more expensive than the
+        // ordering win it buys; computing each move's score exactly once avoids that. Sized to the
+        // same ceiling as _moveBuffers' individual lists and grown lazily on the same "never shrink"
+        // policy as _rootScores.
+        private int[] _seeScoreCache = new int[64];
+
         public AlphaBetaSearch(IChessEngine engine, IPositionEvaluator evaluator, int maxSupportedDepth = 32,
                                 TranspositionTable transpositionTable = null)
         {
@@ -494,7 +503,7 @@ namespace ChessTheBetrayal.AI
                 return 0; // stalemate
             }
 
-            OrderMoves(moves, ttMove, plyFromRoot);
+            OrderMoves(board, moves, ttMove, plyFromRoot);
 
             // LMR eligibility for THIS node is fixed once, before the loop: a pending Betrayer means
             // every child here is part of a forced tactical sequence (same reasoning as the null-move
@@ -838,7 +847,7 @@ namespace ChessTheBetrayal.AI
                 if (retribution.Count == 0)
                     return ResolveForcedDefection(board, alpha, beta, perspectiveTeam, plyFromRoot, qply, ct);
 
-                OrderMoves(retribution);
+                OrderMoves(board, retribution);
                 int bestRetribution = -Infinity;
                 for (int i = 0; i < retribution.Count; i++)
                 {
@@ -904,7 +913,7 @@ namespace ChessTheBetrayal.AI
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             _tt.Stats.QMovesGenerated += moves.Count;
 #endif
-            OrderMoves(moves);
+            OrderMoves(board, moves);
 
             int best = standPat;
             for (int i = 0; i < moves.Count; i++)
@@ -934,6 +943,23 @@ namespace ChessTheBetrayal.AI
                 {
                     int optimisticGain = CapturedPieceValue(move.CapturedType) + DeltaPruningMargin;
                     if (standPat + optimisticGain <= alpha) continue;
+
+                    // Static-exchange prune: delta pruning above only catches a capture whose best
+                    // case can't help even if it wins outright — this catches the opposite case, a
+                    // capture that LOOKS like material gain (it passed delta pruning) but actually
+                    // loses material once every recapture on the square is accounted for. Only
+                    // trusted where StaticExchangeEvaluation.IsApplicable holds; on a square where a
+                    // Betrayal Act just staged a pending Retribution, the exchange isn't a normal
+                    // alternating trade, so this prune stays off there exactly like ordering's own
+                    // SEE nudge does.
+                    if (StaticExchangeEvaluation.IsApplicable(board, move)
+                        && StaticExchangeEvaluation.Evaluate(board, move) < 0)
+                    {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                        _tt.Stats.SeeQuiescencePrunes++;
+#endif
+                        continue;
+                    }
                 }
 
                 ApplyMoveAndTurn(board, move);
@@ -1067,7 +1093,7 @@ namespace ChessTheBetrayal.AI
                 return board.CurrentTurn == perspectiveTeam ? -MateScore : MateScore;
             }
 
-            OrderMoves(saves);
+            OrderMoves(board, saves);
             int best = -Infinity;
             for (int i = 0; i < saves.Count; i++)
             {
@@ -1091,7 +1117,7 @@ namespace ChessTheBetrayal.AI
         /// plyFromRoot to key killers against at this call site (quiescence has no ply-indexed
         /// killer table of its own), so quiet moves fall back to history only.
         /// </summary>
-        private void OrderMoves(List<MoveCommand> moves) => OrderMoves(moves, 0, plyFromRoot: -1);
+        private void OrderMoves(BoardState board, List<MoveCommand> moves) => OrderMoves(board, moves, 0, plyFromRoot: -1);
 
         /// <summary>
         /// MVV-LVA-ish ordering + Act-first, with the TT move (if any) sorted to the very front.
@@ -1099,23 +1125,76 @@ namespace ChessTheBetrayal.AI
         /// prior iteration/turn is the single best predictor of the true best move at a node.
         /// plyFromRoot: -1 opts out of the killer lookup (used by quiescence, which has no
         /// ply-indexed killer table of its own).
+        ///
+        /// A capture's exact tier position within the winning/losing capture bands comes from a
+        /// real static-exchange read (see EnsureSeeScoreCache/SeeOrderBonus below) whenever
+        /// StaticExchangeEvaluation.IsApplicable allows it — the coarse piece-rank difference
+        /// (MVV-LVA) that used to be the whole story is now only the fallback for a Betrayal-pending
+        /// square, where SEE's alternating-recapture assumption doesn't hold.
         /// </summary>
-        private void OrderMoves(List<MoveCommand> moves, uint ttMove, int plyFromRoot)
+        private void OrderMoves(BoardState board, List<MoveCommand> moves, uint ttMove, int plyFromRoot)
         {
+            EnsureSeeScoreCache(moves.Count);
+            for (int i = 0; i < moves.Count; i++)
+                _seeScoreCache[i] = ComputeSeeOrderBonus(board, moves[i]);
+
             // Simple insertion-sort by a cheap score key; move lists are small (<~45), so this is
-            // faster than allocating a comparer/delegate and avoids GC.
+            // faster than allocating a comparer/delegate and avoids GC. The SEE cache is index-
+            // aligned to the ORIGINAL move order and must move in lockstep with each swap below —
+            // it's the same "score sits in a parallel array, shuffled together with its move"
+            // discipline MoveToFront already uses for _rootScores/_rootMoves.
             for (int i = 1; i < moves.Count; i++)
             {
                 MoveCommand key = moves[i];
-                int keyScore = OrderScore(key, ttMove, plyFromRoot);
+                int keySee = _seeScoreCache[i];
+                int keyScore = OrderScore(key, ttMove, plyFromRoot, keySee);
                 int j = i - 1;
-                while (j >= 0 && OrderScore(moves[j], ttMove, plyFromRoot) < keyScore)
+                while (j >= 0 && OrderScore(moves[j], ttMove, plyFromRoot, _seeScoreCache[j]) < keyScore)
                 {
                     moves[j + 1] = moves[j];
+                    _seeScoreCache[j + 1] = _seeScoreCache[j];
                     j--;
                 }
                 moves[j + 1] = key;
+                _seeScoreCache[j + 1] = keySee;
             }
+        }
+
+        /// <summary>Grows the SEE ordering cache to fit a pathological move-list size, mirroring
+        /// EnsureRootScoreCapacity's own "grown lazily, never freed" policy.</summary>
+        private void EnsureSeeScoreCache(int requiredCount)
+        {
+            if (_seeScoreCache.Length >= requiredCount) return;
+            Array.Resize(ref _seeScoreCache, requiredCount * 2);
+        }
+
+        // SEE's raw centipawn output (up to the low tens of thousands for a king-adjacent trade)
+        // is far larger than the gap between OrderScoreCore's tier bands — adding it in unscaled
+        // would risk a deeply-losing SEE capture outscoring a promo or even a quiet move's tier,
+        // which is not what this lever is for: SEE is only supposed to refine ordering WITHIN
+        // whichever tier MVV-LVA already placed the capture in, not override the tier system
+        // itself. Clamping to this range keeps the nudge strictly smaller than the smallest gap
+        // between two adjacent tiers (Tier 2's equal-capture/promo band down to Tier 3's Act band
+        // is a 9,500-point gap; ±500 leaves comfortable headroom on both sides).
+        private const int SeeOrderBonusClamp = 500;
+
+        /// <summary>
+        /// A small ordering nudge derived from a real static-exchange read, computed exactly once
+        /// per move per OrderMoves call (see the cache above) rather than per comparison. Zero for
+        /// every non-capture, and zero whenever StaticExchangeEvaluation.IsApplicable says the
+        /// alternating-recapture assumption doesn't hold here (a Betrayal-pending square) — those
+        /// moves fall back to OrderScoreCore's plain MVV-LVA rank-difference entirely, exactly as
+        /// before this lever existed. Clamped (see SeeOrderBonusClamp) so it can only reorder
+        /// moves within their existing MVV-LVA tier, never move a capture into a different one.
+        /// </summary>
+        private static int ComputeSeeOrderBonus(BoardState board, MoveCommand m)
+        {
+            if (!m.IsCapture || !StaticExchangeEvaluation.IsApplicable(board, m)) return 0;
+
+            int see = StaticExchangeEvaluation.Evaluate(board, m);
+            if (see > SeeOrderBonusClamp) return SeeOrderBonusClamp;
+            if (see < -SeeOrderBonusClamp) return -SeeOrderBonusClamp;
+            return see;
         }
 
         /// <summary>
@@ -1137,20 +1216,35 @@ namespace ChessTheBetrayal.AI
         internal static int OrderScore(MoveCommand m, uint ttMove) => OrderScoreCore(m, ttMove, out _);
 
         /// <summary>
-        /// Concrete tier bands. Ordering only — never changes which move wins the
-        /// node, only how fast alpha-beta gets there. Act is Tier 3 (below captures/promo, above
-        /// quiets): demoted from the old flat +5000 so a cheaper cutoff gets a chance to fire
-        /// before the search pays Retribution's branching cost by exploring an Act first.
+        /// Concrete tier bands, plus a real static-exchange nudge on captures where one is
+        /// available. Ordering only — never changes which move wins the node, only how fast
+        /// alpha-beta gets there. Act is Tier 3 (below captures/promo, above quiets): demoted from
+        /// the old flat +5000 so a cheaper cutoff gets a chance to fire before the search pays
+        /// Retribution's branching cost by exploring an Act first.
+        ///
+        /// seeBonus is added on top of the coarse MVV-LVA tier score for a capture, refining the
+        /// ordering WITHIN the winning/losing-capture bands with an actual exchange result instead
+        /// of just the piece-rank difference — e.g. two different winning captures that MVV-LVA
+        /// would rank identically can still be told apart by how much material each one really
+        /// nets once recaptures are accounted for. It never moves a capture OUT of its MVV-LVA tier
+        /// (a small nudge added to a Tier-1 score still sorts above every Tier-2 score, since the
+        /// tier gap is always far larger than any single exchange's plausible centipawn swing).
         ///
         /// The quiet band (Tier 4, previously a flat 0) now carries a killer/history sub-score so
         /// quiet moves that have caused cutoffs before get tried before ones that never have —
         /// still strictly below every capture/promo/Act tier above it, so this only reorders WITHIN
         /// the quiet band, never promotes a quiet move ahead of a tactical one.
         /// </summary>
-        private int OrderScore(MoveCommand m, uint ttMove, int plyFromRoot)
+        private int OrderScore(MoveCommand m, uint ttMove, int plyFromRoot, int seeBonus)
         {
             int tierScore = OrderScoreCore(m, ttMove, out bool isQuiet);
-            return isQuiet ? QuietMoveOrderScore(m, plyFromRoot) : tierScore;
+            if (isQuiet) return QuietMoveOrderScore(m, plyFromRoot);
+
+            // Only the winning/equal-capture bands (Tier 1/2, both >= 20,000) get the SEE nudge —
+            // a losing capture's tier sits too close to the Act/quiet bands below it (as little as
+            // a few points of headroom) for even a small nudge to stay safely inside it, so those
+            // keep the plain MVV-LVA rank-difference score exactly as before this lever existed.
+            return tierScore >= 20_000 ? tierScore + seeBonus : tierScore;
         }
 
         /// <summary>Shared tier-band logic for both OrderScore overloads. isQuiet reports whether
@@ -1227,9 +1321,12 @@ namespace ChessTheBetrayal.AI
             RecordQuietCutoff(move, depth, plyFromRoot);
 
         /// <summary>Test seam: reads back the ordering score OrderMoves would have used for this
-        /// move at this ply, including any killer/history bonus recorded so far.</summary>
-        internal int OrderScoreForTest(MoveCommand move, uint ttMove, int plyFromRoot) =>
-            OrderScore(move, ttMove, plyFromRoot);
+        /// move at this ply, including any killer/history bonus and (when a board is supplied) any
+        /// static-exchange nudge recorded so far. A null board mirrors the pre-SEE behavior (no
+        /// nudge) — most existing callers only care about killer/history tier placement and don't
+        /// have a board handy.</summary>
+        internal int OrderScoreForTest(MoveCommand move, uint ttMove, int plyFromRoot, BoardState board = null) =>
+            OrderScore(move, ttMove, plyFromRoot, board == null ? 0 : ComputeSeeOrderBonus(board, move));
 
         private void RecordQuietCutoff(MoveCommand move, int depth, int plyFromRoot)
         {
