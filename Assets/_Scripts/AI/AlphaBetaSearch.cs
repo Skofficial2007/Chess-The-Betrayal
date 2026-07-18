@@ -45,6 +45,33 @@ namespace ChessTheBetrayal.AI
         private static int NullMoveReduction(int depth) => NullMoveBaseReduction + depth / 6;
         private static int NullMoveMinDepth(int depth) => NullMoveReduction(depth) + 2; // guard 3: depth >= R + 2
 
+        // Reverse futility pruning (a.k.a. static null-move pruning): only attempted within this many
+        // plies of the horizon — beyond that the static eval is too weak a proxy for "this node is
+        // hopeless for the opponent" to trust without search. Margin grows with depth so a node
+        // further from the horizon demands a bigger static cushion before it's allowed to skip search
+        // entirely, mirroring how NullMoveReduction scales its own confidence with depth.
+        private const int ReverseFutilityMaxDepth = 6;
+        private static int ReverseFutilityMargin(int depth) => 90 * depth;
+
+        // Move-count pruning (LMP): once this many quiet moves have already been searched at a
+        // shallow node without improving alpha, later quiet moves in the same list are skipped
+        // outright rather than searched — a quiet move that far down an already-ordered list is
+        // vanishingly unlikely to be the best move at a node this close to the horizon. Only ever
+        // applied to quiet, non-TT, non-killer moves (see IsReducibleMove's own exemptions), so a
+        // capture/promotion/Betrayal-stage move is never skipped this way.
+        private const int LateMovePruningMaxDepth = 4;
+        private static int LateMovePruningThreshold(int depth) => 3 + depth * depth;
+
+        // Frontier futility pruning: at a node this close to the horizon, a quiet move that can't
+        // even in its best case (static eval + margin) reach alpha is skipped without being
+        // searched. The margin scales with depth for the same reason ReverseFutilityMargin's does —
+        // more plies of remaining search means more room for the position to improve, so the cutoff
+        // needs a bigger cushion to stay safe. Exempt from this: any move that leaves the opponent
+        // in check, since that promise of forced follow-up is exactly what a purely-static eval
+        // can't see (this is why quiescence itself never stands pat while resolving one either).
+        private const int FrontierFutilityMaxDepth = 3;
+        private static int FrontierFutilityMargin(int depth) => 150 + 100 * depth;
+
         // Hard backstop for quiescence recursion. A Betrayal sub-phase (Act -> Retribution/Defection
         // -> optional DefensiveOverride) is at most a handful of plies for one turn, and captures
         // fizzle out fast, so a real quiescence line is short. This cap exists purely so that a future
@@ -386,15 +413,42 @@ namespace ChessTheBetrayal.AI
                 }
             }
 
+            // Shared guard for the whole forward-pruning family (NMP, reverse futility, move-count
+            // pruning, frontier futility): every one of them substitutes a cheap static judgment for
+            // real search, which is only sound when this node is an ordinary, non-forcing position.
+            // PendingBetrayerSquare covers Act-pending, Retribution-pending, AND ForcedSave-pending
+            // alike — a pruned-away node mid-sequence would corrupt move generation and the turn/hash
+            // bookkeeping exactly like a null move would. Being in check means every legal move is
+            // already forced and narrow, so there is nothing "extra" left to prune away safely.
+            bool forwardPruningAllowed = !board.PendingBetrayerSquare.HasValue
+                && !_engine.IsKingInCheck(board, board.CurrentTurn);
+
+            // Reverse futility pruning (static null-move pruning): if the static eval already beats
+            // beta by more than this depth's margin, the opponent would need to find an improvement
+            // search says is implausible at this shallow a depth just to bring the score back down to
+            // beta — so we trust the static judgment and cut immediately instead of searching.
+            if (forwardPruningAllowed
+                && depth <= ReverseFutilityMaxDepth
+                && beta < MateScore - _maxSupportedDepth)
+            {
+                int staticEval = _evaluator.Evaluate(board, perspectiveTeam);
+                if (staticEval - ReverseFutilityMargin(depth) >= beta)
+                {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                    _tt.Stats.ReverseFutilityCutoffs++;
+#endif
+                    return staticEval;
+                }
+            }
+
             // Null Move Pruning — sits after the TT probe, before movegen; the full guard set below
             // must pass before we ever touch the board. PendingBetrayerSquare covers Act-pending,
             // Retribution-pending, AND ForcedSave-pending alike, not just Retribution — a null move
             // mid-sequence would flip CurrentTurn while the domain mandates the SAME player
             // continues, corrupting move generation, the TT hash, and the alpha-beta frame at once.
             if (depth >= NullMoveMinDepth(depth)
-                && !board.PendingBetrayerSquare.HasValue
+                && forwardPruningAllowed
                 && !parentWasNull
-                && !_engine.IsKingInCheck(board, board.CurrentTurn)
                 && HasNonPawnMaterial(board, board.CurrentTurn)
                 && beta < MateScore - _maxSupportedDepth)
             {
@@ -447,6 +501,20 @@ namespace ChessTheBetrayal.AI
             // guard above), so nothing at this node may ever be reduced.
             bool nodeAllowsReduction = depth >= 3 && !board.PendingBetrayerSquare.HasValue;
 
+            // Move-count pruning and frontier futility are both members of the forward-pruning
+            // family gated by the same shared guard as NMP/reverse-futility above. A node with only
+            // one legal move can never actually skip it (best must come from somewhere), so both are
+            // additionally gated on moves.Count > 1 here rather than relying on the loop's own
+            // "at least one move survives" behavior to hold by accident.
+            bool nodeAllowsLateMovePruning = forwardPruningAllowed && depth <= LateMovePruningMaxDepth && moves.Count > 1;
+            bool nodeAllowsFrontierFutility = forwardPruningAllowed && depth <= FrontierFutilityMaxDepth && moves.Count > 1;
+
+            // Computed lazily — only the first time either pruning member actually needs it — since
+            // most nodes never reach this depth band and the eval call is not free.
+            bool staticEvalComputed = false;
+            int staticEvalForPruning = 0;
+            int quietMovesSearched = 0;
+
             int best = -Infinity;
             uint bestPackedMove = 0;
             for (int i = 0; i < moves.Count; i++)
@@ -454,8 +522,51 @@ namespace ChessTheBetrayal.AI
                 if (ct.IsCancellationRequested) return best;
 
                 MoveCommand move = moves[i];
+                bool isQuiet = IsReducibleMove(move, ttMove);
 
-                bool reduce = nodeAllowsReduction && i >= 2 && IsReducibleMove(move, ttMove);
+                // Move-count pruning: once enough quiet moves have already been tried at this node
+                // without improving alpha, later quiet moves in the (cutoff-ordered) list are so
+                // unlikely to be the best that we skip them without searching at all. i > 0 keeps the
+                // PV/first move always searched regardless of the counter.
+                if (nodeAllowsLateMovePruning && isQuiet && i > 0 && quietMovesSearched >= LateMovePruningThreshold(depth))
+                {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                    _tt.Stats.LateMovePrunes++;
+#endif
+                    continue;
+                }
+
+                // Frontier futility pruning: a quiet move whose best-case static outlook still can't
+                // reach alpha is skipped, UNLESS it leaves the opponent in check — a forcing move's
+                // true value can't be judged from a static eval, exactly like quiescence's own
+                // never-stand-pat-mid-sequence rule for a pending Betrayer.
+                if (nodeAllowsFrontierFutility && isQuiet && i > 0)
+                {
+                    if (!staticEvalComputed)
+                    {
+                        staticEvalForPruning = _evaluator.Evaluate(board, perspectiveTeam);
+                        staticEvalComputed = true;
+                    }
+
+                    if (staticEvalForPruning + FrontierFutilityMargin(depth) <= alpha)
+                    {
+                        ApplyMoveAndTurn(board, move);
+                        bool givesCheck = _engine.IsKingInCheck(board, board.CurrentTurn);
+                        UndoMoveAndTurn(board, move);
+
+                        if (!givesCheck)
+                        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                            _tt.Stats.FrontierFutilityPrunes++;
+#endif
+                            continue;
+                        }
+                    }
+                }
+
+                if (isQuiet) quietMovesSearched++;
+
+                bool reduce = nodeAllowsReduction && i >= 2 && isQuiet;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                 if (reduce) _tt.Stats.LmrReductions++;
 #endif
