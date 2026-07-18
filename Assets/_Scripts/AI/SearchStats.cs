@@ -33,6 +33,8 @@ namespace ChessTheBetrayal.AI
 
         public long BetrayalExtensions; // Acts granted a search extension for staging a forced Retribution
 
+        public long IirReductions; // nodes given a shallower probe search to find an ordering move before the real search
+
         // Quiescence node-count breakdown. NodesVisited above counts ONLY main-search (Search)
         // nodes; Quiescence() increments nothing there by design. These fields fill that gap so the
         // qtree's size and shape can be measured directly instead of inferred from wall-clock/
@@ -89,7 +91,7 @@ namespace ChessTheBetrayal.AI
         public override string ToString() =>
             $"depth={LastCompletedDepth} nodes={NodesVisited} tt(probe={TTProbes} hit={TTHits} emptyMiss={TTEmptyMisses} verifyMiss={TTVerificationMisses} store={TTStores} replace={TTReplacements}) " +
             $"null(try={NullMoveAttempts} cut={NullMoveCutoffs}) lmr(reduce={LmrReductions} research={LmrReSearches}) pvs(scout={PvsScouts} research={PvsReSearches}) " +
-            $"fwdPrune(rfp={ReverseFutilityCutoffs} lmp={LateMovePrunes} ffp={FrontierFutilityPrunes}) betrayalExt={BetrayalExtensions} " +
+            $"fwdPrune(rfp={ReverseFutilityCutoffs} lmp={LateMovePrunes} ffp={FrontierFutilityPrunes}) betrayalExt={BetrayalExtensions} iir={IirReductions} " +
             $"q(nodes={QNodesVisited} betrayalRes={QBetrayalResolutionNodes} actExp={QActExpansions} gen={QMovesGenerated} searched={QMovesSearched} seePrune={SeeQuiescencePrunes}) " +
             $"depthCurve(d1={NodesAfterDepth1} d2={NodesAfterDepth2} d3={NodesAfterDepth3} d4={NodesAfterDepth4} d5={NodesAfterDepth5} d6={NodesAfterDepth6} d7={NodesAfterDepth7})";
     }
