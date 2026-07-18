@@ -25,6 +25,12 @@ namespace ChessTheBetrayal.AI
         public long PvsScouts;
         public long PvsReSearches;    // null-window scout landed inside (alpha, beta) and was re-searched
 
+        // Forward-pruning family — each counts a node/move it actually skipped, not an
+        // attempt, mirroring NullMoveCutoffs' own "only the successful case" convention.
+        public long ReverseFutilityCutoffs;
+        public long LateMovePrunes;
+        public long FrontierFutilityPrunes;
+
         // Quiescence node-count breakdown. NodesVisited above counts ONLY main-search (Search)
         // nodes; Quiescence() increments nothing there by design. These fields fill that gap so the
         // qtree's size and shape can be measured directly instead of inferred from wall-clock/
@@ -80,6 +86,7 @@ namespace ChessTheBetrayal.AI
         public override string ToString() =>
             $"depth={LastCompletedDepth} nodes={NodesVisited} tt(probe={TTProbes} hit={TTHits} emptyMiss={TTEmptyMisses} verifyMiss={TTVerificationMisses} store={TTStores} replace={TTReplacements}) " +
             $"null(try={NullMoveAttempts} cut={NullMoveCutoffs}) lmr(reduce={LmrReductions} research={LmrReSearches}) pvs(scout={PvsScouts} research={PvsReSearches}) " +
+            $"fwdPrune(rfp={ReverseFutilityCutoffs} lmp={LateMovePrunes} ffp={FrontierFutilityPrunes}) " +
             $"q(nodes={QNodesVisited} betrayalRes={QBetrayalResolutionNodes} actExp={QActExpansions} gen={QMovesGenerated} searched={QMovesSearched}) " +
             $"depthCurve(d1={NodesAfterDepth1} d2={NodesAfterDepth2} d3={NodesAfterDepth3} d4={NodesAfterDepth4} d5={NodesAfterDepth5} d6={NodesAfterDepth6} d7={NodesAfterDepth7})";
     }
