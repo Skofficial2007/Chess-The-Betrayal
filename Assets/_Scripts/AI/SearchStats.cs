@@ -40,6 +40,7 @@ namespace ChessTheBetrayal.AI
         public long QActExpansions;             // qsearch-loop moves surviving the filter with Stage == Act
         public long QMovesGenerated;            // total moves returned by the captures/Acts generator per standard qnode
         public long QMovesSearched;             // of those, how many survived the delta-prune filter
+        public long SeeQuiescencePrunes;        // qsearch captures skipped for having a losing static-exchange result
 
         /// <summary>The deepest iterative-deepening depth FindBestMove fully completed before
         /// returning — via a soft-time-budget cancellation, MaxDepth being reached, or an early
@@ -87,7 +88,7 @@ namespace ChessTheBetrayal.AI
             $"depth={LastCompletedDepth} nodes={NodesVisited} tt(probe={TTProbes} hit={TTHits} emptyMiss={TTEmptyMisses} verifyMiss={TTVerificationMisses} store={TTStores} replace={TTReplacements}) " +
             $"null(try={NullMoveAttempts} cut={NullMoveCutoffs}) lmr(reduce={LmrReductions} research={LmrReSearches}) pvs(scout={PvsScouts} research={PvsReSearches}) " +
             $"fwdPrune(rfp={ReverseFutilityCutoffs} lmp={LateMovePrunes} ffp={FrontierFutilityPrunes}) " +
-            $"q(nodes={QNodesVisited} betrayalRes={QBetrayalResolutionNodes} actExp={QActExpansions} gen={QMovesGenerated} searched={QMovesSearched}) " +
+            $"q(nodes={QNodesVisited} betrayalRes={QBetrayalResolutionNodes} actExp={QActExpansions} gen={QMovesGenerated} searched={QMovesSearched} seePrune={SeeQuiescencePrunes}) " +
             $"depthCurve(d1={NodesAfterDepth1} d2={NodesAfterDepth2} d3={NodesAfterDepth3} d4={NodesAfterDepth4} d5={NodesAfterDepth5} d6={NodesAfterDepth6} d7={NodesAfterDepth7})";
     }
 }
