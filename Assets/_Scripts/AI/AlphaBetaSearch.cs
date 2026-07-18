@@ -72,6 +72,17 @@ namespace ChessTheBetrayal.AI
         private const int FrontierFutilityMaxDepth = 3;
         private static int FrontierFutilityMargin(int depth) => 150 + 100 * depth;
 
+        // Betrayal/Retribution search extension: a Betrayal Act stages a forced tactical sequence
+        // (the target ally MUST execute Retribution next, or the Betrayer defects), so treating it
+        // as "just another ply" like an ordinary quiet move risks the horizon landing mid-sequence
+        // and mis-valuing a position that hasn't actually finished playing out yet. Granting the
+        // very next ply back — searching it at the SAME depth the Act was found at, instead of one
+        // shallower — keeps the whole forced sequence inside the normal search window rather than
+        // eating into the depth budget the same way a real "free" ply would. Capped per line
+        // (extensionsUsedThisLine) so a chain of Betrayals can never re-extend itself forever the
+        // way an uncapped forced-capture-chain extension is well known to blow up a search tree.
+        private const int MaxBetrayalExtensionsPerLine = 3;
+
         // Hard backstop for quiescence recursion. A Betrayal sub-phase (Act -> Retribution/Defection
         // -> optional DefensiveOverride) is at most a handful of plies for one turn, and captures
         // fizzle out fast, so a real quiescence line is short. This cap exists purely so that a future
@@ -84,9 +95,22 @@ namespace ChessTheBetrayal.AI
         private readonly TranspositionTable _tt;
         private readonly int _maxSupportedDepth;
 
-        // Reused across the whole search — one buffer per depth level to avoid clobbering a
+        // Reused across the whole search — one buffer per ply-from-root to avoid clobbering a
         // parent's move list while recursing. Grown lazily; never freed. No per-node allocation.
-        private readonly List<MoveCommand>[] _moveBuffers;
+        //
+        // Indexed by plyFromRoot, NOT by depth. depth used to be a safe index on its own — every
+        // recursive step strictly decreased it, so no two active stack frames could ever hold the
+        // same depth value at once. The Betrayal/Retribution extension breaks that: an Act that
+        // stages a forced Retribution gets +1 ply of depth BACK, so depth can legitimately repeat
+        // across nested frames now (a deep descendant can numerically match an ancestor's depth).
+        // plyFromRoot never has this problem — it strictly increases on every single recursive step
+        // with no exceptions (see ScoreChild, which always receives the caller's already-incremented
+        // plyFromRoot down both its flipping and non-flipping branches) — so it's the only safe key
+        // once depth-restoring extensions exist. Mirrors _killerMoves' own plyFromRoot keying and
+        // maxSupportedDepth-based sizing below. Not readonly (unlike _quiescenceBuffers) because
+        // MoveBuffer can grow this array in place via Array.Resize if plyFromRoot ever exceeds the
+        // ctor's initial sizing — see MoveBuffer's own doc comment.
+        private List<MoveCommand>[] _moveBuffers;
         private readonly List<MoveCommand> _rootMoves = new List<MoveCommand>(64);
 
         // Parallel to _rootMoves by index — every root move's score at the last FULLY COMPLETED
@@ -101,8 +125,8 @@ namespace ChessTheBetrayal.AI
         private int[] _rootScoresScratch = new int[128];
 
         // One move buffer per quiescence recursion level, indexed by the qply budget. Quiescence is
-        // reached from Search(depth 0), so it must NOT borrow a depth-indexed _moveBuffers slot — the
-        // ancestor Search frames at depth 1..N are still iterating their own _moveBuffers[depth] lists.
+        // reached from Search(depth 0), so it must NOT borrow a _moveBuffers slot — every ancestor
+        // Search frame still on the stack is still iterating its own plyFromRoot-keyed list there.
         // And a SINGLE shared quiescence buffer is not enough either: a Retribution/DefensiveOverride
         // loop holds its buffer across a -Quiescence(...) recursion that can itself open a new Betrayal
         // sub-phase, which would clobber the parent's list mid-iteration. Keying by qply gives every
@@ -166,6 +190,27 @@ namespace ChessTheBetrayal.AI
         private List<MoveCommand> QuiescenceBuffer(int qply)
         {
             List<MoveCommand> buffer = _quiescenceBuffers[qply];
+            buffer.Clear();
+            return buffer;
+        }
+
+        /// <summary>The private per-ply-from-root main-search move buffer (see the _moveBuffers
+        /// field comment for why this is keyed by plyFromRoot rather than depth). Grows the backing
+        /// array lazily — mirrors _rootScores/_seeScoreCache's own "never shrink" policy — since a
+        /// deep enough chain of Betrayal extensions can in principle push plyFromRoot past the
+        /// ctor's maxSupportedDepth-based initial sizing, even though depth itself never exceeds it
+        /// (the depth < _maxSupportedDepth guard on the extension itself sees to that).</summary>
+        private List<MoveCommand> MoveBuffer(int plyFromRoot)
+        {
+            if (plyFromRoot >= _moveBuffers.Length)
+            {
+                int newSize = plyFromRoot + 1;
+                Array.Resize(ref _moveBuffers, newSize);
+                for (int i = 0; i < _moveBuffers.Length; i++)
+                    _moveBuffers[i] ??= new List<MoveCommand>(64);
+            }
+
+            List<MoveCommand> buffer = _moveBuffers[plyFromRoot];
             buffer.Clear();
             return buffer;
         }
@@ -268,7 +313,16 @@ namespace ChessTheBetrayal.AI
 
                     // Root moves are always the current player's own choices. An Act or Defection
                     // at the root keeps the SAME player to move, so we recurse without negation.
-                    int score = ScoreChild(board, move, depth - 1, 1, alpha, beta, rootTeam, ct);
+                    // A root Act that stages a forced Retribution gets the same one-ply extension
+                    // an Act found deeper in the tree does (see the move loop below) — root is just
+                    // the shallowest possible place for that sequence to start.
+                    bool rootGrantsExtension = move.Stage == BetrayalStage.Act && board.PendingBetrayerSquare.HasValue
+                        && depth < _maxSupportedDepth;
+                    int rootSearchDepth = rootGrantsExtension ? depth : depth - 1;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                    if (rootGrantsExtension) _tt.Stats.BetrayalExtensions++;
+#endif
+                    int score = ScoreChild(board, move, rootSearchDepth, 1, alpha, beta, rootTeam, ct, rootGrantsExtension ? 1 : 0);
 
                     UndoMoveAndTurn(board, move);
 
@@ -341,7 +395,19 @@ namespace ChessTheBetrayal.AI
 
                 MoveCommand move = _rootMoves[i];
                 ApplyMoveAndTurn(board, move);
-                int exactScore = ScoreChild(board, move, lastCompletedDepth - 1, 1, -Infinity, Infinity, rootTeam, ct);
+
+                // Mirror FindBestMove's own root extension exactly, so a rescored candidate's depth
+                // matches what the original completed-depth search actually explored for it — an
+                // Act that stages a Retribution must get the same extra ply here it got the first
+                // time, or this "exact" re-search would silently search one ply shallower than the
+                // tightened-window pass it's supposed to be correcting.
+                bool rootGrantsExtension = move.Stage == BetrayalStage.Act && board.PendingBetrayerSquare.HasValue
+                    && lastCompletedDepth < _maxSupportedDepth;
+                int rootSearchDepth = rootGrantsExtension ? lastCompletedDepth : lastCompletedDepth - 1;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                if (rootGrantsExtension) _tt.Stats.BetrayalExtensions++;
+#endif
+                int exactScore = ScoreChild(board, move, rootSearchDepth, 1, -Infinity, Infinity, rootTeam, ct, rootGrantsExtension ? 1 : 0);
                 UndoMoveAndTurn(board, move);
 
                 _rootScores[i] = exactScore;
@@ -388,7 +454,7 @@ namespace ChessTheBetrayal.AI
         /// Recursive negamax. 'perspectiveTeam' is whichever side we're currently scoring FOR
         /// (it changes only when the turn actually flips). alpha/beta are always in perspectiveTeam's frame.
         /// </summary>
-        private int Search(BoardState board, int depth, int plyFromRoot, int alpha, int beta, Team perspectiveTeam, CancellationToken ct, bool parentWasNull = false)
+        private int Search(BoardState board, int depth, int plyFromRoot, int alpha, int beta, Team perspectiveTeam, CancellationToken ct, bool parentWasNull = false, int extensionsUsedThisLine = 0)
         {
             if (ct.IsCancellationRequested) return 0;
 
@@ -478,7 +544,7 @@ namespace ChessTheBetrayal.AI
                 }
             }
 
-            List<MoveCommand> moves = _moveBuffers[depth];
+            List<MoveCommand> moves = MoveBuffer(plyFromRoot);
             moves.Clear();
 
             // GetAllLegalMovesIncludingBetrayal returns ONLY Retribution moves when a betrayer is
@@ -584,12 +650,37 @@ namespace ChessTheBetrayal.AI
 
                 ApplyMoveAndTurn(board, move);
 
+                // Betrayal/Retribution extension: only ever granted for the move that JUST staged
+                // the forced sequence (an Act that left a Retribution pending), never for a move
+                // played WHILE already inside one — Retribution/DefensiveOverride/Defection moves
+                // already get their ply "for free" via the non-flipping ScoreChild path (see its
+                // own doc comment), so extending them again on top of that would double-count the
+                // same forced sequence. board.PendingBetrayerSquare is read AFTER ApplyMoveAndTurn,
+                // so it reflects the position this child is actually about to search, not the
+                // parent's.
+                // depth < _maxSupportedDepth guards the extension the same way _moveBuffers/
+                // _killerMoves are themselves sized to maxSupportedDepth + 1 — without it, a chain
+                // of extensions near the ceiling could push searchDepth's recursive Search call past
+                // the last valid _moveBuffers index and index out of bounds.
+                bool grantExtension = move.Stage == BetrayalStage.Act
+                    && board.PendingBetrayerSquare.HasValue
+                    && extensionsUsedThisLine < MaxBetrayalExtensionsPerLine
+                    && depth < _maxSupportedDepth;
+                int childExtensionsUsed = grantExtension ? extensionsUsedThisLine + 1 : extensionsUsedThisLine;
+                if (grantExtension)
+                {
+                    searchDepth++;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                    _tt.Stats.BetrayalExtensions++;
+#endif
+                }
+
                 int score;
                 if (i == 0)
                 {
                     // PV move (first child, typically the TT/ordering pick): full window. Its score
                     // sets the working alpha every later sibling is scouted against.
-                    score = ScoreChild(board, move, searchDepth, plyFromRoot + 1, alpha, beta, perspectiveTeam, ct);
+                    score = ScoreChild(board, move, searchDepth, plyFromRoot + 1, alpha, beta, perspectiveTeam, ct, childExtensionsUsed);
                 }
                 else
                 {
@@ -600,28 +691,35 @@ namespace ChessTheBetrayal.AI
                     // non-flipping Act/Defection child (same maximizer frame) and negates it to
                     // (-alpha-1, -alpha) for a flipping child. Proves "can this beat alpha?" cheaply;
                     // a fail-low here is a real cutoff regardless of whether depth was reduced.
-                    score = ScoreChild(board, move, searchDepth, plyFromRoot + 1, alpha, alpha + 1, perspectiveTeam, ct);
+                    score = ScoreChild(board, move, searchDepth, plyFromRoot + 1, alpha, alpha + 1, perspectiveTeam, ct, childExtensionsUsed);
 
                     // LMR fail-high — the reduction may have hidden real strength. Re-search at full
                     // depth, STILL null-window, before deciding whether a full-window re-search is
-                    // even warranted.
+                    // even warranted. reduce is only ever true for a quiet move (see IsReducibleMove),
+                    // and grantExtension is only ever true for an Act, so the two never coincide —
+                    // "full depth" here is always plain depth - 1, never the extended searchDepth.
                     if (reduce && score > alpha)
                     {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                         _tt.Stats.LmrReSearches++;
 #endif
-                        score = ScoreChild(board, move, depth - 1, plyFromRoot + 1, alpha, alpha + 1, perspectiveTeam, ct);
+                        score = ScoreChild(board, move, depth - 1, plyFromRoot + 1, alpha, alpha + 1, perspectiveTeam, ct, childExtensionsUsed);
                     }
 
                     // PVS fail-high — the null-window scout can only prove "not worse than alpha",
                     // not the true score. Only a genuine alpha<score<beta result needs the full-window
                     // re-search; a score >= beta is already a valid cutoff via the null window alone.
+                    // Full, un-reduced depth — reduce and grantExtension are mutually exclusive (see
+                    // above), so this is depth - 1 for a reduced quiet move and depth (the extended
+                    // searchDepth) for an Act that staged a Retribution; either way it's the same
+                    // depth the LMR fail-high branch above would have used had it fired instead.
                     if (score > alpha && score < beta)
                     {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                         _tt.Stats.PvsReSearches++;
 #endif
-                        score = ScoreChild(board, move, depth - 1, plyFromRoot + 1, alpha, beta, perspectiveTeam, ct);
+                        int fullDepth = grantExtension ? depth : depth - 1;
+                        score = ScoreChild(board, move, fullDepth, plyFromRoot + 1, alpha, beta, perspectiveTeam, ct, childExtensionsUsed);
                     }
                 }
 
@@ -759,21 +857,23 @@ namespace ChessTheBetrayal.AI
         /// This is the exact mirror of Core's ApplyZobristMove turn-hash rule.
         /// </summary>
         private int ScoreChild(BoardState board, MoveCommand move, int childDepth, int plyFromRoot,
-                               int alpha, int beta, Team perspectiveTeam, CancellationToken ct)
+                               int alpha, int beta, Team perspectiveTeam, CancellationToken ct, int extensionsUsedThisLine = 0)
         {
             if (StageFlipsTurn(move.Stage))
             {
                 // Standard negamax step: opponent to move, minimize from our view => negate.
                 Team childPerspective = perspectiveTeam == Team.White ? Team.Black : Team.White;
-                return -Search(board, childDepth, plyFromRoot, -beta, -alpha, childPerspective, ct);
+                return -Search(board, childDepth, plyFromRoot, -beta, -alpha, childPerspective, ct, extensionsUsedThisLine: extensionsUsedThisLine);
             }
             else
             {
                 // Same player continues (mid-Betrayal). No negation, no window swap, same frame.
                 // NOTE: we do NOT decrement depth differently here — an Act followed by a forced
                 // Retribution is two plies of one turn; letting each consume a ply keeps the depth
-                // budget honest and prevents infinite non-flipping recursion.
-                return Search(board, childDepth, plyFromRoot, alpha, beta, perspectiveTeam, ct);
+                // budget honest and prevents infinite non-flipping recursion. The extension above
+                // is what compensates for that cost on the Act itself; this branch's depth handling
+                // is unchanged by it.
+                return Search(board, childDepth, plyFromRoot, alpha, beta, perspectiveTeam, ct, extensionsUsedThisLine: extensionsUsedThisLine);
             }
         }
 
