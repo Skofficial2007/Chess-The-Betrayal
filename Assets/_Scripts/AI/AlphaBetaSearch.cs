@@ -90,6 +90,12 @@ namespace ChessTheBetrayal.AI
         // forced-Defection loop once did — if we ever hit it we stand pat rather than recurse forever.
         private const int MaxQuiescencePly = 64;
 
+        // A node deep enough to matter but with no TT move at all gets a cheap shallower probe first,
+        // purely to seed move ordering for the real search that follows. Below this depth the node is
+        // already cheap enough that skipping straight to the real search costs less than the probe would.
+        private const int InternalIterativeReductionMinDepth = 4;
+        private const int InternalIterativeReductionAmount = 1;
+
         private readonly IChessEngine _engine;
         private readonly IPositionEvaluator _evaluator;
         private readonly TranspositionTable _tt;
@@ -454,7 +460,7 @@ namespace ChessTheBetrayal.AI
         /// Recursive negamax. 'perspectiveTeam' is whichever side we're currently scoring FOR
         /// (it changes only when the turn actually flips). alpha/beta are always in perspectiveTeam's frame.
         /// </summary>
-        private int Search(BoardState board, int depth, int plyFromRoot, int alpha, int beta, Team perspectiveTeam, CancellationToken ct, bool parentWasNull = false, int extensionsUsedThisLine = 0)
+        private int Search(BoardState board, int depth, int plyFromRoot, int alpha, int beta, Team perspectiveTeam, CancellationToken ct, bool parentWasNull = false, int extensionsUsedThisLine = 0, bool iirAllowed = true)
         {
             if (ct.IsCancellationRequested) return 0;
 
@@ -486,6 +492,28 @@ namespace ChessTheBetrayal.AI
                     if (ttFlag == TTFlag.UpperBound && s < beta) beta = s;
                     if (alpha >= beta) return s;
                 }
+            }
+
+            // Internal iterative reduction: a node this deep with no TT move at all has never been
+            // searched before, so move ordering here is flying blind (no killer/history head start
+            // from a prior visit). Rather than order blindly at full cost, do a cheap shallower probe
+            // first — its own recursive TT stores will very likely populate an entry for THIS
+            // position, handing the real search below a ttMove to order from. Same reasoning as the
+            // engine's existing null-move probe: spend a smaller search to buy a better-ordered
+            // bigger one. No Betrayal-specific guard needed — this only changes how deep we look
+            // before committing to the real search at this exact node, not what moves are legal or
+            // how the turn/hash bookkeeping behaves. iirAllowed: false on the probe call itself so a
+            // TT-cold line can't cascade into a chain of nested reductions all the way down to the
+            // depth floor — this fires at most once per real node, exactly like a single extra ply
+            // of lookahead, not a repeating discount applied at every level of the probe.
+            if (iirAllowed && ttMove == 0 && depth >= InternalIterativeReductionMinDepth)
+            {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                _tt.Stats.IirReductions++;
+#endif
+                Search(board, depth - InternalIterativeReductionAmount, plyFromRoot, alpha, beta, perspectiveTeam, ct, parentWasNull, extensionsUsedThisLine, iirAllowed: false);
+                if (_tt.Probe(board.ZobristHash, out _, out uint iirPackedMove, out _, out _))
+                    ttMove = iirPackedMove;
             }
 
             // Shared guard for the whole forward-pruning family (NMP, reverse futility, move-count
