@@ -51,7 +51,7 @@ namespace ChessTheBetrayal.AI
         /// mate-found exit. Lets a caller distinguish "the search finished on its own" from "it
         /// got cut off partway" without changing FindBestMove's return type, and is the only way
         /// to compare search throughput across two runs that both hit the same wall-clock budget
-        /// cap (e.g. two devices both capped at a profile's SoftTimeBudgetMs) — the elapsed time
+        /// cap (e.g. two devices both capped at a profile's TimeBudget) — the elapsed time
         /// alone is identical in that case, but the depth reached is not.</summary>
         public int LastCompletedDepth;
 

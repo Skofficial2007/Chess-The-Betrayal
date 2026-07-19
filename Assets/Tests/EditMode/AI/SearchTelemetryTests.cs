@@ -31,7 +31,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         public void FindBestMove_AnyPosition_NodesVisitedIsPositive()
         {
             BoardState board = TestBoardSetupUtility.CreateStandard();
-            var settings = new AISearchSettings(maxDepth: 3, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 3, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             _search.FindBestMove(board, settings, CancellationToken.None);
 
@@ -42,8 +42,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         public void FindBestMove_SecondShallowerCall_DoesNotAccumulateFromFirstCall()
         {
             BoardState board = TestBoardSetupUtility.CreateStandard();
-            var deepSettings = new AISearchSettings(maxDepth: 4, softTimeBudgetMs: 5000, BetrayalUsage.Full);
-            var shallowSettings = new AISearchSettings(maxDepth: 1, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var deepSettings = new AISearchSettings(maxDepth: 4, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
+            var shallowSettings = new AISearchSettings(maxDepth: 1, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             _search.FindBestMove(board, deepSettings, CancellationToken.None);
             long deepCallNodes = _search.Stats.NodesVisited;
@@ -120,7 +120,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             // node-count assertion (those are brittle to evaluator/ordering tuning and belong to a
             // benchmark suite, not a unit test).
             BoardState board = TestBoardSetupUtility.CreateStandard();
-            var settings = new AISearchSettings(maxDepth: 5, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 5, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             _search.FindBestMove(board, settings, CancellationToken.None);
 
@@ -141,7 +141,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 .WithPiece("d5", Team.Black, ChessPieceType.Pawn)
                 .WithTurn(Team.White)
                 .WithComputedHash();
-            var settings = new AISearchSettings(maxDepth: 3, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 3, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             _search.FindBestMove(board, settings, CancellationToken.None);
 
@@ -155,7 +155,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             // each completed depth — a deeper completed iteration can never report fewer total nodes
             // than a shallower one.
             BoardState board = TestBoardSetupUtility.CreateStandard();
-            var settings = new AISearchSettings(maxDepth: 4, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 4, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             _search.FindBestMove(board, settings, CancellationToken.None);
 
@@ -173,10 +173,10 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             // on the hot path (gated behind UNITY_EDITOR||DEVELOPMENT_BUILD, which IS defined for
             // this EditMode test assembly) — plain long field writes must not introduce boxing/GC.
             BoardState warmup = TestBoardSetupUtility.CreateStandard();
-            _search.FindBestMove(warmup, new AISearchSettings(2, 5000, BetrayalUsage.Full), CancellationToken.None);
+            _search.FindBestMove(warmup, new AISearchSettings(2, TestTimeBudgets.Generous, BetrayalUsage.Full), CancellationToken.None);
 
             BoardState board = TestBoardSetupUtility.CreateStandard();
-            var settings = new AISearchSettings(maxDepth: 3, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 3, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             GC.Collect();
             GC.WaitForPendingFinalizers();

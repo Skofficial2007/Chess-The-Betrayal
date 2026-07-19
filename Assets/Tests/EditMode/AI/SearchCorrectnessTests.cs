@@ -40,7 +40,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 .WithTurn(Team.White)
                 .WithComputedHash();
 
-            var settings = new AISearchSettings(maxDepth: 3, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 3, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
             MoveCommand best = _search.FindBestMove(board, settings, CancellationToken.None);
 
             Assert.That(best.StartPosition, Is.EqualTo(TestBoardSetupUtility.AlgebraicToVector("a1")));
@@ -56,7 +56,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             BoardState board = TestBoardSetupUtility.CreateStandard();
             ulong hashBefore = board.ZobristHash;
 
-            var settings = new AISearchSettings(maxDepth: 3, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 3, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
             _search.FindBestMove(board, settings, CancellationToken.None);
 
             Assert.DoesNotThrow(() => board.AssertZobristConsistency(),
@@ -85,7 +85,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
 
             ulong hashBefore = board.ZobristHash;
 
-            var settings = new AISearchSettings(maxDepth: 3, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 3, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             Assert.DoesNotThrow(() => _search.FindBestMove(board, settings, CancellationToken.None),
                 "Search must explore an Act -> Retribution sub-sequence without throwing.");
@@ -192,7 +192,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 .WithPendingBetrayer("e4", Team.White)
                 .WithComputedHash();
 
-            var settings = new AISearchSettings(maxDepth: 3, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 3, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             MoveCommand best = default;
             Assert.DoesNotThrow(() => best = _search.FindBestMove(board, settings, CancellationToken.None),
@@ -215,7 +215,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 .WithBetrayalRight(true)
                 .WithComputedHash();
 
-            var settings = new AISearchSettings(maxDepth: 2, softTimeBudgetMs: 5000, BetrayalUsage.DefendOnly);
+            var settings = new AISearchSettings(maxDepth: 2, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.DefendOnly);
             MoveCommand best = _search.FindBestMove(board, settings, CancellationToken.None);
 
             Assert.That(best.Stage, Is.Not.EqualTo(BetrayalStage.Act),

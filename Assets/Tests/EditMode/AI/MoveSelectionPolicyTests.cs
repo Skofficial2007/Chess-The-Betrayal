@@ -26,7 +26,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
 
         private static AIProfile ProfileWith(float blunderRate = 0f, int blunderMarginCp = 0,
             float betrayalAggression = 0f, int tieBreakWindowCp = 0) =>
-            new AIProfile("test", maxDepth: 1, softTimeBudgetMs: 1000, blunderRate, blunderMarginCp,
+            new AIProfile("test", maxDepth: 1, timeBudget: new AITimeBudget(1000, 1500), blunderRate, blunderMarginCp,
                 betrayalAggression, attackDefenseBias: 1f, tieBreakWindowCp, useOpeningBook: false);
 
         /// <summary>Always returns 0f from NextFloat (forces any probability roll to succeed / any

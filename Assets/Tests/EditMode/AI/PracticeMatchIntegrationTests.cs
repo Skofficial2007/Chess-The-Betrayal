@@ -58,7 +58,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             _aiAgent = new AsyncAIAgent(
                 _engine,
                 new BetrayalAwareEvaluator(),
-                new AISearchSettings(maxDepth: 2, softTimeBudgetMs: 5000, betrayalUsage));
+                new AISearchSettings(maxDepth: 2, TestTimeBudgets.Generous, betrayalUsage));
 
             _aiAgent.OnMoveDecided += move =>
             {
@@ -216,7 +216,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             var slowAgent = new AsyncAIAgent(
                 _engine,
                 new BetrayalAwareEvaluator(),
-                new AISearchSettings(maxDepth: 32, softTimeBudgetMs: 30_000, BetrayalUsage.Full));
+                new AISearchSettings(maxDepth: 32, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full));
 
             try
             {

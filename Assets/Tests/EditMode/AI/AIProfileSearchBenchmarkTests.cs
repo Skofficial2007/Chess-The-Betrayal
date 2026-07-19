@@ -10,7 +10,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
 {
     /// <summary>
     /// Times every built-in AIProfile tier (see AIProfileTable.BuiltIn) independently, at its own
-    /// MaxDepth/SoftTimeBudgetMs, on the same midgame position SearchBenchmarkTests uses. Each
+    /// MaxDepth/TimeBudget, on the same midgame position SearchBenchmarkTests uses. Each
     /// tier gets its own test so a slow profile fails on its own name instead of hiding inside one
     /// aggregate assertion.
     ///
@@ -72,7 +72,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 .WithComputedHash();
 
         private static AISearchSettings SettingsFor(AIProfile profile) =>
-            new AISearchSettings(profile.MaxDepth, profile.SoftTimeBudgetMs, BetrayalUsage.Full);
+            new AISearchSettings(profile.MaxDepth, profile.TimeBudget, BetrayalUsage.Full);
 
         private void AssertSingleMoveUnderThreshold(string profileId)
         {

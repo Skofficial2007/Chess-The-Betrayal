@@ -55,7 +55,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 .WithTurn(Team.White)
                 .WithComputedHash();
 
-            var settings = new AISearchSettings(maxDepth: 4, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 4, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             MoveCommand withTT = NewSearchWithFreshTT().FindBestMove(boardTTOn, settings, CancellationToken.None);
             MoveCommand withoutTT = NewSearchWithNegligibleTT().FindBestMove(boardTTOff, settings, CancellationToken.None);
@@ -87,7 +87,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 .WithPendingBetrayer("d4", Team.Black)
                 .WithComputedHash();
 
-            var settings = new AISearchSettings(maxDepth: 3, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 3, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             MoveCommand withTT = NewSearchWithFreshTT().FindBestMove(boardTTOn, settings, CancellationToken.None);
             MoveCommand withoutTT = NewSearchWithNegligibleTT().FindBestMove(boardTTOff, settings, CancellationToken.None);
@@ -122,7 +122,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             }
 
             var search = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator(), transpositionTable: tt);
-            var settings = new AISearchSettings(maxDepth: 4, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 4, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             MoveCommand best = search.FindBestMove(board, settings, CancellationToken.None);
 

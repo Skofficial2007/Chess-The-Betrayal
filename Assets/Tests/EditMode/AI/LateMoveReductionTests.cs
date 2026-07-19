@@ -147,7 +147,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
 
             var engine = new ChessEngineAdapter();
             var search = new AlphaBetaSearch(engine, new BetrayalAwareEvaluator());
-            var settings = new AISearchSettings(maxDepth: 4, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 4, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             MoveCommand best = search.FindBestMove(board, settings, CancellationToken.None);
 
@@ -173,7 +173,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             ulong hashBefore = board.ZobristHash;
             var engine = new ChessEngineAdapter();
             var search = new AlphaBetaSearch(engine, new BetrayalAwareEvaluator());
-            var settings = new AISearchSettings(maxDepth: 4, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 4, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             Assert.DoesNotThrow(() => search.FindBestMove(board, settings, CancellationToken.None));
 

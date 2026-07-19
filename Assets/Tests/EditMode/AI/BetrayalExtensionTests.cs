@@ -42,7 +42,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 .WithBetrayalRight(true)
                 .WithComputedHash();
 
-            var settings = new AISearchSettings(maxDepth: 4, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 4, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
             _search.FindBestMove(board, settings, CancellationToken.None);
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -59,7 +59,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             // real staged Retribution, not firing unconditionally.
             BoardState board = TestBoardSetupUtility.CreateStandard();
 
-            var settings = new AISearchSettings(maxDepth: 3, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 3, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
             _search.FindBestMove(board, settings, CancellationToken.None);
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -96,7 +96,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 .WithComputedHash();
 
             ulong hashBefore = board.ZobristHash;
-            var settings = new AISearchSettings(maxDepth: 4, softTimeBudgetMs: 8000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 4, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             Assert.DoesNotThrow(() => _search.FindBestMove(board, settings, CancellationToken.None));
 
@@ -131,7 +131,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             // deterministic ceiling on how many times a Search node keyed on this exact position
             // could possibly be entered, which is the real invariant worth pinning here rather than
             // an arbitrary guess at "small."
-            var settings = new AISearchSettings(maxDepth: 4, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 4, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
             _search.FindBestMove(board, settings, CancellationToken.None);
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD

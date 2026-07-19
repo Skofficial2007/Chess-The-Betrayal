@@ -51,7 +51,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 .WithTurn(Team.White)
                 .WithComputedHash();
 
-            var settings = new AISearchSettings(maxDepth: 5, softTimeBudgetMs: 8000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 5, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
             _search.FindBestMove(board, settings, CancellationToken.None);
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -67,7 +67,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             // probe search would cost more than it saves - IIR must stay off entirely down there.
             BoardState board = TestBoardSetupUtility.CreateStandard();
 
-            var settings = new AISearchSettings(maxDepth: 3, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 3, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
             _search.FindBestMove(board, settings, CancellationToken.None);
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -100,7 +100,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 .WithTurn(Team.White)
                 .WithComputedHash();
 
-            var settings = new AISearchSettings(maxDepth: 5, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 5, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             var firstRun = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator());
             MoveCommand firstBest = firstRun.FindBestMove(board, settings, CancellationToken.None);
