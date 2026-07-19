@@ -297,6 +297,40 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
+        public void FindBestMove_RootScoresExactForSelection_ReportsWhenCandidateScoresAreTrustworthy()
+        {
+            // Non-best root scores start life as tightened alpha-beta bounds, and a bound can sit
+            // arbitrarily close to the best score while its move is far worse — so anything that
+            // picks among "near-best" candidates (tie-break windows, deliberate blunders) must
+            // know whether the exact-rescore pass actually ran. Trusting bounds is how a
+            // time-capped profile once ended up playing near-random moves: its budget expired
+            // before the rescore pass, and the selection window happily treated leftover bounds
+            // as real scores.
+            BoardState board = TestBoardSetupUtility.CreateStandard();
+            var settings = new AISearchSettings(maxDepth: 3, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
+
+            // Uncancelled search with a rescore margin: the pass completes, scores are exact.
+            _search.FindBestMove(board, settings, CancellationToken.None, candidateRescoreMarginCp: 100);
+            Assert.That(_search.RootScoresExactForSelection, Is.True,
+                "An uncancelled search that requested a rescore margin must report exact candidate scores.");
+
+            // No rescore margin requested: non-best scores stay bounds, and must be reported as such.
+            _search.FindBestMove(board, settings, CancellationToken.None);
+            Assert.That(_search.RootScoresExactForSelection, Is.False,
+                "Without a rescore margin the non-best root scores are alpha-beta bounds — never exact.");
+
+            // Budget already spent (the token fired before the search could even start): whatever
+            // scores are left over must never be presented as selection-worthy.
+            using (var cts = new CancellationTokenSource())
+            {
+                cts.Cancel();
+                _search.FindBestMove(board, settings, cts.Token, candidateRescoreMarginCp: 100);
+                Assert.That(_search.RootScoresExactForSelection, Is.False,
+                    "A cancelled search cannot have rescored its candidates — selection must fall back to the best move.");
+            }
+        }
+
+        [Test]
         public void FindBestMove_DefendOnlyMode_NeverChoosesActAtRoot()
         {
             BoardState board = TestBoardSetupUtility.CreateEmpty()

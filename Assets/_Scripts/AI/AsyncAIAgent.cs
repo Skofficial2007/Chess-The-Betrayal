@@ -173,8 +173,13 @@ namespace ChessTheBetrayal.AI
                     // ranked root-move output — still on THIS worker thread, before the result ever
                     // crosses to the main thread. rng == null (convenience ctor) or a fully zero-dial
                     // profile both skip this entirely, returning FindBestMove's own best move
-                    // unchanged — byte-identical to pre-AI-24 behavior.
-                    if (_rng != null && (_profile.BlunderRate > 0f || _profile.TieBreakWindowCp > 0))
+                    // unchanged. RootScoresExactForSelection guards the remaining case: a search
+                    // that spent its whole budget on the depth loop never got its candidate scores
+                    // rescored to exact values, and picking "near-best" moves from the leftover
+                    // alpha-beta bounds is how a time-capped tier ends up playing near-random moves —
+                    // personality dials only apply when the scores they read are real.
+                    if (_rng != null && (_profile.BlunderRate > 0f || _profile.TieBreakWindowCp > 0)
+                        && _search.RootScoresExactForSelection)
                     {
                         best = _selectionPolicy.SelectFinalMove(
                             _search.RootMoves, _search.RootScores, _search.RootMoveCount, _search.BestRootIndex,
