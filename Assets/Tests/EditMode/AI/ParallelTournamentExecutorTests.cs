@@ -115,18 +115,34 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             var session = TournamentSession.CreateQuick(runSeed: 11, FastFixtureRoster, TestPlyCap);
             int totalExpected = session.TotalGames;
 
-            int callCount = 0;
-            int lastReportedCompleted = 0;
-            ParallelTournamentExecutor.RunRemainingGames(session, maxDegreeOfParallelism: 4,
-                onGamePlayed: (completed, total) =>
-                {
-                    Interlocked.Increment(ref callCount);
-                    Interlocked.Exchange(ref lastReportedCompleted, completed);
-                    Assert.That(total, Is.EqualTo(totalExpected));
-                });
+            var recorder = new RecordingProgress();
+            ParallelTournamentExecutor.RunRemainingGames(session, maxDegreeOfParallelism: 4, progress: recorder);
 
-            Assert.That(callCount, Is.EqualTo(totalExpected));
-            Assert.That(lastReportedCompleted, Is.EqualTo(totalExpected));
+            Assert.That(recorder.CallCount, Is.EqualTo(totalExpected));
+            Assert.That(recorder.LastReportedCompleted, Is.EqualTo(totalExpected));
+            Assert.That(recorder.EveryReportedTotalMatched, Is.True);
+        }
+
+        /// <summary>Thread-safe test double — ReportGameCompleted fires from worker threads, out
+        /// of order, exactly like the real sinks must tolerate.</summary>
+        private sealed class RecordingProgress : ChessTheBetrayal.EditorTools.Benchmark.ITournamentProgress
+        {
+            private int _callCount;
+            private int _lastReportedCompleted;
+            private bool _everyReportedTotalMatched = true;
+            private int _expectedTotal = -1;
+
+            public int CallCount => _callCount;
+            public int LastReportedCompleted => _lastReportedCompleted;
+            public bool EveryReportedTotalMatched => _everyReportedTotalMatched;
+
+            public void ReportGameCompleted(int current, int total)
+            {
+                Interlocked.Increment(ref _callCount);
+                Interlocked.Exchange(ref _lastReportedCompleted, current);
+                if (Interlocked.CompareExchange(ref _expectedTotal, total, -1) != -1 && _expectedTotal != total)
+                    _everyReportedTotalMatched = false;
+            }
         }
 
         [Test]

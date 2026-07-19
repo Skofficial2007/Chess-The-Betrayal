@@ -45,19 +45,21 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
         /// AlphaBetaSearch mid-recursion has no cooperative cancellation point to hand a token to
         /// today — it currently reads a token only at the top of FindBestMove's depth loop and, for
         /// MatchTimeControl.ProductionBudget games, at that game's own hard time budget).
-        /// onGamePlayed reports raw completion count as games finish across all workers (fires from
-        /// a worker thread, out of order) — separate from the session's own OnGameCompleted (fires
-        /// from the caller's thread, in order) so a progress bar can show live movement without a
-        /// caller needing to reason about thread affinity.
+        /// progress reports raw completion count as games finish across all workers (fires from a
+        /// worker thread, out of order, so it must itself be safe to call concurrently — both
+        /// shipped sinks are) — separate from the session's own OnGameCompleted (fires from the
+        /// caller's thread, in order) so a progress bar/log can show live movement without a
+        /// caller needing to reason about thread affinity. Defaults to reporting nothing.
         /// </summary>
         public static void RunRemainingGames(
             TournamentSession session,
             int maxDegreeOfParallelism = -1,
             CancellationToken cancellationToken = default,
-            Action<int, int> onGamePlayed = null)
+            ITournamentProgress progress = null)
         {
             if (session == null) throw new ArgumentNullException(nameof(session));
             if (maxDegreeOfParallelism <= 0) maxDegreeOfParallelism = DefaultMaxDegreeOfParallelism;
+            progress ??= NullTournamentProgress.Instance;
 
             int totalPending = session.PendingGameCount;
             if (totalPending == 0) return;
@@ -89,7 +91,7 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
                         results[offset] = session.PlayOneGame(simulator, startIndex + offset);
 
                         int completed = Interlocked.Increment(ref completedSoFar);
-                        onGamePlayed?.Invoke(completed, totalPending);
+                        progress.ReportGameCompleted(completed, totalPending);
                     });
                 }
                 catch (OperationCanceledException)
