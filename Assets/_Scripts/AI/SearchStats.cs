@@ -35,6 +35,12 @@ namespace ChessTheBetrayal.AI
 
         public long IirReductions; // nodes given a shallower probe search to find an ordering move before the real search
 
+        // Aspiration windows (experimental) — depths searched with a narrow guessed window, and how
+        // many of those had to be thrown away and re-searched with the full window because the
+        // guess was wrong (a fail-low or fail-high against the narrow bound).
+        public long AspirationWindowAttempts;
+        public long AspirationWindowReSearches;
+
         // Quiescence node-count breakdown. NodesVisited above counts ONLY main-search (Search)
         // nodes; Quiescence() increments nothing there by design. These fields fill that gap so the
         // qtree's size and shape can be measured directly instead of inferred from wall-clock/
@@ -92,6 +98,7 @@ namespace ChessTheBetrayal.AI
             $"depth={LastCompletedDepth} nodes={NodesVisited} tt(probe={TTProbes} hit={TTHits} emptyMiss={TTEmptyMisses} verifyMiss={TTVerificationMisses} store={TTStores} replace={TTReplacements}) " +
             $"null(try={NullMoveAttempts} cut={NullMoveCutoffs}) lmr(reduce={LmrReductions} research={LmrReSearches}) pvs(scout={PvsScouts} research={PvsReSearches}) " +
             $"fwdPrune(rfp={ReverseFutilityCutoffs} lmp={LateMovePrunes} ffp={FrontierFutilityPrunes}) betrayalExt={BetrayalExtensions} iir={IirReductions} " +
+            $"aspiration(attempt={AspirationWindowAttempts} research={AspirationWindowReSearches}) " +
             $"q(nodes={QNodesVisited} betrayalRes={QBetrayalResolutionNodes} actExp={QActExpansions} gen={QMovesGenerated} searched={QMovesSearched} seePrune={SeeQuiescencePrunes}) " +
             $"depthCurve(d1={NodesAfterDepth1} d2={NodesAfterDepth2} d3={NodesAfterDepth3} d4={NodesAfterDepth4} d5={NodesAfterDepth5} d6={NodesAfterDepth6} d7={NodesAfterDepth7})";
     }
