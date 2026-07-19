@@ -203,6 +203,100 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
+        public void FindBestMove_ActNobodyCanAnswer_IsNotMistakenForStalemateDraw()
+        {
+            // White is slightly behind (knight + pawn vs rook). The knight on b1 can Act onto its
+            // own a3 pawn, and NO White piece can then capture a3 — so the knight defects to Black,
+            // leaving White down a knight AND the pawn it just betrayed. The search used to score
+            // that empty-Retribution position as stalemate (0), which made the Act look like a free
+            // draw to any side that was behind — the deeper the search, the better it got at
+            // steering into that phantom escape hatch, which inverted the whole difficulty ladder.
+            // Search must resolve the forced Defection and keep searching instead.
+            BoardState board = TestBoardSetupUtility.CreateEmpty()
+                .WithPiece("a1", Team.White, ChessPieceType.King)
+                .WithPiece("b1", Team.White, ChessPieceType.Knight)
+                .WithPiece("a3", Team.White, ChessPieceType.Pawn)
+                .WithPiece("e8", Team.Black, ChessPieceType.King)
+                .WithPiece("h8", Team.Black, ChessPieceType.Rook)
+                .WithTurn(Team.White)
+                .WithBetrayalRight(true)
+                .WithComputedHash();
+
+            ulong hashBefore = board.ZobristHash;
+            var settings = new AISearchSettings(maxDepth: 4, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
+
+            // The wide rescore margin forces an exact full-window score for every root move, so the
+            // Act's entry in RootScores below is its true value, not an alpha-beta bound.
+            MoveCommand best = _search.FindBestMove(board, settings, CancellationToken.None,
+                candidateRescoreMarginCp: 2000);
+
+            Assert.That(best.Stage, Is.Not.EqualTo(BetrayalStage.Act),
+                "A losing side must not play an unanswerable Act in the belief it forces a draw.");
+
+            int actIndex = -1;
+            for (int i = 0; i < _search.RootMoveCount; i++)
+            {
+                if (_search.RootMoves[i].Stage == BetrayalStage.Act) actIndex = i;
+            }
+
+            Assert.That(actIndex, Is.GreaterThanOrEqualTo(0),
+                "The b1xa3 Act must exist as a root move for this test to mean anything.");
+            Assert.That(_search.RootScores[actIndex], Is.LessThan(-300),
+                "The unanswerable Act loses the betrayed pawn and hands Black the defected knight — " +
+                "its score must reflect that material reality, not read as a draw.");
+            Assert.That(_search.Stats.ForcedDefectionResolutions, Is.GreaterThan(0),
+                "The search must have explored the Act line by resolving the forced Defection in-line.");
+
+            Assert.DoesNotThrow(() => board.AssertZobristConsistency(),
+                "Resolving Defections inside the main search must keep the incremental hash consistent.");
+            Assert.That(board.ZobristHash, Is.EqualTo(hashBefore),
+                "The live board must be fully restored after searching through in-line Defection resolutions.");
+        }
+
+        [Test]
+        public void FindBestMove_ActWhoseDefectionChecksOwnKing_ScoresTheForcedSaveContinuation()
+        {
+            // The self-check flavor of the same rule: the rook on e5 can Act onto its own e4 pawn
+            // with no possible Retribution, and the defected (now Black) rook then checks the White
+            // King along the open e-file — so White owes a mandatory king-save before play resumes.
+            // The search must play out that whole forced continuation (Defection, then the save)
+            // rather than scoring the empty-Retribution position as a draw.
+            BoardState board = TestBoardSetupUtility.CreateEmpty()
+                .WithPiece("e1", Team.White, ChessPieceType.King)
+                .WithPiece("e5", Team.White, ChessPieceType.Rook)
+                .WithPiece("e4", Team.White, ChessPieceType.Pawn)
+                .WithPiece("h8", Team.Black, ChessPieceType.King)
+                .WithPiece("a8", Team.Black, ChessPieceType.Rook)
+                .WithTurn(Team.White)
+                .WithBetrayalRight(true)
+                .WithComputedHash();
+
+            ulong hashBefore = board.ZobristHash;
+            var settings = new AISearchSettings(maxDepth: 4, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
+
+            _search.FindBestMove(board, settings, CancellationToken.None, candidateRescoreMarginCp: 2000);
+
+            int actIndex = -1;
+            for (int i = 0; i < _search.RootMoveCount; i++)
+            {
+                if (_search.RootMoves[i].Stage == BetrayalStage.Act) actIndex = i;
+            }
+
+            Assert.That(actIndex, Is.GreaterThanOrEqualTo(0),
+                "The e5xe4 Act must exist as a root move for this test to mean anything.");
+            Assert.That(_search.RootScores[actIndex], Is.LessThan(-300),
+                "Betraying the pawn gifts Black a whole rook (with check) — the Act's score must " +
+                "reflect the ForcedSave continuation, not read as a draw.");
+            Assert.That(_search.Stats.ForcedDefectionResolutions, Is.GreaterThan(0),
+                "The search must have resolved the self-checking Defection in-line to score this line.");
+
+            Assert.DoesNotThrow(() => board.AssertZobristConsistency(),
+                "The Defection + king-save make/unmake inside the main search must keep the hash consistent.");
+            Assert.That(board.ZobristHash, Is.EqualTo(hashBefore),
+                "The live board must be fully restored after the ForcedSave continuation unwinds.");
+        }
+
+        [Test]
         public void FindBestMove_DefendOnlyMode_NeverChoosesActAtRoot()
         {
             BoardState board = TestBoardSetupUtility.CreateEmpty()

@@ -33,6 +33,12 @@ namespace ChessTheBetrayal.AI
 
         public long BetrayalExtensions; // Acts granted a search extension for staging a forced Retribution
 
+        // Main-search nodes whose pending Retribution had no legal executioner, so the Betrayer's
+        // forced Defection was resolved in-line and the search continued through it (see
+        // AlphaBetaSearch.ResolveForcedDefectionInSearch). Quiescence's own resolutions are counted
+        // separately under QBetrayalResolutionNodes below.
+        public long ForcedDefectionResolutions;
+
         public long IirReductions; // nodes given a shallower probe search to find an ordering move before the real search
 
         // Aspiration windows (experimental) — depths searched with a narrow guessed window, and how
@@ -97,7 +103,7 @@ namespace ChessTheBetrayal.AI
         public override string ToString() =>
             $"depth={LastCompletedDepth} nodes={NodesVisited} tt(probe={TTProbes} hit={TTHits} emptyMiss={TTEmptyMisses} verifyMiss={TTVerificationMisses} store={TTStores} replace={TTReplacements}) " +
             $"null(try={NullMoveAttempts} cut={NullMoveCutoffs}) lmr(reduce={LmrReductions} research={LmrReSearches}) pvs(scout={PvsScouts} research={PvsReSearches}) " +
-            $"fwdPrune(rfp={ReverseFutilityCutoffs} lmp={LateMovePrunes} ffp={FrontierFutilityPrunes}) betrayalExt={BetrayalExtensions} iir={IirReductions} " +
+            $"fwdPrune(rfp={ReverseFutilityCutoffs} lmp={LateMovePrunes} ffp={FrontierFutilityPrunes}) betrayalExt={BetrayalExtensions} forcedDefection={ForcedDefectionResolutions} iir={IirReductions} " +
             $"aspiration(attempt={AspirationWindowAttempts} research={AspirationWindowReSearches}) " +
             $"q(nodes={QNodesVisited} betrayalRes={QBetrayalResolutionNodes} actExp={QActExpansions} gen={QMovesGenerated} searched={QMovesSearched} seePrune={SeeQuiescencePrunes}) " +
             $"depthCurve(d1={NodesAfterDepth1} d2={NodesAfterDepth2} d3={NodesAfterDepth3} d4={NodesAfterDepth4} d5={NodesAfterDepth5} d6={NodesAfterDepth6} d7={NodesAfterDepth7})";
