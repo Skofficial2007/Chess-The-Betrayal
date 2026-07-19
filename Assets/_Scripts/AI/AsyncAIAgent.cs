@@ -148,14 +148,14 @@ namespace ChessTheBetrayal.AI
             CancellationTokenSource ctsForThisSearch = _cts; // captured so a later RequestBestMove/CancelSearch swapping _cts can't affect this closure
             CancellationToken token = _cts.Token;
 
-            // The wall-clock half of iterative deepening: FindBestMove's depth loop already keeps
-            // the best move from the last FULLY COMPLETED depth and discards a cancelled partial
-            // depth (see its doc comment) — but until now nothing ever triggered that cancellation
-            // on a timer, so SoftTimeBudgetMs was dead data and a hard position could run as long as
-            // MaxDepth allowed. CancelAfter arms exactly the timeout every iterative-deepening chess
-            // engine uses: let the search run until the budget expires, then stop and use whatever
-            // depth it finished. Never throws/blocks — it just schedules Cancel() on the timer thread.
-            _cts.CancelAfter(_settings.SoftTimeBudgetMs);
+            // The wall-clock backstop of iterative deepening: FindBestMove's depth loop already
+            // keeps the best move from the last FULLY COMPLETED depth and discards a cancelled
+            // partial depth (see its doc comment). Arming this timer at the HARD budget rather
+            // than the soft one gives the search room to spend the gap between them on a position
+            // that looks unsettled (see FindBestMove's own soft-budget handling) while this timer
+            // still guarantees the search can never run past the hard ceiling no matter what it
+            // decides internally. Never throws/blocks — it just schedules Cancel() on the timer thread.
+            _cts.CancelAfter(_settings.TimeBudget.HardMs);
 
             Task.Run(() =>
             {
@@ -184,7 +184,7 @@ namespace ChessTheBetrayal.AI
                     // deepening — FindBestMove already returns the best move from the last fully
                     // completed depth in that case, so it must still be delivered. token.
                     // IsCancellationRequested being true does NOT mean the search was aborted: it is
-                    // ALSO true when our own CancelAfter(SoftTimeBudgetMs) timer simply expired, which
+                    // ALSO true when our own CancelAfter(HardMs) timer simply expired, which
                     // is the common, correct outcome in a real match. Two genuinely different "this
                     // search no longer matters" conditions must still discard the result:
                     //   1. The caller's own `cancellation` token fired (game reset / scene change /

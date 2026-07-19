@@ -52,7 +52,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             BoardState boardTTOn = CaptureRichMidgamePosition();
             BoardState boardTTOff = CaptureRichMidgamePosition();
 
-            var settings = new AISearchSettings(maxDepth: 5, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 5, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             var searchOn = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator(),
                 transpositionTable: new TranspositionTable(log2Size: 14));
@@ -75,7 +75,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             BoardState boardTTOn = CaptureRichMidgamePosition();
             BoardState boardTTOff = CaptureRichMidgamePosition();
 
-            var settings = new AISearchSettings(maxDepth: 5, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 5, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             var searchOn = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator(),
                 transpositionTable: new TranspositionTable(log2Size: 14));
@@ -112,7 +112,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 .WithPendingBetrayer("d4", Team.Black)
                 .WithComputedHash();
 
-            var settings = new AISearchSettings(maxDepth: 3, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 3, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             var searchOn = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator(),
                 transpositionTable: new TranspositionTable(log2Size: 12));
@@ -164,7 +164,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             // (actExp=181144 on the fixed benchmark) must shrink substantially once Act can only be
             // initiated at qply == MaxQuiescencePly, not at every nested qply thereafter.
             BoardState board = CaptureRichMidgamePosition();
-            var settings = new AISearchSettings(maxDepth: 5, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 5, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
             var search = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator());
 
             search.FindBestMove(board, settings, CancellationToken.None);

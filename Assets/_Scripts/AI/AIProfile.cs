@@ -6,7 +6,7 @@ namespace ChessTheBetrayal.AI
     /// <see cref="AIProfileTable"/> (or a new <see cref="AIProfileDefinition"/> asset later) —
     /// never a code change. See ADR_AI23_Profile_EventStream_OpeningBook.md Section 1.
     ///
-    /// <see cref="MaxDepth"/>/<see cref="SoftTimeBudgetMs"/> shape the search itself (via
+    /// <see cref="MaxDepth"/>/<see cref="TimeBudget"/> shape the search itself (via
     /// AISearchSettings.FromProfile); <see cref="BlunderRate"/>/<see cref="BlunderMarginCp"/>/
     /// <see cref="TieBreakWindowCp"/>/<see cref="BetrayalAggression"/> shape which of the search's
     /// own ranked root moves gets picked (via MoveSelectionPolicy). <see cref="AttackDefenseBias"/>
@@ -17,7 +17,7 @@ namespace ChessTheBetrayal.AI
     {
         public readonly string Id;
         public readonly int MaxDepth;
-        public readonly int SoftTimeBudgetMs;
+        public readonly AITimeBudget TimeBudget;
         public readonly float BlunderRate;
         public readonly int BlunderMarginCp;
         public readonly float BetrayalAggression;
@@ -28,7 +28,7 @@ namespace ChessTheBetrayal.AI
         public AIProfile(
             string id,
             int maxDepth,
-            int softTimeBudgetMs,
+            AITimeBudget timeBudget,
             float blunderRate,
             int blunderMarginCp,
             float betrayalAggression,
@@ -38,7 +38,7 @@ namespace ChessTheBetrayal.AI
         {
             Id = id;
             MaxDepth = maxDepth;
-            SoftTimeBudgetMs = softTimeBudgetMs;
+            TimeBudget = timeBudget;
             BlunderRate = blunderRate;
             BlunderMarginCp = blunderMarginCp;
             BetrayalAggression = betrayalAggression;
@@ -51,7 +51,7 @@ namespace ChessTheBetrayal.AI
         /// AsyncAIAgent construction with no profile injected). MoveSelectionPolicy's zero-dial
         /// fast path returns the search's own best move for this, unconditionally.</summary>
         public static readonly AIProfile None = new AIProfile(
-            id: "none", maxDepth: 1, softTimeBudgetMs: 1000,
+            id: "none", maxDepth: 1, timeBudget: new AITimeBudget(1000, 1000),
             blunderRate: 0f, blunderMarginCp: 0, betrayalAggression: 0f,
             attackDefenseBias: 1.0f, tieBreakWindowCp: 0, useOpeningBook: false);
     }

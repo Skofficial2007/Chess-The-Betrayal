@@ -41,7 +41,7 @@ namespace ChessTheBetrayal.AI
             return new AIProfile(
                 profile.Id,
                 profile.MaxDepth,
-                profile.SoftTimeBudgetMs,
+                profile.TimeBudget,
                 profile.BlunderRate,
                 profile.BlunderMarginCp,
                 ClampBetrayalAggression(profile.MaxDepth, profile.BetrayalAggression),

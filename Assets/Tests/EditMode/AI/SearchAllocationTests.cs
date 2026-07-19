@@ -32,14 +32,14 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             // the constructor and first-call JIT both allocate legitimately and aren't part of the
             // zero-GC contract, which only covers the steady-state per-node search loop.
             BoardState warmup = TestBoardSetupUtility.CreateStandard();
-            _search.FindBestMove(warmup, new AISearchSettings(2, 5000, BetrayalUsage.Full), CancellationToken.None);
+            _search.FindBestMove(warmup, new AISearchSettings(2, TestTimeBudgets.Generous, BetrayalUsage.Full), CancellationToken.None);
         }
 
         [Test]
         public void FindBestMove_FixedPosition_AllocatesNoManagedMemory()
         {
             BoardState board = TestBoardSetupUtility.CreateStandard();
-            var settings = new AISearchSettings(maxDepth: 3, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 3, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             GC.Collect();
             GC.WaitForPendingFinalizers();
@@ -58,7 +58,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         public void FindBestMove_WithRescoreMargin_AllocatesNoManagedMemory()
         {
             BoardState board = TestBoardSetupUtility.CreateStandard();
-            var settings = new AISearchSettings(maxDepth: 3, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 3, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             // Warm up the bounded-rescore path too — its own pooled arrays are already sized in the
             // constructor, but the first call still needs to JIT the new code path outside the
@@ -82,8 +82,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         public void SelectFinalMove_RepeatedCalls_AllocateNoManagedMemory()
         {
             BoardState board = TestBoardSetupUtility.CreateStandard();
-            var settings = new AISearchSettings(maxDepth: 2, softTimeBudgetMs: 5000, BetrayalUsage.Full);
-            var profile = new AIProfile("test", maxDepth: 2, softTimeBudgetMs: 5000,
+            var settings = new AISearchSettings(maxDepth: 2, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
+            var profile = new AIProfile("test", maxDepth: 2, timeBudget: new AITimeBudget(5000, 7500),
                 blunderRate: 0.2f, blunderMarginCp: 50, betrayalAggression: 0.5f,
                 attackDefenseBias: 1f, tieBreakWindowCp: 30, useOpeningBook: false);
             var rng = new SystemRandomSource(seed: 42);
@@ -113,7 +113,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             var weightedSearch = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator(weights));
 
             BoardState warmup = TestBoardSetupUtility.CreateStandard();
-            var settings = new AISearchSettings(maxDepth: 3, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 3, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
             weightedSearch.FindBestMove(warmup, settings, CancellationToken.None);
 
             BoardState board = TestBoardSetupUtility.CreateStandard();

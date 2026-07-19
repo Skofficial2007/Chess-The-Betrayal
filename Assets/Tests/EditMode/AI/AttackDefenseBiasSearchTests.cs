@@ -34,7 +34,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             var engine = new ChessEngineAdapter();
             var searchLow = new AlphaBetaSearch(engine, lowBias);
             var searchHigh = new AlphaBetaSearch(engine, highBias);
-            var settings = new AISearchSettings(maxDepth: 2, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 2, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             MoveCommand bestLow = searchLow.FindBestMove(boardLow, settings, CancellationToken.None);
             MoveCommand bestHigh = searchHigh.FindBestMove(boardHigh, settings, CancellationToken.None);

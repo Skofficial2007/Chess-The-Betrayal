@@ -99,7 +99,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 .WithTurn(Team.White)
                 .WithComputedHash();
 
-            var settings = new AISearchSettings(maxDepth: 4, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 4, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
             MoveCommand best = _search.FindBestMove(board, settings, CancellationToken.None);
 
             Assert.That(best.StartPosition, Is.EqualTo(TestBoardSetupUtility.AlgebraicToVector("d4")));

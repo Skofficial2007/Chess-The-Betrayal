@@ -39,8 +39,9 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
 
                 Assert.That(settings.MaxDepth, Is.EqualTo(profile.MaxDepth));
                 Assert.That(settings.MaxDepth, Is.GreaterThan(0));
-                Assert.That(settings.SoftTimeBudgetMs, Is.EqualTo(profile.SoftTimeBudgetMs));
-                Assert.That(settings.SoftTimeBudgetMs, Is.GreaterThan(0));
+                Assert.That(settings.TimeBudget.SoftMs, Is.EqualTo(profile.TimeBudget.SoftMs));
+                Assert.That(settings.TimeBudget.SoftMs, Is.GreaterThan(0));
+                Assert.That(settings.TimeBudget.HardMs, Is.GreaterThanOrEqualTo(settings.TimeBudget.SoftMs));
             }
         }
 
@@ -93,7 +94,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         {
             var extendedRoster = new List<AIProfile>(AIProfileTable.BuiltIn)
             {
-                new AIProfile("berserker", maxDepth: 4, softTimeBudgetMs: 1000,
+                new AIProfile("berserker", maxDepth: 4, timeBudget: new AITimeBudget(1000, 1500),
                     blunderRate: 0.15f, blunderMarginCp: 50, betrayalAggression: 1f,
                     attackDefenseBias: 2f, tieBreakWindowCp: 40, useOpeningBook: false)
             };

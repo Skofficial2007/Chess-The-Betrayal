@@ -17,6 +17,7 @@ namespace ChessTheBetrayal.AI
         [SerializeField] private string _id = "normal";
         [SerializeField, Min(1)] private int _maxDepth = 5;
         [SerializeField, Min(1)] private int _softTimeBudgetMs = 1500;
+        [SerializeField, Min(1)] private int _hardTimeBudgetMs = 2250;
         [SerializeField, Range(0f, 1f)] private float _blunderRate;
         [SerializeField, Min(0)] private int _blunderMarginCp;
         [SerializeField] private float _betrayalAggression;
@@ -25,7 +26,7 @@ namespace ChessTheBetrayal.AI
         [SerializeField] private bool _useOpeningBook = true;
 
         public AIProfile ToProfile() => AIProfileGuardrails.Apply(new AIProfile(
-            _id, _maxDepth, _softTimeBudgetMs, _blunderRate, _blunderMarginCp,
+            _id, _maxDepth, new AITimeBudget(_softTimeBudgetMs, _hardTimeBudgetMs), _blunderRate, _blunderMarginCp,
             _betrayalAggression, _attackDefenseBias, _tieBreakWindowCp, _useOpeningBook));
 
         private void OnValidate()
@@ -38,6 +39,12 @@ namespace ChessTheBetrayal.AI
 
             if (_softTimeBudgetMs < 1)
                 Debug.LogError($"[{nameof(AIProfileDefinition)}] '{name}' SoftTimeBudgetMs must be >= 1.", this);
+
+            if (_hardTimeBudgetMs < 1)
+                Debug.LogError($"[{nameof(AIProfileDefinition)}] '{name}' HardTimeBudgetMs must be >= 1.", this);
+
+            if (_hardTimeBudgetMs < _softTimeBudgetMs)
+                Debug.LogError($"[{nameof(AIProfileDefinition)}] '{name}' HardTimeBudgetMs ({_hardTimeBudgetMs}) must be >= SoftTimeBudgetMs ({_softTimeBudgetMs}).", this);
 
             if (AIProfileGuardrails.RequiresClamp(_maxDepth))
             {

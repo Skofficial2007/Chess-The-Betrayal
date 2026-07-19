@@ -43,7 +43,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 .WithTurn(Team.White)
                 .WithComputedHash();
 
-            var settings = new AISearchSettings(maxDepth: 5, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 5, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             MoveCommand best = _search.FindBestMove(board, settings, CancellationToken.None);
 
@@ -60,7 +60,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             // since chosen-move pinning at this depth/branching would be brittle to evaluator tuning.
             BoardState board = TestBoardSetupUtility.CreateStandard();
             ulong hashBefore = board.ZobristHash;
-            var settings = new AISearchSettings(maxDepth: 4, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 4, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             Assert.DoesNotThrow(() => _search.FindBestMove(board, settings, CancellationToken.None));
 
@@ -86,7 +86,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 .WithComputedHash();
 
             ulong hashBefore = board.ZobristHash;
-            var settings = new AISearchSettings(maxDepth: 4, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 4, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             Assert.DoesNotThrow(() => _search.FindBestMove(board, settings, CancellationToken.None));
 
@@ -109,7 +109,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 .WithPendingBetrayer("d4", Team.Black)
                 .WithComputedHash();
 
-            var settings = new AISearchSettings(maxDepth: 3, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 3, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             Assert.DoesNotThrow(() => _search.FindBestMove(board, settings, CancellationToken.None));
 

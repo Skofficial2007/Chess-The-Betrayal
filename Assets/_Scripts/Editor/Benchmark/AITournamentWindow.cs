@@ -53,6 +53,7 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
             public string Id;
             public int MaxDepth;
             public int SoftTimeBudgetMs;
+            public int HardTimeBudgetMs;
             public float BlunderRate;
             public int BlunderMarginCp;
             public float BetrayalAggression;
@@ -64,6 +65,7 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
                 Id = id,
                 MaxDepth = 3,
                 SoftTimeBudgetMs = 1000,
+                HardTimeBudgetMs = 1500,
                 BlunderRate = 0f,
                 BlunderMarginCp = 0,
                 BetrayalAggression = 0f,
@@ -75,7 +77,7 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
             // positions the book has no entries for), so the flag is fixed off rather than shown as
             // a dial that would do nothing.
             public AIProfile Build() => AIProfileGuardrails.Apply(new AIProfile(
-                Id, MaxDepth, SoftTimeBudgetMs, BlunderRate, BlunderMarginCp,
+                Id, MaxDepth, new AITimeBudget(SoftTimeBudgetMs, HardTimeBudgetMs), BlunderRate, BlunderMarginCp,
                 BetrayalAggression, AttackDefenseBias, TieBreakWindowCp, useOpeningBook: false));
         }
 
@@ -183,6 +185,7 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
             draft.Id = EditorGUILayout.TextField("Id", string.IsNullOrWhiteSpace(draft.Id) ? "custom" : draft.Id);
             draft.MaxDepth = EditorGUILayout.IntSlider("Max Depth", draft.MaxDepth, 1, 12);
             draft.SoftTimeBudgetMs = Mathf.Max(1, EditorGUILayout.IntField("Soft Time Budget (ms)", draft.SoftTimeBudgetMs));
+            draft.HardTimeBudgetMs = Mathf.Max(draft.SoftTimeBudgetMs, EditorGUILayout.IntField("Hard Time Budget (ms)", draft.HardTimeBudgetMs));
             draft.BlunderRate = EditorGUILayout.Slider("Blunder Rate", draft.BlunderRate, 0f, 1f);
             draft.BlunderMarginCp = Mathf.Max(0, EditorGUILayout.IntField("Blunder Margin (cp)", draft.BlunderMarginCp));
             draft.BetrayalAggression = EditorGUILayout.Slider("Betrayal Aggression", draft.BetrayalAggression, -1f, 1f);

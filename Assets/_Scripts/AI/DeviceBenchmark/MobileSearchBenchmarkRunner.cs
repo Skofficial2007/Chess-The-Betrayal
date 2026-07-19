@@ -69,21 +69,21 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         /// chess this simple loop can follow.
         /// </summary>
         private static AISearchSettings SettingsFor(AIProfile profile) =>
-            new AISearchSettings(profile.MaxDepth, profile.SoftTimeBudgetMs, BetrayalUsage.DefendOnly);
+            new AISearchSettings(profile.MaxDepth, profile.TimeBudget, BetrayalUsage.DefendOnly);
 
         /// <summary>
         /// Runs one search under the same wall-clock cap real gameplay uses: AsyncAIAgent arms
-        /// CancelAfter(SoftTimeBudgetMs) on every request, and iterative deepening returns the
-        /// best move from the last fully completed depth when that fires. Passing
-        /// CancellationToken.None instead (an earlier version of this tool did) lets a deep tier
-        /// like "impossible" run unbounded — timing a configuration that can never occur in a real
-        /// match. Budget-capped timings are what players actually experience.
+        /// CancelAfter(HardMs) on every request, and iterative deepening returns the best move
+        /// from the last fully completed depth when that fires. Passing CancellationToken.None
+        /// instead (an earlier version of this tool did) lets a deep tier like "impossible" run
+        /// unbounded — timing a configuration that can never occur in a real match. Budget-capped
+        /// timings are what players actually experience.
         /// </summary>
         private static MoveCommand TimedSearch(AlphaBetaSearch search, BoardState board,
             AISearchSettings settings, out SearchTiming timing)
         {
             using var cts = new CancellationTokenSource();
-            cts.CancelAfter(settings.SoftTimeBudgetMs);
+            cts.CancelAfter(settings.TimeBudget.HardMs);
 
             var stopwatch = Stopwatch.StartNew();
             MoveCommand best = search.FindBestMove(board, settings, cts.Token);

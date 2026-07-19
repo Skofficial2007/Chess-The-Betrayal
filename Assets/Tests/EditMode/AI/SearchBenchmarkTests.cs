@@ -82,7 +82,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             // down as the remaining pruning/ordering work lands, before this project moves past
             // its current phase.
             BoardState board = MidgamePosition();
-            var settings = new AISearchSettings(maxDepth: 7, softTimeBudgetMs: 60_000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 7, new AITimeBudget(60_000, 60_000), BetrayalUsage.Full);
             var search = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator());
 
             var stopwatch = Stopwatch.StartNew();
@@ -106,7 +106,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             // is the gate check's other half: proving the DoD (if met) is met BECAUSE the pruning
             // stack is engaged, not because the position happened to be trivial.
             BoardState board = MidgamePosition();
-            var settings = new AISearchSettings(maxDepth: 7, softTimeBudgetMs: 60_000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 7, new AITimeBudget(60_000, 60_000), BetrayalUsage.Full);
             var search = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator());
 
             search.FindBestMove(board, settings, CancellationToken.None);

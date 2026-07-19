@@ -31,7 +31,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         public void FindBestMove_RootScores_PopulatedForEveryRootMove_AtLastCompletedDepth()
         {
             BoardState board = TestBoardSetupUtility.CreateStandard();
-            var settings = new AISearchSettings(maxDepth: 2, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 2, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             _search.FindBestMove(board, settings, CancellationToken.None);
 
@@ -60,7 +60,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             // pre-loop TT-hint call does, before scores exist) — a multi-depth search is required
             // to actually exercise the parallel-array permutation this test guards.
             BoardState board = TestBoardSetupUtility.CreateStandard();
-            var settings = new AISearchSettings(maxDepth: 3, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 3, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             MoveCommand best = _search.FindBestMove(board, settings, CancellationToken.None);
 
@@ -82,7 +82,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         public void FindBestMove_CancelledMidDepth_RootScoresStayAtPreviousCompletedDepth()
         {
             BoardState board = TestBoardSetupUtility.CreateStandard();
-            var settings = new AISearchSettings(maxDepth: 1, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 1, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             // First, a real completed depth-1 search to establish a baseline.
             _search.FindBestMove(board, settings, CancellationToken.None);
@@ -107,7 +107,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         public void FindBestMove_BoundedRescore_OnlyRescoresWithinMargin()
         {
             BoardState board = TestBoardSetupUtility.CreateStandard();
-            var settings = new AISearchSettings(maxDepth: 2, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 2, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             // A very small margin (1cp) means at most the best move itself (excluded by construction)
             // realistically qualifies — this asserts the bounded re-search doesn't crash/misbehave
@@ -124,7 +124,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         {
             BoardState boardA = TestBoardSetupUtility.CreateStandard();
             BoardState boardB = TestBoardSetupUtility.CreateStandard();
-            var settings = new AISearchSettings(maxDepth: 2, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 2, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             var searchA = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator());
             var searchB = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator());

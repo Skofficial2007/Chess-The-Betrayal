@@ -34,24 +34,25 @@ namespace ChessTheBetrayal.AI
         /// instead of a clock, so the search is deterministic and reproducible across runs.</summary>
         public readonly int MaxDepth;
 
-        /// <summary>Soft wall-clock budget in ms. Iterative deepening returns the best move from the
-        /// last fully-completed depth once this elapses. Even in "no timer" mode we keep a budget so a
-        /// pathological position can't hang the worker thread forever; set high (e.g. 5000) for Ultimate.</summary>
-        public readonly int SoftTimeBudgetMs;
+        /// <summary>Soft/hard wall-clock budget. Iterative deepening returns the best move from the
+        /// last fully-completed depth once the soft budget elapses, unless the search asks for extra
+        /// room up to the hard ceiling. Even in "no timer" mode we keep a budget so a pathological
+        /// position can't hang the worker thread forever; set both high (e.g. 5000/5000) for Ultimate.</summary>
+        public readonly AITimeBudget TimeBudget;
 
         /// <summary>Agent-level Betrayal policy (Issue B). Board-level "plain chess" (Option 1) is
         /// handled separately in Core via BoardState.BetrayalRightAvailable == false and does not
         /// belong here.</summary>
         public readonly BetrayalUsage BetrayalUsage;
 
-        public AISearchSettings(int maxDepth, int softTimeBudgetMs, BetrayalUsage betrayalUsage)
+        public AISearchSettings(int maxDepth, AITimeBudget timeBudget, BetrayalUsage betrayalUsage)
         {
             MaxDepth = maxDepth;
-            SoftTimeBudgetMs = softTimeBudgetMs;
+            TimeBudget = timeBudget;
             BetrayalUsage = betrayalUsage;
         }
 
         public static AISearchSettings FromProfile(BetrayalUsage usage, AIProfile profile) =>
-            new AISearchSettings(profile.MaxDepth, profile.SoftTimeBudgetMs, usage);
+            new AISearchSettings(profile.MaxDepth, profile.TimeBudget, usage);
     }
 }

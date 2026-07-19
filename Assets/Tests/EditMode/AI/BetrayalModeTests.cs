@@ -43,7 +43,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 .WithBetrayalRight(false)
                 .WithComputedHash();
 
-            var settings = new AISearchSettings(maxDepth: 2, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 2, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
             MoveCommand best = _search.FindBestMove(board, settings, CancellationToken.None);
 
             Assert.That(best.Stage, Is.Not.EqualTo(BetrayalStage.Act),
@@ -68,7 +68,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 .WithBetrayalRight(true)
                 .WithComputedHash();
 
-            var settings = new AISearchSettings(maxDepth: 2, softTimeBudgetMs: 5000, BetrayalUsage.DefendOnly);
+            var settings = new AISearchSettings(maxDepth: 2, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.DefendOnly);
             MoveCommand best = _search.FindBestMove(board, settings, CancellationToken.None);
 
             Assert.That(best.Stage, Is.Not.EqualTo(BetrayalStage.Act),
@@ -96,7 +96,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 .WithBetrayalRight(true)
                 .WithComputedHash();
 
-            var settings = new AISearchSettings(maxDepth: 1, softTimeBudgetMs: 5000, BetrayalUsage.DefendOnly);
+            var settings = new AISearchSettings(maxDepth: 1, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.DefendOnly);
             MoveCommand whiteMove = _search.FindBestMove(board, settings, CancellationToken.None);
 
             _engine.ApplyMove(board, whiteMove);
@@ -135,7 +135,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             MoveCommand actMove = actMoves[0];
             _engine.ApplyMove(board, actMove);
 
-            var settings = new AISearchSettings(maxDepth: 2, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 2, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
             MoveCommand chosen = _search.FindBestMove(board, settings, CancellationToken.None);
 
             Assert.That(chosen.Stage, Is.EqualTo(BetrayalStage.Retribution),

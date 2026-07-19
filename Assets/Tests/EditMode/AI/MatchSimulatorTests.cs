@@ -16,7 +16,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
     public class MatchSimulatorTests
     {
         private static AIProfile Fast(string id, int maxDepth) =>
-            new AIProfile(id, maxDepth, softTimeBudgetMs: 2000, blunderRate: 0f, blunderMarginCp: 0,
+            new AIProfile(id, maxDepth, timeBudget: new AITimeBudget(2000, 3000), blunderRate: 0f, blunderMarginCp: 0,
                 betrayalAggression: 0f, attackDefenseBias: 1f, tieBreakWindowCp: 0, useOpeningBook: false);
 
         [Test]

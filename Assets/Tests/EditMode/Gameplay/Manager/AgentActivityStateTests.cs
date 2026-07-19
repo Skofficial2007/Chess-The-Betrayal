@@ -22,10 +22,10 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         private const int PollIntervalMs = 10;
 
         private static AISearchSettings ShallowSettings(BetrayalUsage usage, AIProfile profile) =>
-            new AISearchSettings(maxDepth: 1, softTimeBudgetMs: 5000, usage);
+            new AISearchSettings(maxDepth: 1, TestTimeBudgets.Generous, usage);
 
         private static AISearchSettings SlowSettings(BetrayalUsage usage, AIProfile profile) =>
-            new AISearchSettings(maxDepth: 32, softTimeBudgetMs: 30_000, usage);
+            new AISearchSettings(maxDepth: 32, TestTimeBudgets.Generous, usage);
 
         private static readonly IAIProfileProvider ProfileProvider = new AIProfileTableProvider();
 

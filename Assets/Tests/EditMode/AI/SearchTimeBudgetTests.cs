@@ -9,10 +9,10 @@ using ChessTheBetrayal.Tests.Utilities;
 namespace ChessTheBetrayal.Tests.EditMode.AI
 {
     /// <summary>
-    /// Guards the wall-clock half of iterative deepening: AISearchSettings.SoftTimeBudgetMs must
-    /// actually bound every individual FindBestMove call, turn after turn — not just the first one.
-    /// Before this was wired up (AsyncAIAgent.RequestBestMove now arms CancellationTokenSource.
-    /// CancelAfter(settings.SoftTimeBudgetMs)), the budget was dead data: a search could run to
+    /// Guards the wall-clock half of iterative deepening: AISearchSettings.TimeBudget must actually
+    /// bound every individual FindBestMove call, turn after turn — not just the first one. Before
+    /// this was wired up (AsyncAIAgent.RequestBestMove now arms CancellationTokenSource.
+    /// CancelAfter(settings.TimeBudget.HardMs)), the budget was dead data: a search could run to
     /// MaxDepth regardless of how long that took, which is why a single depth-7 call could take
     /// several seconds with no way to cap it turn-over-turn in a real match.
     ///
@@ -80,13 +80,13 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             const int turnsToPlay = 6;
 
             BoardState board = MidgamePosition();
-            var settings = new AISearchSettings(maxDepth: 32, softTimeBudgetMs: softBudgetMs, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 32, new AITimeBudget(softBudgetMs, softBudgetMs), BetrayalUsage.Full);
             var search = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator());
 
             for (int turn = 0; turn < turnsToPlay; turn++)
             {
                 using var cts = new CancellationTokenSource();
-                cts.CancelAfter(settings.SoftTimeBudgetMs);
+                cts.CancelAfter(settings.TimeBudget.HardMs);
 
                 var stopwatch = Stopwatch.StartNew();
                 MoveCommand best = search.FindBestMove(board, settings, cts.Token);
@@ -98,7 +98,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
 
                 Assert.That(stopwatch.Elapsed.TotalMilliseconds, Is.LessThan(softBudgetMs + toleranceMs),
                     $"Turn {turn} took {stopwatch.Elapsed.TotalMilliseconds:F0}ms against a " +
-                    $"{softBudgetMs}ms budget — SoftTimeBudgetMs must bound every individual turn, " +
+                    $"{softBudgetMs}ms budget — the time budget must bound every individual turn, " +
                     "not just the first one in a match.");
 
                 ChessEngine.ApplyMoveToBoard(board, best, recordHistory: false);
@@ -112,7 +112,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 while (board.PendingBetrayerSquare.HasValue && guard++ < 8)
                 {
                     using var subCts = new CancellationTokenSource();
-                    subCts.CancelAfter(settings.SoftTimeBudgetMs);
+                    subCts.CancelAfter(settings.TimeBudget.HardMs);
 
                     MoveCommand sub = search.FindBestMove(board, settings, subCts.Token);
                     ChessEngine.ApplyMoveToBoard(board, sub, recordHistory: false);
