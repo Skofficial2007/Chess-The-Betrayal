@@ -85,7 +85,17 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             var progressSink = new TestContextProgressSink($"{strongerId} vs {weakerId}");
             int completed = 0;
 
-            using (var threadLocalSimulator = new ThreadLocal<MatchSimulator>(() => new MatchSimulator()))
+            // Uncapped (depth-bound) games, deliberately NOT the production time budgets: these
+            // assertions are about the TIER LADDER — does a deeper-configured profile actually
+            // out-play a shallower one — and that question needs each side to genuinely reach its
+            // configured depth. Under wall-clock budgets with many games sharing the machine's
+            // cores, every concurrent search steals time from every other, which silently starves
+            // the budget-bound (deeper) tiers down to shallow effective depth while the fast
+            // shallow tiers still complete their full depth — inverting the measured ladder for
+            // reasons that have nothing to do with the profiles being compared. Depth-bound play
+            // is immune to machine load and deterministic per seed; the production budget contract
+            // has its own dedicated coverage in AIProfileSearchBenchmarkTests.
+            using (var threadLocalSimulator = new ThreadLocal<MatchSimulator>(() => new MatchSimulator(MatchTimeControl.Uncapped)))
             {
                 Parallel.For(0, gameCount, i =>
                 {

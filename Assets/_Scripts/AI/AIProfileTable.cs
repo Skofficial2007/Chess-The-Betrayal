@@ -11,27 +11,19 @@ namespace ChessTheBetrayal.AI
     {
         public const string DefaultId = "normal";
 
-        // Config data, re-measured against the live search (not an algorithm change): every tier's
-        // soft time budget is capped at 3 seconds, matching the real per-move target for every
-        // difficulty. A fresh uncapped timing pass on a representative midgame position showed
-        // every tier finishing in well under 1 second on its own, thanks to the pruning/ordering/
-        // extension work that landed since these numbers were last picked.
-        //
-        // aggressive/hard/extreme each got their MaxDepth raised by one ply on top of that
-        // measurement — these tiers exist specifically to search as strong as the engine can
-        // manage, so freed-up budget headroom belongs to them; easy/normal are deliberately shallow
-        // as PART of their difficulty identity (their blunder rate already does the weakening), so
-        // raising their depth would work against the design instead of with it.
-        //
-        // impossible's own +1 raise (10 -> 11) was reverted once the multi-move benchmark (which
-        // plays several successive turns, including a real Betrayal resolution, on one persistent
-        // search) caught it costing 6-9s on the position that resolution leaves behind — a real,
-        // legitimately harder middlegame than the single fixed opening position the depth-raise was
-        // originally measured against, not a test artifact. Depth 10 (its original, pre-raise
-        // depth) still occasionally brushed the 3-second ceiling on the same run's hardest ply, so
-        // this dropped one further to 9 — the depth actually proven, across a full successive-turn
-        // run including a real Betrayal resolution, to hold comfortably under target rather than
-        // right at its edge.
+        // The time budget is the promise each tier makes to the player: a move always arrives
+        // within HardMs (3 seconds at most, every tier). MaxDepth is a CEILING, not a guarantee —
+        // easy and normal complete their full depth in a fraction of their budgets (their shallow
+        // depth is part of the difficulty identity; the blunder rate does the intentional
+        // weakening), while the deeper tiers are genuinely budget-bound: on the desktop baseline
+        // they complete depth 7-8 of their configured 7-9 before the timer stops them, and faster
+        // hardware reaches deeper without any config change. They became budget-bound when the
+        // search started valuing Betrayal Defections honestly — a correct tree on a position with
+        // the Betrayal right still live is much larger than the mis-scored one these depths were
+        // originally timed against, and cutting depth to chase fixed-depth timings would cap the
+        // tiers on strong hardware for the sake of a number no player experiences. Iterative
+        // deepening always keeps the last fully completed depth's answer, so a budget stop is
+        // never a wasted search.
         public static readonly IReadOnlyList<AIProfile> BuiltIn = new[]
         {
             new AIProfile("easy",       maxDepth: 3,  timeBudget: new AITimeBudget(800, 1300),    blunderRate: 0.30f, blunderMarginCp: 120, betrayalAggression: 0f,    attackDefenseBias: 1.0f, tieBreakWindowCp: 30, useOpeningBook: true),
