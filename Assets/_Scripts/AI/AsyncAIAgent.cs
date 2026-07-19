@@ -166,7 +166,8 @@ namespace ChessTheBetrayal.AI
                     // handful of candidates SelectFinalMove might actually pick. Zero for the
                     // convenience-ctor/zero-dial (Impossible tier) path, matching pre-AI-24 cost.
                     int rescoreMargin = Math.Max(_profile.BlunderMarginCp, _profile.TieBreakWindowCp);
-                    MoveCommand best = _search.FindBestMove(isolated, _settings, token, rescoreMargin);
+                    MoveCommand best = _search.FindBestMove(isolated, _settings, token, rescoreMargin,
+                        enableInstabilityTimeManagement: true);
 
                     // MoveSelectionPolicy applies AIProfile's personality dials to the search's own
                     // ranked root-move output — still on THIS worker thread, before the result ever
