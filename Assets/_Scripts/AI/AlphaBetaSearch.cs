@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
@@ -95,6 +97,18 @@ namespace ChessTheBetrayal.AI
         // already cheap enough that skipping straight to the real search costs less than the probe would.
         private const int InternalIterativeReductionMinDepth = 4;
         private const int InternalIterativeReductionAmount = 1;
+
+        // Instability time management: once the soft half of the time budget has elapsed, whether
+        // iterative deepening starts another depth depends on how settled the root looks. A root is
+        // "stable" once the last two completed depths agree on both the best move AND a close-enough
+        // score — either signal alone is too weak (the score can swing wildly while the same move
+        // stays best because a deeper tactic was just found under it, and the score can stay flat
+        // while the best move itself flip-flops between two nearly-equal candidates), so both must
+        // hold before another depth is judged unnecessary. The score window reuses the same order of
+        // magnitude this codebase already treats as "noise" for move selection (AIProfileTable's own
+        // tie-break windows run 10-30cp). The minimum-depth floor reuses AIProfileGuardrails' own
+        // "a shallow search can't be trusted" threshold rather than inventing a second one.
+        private const int StabilityThresholdCp = 25;
 
         private readonly IChessEngine _engine;
         private readonly IPositionEvaluator _evaluator;
@@ -260,11 +274,22 @@ namespace ChessTheBetrayal.AI
         /// for the handful of candidates a personality-driven selection might actually pick.
         /// TT-warmed (every node was already visited this search), so it's cheap. Defaults to 0 —
         /// today's exact pre-AI-24 behavior, zero overhead — for callers that don't need it.
+        ///
+        /// enableInstabilityTimeManagement: off by default so every existing CancellationToken.None
+        /// caller (both benchmark suites) stays exactly depth-bound, byte-identical to before this
+        /// was added — this flag is what makes that a guarantee of the call site, not a coincidence
+        /// of which numbers happen to be passed as the time budget. Real gameplay/tooling callers
+        /// (AsyncAIAgent, MobileSearchBenchmarkRunner) pass true: once the soft half of the time
+        /// budget elapses, a settled root is allowed to stop early instead of spending the full
+        /// budget on a search that's very unlikely to change its mind, and an unsettled root is
+        /// allowed to keep going into the soft-to-hard gap instead of stopping the instant soft is
+        /// crossed — see the between-depths check below for exactly how "settled" is judged.
         /// </summary>
         public MoveCommand FindBestMove(BoardState board, AISearchSettings settings, CancellationToken ct,
-            int candidateRescoreMarginCp = 0)
+            int candidateRescoreMarginCp = 0, bool enableInstabilityTimeManagement = false)
         {
             Team rootTeam = board.CurrentTurn;
+            Stopwatch stopwatch = enableInstabilityTimeManagement ? Stopwatch.StartNew() : null;
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             _tt.Stats.Reset();
@@ -290,6 +315,14 @@ namespace ChessTheBetrayal.AI
 
             MoveCommand bestMove = _rootMoves.Count > 0 ? _rootMoves[0] : default;
             int lastCompletedDepth = 0;
+
+            // Only meaningful when enableInstabilityTimeManagement is on — tracks what the
+            // PREVIOUS completed depth found, so the next depth's completion can compare against
+            // it. hasPriorCompletedDepth distinguishes "no previous depth yet" from a legitimate
+            // score of 0, since a fresh search has nothing to compare its first completed depth to.
+            bool hasPriorCompletedDepth = false;
+            int previousCompletedScore = 0;
+            MoveCommand previousCompletedBestMove = default;
 
             // Iterative deepening: search depth 1, 2, 3... keeping the best move from the last
             // FULLY COMPLETED depth. If cancelled or over-budget mid-depth, we discard that
@@ -372,6 +405,37 @@ namespace ChessTheBetrayal.AI
 
                     // Early exit on forced mate found — no deeper search changes the decision.
                     if (bestScore >= MateScore) break;
+
+                    if (enableInstabilityTimeManagement)
+                    {
+                        long elapsedMs = stopwatch.ElapsedMilliseconds;
+
+                        // Below the depth floor, the stability signal itself isn't trustworthy yet
+                        // (same reasoning AIProfileGuardrails already applies to a shallow search
+                        // being asked to vet a reshaped evaluator) — always search on regardless of
+                        // elapsed time, exactly like today with the flag off.
+                        bool depthDeepEnoughToTrustStability = depth >= AIProfileGuardrails.ShallowSearchDepthThreshold;
+
+                        if (depthDeepEnoughToTrustStability)
+                        {
+                            bool stable = hasPriorCompletedDepth
+                                && IsRootStable(bestScore, previousCompletedScore, bestMove, previousCompletedBestMove);
+
+                            // Settled and past the soft target: further search is unlikely to change
+                            // the answer, so stop now rather than spend the rest of the budget.
+                            if (stable && elapsedMs >= settings.TimeBudget.SoftMs) break;
+
+                            // Unsettled: allowed to spend into the soft-to-hard gap for one more
+                            // depth, but never past the hard ceiling — that ceiling is also what the
+                            // external CancelAfter(HardMs) timer backstops independently, so the two
+                            // never disagree about what "hard" means.
+                            if (!stable && elapsedMs >= settings.TimeBudget.HardMs) break;
+                        }
+
+                        hasPriorCompletedDepth = true;
+                        previousCompletedScore = bestScore;
+                        previousCompletedBestMove = bestMove;
+                    }
                 }
             }
 
@@ -1491,6 +1555,19 @@ namespace ChessTheBetrayal.AI
             uint promo = (uint)m.PromotedTo & 0xF;
             uint stage = (uint)m.Stage & 0x7;
             return from | (to << 6) | (promo << 12) | (stage << 16);
+        }
+
+        /// <summary>True once two consecutive completed depths agree closely enough that another
+        /// depth is unlikely to change the answer — same best move AND a score within
+        /// StabilityThresholdCp of each other. Neither signal alone is trustworthy on its own (see
+        /// the constant's own doc comment), so both are required.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool IsRootStable(int currentScore, int previousScore, MoveCommand currentBest, MoveCommand previousBest)
+        {
+            bool sameBestMove = PackMove(currentBest) == PackMove(previousBest);
+            int scoreDelta = currentScore - previousScore;
+            if (scoreDelta < 0) scoreDelta = -scoreDelta;
+            return sameBestMove && scoreDelta <= StabilityThresholdCp;
         }
 
         private static int PieceRank(ChessPieceType t) => t switch

@@ -86,7 +86,8 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             cts.CancelAfter(settings.TimeBudget.HardMs);
 
             var stopwatch = Stopwatch.StartNew();
-            MoveCommand best = search.FindBestMove(board, settings, cts.Token);
+            MoveCommand best = search.FindBestMove(board, settings, cts.Token,
+                enableInstabilityTimeManagement: true);
             stopwatch.Stop();
 
             int depthReached = 0;
