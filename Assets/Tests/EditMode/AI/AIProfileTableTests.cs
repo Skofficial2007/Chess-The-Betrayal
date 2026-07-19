@@ -46,6 +46,22 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
+        public void BuiltIn_EveryRow_SoftTimeBudgetStaysAtOrBelowTheRealPerMoveTarget()
+        {
+            // Every tier is now measured (not guessed) to comfortably finish its full search well
+            // under the 3-second per-move target, so nothing should ever be configured to try for
+            // longer than that on its own initiative — a slow position hitting the hard ceiling is
+            // still possible, but the search should never be TARGETING more than 3s as its soft goal.
+            const int realTargetMs = 3000;
+            foreach (var profile in AIProfileTable.BuiltIn)
+            {
+                Assert.That(profile.TimeBudget.SoftMs, Is.LessThanOrEqualTo(realTargetMs),
+                    $"'{profile.Id}' has a soft time budget of {profile.TimeBudget.SoftMs}ms — " +
+                    $"every tier should target at most {realTargetMs}ms per move.");
+            }
+        }
+
+        [Test]
         public void Resolve_KnownId_ReturnsMatchingRow()
         {
             IAIProfileProvider provider = new AIProfileTableProvider();
