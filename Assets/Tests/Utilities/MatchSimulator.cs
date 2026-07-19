@@ -84,16 +84,23 @@ namespace ChessTheBetrayal.Tests.Utilities
     }
 
     /// <summary>
-    /// Plays one full game between two AIProfile-driven sides, entirely synchronously and off the
-    /// worker-thread path AsyncAIAgent normally uses — there is no benefit to threading here and it
-    /// would only add nondeterministic scheduling to what needs to be a bit-reproducible tournament.
+    /// Plays one full game between two AIProfile-driven sides, synchronously on the calling
+    /// thread. One instance is NOT safe to share across threads — parallel tournament runs give
+    /// each worker thread its own simulator instead, which also keeps every game's searches,
+    /// tables, and RNG streams fully independent of scheduling order.
     ///
-    /// Composes the same stack a real match uses (AlphaBetaSearch + MoveSelectionPolicy +
-    /// BetrayalAwareEvaluator, moves applied through MatchDriver so Betrayal sub-sequences,
-    /// checkmate/stalemate detection, and move logging all run through the exact seam a live game
-    /// uses) but calls FindBestMove directly instead of going through AsyncAIAgent, since the
-    /// threading/cancellation contract there is already covered by its own tests and would only
-    /// slow this down.
+    /// Composes the same stack a real match uses: AlphaBetaSearch with a full-size transposition
+    /// table, MoveSelectionPolicy, BetrayalAwareEvaluator, and moves applied through MatchDriver so
+    /// Betrayal sub-sequences and checkmate/stalemate detection run through the exact seam a live
+    /// game uses. Under MatchTimeControl.ProductionBudget (the default) each move's search is also
+    /// time-bounded exactly the way the live agent bounds it — hard-budget cancellation plus the
+    /// settle-early logic — so tournament results measure the engine as it ships, not an
+    /// unbounded-depth variant of it that no player ever faces.
+    ///
+    /// The two transposition tables (one per side, like a real match where each agent owns its own)
+    /// are allocated once and reused across every game this simulator plays, wiped between games.
+    /// Reusing ~16 MB tables matters when a tournament plays hundreds of games; wiping them keeps
+    /// each game's result independent of whatever was played before it.
     ///
     /// A game with no result by the ply cap is adjudicated by static evaluation margin rather than
     /// played out indefinitely — there is no threefold-repetition detection yet, so the cap is what
@@ -104,8 +111,25 @@ namespace ChessTheBetrayal.Tests.Utilities
         public const int DefaultPlyCap = 120;
         public const int AdjudicationMarginCp = 300;
 
+        /// <summary>Same table size the live agent allocates — an undersized table degrades move
+        /// ordering more and more as a long game fills it, inflating node counts in a way that has
+        /// nothing to do with the search being measured.</summary>
+        public const int ProductionTranspositionTableLog2Size = 20;
+
         private readonly IChessEngine _engine = new ChessEngineAdapter();
         private readonly IPositionEvaluator _adjudicationEvaluator = new BetrayalAwareEvaluator();
+        private readonly MatchTimeControl _timeControl;
+        private readonly TranspositionTable _whiteTable;
+        private readonly TranspositionTable _blackTable;
+
+        public MatchSimulator(
+            MatchTimeControl timeControl = MatchTimeControl.ProductionBudget,
+            int transpositionTableLog2Size = ProductionTranspositionTableLog2Size)
+        {
+            _timeControl = timeControl;
+            _whiteTable = new TranspositionTable(transpositionTableLog2Size);
+            _blackTable = new TranspositionTable(transpositionTableLog2Size);
+        }
 
         /// <summary>
         /// Plays one game from <paramref name="startingPosition"/> between <paramref name="whiteProfile"/>
@@ -150,8 +174,15 @@ namespace ChessTheBetrayal.Tests.Utilities
                 moveRejectedChannel: null, checkDetectedChannel: null, betrayalChannel: null);
             matchDriver.TransitionToPhase(TurnPhase.Normal);
 
-            var whiteSearch = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator(EvaluationWeights.FromProfile(whiteProfile)));
-            var blackSearch = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator(EvaluationWeights.FromProfile(blackProfile)));
+            // The searches themselves are rebuilt per game because each side's evaluator bakes in
+            // that profile's weights, but they borrow this simulator's long-lived tables — wiped
+            // here so nothing from an earlier game can influence this one.
+            _whiteTable.Clear();
+            _blackTable.Clear();
+            var whiteSearch = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator(EvaluationWeights.FromProfile(whiteProfile)),
+                transpositionTable: _whiteTable);
+            var blackSearch = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator(EvaluationWeights.FromProfile(blackProfile)),
+                transpositionTable: _blackTable);
             var whitePolicy = new MoveSelectionPolicy();
             var blackPolicy = new MoveSelectionPolicy();
             IRandomSource whiteRng = new SystemRandomSource(rngSeedWhite);
@@ -176,7 +207,7 @@ namespace ChessTheBetrayal.Tests.Utilities
                 int rescoreMargin = Math.Max(profile.BlunderMarginCp, profile.TieBreakWindowCp);
 
                 var moveStopwatch = System.Diagnostics.Stopwatch.StartNew();
-                MoveCommand move = search.FindBestMove(board, settings, System.Threading.CancellationToken.None, rescoreMargin);
+                MoveCommand move = FindMoveUnderTimeControl(search, board, settings, rescoreMargin);
 
                 bool blunderRollFired = false;
                 if (profile.BlunderRate > 0f || profile.TieBreakWindowCp > 0)
@@ -207,6 +238,30 @@ namespace ChessTheBetrayal.Tests.Utilities
             }
 
             return new MatchResult(AdjudicateByMargin(board), ply, reachedPlyCap: true);
+        }
+
+        /// <summary>
+        /// Runs one move's search bounded the way this simulator's time control dictates. Under
+        /// ProductionBudget this is the live agent's exact contract: a cancellation timer armed at
+        /// the profile's hard budget (the unconditional wall-clock ceiling) plus the search's own
+        /// settle-early/panic-extend logic reading the soft budget. The per-move token source is a
+        /// small allocation, accepted deliberately: this harness code never runs in a shipped game,
+        /// and the search hot path itself stays allocation-free.
+        /// </summary>
+        private MoveCommand FindMoveUnderTimeControl(
+            AlphaBetaSearch search, BoardState board, AISearchSettings settings, int rescoreMargin)
+        {
+            if (_timeControl == MatchTimeControl.Uncapped)
+            {
+                return search.FindBestMove(board, settings, System.Threading.CancellationToken.None, rescoreMargin);
+            }
+
+            using (var cts = new System.Threading.CancellationTokenSource())
+            {
+                cts.CancelAfter(settings.TimeBudget.HardMs);
+                return search.FindBestMove(board, settings, cts.Token, rescoreMargin,
+                    enableInstabilityTimeManagement: true);
+            }
         }
 
         /// <summary>Sums one side's SearchStats across every move it made this game — a plain

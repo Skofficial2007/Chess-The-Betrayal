@@ -73,9 +73,10 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
                 TieBreakWindowCp = 0,
             };
 
-            // The simulator never consults the opening book (it starts from curated middlegame-ish
-            // positions the book has no entries for), so the flag is fixed off rather than shown as
-            // a dial that would do nothing.
+            // The simulator never consults the opening book — deliberately, so a tournament
+            // measures raw search strength rather than book coverage (several curated starting
+            // positions ARE reachable book lines, so a book probe would short-circuit real
+            // searches). The flag is fixed off rather than shown as a dial that would do nothing.
             public AIProfile Build() => AIProfileGuardrails.Apply(new AIProfile(
                 Id, MaxDepth, new AITimeBudget(SoftTimeBudgetMs, HardTimeBudgetMs), BlunderRate, BlunderMarginCp,
                 BetrayalAggression, AttackDefenseBias, TieBreakWindowCp, useOpeningBook: false));

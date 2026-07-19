@@ -8,8 +8,9 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
     /// Batch entry point over TournamentSession: drains a whole tournament in one blocking call and
     /// returns the report — the shape a menu command or a CI -executeMethod invocation wants. The
     /// interactive tournament window drives the same TournamentSession one game per editor tick
-    /// instead; because both paths share the session (and its seeding) verbatim, a batch run and an
-    /// interactive run at the same seed produce bit-identical reports.
+    /// instead; both paths share the session (and its seeding) verbatim, so they play the same
+    /// pairings from the same positions with the same RNG streams. See TournamentSession's own
+    /// doc comment for the one caveat time-budgeted searches put on exact outcome reproduction.
     ///
     /// Dev/editor-only. Nothing in Core, AI, or the shipped player build ever references this —
     /// it's the same category of tool as the opening-book compiler, not a player-facing feature.

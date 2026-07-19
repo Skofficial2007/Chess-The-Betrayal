@@ -31,8 +31,12 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
     /// caller decides the pacing: BenchmarkRunner drains it in one tight loop for batch/CI runs,
     /// while the tournament window plays one game per editor tick so the UI stays responsive and a
     /// run can be cancelled mid-way. Both callers go through this exact class with the exact same
-    /// seeding, which is what makes a number seen in the window trustworthy — an interactive run at
-    /// seed N is bit-identical to a batch run at seed N, by construction rather than by discipline.
+    /// seeding, so the pairings, positions, and RNG streams of a window run and a batch run at the
+    /// same seed are identical by construction. Individual game OUTCOMES carry one caveat: the
+    /// simulator plays under the profiles' real time budgets, so a search that hits its clock may
+    /// complete a different depth on a slower or busier machine and pick a different move — the
+    /// statistics over a whole run absorb that, and a bit-exact single-game reproduction is still
+    /// available by running the simulator with MatchTimeControl.Uncapped.
     ///
     /// Dev/editor-only, same category as the opening-book compiler — never a player feature.
     /// </summary>
