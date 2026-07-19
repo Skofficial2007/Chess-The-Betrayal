@@ -102,9 +102,9 @@ namespace ChessTheBetrayal.Tests.Utilities
     /// Reusing ~16 MB tables matters when a tournament plays hundreds of games; wiping them keeps
     /// each game's result independent of whatever was played before it.
     ///
-    /// A game with no result by the ply cap is adjudicated by static evaluation margin rather than
-    /// played out indefinitely — there is no threefold-repetition detection yet, so the cap is what
-    /// actually terminates a repeating line.
+    /// A game with no result by the ply cap is adjudicated by static evaluation margin. Before the
+    /// cap, MatchAdjudicator can also end a game early on threefold repetition, the fifty-move
+    /// rule, or a large/small score sustained over several plies — see AdjudicationRules.
     /// </summary>
     public sealed class MatchSimulator
     {
@@ -119,14 +119,17 @@ namespace ChessTheBetrayal.Tests.Utilities
         private readonly IChessEngine _engine = new ChessEngineAdapter();
         private readonly IPositionEvaluator _adjudicationEvaluator = new BetrayalAwareEvaluator();
         private readonly MatchTimeControl _timeControl;
+        private readonly AdjudicationRules _adjudicationRules;
         private readonly TranspositionTable _whiteTable;
         private readonly TranspositionTable _blackTable;
 
         public MatchSimulator(
             MatchTimeControl timeControl = MatchTimeControl.ProductionBudget,
-            int transpositionTableLog2Size = ProductionTranspositionTableLog2Size)
+            int transpositionTableLog2Size = ProductionTranspositionTableLog2Size,
+            AdjudicationRules? adjudicationRules = null)
         {
             _timeControl = timeControl;
+            _adjudicationRules = adjudicationRules ?? AdjudicationRules.Standard;
             _whiteTable = new TranspositionTable(transpositionTableLog2Size);
             _blackTable = new TranspositionTable(transpositionTableLog2Size);
         }
@@ -191,6 +194,9 @@ namespace ChessTheBetrayal.Tests.Utilities
             var whiteAccumulator = new SideStatsAccumulator();
             var blackAccumulator = new SideStatsAccumulator();
 
+            var adjudicator = new MatchAdjudicator(_adjudicationRules);
+            adjudicator.RecordStartingPosition(board);
+
             int ply = 0;
             for (; ply < plyCap && !board.IsGameOver; ply++)
             {
@@ -218,9 +224,31 @@ namespace ChessTheBetrayal.Tests.Utilities
                 }
                 moveStopwatch.Stop();
 
+                // The mover's own root score is already exact-enough at BestRootIndex (see
+                // AlphaBetaSearch.RootScores' doc comment) and free — no extra evaluator call
+                // needed to feed the adjudicator. Flipped to White's perspective since scores come
+                // back from the mover's own point of view (positive == good for whoever just moved).
+                int scoreFromMoverPerspective = search.RootMoveCount > 0 ? search.RootScores[search.BestRootIndex] : 0;
+                int scoreForWhiteCp = isWhite ? scoreFromMoverPerspective : -scoreFromMoverPerspective;
+
                 accumulator.Record(search.Stats, moveStopwatch.Elapsed.TotalMilliseconds, profile.BlunderRate > 0f, blunderRollFired);
 
                 matchDriver.PlayMove(move);
+
+                // Betrayal sub-sequence moves (Act/Retribution/DefensiveOverride) don't end a turn
+                // and can leave the board in a state a repetition/fifty-move count shouldn't
+                // sample mid-sequence — only adjudicate once the turn is actually settled, i.e.
+                // back in Normal phase (or the game just ended, which the loop condition below
+                // already handles).
+                if (matchDriver.CurrentPhase != TurnPhase.Normal) continue;
+
+                MatchOutcome? adjudicated = adjudicator.RecordPly(board, move, ply, scoreForWhiteCp);
+                if (adjudicated.HasValue)
+                {
+                    whiteStats = whiteAccumulator.ToStats();
+                    blackStats = blackAccumulator.ToStats();
+                    return new MatchResult(adjudicated.Value, ply + 1, reachedPlyCap: false);
+                }
             }
 
             whiteStats = whiteAccumulator.ToStats();
