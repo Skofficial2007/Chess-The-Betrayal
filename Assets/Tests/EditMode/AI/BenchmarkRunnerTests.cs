@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using NUnit.Framework;
 using ChessTheBetrayal.AI;
 using ChessTheBetrayal.EditorTools.Benchmark;
+using ChessTheBetrayal.Tests.Utilities;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI
 {
@@ -37,8 +38,13 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         [Test]
         public void RunAll_QuickMode_SameSeed_ProducesReproducibleWinRates()
         {
-            BenchmarkReport report1 = BenchmarkRunner.RunAll(runSeed: 999, BenchmarkMode.Quick, FastFixtureRoster, TestPlyCap);
-            BenchmarkReport report2 = BenchmarkRunner.RunAll(runSeed: 999, BenchmarkMode.Quick, FastFixtureRoster, TestPlyCap);
+            // Uncapped deliberately: under MatchTimeControl.ProductionBudget (the default for a
+            // real run), a search that hits its clock can complete a different depth run to run
+            // depending on CPU contention — genuinely reproducing bit-identical results needs the
+            // depth-bound path instead of the time-bound one. See TournamentSession.CreateQuick's
+            // own doc comment for this trade-off.
+            BenchmarkReport report1 = BenchmarkRunner.RunAll(runSeed: 999, BenchmarkMode.Quick, FastFixtureRoster, TestPlyCap, timeControl: MatchTimeControl.Uncapped);
+            BenchmarkReport report2 = BenchmarkRunner.RunAll(runSeed: 999, BenchmarkMode.Quick, FastFixtureRoster, TestPlyCap, timeControl: MatchTimeControl.Uncapped);
 
             Assert.That(report1.PairResults.Count, Is.EqualTo(report2.PairResults.Count));
             for (int i = 0; i < report1.PairResults.Count; i++)
