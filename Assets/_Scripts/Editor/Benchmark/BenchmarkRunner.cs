@@ -35,16 +35,23 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
         /// </summary>
         public static BenchmarkReport RunAll(int runSeed, BenchmarkMode mode,
             IReadOnlyList<AIProfile> roster, int plyCap = MatchSimulator.DefaultPlyCap, bool parallel = true,
-            MatchTimeControl timeControl = MatchTimeControl.ProductionBudget)
+            MatchTimeControl timeControl = MatchTimeControl.ProductionBudget, ITournamentProgress progress = null)
         {
             TournamentSession session = mode == BenchmarkMode.Quick
                 ? TournamentSession.CreateQuick(runSeed, roster, plyCap, timeControl)
                 : TournamentSession.CreateFull(runSeed, roster, plyCap, timeControl);
 
             if (parallel)
-                ParallelTournamentExecutor.RunRemainingGames(session);
+            {
+                ParallelTournamentExecutor.RunRemainingGames(session, progress: progress);
+            }
             else
-                while (session.RunNextGame()) { }
+            {
+                int total = session.TotalGames;
+                progress ??= NullTournamentProgress.Instance;
+                while (session.RunNextGame())
+                    progress.ReportGameCompleted(session.GamesCompleted, total);
+            }
 
             return session.BuildReport();
         }
