@@ -110,6 +110,20 @@ namespace ChessTheBetrayal.AI
         // "a shallow search can't be trusted" threshold rather than inventing a second one.
         private const int StabilityThresholdCp = 25;
 
+        // Aspiration windows (experimental, off by default — see FindBestMove's own doc comment):
+        // instead of always searching a fresh depth with the full [-Infinity, +Infinity] window,
+        // guess that the score won't move far from the previous depth's answer and search a narrow
+        // band around it first. Most of the time that guess holds and every cutoff in the tree gets
+        // tighter for free; when it doesn't, the result lands exactly on the window's edge (a
+        // fail-low or fail-high) rather than a real score, and that whole depth must be re-searched
+        // with the full window before its result can be trusted — a narrow window can never be
+        // allowed to silently stand in for the true value. The margin is wider than
+        // StabilityThresholdCp on purpose: that constant exists to detect when two depths agree
+        // closely enough to stop searching, which wants to be strict; this one exists to avoid
+        // triggering an expensive re-search on perfectly ordinary depth-to-depth drift, which wants
+        // to be forgiving.
+        private const int AspirationWindowCp = 50;
+
         private readonly IChessEngine _engine;
         private readonly IPositionEvaluator _evaluator;
         private readonly TranspositionTable _tt;
@@ -284,9 +298,22 @@ namespace ChessTheBetrayal.AI
         /// budget on a search that's very unlikely to change its mind, and an unsettled root is
         /// allowed to keep going into the soft-to-hard gap instead of stopping the instant soft is
         /// crossed — see the between-depths check below for exactly how "settled" is judged.
+        ///
+        /// enableAspirationWindows: off by default, same "structural guarantee, not a numeric
+        /// coincidence" reasoning as enableInstabilityTimeManagement — every existing
+        /// CancellationToken.None caller omits it and is therefore unaffected by construction. When
+        /// on, every depth after the first searches a narrow window guessed from the previous
+        /// depth's score instead of the full range, re-searching that same depth with the full
+        /// window on a fail-low/fail-high before trusting the result. This is an independent,
+        /// composable switch from enableInstabilityTimeManagement — either can be on without the
+        /// other. Experimental: the literature is genuinely mixed on whether this helps (a
+        /// documented case exists of a comparable engine measuring REMOVING aspiration windows as a
+        /// net improvement), which is exactly why it ships behind its own flag rather than replacing
+        /// the full-window search outright.
         /// </summary>
         public MoveCommand FindBestMove(BoardState board, AISearchSettings settings, CancellationToken ct,
-            int candidateRescoreMarginCp = 0, bool enableInstabilityTimeManagement = false)
+            int candidateRescoreMarginCp = 0, bool enableInstabilityTimeManagement = false,
+            bool enableAspirationWindows = false)
         {
             Team rootTeam = board.CurrentTurn;
             Stopwatch stopwatch = enableInstabilityTimeManagement ? Stopwatch.StartNew() : null;
@@ -324,6 +351,13 @@ namespace ChessTheBetrayal.AI
             int previousCompletedScore = 0;
             MoveCommand previousCompletedBestMove = default;
 
+            // Only meaningful when enableAspirationWindows is on — deliberately a SEPARATE pair of
+            // locals from the instability-tracking ones above, even though both record "the last
+            // completed depth's score": the two flags are independent and composable, so neither
+            // one's bookkeeping may depend on whether the other happens to be enabled.
+            bool hasPriorAspirationScore = false;
+            int priorAspirationScore = 0;
+
             // Iterative deepening: search depth 1, 2, 3... keeping the best move from the last
             // FULLY COMPLETED depth. If cancelled or over-budget mid-depth, we discard that
             // partial depth and return the previous complete one.
@@ -336,48 +370,88 @@ namespace ChessTheBetrayal.AI
                 // shallower, since-refuted line from lingering and mis-ordering a deeper one.
                 Array.Clear(_killerMoves, 0, _killerMoves.Length);
 
-                int alpha = -Infinity;
-                int beta = Infinity;
                 MoveCommand bestThisDepth = bestMove;
                 int bestIndexThisDepth = 0;
                 int bestScore = -Infinity;
                 bool completed = true;
 
-                for (int i = 0; i < _rootMoves.Count; i++)
+                // Aspiration windows: the first attempt at this depth guesses a narrow band around
+                // the previous depth's score instead of searching the full range. If that guess
+                // turns out wrong (the true score lands ON or PAST the window edge, which alpha-beta
+                // reports as a fail-low/fail-high rather than a real value), the whole depth is
+                // thrown away and re-searched with the full window before its result is trusted —
+                // never trust a bound as if it were an exact score. `widenToFullWindow` starts false
+                // (or true outright when the flag is off, or there's no prior score to aspire
+                // around, or a bailout condition below decides even a doubled window isn't worth it)
+                // so a normal full-window search is always the fallback both features degrade to.
+                bool widenToFullWindow = !enableAspirationWindows || !hasPriorAspirationScore;
+                int windowMarginCp = AspirationWindowCp;
+
+                while (true)
                 {
-                    if (ct.IsCancellationRequested) { completed = false; break; }
+                    int alpha = widenToFullWindow ? -Infinity : priorAspirationScore - windowMarginCp;
+                    int beta = widenToFullWindow ? Infinity : priorAspirationScore + windowMarginCp;
 
-                    MoveCommand move = _rootMoves[i];
-                    ApplyMoveAndTurn(board, move);
-
-                    // Root moves are always the current player's own choices. An Act or Defection
-                    // at the root keeps the SAME player to move, so we recurse without negation.
-                    // A root Act that stages a forced Retribution gets the same one-ply extension
-                    // an Act found deeper in the tree does (see the move loop below) — root is just
-                    // the shallowest possible place for that sequence to start.
-                    bool rootGrantsExtension = move.Stage == BetrayalStage.Act && board.PendingBetrayerSquare.HasValue
-                        && depth < _maxSupportedDepth;
-                    int rootSearchDepth = rootGrantsExtension ? depth : depth - 1;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-                    if (rootGrantsExtension) _tt.Stats.BetrayalExtensions++;
+                    if (!widenToFullWindow) _tt.Stats.AspirationWindowAttempts++;
 #endif
-                    int score = ScoreChild(board, move, rootSearchDepth, 1, alpha, beta, rootTeam, ct, rootGrantsExtension ? 1 : 0);
 
-                    UndoMoveAndTurn(board, move);
+                    bestThisDepth = bestMove;
+                    bestIndexThisDepth = 0;
+                    bestScore = -Infinity;
+                    completed = true;
 
-                    // Every candidate's score is recorded here (not just the running best) — this
-                    // scratch write is unconditional so MoveSelectionPolicy can later rank/bias
-                    // among ALL root moves, not only the single winner. Committed into the
-                    // externally-visible _rootScores only if this depth completes (below).
-                    _rootScoresScratch[i] = score;
-
-                    if (score > bestScore)
+                    for (int i = 0; i < _rootMoves.Count; i++)
                     {
-                        bestScore = score;
-                        bestThisDepth = move;
-                        bestIndexThisDepth = i;
+                        if (ct.IsCancellationRequested) { completed = false; break; }
+
+                        MoveCommand move = _rootMoves[i];
+                        ApplyMoveAndTurn(board, move);
+
+                        // Root moves are always the current player's own choices. An Act or Defection
+                        // at the root keeps the SAME player to move, so we recurse without negation.
+                        // A root Act that stages a forced Retribution gets the same one-ply extension
+                        // an Act found deeper in the tree does (see the move loop below) — root is just
+                        // the shallowest possible place for that sequence to start.
+                        bool rootGrantsExtension = move.Stage == BetrayalStage.Act && board.PendingBetrayerSquare.HasValue
+                            && depth < _maxSupportedDepth;
+                        int rootSearchDepth = rootGrantsExtension ? depth : depth - 1;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                        if (rootGrantsExtension) _tt.Stats.BetrayalExtensions++;
+#endif
+                        int score = ScoreChild(board, move, rootSearchDepth, 1, alpha, beta, rootTeam, ct, rootGrantsExtension ? 1 : 0);
+
+                        UndoMoveAndTurn(board, move);
+
+                        // Every candidate's score is recorded here (not just the running best) — this
+                        // scratch write is unconditional so MoveSelectionPolicy can later rank/bias
+                        // among ALL root moves, not only the single winner. Committed into the
+                        // externally-visible _rootScores only if this depth completes (below).
+                        _rootScoresScratch[i] = score;
+
+                        if (score > bestScore)
+                        {
+                            bestScore = score;
+                            bestThisDepth = move;
+                            bestIndexThisDepth = i;
+                        }
+                        if (score > alpha) alpha = score;
                     }
-                    if (score > alpha) alpha = score;
+
+                    // A fail-low/fail-high against a narrow window means bestScore is only a bound,
+                    // not the true value — the whole depth must be re-searched with the full window.
+                    // Cancellation takes priority over a fail-widen retry: an incomplete depth from a
+                    // cancelled scan must fall straight through to the completed-gated discard below,
+                    // never loop back for another (equally doomed) attempt.
+                    if (widenToFullWindow || !completed) break;
+                    bool failedLow = bestScore <= priorAspirationScore - windowMarginCp;
+                    bool failedHigh = bestScore >= priorAspirationScore + windowMarginCp;
+                    if (!failedLow && !failedHigh) break;
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                    _tt.Stats.AspirationWindowReSearches++;
+#endif
+                    widenToFullWindow = true;
                 }
 
                 if (completed)
@@ -405,6 +479,12 @@ namespace ChessTheBetrayal.AI
 
                     // Early exit on forced mate found — no deeper search changes the decision.
                     if (bestScore >= MateScore) break;
+
+                    if (enableAspirationWindows)
+                    {
+                        hasPriorAspirationScore = true;
+                        priorAspirationScore = bestScore;
+                    }
 
                     if (enableInstabilityTimeManagement)
                     {
