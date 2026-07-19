@@ -730,7 +730,40 @@ namespace ChessTheBetrayal.AI
 
             if (moves.Count == 0)
             {
-                // No legal moves: checkmate (bad for side to move) or stalemate (draw).
+                // A pending Retribution with no legal executioner is NOT stalemate — the Betrayer
+                // defects to the other side and play continues (the same rule TurnResolver applies
+                // in a live game, and Quiescence's own ResolveForcedDefection applies past the
+                // horizon). Scoring it as a draw here hands every losing side a phantom escape
+                // hatch: "play an Act nobody can answer, get a guaranteed 0" — when the real
+                // continuation usually loses the defected piece's worth of material. A deeper
+                // search is BETTER at engineering exactly that configuration several plies ahead,
+                // which made stronger tiers actively steer into self-destructing Betrayals.
+                if (board.PendingBetrayerSquare.HasValue && board.BetrayalInitiator.HasValue
+                    && board.GetPiece(board.PendingBetrayerSquare.Value).Team == board.BetrayalInitiator.Value)
+                {
+                    int resolved = ResolveForcedDefectionInSearch(board, depth, plyFromRoot, alpha, beta,
+                        perspectiveTeam, ct, extensionsUsedThisLine);
+
+                    // Unlike the mate/stalemate returns below (trivial to recompute), this result
+                    // cost a real subtree search — worth a TT entry like any other node's, or every
+                    // deepening iteration and every transposition into this position replays the
+                    // whole post-Defection continuation from scratch. The pending sub-state is part
+                    // of the Zobrist hash, so the entry can never be confused with the resolved
+                    // position's own. No best move to record: the "move" here is the domain's
+                    // automatic resolution, not a searchable choice.
+                    if (!ct.IsCancellationRequested)
+                    {
+                        TTFlag resolvedFlag = resolved <= alphaOriginal ? TTFlag.UpperBound
+                                            : resolved >= beta ? TTFlag.LowerBound
+                                            : TTFlag.Exact;
+                        _tt.Store(board.ZobristHash, AdjustMateScore(resolved, plyFromRoot), packedMove: 0, depth, resolvedFlag);
+                    }
+                    return resolved;
+                }
+
+                // No legal moves: checkmate (bad for side to move) or stalemate (draw). A
+                // ForcedSave-pending position with no legal king-save lands here too, and the
+                // in-check branch scores it as the mate it is.
                 bool inCheck = _engine.IsKingInCheck(board, board.CurrentTurn);
                 if (inCheck)
                 {
@@ -1340,6 +1373,51 @@ namespace ChessTheBetrayal.AI
             // move's Previous* snapshot, and — for a stamped (ClosesBetrayalSequence) move — reverses
             // the turn-hash and sub-state hash toggles ResolveDefection performed above, symmetrically
             // via ApplyZobristMove. The board returns to exactly the pre-resolution state either way.
+            _engine.UndoMove(board, outcome.DefectionMove);
+            return score;
+        }
+
+        /// <summary>
+        /// The main-search twin of <see cref="ResolveForcedDefection"/>: a Search node whose
+        /// pending Retribution has no legal executioner resolves the Betrayer's Defection in-line
+        /// and keeps searching, instead of mistaking the empty move list for stalemate. The
+        /// resolution itself is the domain's, not a searched move — the same two sub-cases and the
+        /// same undo contract as the quiescence version; only the recursion target differs (back
+        /// into Search, one ply shallower, so the depth budget stays honest and the recursion
+        /// provably terminates — at depth 0 it lands in Quiescence, which already handles every
+        /// pending-Betrayal state).
+        /// </summary>
+        private int ResolveForcedDefectionInSearch(BoardState board, int depth, int plyFromRoot,
+                                                   int alpha, int beta, Team perspectiveTeam, CancellationToken ct,
+                                                   int extensionsUsedThisLine)
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            _tt.Stats.ForcedDefectionResolutions++;
+#endif
+            DefectionOutcome outcome = ChessEngine.ResolveFailedRetribution(board);
+
+            int score;
+            if (outcome.RequiresForcedSave)
+            {
+                // The defected piece checks its former King: the SAME side owes a mandatory
+                // king-save, so no turn flip and no negation. The recursive call re-enters Search
+                // on the ForcedSave-pending position, whose move generation returns only the legal
+                // king-saves (and whose own empty-list case is a genuine mate, scored above).
+                score = Search(board, depth - 1, plyFromRoot + 1, alpha, beta, perspectiveTeam, ct,
+                    extensionsUsedThisLine: extensionsUsedThisLine);
+            }
+            else
+            {
+                // Fully resolved: the turn passes to the opponent, standard negamax step.
+                // CurrentTurn is the caller's own bookkeeping to flip, exactly as in the
+                // quiescence version — ResolveFailedRetribution already handled every hash toggle.
+                board.NextTurn();
+                Team childPerspective = perspectiveTeam == Team.White ? Team.Black : Team.White;
+                score = -Search(board, depth - 1, plyFromRoot + 1, -beta, -alpha, childPerspective, ct,
+                    extensionsUsedThisLine: extensionsUsedThisLine);
+                board.NextTurn();
+            }
+
             _engine.UndoMove(board, outcome.DefectionMove);
             return score;
         }
