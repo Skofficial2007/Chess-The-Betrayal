@@ -282,6 +282,19 @@ namespace ChessTheBetrayal.AI
         /// completed depth — MoveToFront(bestIndexThisDepth) puts the committed best there.</summary>
         public int BestRootIndex { get; private set; }
 
+        /// <summary>
+        /// True only when the candidate-rescore pass ran to completion, i.e. every RootScores entry
+        /// within the requested margin of the best is a genuine full-window value rather than the
+        /// tightened alpha-beta bound the main loop recorded. A search that spends its whole time
+        /// budget on the depth loop gets its rescore pass cancelled before it starts — its
+        /// non-best RootScores are then only upper bounds, and a bound can sit arbitrarily close
+        /// to the best score while the move it belongs to is actually much worse. Any caller that
+        /// picks among near-best candidates (tie-break windows, deliberate blunders) MUST check
+        /// this first and fall back to the best move alone when it is false — selecting from
+        /// bound scores is how a time-capped tier ends up playing near-random moves with full
+        /// confidence.
+        /// </summary>
+        public bool RootScoresExactForSelection { get; private set; }
 
         /// <summary>
         /// Iterative deepening entry point. Returns the best move for board.CurrentTurn.
@@ -294,7 +307,9 @@ namespace ChessTheBetrayal.AI
         /// "later root moves may only carry an upper-bound score" caveat (see MoveSelectionPolicy)
         /// for the handful of candidates a personality-driven selection might actually pick.
         /// TT-warmed (every node was already visited this search), so it's cheap. Defaults to 0 —
-        /// no rescore pass at all, zero overhead — for callers that don't need it.
+        /// no rescore pass at all, zero overhead — for callers that don't need it. Whether the
+        /// pass actually COMPLETED is reported via RootScoresExactForSelection; a cancelled
+        /// search skips or truncates it, and selection must then stick to the best move.
         ///
         /// enableInstabilityTimeManagement: off by default so every existing CancellationToken.None
         /// caller (both benchmark suites) stays exactly depth-bound, byte-identical to before this
@@ -334,6 +349,7 @@ namespace ChessTheBetrayal.AI
             // Build the root move list ONCE. This is where the agent-level Betrayal policy applies.
             BuildRootMoves(board, rootTeam, settings.BetrayalUsage);
             EnsureRootScoreCapacity(_rootMoves.Count);
+            RootScoresExactForSelection = false;
 
             // TT informs root ORDERING ONLY — never a short-circuit. The root list carries the
             // BetrayalUsage.DefendOnly filter and MoveToFront's PV bookkeeping; a TT cutoff here
@@ -547,9 +563,12 @@ namespace ChessTheBetrayal.AI
             int threshold = _rootScores[0] - candidateRescoreMarginCp; // BestRootIndex == 0
             for (int i = 1; i < _rootMoves.Count; i++) // index 0 is already exact-enough by construction
             {
-                // Safe degrade: leave any not-yet-rescored entry at its tightened-window value —
-                // still an upper bound in the right direction, never a torn write.
-                if (ct.IsCancellationRequested) break;
+                // Cancelled mid-pass: leave the remaining entries at their tightened-window values
+                // and — critically — leave RootScoresExactForSelection false, so no caller
+                // mistakes those bounds for real scores. A search that spends its whole time
+                // budget on the depth loop lands here with the token already fired, which is the
+                // normal case for a deep tier, not an anomaly.
+                if (ct.IsCancellationRequested) return;
                 if (_rootScores[i] < threshold) continue;
 
                 MoveCommand move = _rootMoves[i];
@@ -570,8 +589,15 @@ namespace ChessTheBetrayal.AI
                 int exactScore = ScoreChild(board, move, rootSearchDepth, 1, -Infinity, Infinity, rootTeam, ct, rootGrantsExtension ? 1 : 0);
                 UndoMoveAndTurn(board, move);
 
+                // A cancellation that fired DURING this candidate's re-search makes its result a
+                // partial garbage value, not an exact score — discard it and report the pass as
+                // incomplete rather than publish a number that looks authoritative.
+                if (ct.IsCancellationRequested) return;
+
                 _rootScores[i] = exactScore;
             }
+
+            RootScoresExactForSelection = true;
         }
 
         /// <summary>Grows the root-score buffers to fit a pathological branching root, mirroring

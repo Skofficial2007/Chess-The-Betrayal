@@ -215,8 +215,14 @@ namespace ChessTheBetrayal.Tests.Utilities
                 var moveStopwatch = System.Diagnostics.Stopwatch.StartNew();
                 MoveCommand move = FindMoveUnderTimeControl(search, board, settings, rescoreMargin);
 
+                // RootScoresExactForSelection mirrors the live agent's own guard: a search that
+                // spent its whole time budget on the depth loop never rescored its candidate
+                // scores to exact values, and applying blunder/tie-break windows to the leftover
+                // alpha-beta bounds selects near-random moves — the exact failure that once made
+                // every time-capped tier lose to shallower ones in this very harness.
                 bool blunderRollFired = false;
-                if (profile.BlunderRate > 0f || profile.TieBreakWindowCp > 0)
+                if ((profile.BlunderRate > 0f || profile.TieBreakWindowCp > 0)
+                    && search.RootScoresExactForSelection)
                 {
                     move = policy.SelectFinalMove(
                         search.RootMoves, search.RootScores, search.RootMoveCount, search.BestRootIndex,
