@@ -75,12 +75,11 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 .WithComputedHash();
 
         [Test]
-        public void FindBestMove_Depth7Midgame_CompletesWellUnderFiveSeconds()
+        public void FindBestMove_Depth7Midgame_CompletesWellUnderThreeSeconds()
         {
-            // Temporary threshold while search performance work is still in progress. The real
-            // target for AI move time is 3 seconds in every case, not 6 — this number will come
-            // down as the remaining pruning/ordering work lands, before this project moves past
-            // its current phase.
+            // 3 seconds is the real per-move target for every difficulty tier. Tightened from a
+            // temporary 6.0s once the search-performance pass landed enough levers that this exact
+            // search now measures well under 1s uncapped.
             BoardState board = MidgamePosition();
             var settings = new AISearchSettings(maxDepth: 7, new AITimeBudget(60_000, 60_000), BetrayalUsage.Full);
             var search = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator());
@@ -92,8 +91,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             System.Console.WriteLine(
                 $"Depth-7 midgame search: {stopwatch.Elapsed.TotalSeconds:F2}s, best={best}, stats={search.Stats}");
 
-            Assert.That(stopwatch.Elapsed.TotalSeconds, Is.LessThan(6.0),
-                $"Depth-7 midgame search took {stopwatch.Elapsed.TotalSeconds:F2}s — expected well under 6s; " +
+            Assert.That(stopwatch.Elapsed.TotalSeconds, Is.LessThan(3.0),
+                $"Depth-7 midgame search took {stopwatch.Elapsed.TotalSeconds:F2}s — expected well under 3s; " +
                 "exceeding this means a pruning mechanism likely broke, not just that the target needs re-tuning.");
 
             Assert.That(search.Stats.NodesVisited, Is.GreaterThan(0));
