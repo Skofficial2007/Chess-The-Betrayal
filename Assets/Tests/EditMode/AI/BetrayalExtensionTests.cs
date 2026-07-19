@@ -8,10 +8,12 @@ using ChessTheBetrayal.Tests.Utilities;
 namespace ChessTheBetrayal.Tests.EditMode.AI
 {
     /// <summary>
-    /// Proves the Betrayal/Retribution search extension actually fires when an Act stages a forced
-    /// Retribution, and that its per-line cap holds even on a position engineered to offer the
-    /// search more Betrayal opportunities than the cap allows — an uncapped version of this lever
-    /// is exactly the kind of forced-capture-chain explosion that makes antichess engines slow.
+    /// Pins the Betrayal/Retribution search extension's contract. The extension is currently
+    /// DISABLED (see MaxBetrayalExtensionsPerLine's own comment for the measured reasoning), so
+    /// the headline test here proves it stays off even on a position built to invite it — a
+    /// silent re-enable would roughly double deep-search node counts. The remaining tests pin the
+    /// machinery's safety properties (state restoration, sane counter bounds), which must hold
+    /// unchanged if a future measured pass ever turns the cap back up.
     /// </summary>
     [TestFixture]
     public class BetrayalExtensionTests
@@ -27,11 +29,13 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
-        public void FindBestMove_ActStagesRetribution_ExtensionFires()
+        public void FindBestMove_ActStagesRetribution_ExtensionStaysDisabled()
         {
             // White can Act the Knight at b1 onto its own Pawn at a3; White's Rook at a1 can then
-            // execute Retribution. Whether or not the search ultimately PREFERS this line, exploring
-            // it at all should register at least one extension in telemetry.
+            // execute Retribution — the exact shape the extension was built for. With the cap at 0
+            // it must still never fire: this position is deliberately the most inviting one, so a
+            // future change that quietly re-enables the extension (and its measured node-count
+            // cost) fails here instead of only showing up as a slow benchmark.
             BoardState board = TestBoardSetupUtility.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
@@ -46,8 +50,9 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             _search.FindBestMove(board, settings, CancellationToken.None);
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-            Assert.That(_search.Stats.BetrayalExtensions, Is.GreaterThan(0),
-                "At least one Act that staged a Retribution should have been granted the extension.");
+            Assert.That(_search.Stats.BetrayalExtensions, Is.EqualTo(0),
+                "The extension is disabled — no Act may be granted extra depth while the cap is 0, " +
+                "at the root or anywhere in the tree.");
 #endif
         }
 

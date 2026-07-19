@@ -8,11 +8,13 @@ using ChessTheBetrayal.Tests.Utilities;
 namespace ChessTheBetrayal.Tests.EditMode.AI
 {
     /// <summary>
-    /// Pins the LMR exemption predicate directly (ADR Sec 1.3/2.4) — captures, promotions, the TT
-    /// move, and every Betrayal-stage move are never reducible regardless of where they land in
-    /// the sort order — and regression-tests that reducing quiet moves never changes which move a
-    /// full search reports as best (SearchCorrectnessTests already pins the exact chosen moves; this
-    /// file adds a couple of positions likely to exercise the reduce -> fail-high -> re-search path).
+    /// Pins the quiet-move predicate directly — captures, promotions, the TT move, and every
+    /// Betrayal-stage move are never treated as quiet regardless of where they land in the sort
+    /// order (an Act still gets reduced, but through its own explicitly-reasoned path in Search's
+    /// loop, never by falling into the quiet band) — and regression-tests that reducing moves
+    /// never changes which move a full search reports as best (SearchCorrectnessTests already pins
+    /// the exact chosen moves; this file adds a couple of positions likely to exercise the
+    /// reduce -> fail-high -> re-search path).
     /// </summary>
     [TestFixture]
     public class LateMoveReductionTests
@@ -102,10 +104,12 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
-        public void ActMove_IsNeverReducible()
+        public void ActMove_IsNeverTreatedAsQuiet()
         {
             Assert.That(AlphaBetaSearch.IsReducibleMove(ActMove(), ttMove: 0), Is.False,
-                "Act sorts LATE after AI-17's demotion — exactly where index-driven LMR would catch it if not exempted by Stage.");
+                "An Act is a capture of one's own piece that stages a forced sequence — treating it as a " +
+                "quiet move would expose it to move-count pruning and futility skips, which must never " +
+                "silently discard a Betrayal line. Its reduction happens through its own dedicated path.");
         }
 
         [Test]

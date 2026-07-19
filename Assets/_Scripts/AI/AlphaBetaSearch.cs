@@ -74,16 +74,22 @@ namespace ChessTheBetrayal.AI
         private const int FrontierFutilityMaxDepth = 3;
         private static int FrontierFutilityMargin(int depth) => 150 + 100 * depth;
 
-        // Betrayal/Retribution search extension: a Betrayal Act stages a forced tactical sequence
-        // (the target ally MUST execute Retribution next, or the Betrayer defects), so treating it
-        // as "just another ply" like an ordinary quiet move risks the horizon landing mid-sequence
-        // and mis-valuing a position that hasn't actually finished playing out yet. Granting the
-        // very next ply back — searching it at the SAME depth the Act was found at, instead of one
-        // shallower — keeps the whole forced sequence inside the normal search window rather than
-        // eating into the depth budget the same way a real "free" ply would. Capped per line
-        // (extensionsUsedThisLine) so a chain of Betrayals can never re-extend itself forever the
-        // way an uncapped forced-capture-chain extension is well known to blow up a search tree.
-        private const int MaxBetrayalExtensionsPerLine = 3;
+        // Betrayal/Retribution search extension: an Act that stages a forced Retribution can be
+        // granted its next ply back (searched at the SAME depth it was found at, instead of one
+        // shallower), so the forced sequence stays inside the normal search window. Capped per
+        // line (extensionsUsedThisLine) so a chain of Betrayals can never re-extend forever.
+        //
+        // Currently DISABLED (cap 0), from measurement rather than principle. The extension is not
+        // needed for correct valuation: quiescence refuses to stand pat while any Betrayal
+        // sequence is unresolved, so no leaf is ever evaluated mid-sequence with or without the
+        // extra ply — the extension only deepens the position AFTER the sequence resolves. Once
+        // the search valued Defections honestly (see ResolveForcedDefectionInSearch), that quality
+        // nudge measured at roughly double the node count at depth 9 on a Betrayal-live midgame —
+        // about the price of a full extra ply of depth everywhere, spent only on Betrayal lines.
+        // Depth spent uniformly buys more strength than depth spent there, so the cap is 0. The
+        // machinery stays wired so re-enabling is a one-constant change if a future measured pass
+        // finds positions where it earns its cost.
+        private const int MaxBetrayalExtensionsPerLine = 0;
 
         // Hard backstop for quiescence recursion. A Betrayal sub-phase (Act -> Retribution/Defection
         // -> optional DefensiveOverride) is at most a handful of plies for one turn, and captures
@@ -276,6 +282,7 @@ namespace ChessTheBetrayal.AI
         /// completed depth — MoveToFront(bestIndexThisDepth) puts the committed best there.</summary>
         public int BestRootIndex { get; private set; }
 
+
         /// <summary>
         /// Iterative deepening entry point. Returns the best move for board.CurrentTurn.
         /// Caller runs this on a worker thread against a cloned board (see AsyncAIAgent).
@@ -287,7 +294,7 @@ namespace ChessTheBetrayal.AI
         /// "later root moves may only carry an upper-bound score" caveat (see MoveSelectionPolicy)
         /// for the handful of candidates a personality-driven selection might actually pick.
         /// TT-warmed (every node was already visited this search), so it's cheap. Defaults to 0 —
-        /// today's exact pre-AI-24 behavior, zero overhead — for callers that don't need it.
+        /// no rescore pass at all, zero overhead — for callers that don't need it.
         ///
         /// enableInstabilityTimeManagement: off by default so every existing CancellationToken.None
         /// caller (both benchmark suites) stays exactly depth-bound, byte-identical to before this
@@ -412,8 +419,10 @@ namespace ChessTheBetrayal.AI
                         // at the root keeps the SAME player to move, so we recurse without negation.
                         // A root Act that stages a forced Retribution gets the same one-ply extension
                         // an Act found deeper in the tree does (see the move loop below) — root is just
-                        // the shallowest possible place for that sequence to start.
+                        // the shallowest possible place for that sequence to start. Zero extensions
+                        // have been used at the root, so the cap check is against zero.
                         bool rootGrantsExtension = move.Stage == BetrayalStage.Act && board.PendingBetrayerSquare.HasValue
+                            && 0 < MaxBetrayalExtensionsPerLine
                             && depth < _maxSupportedDepth;
                         int rootSearchDepth = rootGrantsExtension ? depth : depth - 1;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -539,7 +548,7 @@ namespace ChessTheBetrayal.AI
             for (int i = 1; i < _rootMoves.Count; i++) // index 0 is already exact-enough by construction
             {
                 // Safe degrade: leave any not-yet-rescored entry at its tightened-window value —
-                // still "acceptable by direction" per the ADR's own caveat, never a torn write.
+                // still an upper bound in the right direction, never a torn write.
                 if (ct.IsCancellationRequested) break;
                 if (_rootScores[i] < threshold) continue;
 
@@ -552,6 +561,7 @@ namespace ChessTheBetrayal.AI
                 // time, or this "exact" re-search would silently search one ply shallower than the
                 // tightened-window pass it's supposed to be correcting.
                 bool rootGrantsExtension = move.Stage == BetrayalStage.Act && board.PendingBetrayerSquare.HasValue
+                    && 0 < MaxBetrayalExtensionsPerLine
                     && lastCompletedDepth < _maxSupportedDepth;
                 int rootSearchDepth = rootGrantsExtension ? lastCompletedDepth : lastCompletedDepth - 1;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -846,7 +856,15 @@ namespace ChessTheBetrayal.AI
 
                 if (isQuiet) quietMovesSearched++;
 
-                bool reduce = nodeAllowsReduction && i >= 2 && isQuiet;
+                // Late quiet moves AND Act moves both reduce. An Act volunteers one of your own
+                // pieces to the opponent unless your own side then executes it, so with Defections
+                // valued honestly it is almost never the best move at a node — yet it opens a
+                // full-width continuation (the defected piece changes sides and play goes on),
+                // making it one of the most expensive children to search. Exactly the profile LMR
+                // exists for: search it shallower first, and the fail-high re-search below restores
+                // full depth on the rare occasion an Act really is strong here. i >= 2 keeps the
+                // PV move and the first alternative at full depth, same as for quiet moves.
+                bool reduce = nodeAllowsReduction && i >= 2 && (isQuiet || move.Stage == BetrayalStage.Act);
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                 if (reduce) _tt.Stats.LmrReductions++;
 #endif
@@ -867,7 +885,10 @@ namespace ChessTheBetrayal.AI
                 // _killerMoves are themselves sized to maxSupportedDepth + 1 — without it, a chain
                 // of extensions near the ceiling could push searchDepth's recursive Search call past
                 // the last valid _moveBuffers index and index out of bounds.
-                bool grantExtension = move.Stage == BetrayalStage.Act
+                // !reduce keeps "reduced" and "extended" mutually exclusive for the same child by
+                // construction — the re-search depth arithmetic below leans on that invariant, and
+                // an Act cheap enough to reduce has by definition not earned an extra ply anyway.
+                bool grantExtension = !reduce && move.Stage == BetrayalStage.Act
                     && board.PendingBetrayerSquare.HasValue
                     && extensionsUsedThisLine < MaxBetrayalExtensionsPerLine
                     && depth < _maxSupportedDepth;
@@ -900,9 +921,9 @@ namespace ChessTheBetrayal.AI
 
                     // LMR fail-high — the reduction may have hidden real strength. Re-search at full
                     // depth, STILL null-window, before deciding whether a full-window re-search is
-                    // even warranted. reduce is only ever true for a quiet move (see IsReducibleMove),
-                    // and grantExtension is only ever true for an Act, so the two never coincide —
-                    // "full depth" here is always plain depth - 1, never the extended searchDepth.
+                    // even warranted. A reduced child (quiet or Act) is never also extended (see the
+                    // !reduce guard on grantExtension), so "full depth" here is always plain
+                    // depth - 1, never the extended searchDepth.
                     if (reduce && score > alpha)
                     {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -915,9 +936,9 @@ namespace ChessTheBetrayal.AI
                     // not the true score. Only a genuine alpha<score<beta result needs the full-window
                     // re-search; a score >= beta is already a valid cutoff via the null window alone.
                     // Full, un-reduced depth — reduce and grantExtension are mutually exclusive (see
-                    // above), so this is depth - 1 for a reduced quiet move and depth (the extended
-                    // searchDepth) for an Act that staged a Retribution; either way it's the same
-                    // depth the LMR fail-high branch above would have used had it fired instead.
+                    // the !reduce guard above), so this is depth - 1 for a reduced child and depth
+                    // (the extended searchDepth) for an extended Act; either way it's the same depth
+                    // the LMR fail-high branch above would have used had it fired instead.
                     if (score > alpha && score < beta)
                     {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -1548,11 +1569,13 @@ namespace ChessTheBetrayal.AI
         }
 
         /// <summary>
-        /// LMR exemption predicate, keyed on move SEMANTICS rather than sort
-        /// position: a capture, a promotion, the TT/PV move, or any Betrayal-stage move (Act,
-        /// Retribution, DefensiveOverride, Defection) is never reduced. The per-node depth/pending-
-        /// Betrayer/index gates live in Search's loop, since those need node-level state this
-        /// predicate doesn't have.
+        /// Quiet-move predicate, keyed on move SEMANTICS rather than sort position: true only for
+        /// a plain non-capture, non-promotion, non-Betrayal, non-TT move. Feeds move-count
+        /// pruning, frontier futility, and the quiet half of the reduction decision — a capture,
+        /// promotion, or Betrayal-stage move is never treated as quiet (though an Act still gets
+        /// its own reduction path in Search's loop, on its own reasoning). The per-node
+        /// depth/pending-Betrayer/index gates live in Search's loop, since those need node-level
+        /// state this predicate doesn't have.
         /// </summary>
         internal static bool IsReducibleMove(MoveCommand m, uint ttMove) =>
             !m.IsCapture && !m.IsPromotion && m.Stage == BetrayalStage.None && PackMove(m) != ttMove;
