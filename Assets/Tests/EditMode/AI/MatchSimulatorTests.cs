@@ -106,6 +106,39 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
+        public void PlayGame_ZeroDialProfilesReachAQuietRepeatingLine_AdjudicationEndsItBeforeThePlyCap()
+        {
+            // Two identical, zero-blunder, zero-personality profiles from a roughly balanced
+            // position tend to shuffle into a repeating/quiet line rather than a decisive result —
+            // exactly the scenario the fifty-move/repetition/draw-margin rules exist to cut short.
+            // A generous 120-ply cap (DefaultPlyCap) is the pre-adjudication behavior; this proves
+            // Standard rules end the game well before that ceiling is reached.
+            AIProfile shallow = Fast("shallow", maxDepth: 2);
+            BoardState position = CuratedPositionSuite.Build(0);
+
+            MatchResult adjudicated = new MatchSimulator(MatchTimeControl.Uncapped, adjudicationRules: AdjudicationRules.Standard)
+                .PlayGame(position, shallow, shallow, rngSeedWhite: 111, rngSeedBlack: 222);
+
+            Assert.That(adjudicated.PlyCount, Is.LessThan(MatchSimulator.DefaultPlyCap),
+                "Standard adjudication rules should end a quiet/repeating shallow-vs-shallow game well before the full ply cap.");
+        }
+
+        [Test]
+        public void PlayGame_AdjudicationDisabled_PlaysAtLeastAsLongAsWithStandardRules()
+        {
+            AIProfile shallow = Fast("shallow", maxDepth: 2);
+            BoardState position = CuratedPositionSuite.Build(0);
+
+            MatchResult withStandardRules = new MatchSimulator(MatchTimeControl.Uncapped, adjudicationRules: AdjudicationRules.Standard)
+                .PlayGame(position, shallow, shallow, rngSeedWhite: 111, rngSeedBlack: 222);
+            MatchResult withRulesDisabled = new MatchSimulator(MatchTimeControl.Uncapped, adjudicationRules: AdjudicationRules.Disabled)
+                .PlayGame(position, shallow, shallow, rngSeedWhite: 111, rngSeedBlack: 222);
+
+            Assert.That(withRulesDisabled.PlyCount, Is.GreaterThanOrEqualTo(withStandardRules.PlyCount),
+                "Disabled must never end a game EARLIER than Standard would — it is strictly a superset of plies played.");
+        }
+
+        [Test]
         public void TournamentSeeding_PerturbingOneSidesGameIndex_LeavesTheOtherSidesSeedUnchanged()
         {
             int whiteSeedBefore = TournamentSeeding.DeriveSeed(runSeed: 7, positionIndex: 0, pairIndex: 0, gameIndex: 0, side: 0);

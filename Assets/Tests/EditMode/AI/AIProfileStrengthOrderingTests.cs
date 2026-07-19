@@ -34,24 +34,29 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         private static AIProfile Profile(string id) => AIProfileTable.BuiltIn.Single(p => p.Id == id);
 
         [Test]
-        public void Normal_ScoresAtLeastSixtyPercent_AgainstEasy() => AssertStrongerScoresAtLeast("normal", "easy");
+        public void Normal_ScoresAtLeastSixtyPercent_AgainstEasy() => AssertStrongerScoresAtLeast("normal", "easy", pairIndex: 0);
 
         [Test]
-        public void Hard_ScoresAtLeastSixtyPercent_AgainstNormal() => AssertStrongerScoresAtLeast("hard", "normal");
+        public void Hard_ScoresAtLeastSixtyPercent_AgainstNormal() => AssertStrongerScoresAtLeast("hard", "normal", pairIndex: 1);
 
         [Test]
-        public void Extreme_ScoresAtLeastSixtyPercent_AgainstHard() => AssertStrongerScoresAtLeast("extreme", "hard");
+        public void Extreme_ScoresAtLeastSixtyPercent_AgainstHard() => AssertStrongerScoresAtLeast("extreme", "hard", pairIndex: 2);
 
         [Test]
-        public void Impossible_ScoresAtLeastSixtyPercent_AgainstExtreme() => AssertStrongerScoresAtLeast("impossible", "extreme");
+        public void Impossible_ScoresAtLeastSixtyPercent_AgainstExtreme() => AssertStrongerScoresAtLeast("impossible", "extreme", pairIndex: 3);
 
         [Test]
-        public void Aggressive_ScoresAtLeastSixtyPercent_AgainstNormal() => AssertStrongerScoresAtLeast("aggressive", "normal");
+        public void Aggressive_ScoresAtLeastSixtyPercent_AgainstNormal() => AssertStrongerScoresAtLeast("aggressive", "normal", pairIndex: 4);
 
         [Test]
-        public void Aggressive_ScoresAtLeastSixtyPercent_AgainstEasy() => AssertStrongerScoresAtLeast("aggressive", "easy");
+        public void Aggressive_ScoresAtLeastSixtyPercent_AgainstEasy() => AssertStrongerScoresAtLeast("aggressive", "easy", pairIndex: 5);
 
-        private static void AssertStrongerScoresAtLeast(string strongerId, string weakerId)
+        // pairIndex distinguishes each of the six adjacency checks above so their seeds never
+        // collide — without it, every pairing played at the same positionIndex derived the exact
+        // same White/Black RNG streams as every other pairing, which is not a real independent
+        // sample even though it looked like one (see TournamentSeeding.DeriveSeed's pairIndex
+        // parameter, the same field TournamentSession keys its own pairings by).
+        private static void AssertStrongerScoresAtLeast(string strongerId, string weakerId, int pairIndex)
         {
             AIProfile stronger = Profile(strongerId);
             AIProfile weaker = Profile(weakerId);
@@ -64,10 +69,10 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             {
                 BoardState position = CuratedPositionSuite.Build(positionIndex);
 
-                points += PlayAndScore(simulator, position, stronger, weaker, positionIndex, strongerIsWhite: true);
+                points += PlayAndScore(simulator, position, stronger, weaker, positionIndex, pairIndex, strongerIsWhite: true);
                 games++;
 
-                points += PlayAndScore(simulator, position, weaker, stronger, positionIndex, strongerIsWhite: false);
+                points += PlayAndScore(simulator, position, weaker, stronger, positionIndex, pairIndex, strongerIsWhite: false);
                 games++;
             }
 
@@ -86,10 +91,10 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         /// regardless of which color it played.</summary>
         private static float PlayAndScore(
             MatchSimulator simulator, BoardState position, AIProfile whiteProfile, AIProfile blackProfile,
-            int positionIndex, bool strongerIsWhite)
+            int positionIndex, int pairIndex, bool strongerIsWhite)
         {
-            int seedWhite = TournamentSeeding.DeriveSeed(RunSeed, positionIndex, pairIndex: 0, gameIndex: 0, side: 0);
-            int seedBlack = TournamentSeeding.DeriveSeed(RunSeed, positionIndex, pairIndex: 0, gameIndex: 0, side: 1);
+            int seedWhite = TournamentSeeding.DeriveSeed(RunSeed, positionIndex, pairIndex, gameIndex: 0, side: 0);
+            int seedBlack = TournamentSeeding.DeriveSeed(RunSeed, positionIndex, pairIndex, gameIndex: 0, side: 1);
 
             MatchResult result = simulator.PlayGame(position, whiteProfile, blackProfile, seedWhite, seedBlack);
 
