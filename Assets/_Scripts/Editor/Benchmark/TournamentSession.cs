@@ -16,13 +16,19 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
         public readonly string BlackId;
         public readonly MatchStatsResult Result;
 
-        public TournamentGameRecord(int pairIndex, int positionIndex, string whiteId, string blackId, MatchStatsResult result)
+        /// <summary>Which color the pairing's SUBJECT profile played THIS game. Carried explicitly
+        /// rather than re-derived from WhiteId/the pairing table, because a head-to-head pairing a
+        /// profile plays against itself has no id-based way to tell subject from opponent.</summary>
+        public readonly bool SubjectIsWhite;
+
+        public TournamentGameRecord(int pairIndex, int positionIndex, string whiteId, string blackId, MatchStatsResult result, bool subjectIsWhite)
         {
             PairIndex = pairIndex;
             PositionIndex = positionIndex;
             WhiteId = whiteId;
             BlackId = blackId;
             Result = result;
+            SubjectIsWhite = subjectIsWhite;
         }
     }
 
@@ -85,11 +91,12 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
         private readonly string _modeLabel;
         private readonly int _runSeed;
         private readonly int _plyCap;
+        private readonly MatchTimeControl _timeControl;
         private readonly IReadOnlyList<(string Subject, string Opponent)> _pairs;
         private readonly List<PendingGame> _games;
         private readonly PairTally[] _tallies;
         private readonly Dictionary<string, TierAccumulator> _tierAccumulators = new Dictionary<string, TierAccumulator>();
-        private readonly MatchSimulator _simulator = new MatchSimulator();
+        private readonly MatchSimulator _simulator;
         private int _nextGame;
 
         public event Action<TournamentGameRecord> OnGameCompleted;
@@ -99,13 +106,15 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
         public int GamesCompleted => _nextGame;
         public bool IsComplete => _nextGame >= _games.Count;
 
-        private TournamentSession(string modeLabel, int runSeed, int plyCap,
+        private TournamentSession(string modeLabel, int runSeed, int plyCap, MatchTimeControl timeControl,
             IReadOnlyList<(string Subject, string Opponent)> pairs,
             Func<string, AIProfile> resolve, int positionCount)
         {
             _modeLabel = modeLabel;
             _runSeed = runSeed;
             _plyCap = plyCap;
+            _timeControl = timeControl;
+            _simulator = new MatchSimulator(timeControl);
             _pairs = pairs;
             _tallies = new PairTally[pairs.Count];
 
@@ -128,18 +137,27 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
             }
         }
 
+        /// <summary>
+        /// timeControl defaults to ProductionBudget — a real tournament run should measure the
+        /// engine as it ships, hard-budget cancellation included. Pass Uncapped for a run that
+        /// needs genuinely bit-reproducible outcomes (e.g. a reproducibility regression test) — a
+        /// budget-bound search's OWN move choice can vary run to run under CPU contention/thermal
+        /// throttling, since the budget timer races real wall-clock time; that variance is not a
+        /// bug in this session, it's what a time-bounded engine actually does under load.
+        /// </summary>
         public static TournamentSession CreateQuick(int runSeed, IReadOnlyList<AIProfile> roster,
-            int plyCap = MatchSimulator.DefaultPlyCap)
+            int plyCap = MatchSimulator.DefaultPlyCap, MatchTimeControl timeControl = MatchTimeControl.ProductionBudget)
         {
-            return new TournamentSession(BenchmarkMode.Quick.ToString(), runSeed, plyCap,
+            return new TournamentSession(BenchmarkMode.Quick.ToString(), runSeed, plyCap, timeControl,
                 AdjacentPairs, id => ResolveInRoster(roster, id),
                 Math.Min(QuickPositionCount, CuratedPositionSuite.Count));
         }
 
+        /// <summary>See CreateQuick's doc comment for the timeControl parameter.</summary>
         public static TournamentSession CreateFull(int runSeed, IReadOnlyList<AIProfile> roster,
-            int plyCap = MatchSimulator.DefaultPlyCap)
+            int plyCap = MatchSimulator.DefaultPlyCap, MatchTimeControl timeControl = MatchTimeControl.ProductionBudget)
         {
-            return new TournamentSession(BenchmarkMode.Full.ToString(), runSeed, plyCap,
+            return new TournamentSession(BenchmarkMode.Full.ToString(), runSeed, plyCap, timeControl,
                 AllPairsRoundRobin(roster), id => ResolveInRoster(roster, id),
                 CuratedPositionSuite.Count);
         }
@@ -148,12 +166,13 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
         /// One pairing of the caller's choosing — including hand-built/custom profiles that exist in
         /// no roster, which is why this resolves against the two profiles directly instead of by id.
         /// Playing a profile against itself is legal (both colors just report under the same id).
+        /// See CreateQuick's doc comment for the timeControl parameter.
         /// </summary>
         public static TournamentSession CreateHeadToHead(int runSeed, AIProfile subject, AIProfile opponent,
-            int positionCount, int plyCap = MatchSimulator.DefaultPlyCap)
+            int positionCount, int plyCap = MatchSimulator.DefaultPlyCap, MatchTimeControl timeControl = MatchTimeControl.ProductionBudget)
         {
             var pair = new[] { (subject.Id, opponent.Id) };
-            return new TournamentSession("HeadToHead", runSeed, plyCap,
+            return new TournamentSession("HeadToHead", runSeed, plyCap, timeControl,
                 pair, id => id == subject.Id ? subject : opponent,
                 Math.Min(Math.Max(positionCount, 1), CuratedPositionSuite.Count));
         }
@@ -164,43 +183,82 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
         /// OnGameCompleted, plus OnSessionCompleted if it was the last one. Returns false without
         /// side effects once the session is finished, so a drain loop is just
         /// <c>while (session.RunNextGame()) { }</c>.
+        ///
+        /// Plays with this session's own long-lived simulator, so games run one at a time on the
+        /// caller's thread — the interactive tournament window's per-tick pacing depends on that.
+        /// For a batch/CI run where nothing needs to observe individual game completion in real
+        /// time, ParallelTournamentExecutor.RunRemainingGames plays the same games (same seeds,
+        /// same pairing order) across several worker threads and is dramatically faster wall-clock.
         /// </summary>
         public bool RunNextGame()
         {
             if (IsComplete) return false;
 
             PendingGame game = _games[_nextGame];
+            TournamentGameRecord record = PlayOneGame(_simulator, game);
+            ApplyCompletedGame(record);
+            return true;
+        }
 
+        /// <summary>Plays exactly one pending game (no session-state mutation) — the unit of work a
+        /// parallel executor fans out across worker threads. Public so ParallelTournamentExecutor
+        /// can call it without this session needing to know anything about how it's scheduled.</summary>
+        internal TournamentGameRecord PlayOneGame(MatchSimulator simulator, int gameIndex)
+        {
+            return PlayOneGame(simulator, _games[gameIndex]);
+        }
+
+        internal int PendingGameCount => _games.Count - _nextGame;
+
+        /// <summary>The time control every game in this session plays under — a parallel executor
+        /// needs this to build its own per-worker MatchSimulators the same way, since PlayOneGame
+        /// accepts any caller-supplied simulator rather than always using this session's own.</summary>
+        internal MatchTimeControl TimeControl => _timeControl;
+
+        private TournamentGameRecord PlayOneGame(MatchSimulator simulator, PendingGame game)
+        {
             int seedWhite = TournamentSeeding.DeriveSeed(_runSeed, game.PositionIndex, game.PairIndex, gameIndex: 0, side: 0);
             int seedBlack = TournamentSeeding.DeriveSeed(_runSeed, game.PositionIndex, game.PairIndex, gameIndex: 0, side: 1);
 
             BoardState position = CuratedPositionSuite.Build(game.PositionIndex);
-            MatchStatsResult result = _simulator.PlayGameWithStats(position, game.White, game.Black, seedWhite, seedBlack, _plyCap);
+            MatchStatsResult result = simulator.PlayGameWithStats(position, game.White, game.Black, seedWhite, seedBlack, _plyCap);
 
-            PairTally tally = _tallies[game.PairIndex];
+            return new TournamentGameRecord(game.PairIndex, game.PositionIndex, game.White.Id, game.Black.Id, result, game.SubjectIsWhite);
+        }
+
+        /// <summary>
+        /// Folds one already-played game's result into the running tallies/tier accumulators and
+        /// raises OnGameCompleted (plus OnSessionCompleted if this was the last one). Called by
+        /// RunNextGame right after playing a game itself, and by ParallelTournamentExecutor once
+        /// per completed game, IN THE SESSION'S ORIGINAL GAME ORDER regardless of which worker
+        /// thread actually played it or what order they finished in — this is what keeps a
+        /// parallel run's report byte-identical to a sequential run's: the games are played
+        /// out-of-order across threads, but always folded into state in-order on one thread.
+        /// </summary>
+        internal void ApplyCompletedGame(TournamentGameRecord record)
+        {
+            PairTally tally = _tallies[record.PairIndex];
             tally.Games++;
-            switch (result.Result.Outcome)
+
+            switch (record.Result.Result.Outcome)
             {
                 case MatchOutcome.WhiteWon:
-                    if (game.SubjectIsWhite) tally.SubjectWins++; else tally.OpponentWins++;
+                    if (record.SubjectIsWhite) tally.SubjectWins++; else tally.OpponentWins++;
                     break;
                 case MatchOutcome.BlackWon:
-                    if (game.SubjectIsWhite) tally.OpponentWins++; else tally.SubjectWins++;
+                    if (record.SubjectIsWhite) tally.OpponentWins++; else tally.SubjectWins++;
                     break;
                 default:
                     tally.Draws++;
                     break;
             }
 
-            AccumulateTier(game.White.Id, result.WhiteStats);
-            AccumulateTier(game.Black.Id, result.BlackStats);
+            AccumulateTier(record.WhiteId, record.Result.WhiteStats);
+            AccumulateTier(record.BlackId, record.Result.BlackStats);
 
             _nextGame++;
-            OnGameCompleted?.Invoke(new TournamentGameRecord(
-                game.PairIndex, game.PositionIndex, game.White.Id, game.Black.Id, result));
+            OnGameCompleted?.Invoke(record);
             if (IsComplete) OnSessionCompleted?.Invoke();
-
-            return true;
         }
 
         /// <summary>

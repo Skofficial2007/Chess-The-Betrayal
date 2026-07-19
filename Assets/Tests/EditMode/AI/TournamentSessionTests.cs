@@ -3,6 +3,7 @@ using System.Linq;
 using NUnit.Framework;
 using ChessTheBetrayal.AI;
 using ChessTheBetrayal.EditorTools.Benchmark;
+using ChessTheBetrayal.Tests.Utilities;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI
 {
@@ -105,11 +106,16 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         [Test]
         public void CreateQuick_DrainedSession_MatchesBenchmarkRunnerRunAll()
         {
-            var session = TournamentSession.CreateQuick(runSeed: 7, FastFixtureRoster, TestPlyCap);
+            // Uncapped: this test asserts identity between a hand-drained session and RunAll's
+            // (now parallel-by-default) drain — under a real time budget a search's own move
+            // choice can legitimately vary run to run with CPU contention, which would make this
+            // comparison flaky for a reason that has nothing to do with the two paths actually
+            // agreeing. See TournamentSession.CreateQuick's own doc comment.
+            var session = TournamentSession.CreateQuick(runSeed: 7, FastFixtureRoster, TestPlyCap, MatchTimeControl.Uncapped);
             while (session.RunNextGame()) { }
             BenchmarkReport fromSession = session.BuildReport();
 
-            BenchmarkReport fromRunAll = BenchmarkRunner.RunAll(runSeed: 7, BenchmarkMode.Quick, FastFixtureRoster, TestPlyCap);
+            BenchmarkReport fromRunAll = BenchmarkRunner.RunAll(runSeed: 7, BenchmarkMode.Quick, FastFixtureRoster, TestPlyCap, timeControl: MatchTimeControl.Uncapped);
 
             Assert.That(fromSession.PairResults.Count, Is.EqualTo(fromRunAll.PairResults.Count));
             for (int i = 0; i < fromSession.PairResults.Count; i++)

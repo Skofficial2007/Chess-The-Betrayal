@@ -82,10 +82,11 @@ namespace ChessTheBetrayal.AI
                 ? PieceValue(ChessPieceType.Pawn)
                 : PieceValue(move.CapturedType);
 
-            _removedSquares.Clear();
-            _removedSquares.Add(move.StartPosition); // the mover has already left its origin square
+            List<Vector2Int> removedSquares = RemovedSquares;
+            removedSquares.Clear();
+            removedSquares.Add(move.StartPosition); // the mover has already left its origin square
             if (move.IsEnPassant && move.EnPassantCapturePosition.HasValue)
-                _removedSquares.Add(move.EnPassantCapturePosition.Value); // the captured pawn is gone too
+                removedSquares.Add(move.EnPassantCapturePosition.Value); // the captured pawn is gone too
 
             // Standard swap-off list: gains[0] is the material the very first capture wins. Each
             // later ply is "the value of the piece now sitting on the square, minus whatever the
@@ -102,7 +103,7 @@ namespace ChessTheBetrayal.AI
             {
                 if (ply + 1 >= gains.Length) break; // pathological attacker pile-up backstop
 
-                if (!TryFindCheapestAttacker(board, target, toRecapture, out Vector2Int attackerSquare,
+                if (!TryFindCheapestAttacker(board, target, toRecapture, removedSquares, out Vector2Int attackerSquare,
                                               out ChessPieceType attackerType))
                     break;
 
@@ -110,7 +111,7 @@ namespace ChessTheBetrayal.AI
                 gains[ply] = onMoveValue - gains[ply - 1];
                 onMoveValue = PieceValue(attackerType);
 
-                _removedSquares.Add(attackerSquare);
+                removedSquares.Add(attackerSquare);
                 toRecapture = toRecapture == Team.White ? Team.Black : Team.White;
             }
 
@@ -130,20 +131,32 @@ namespace ChessTheBetrayal.AI
         // Reused across calls — SEE runs inside move ordering and the qsearch prune, both hot
         // per-node paths, so this mirrors AlphaBetaSearch's own ctor-once-buffer discipline rather
         // than allocating fresh collections per call. Sized well above any realistic single-square
-        // attacker count.
-        private static readonly int[] GainBuffer = new int[34]; // 32 pieces + 1 headroom either side
-        private static readonly List<Vector2Int> _removedSquares = new List<Vector2Int>(32);
+        // attacker count. [ThreadStatic] (same pattern ChessEngine's own scratch buffers use) is
+        // load-bearing, not defensive: a tournament/benchmark run plays many games concurrently on
+        // separate worker threads (see ParallelTournamentExecutor), each running its own
+        // AlphaBetaSearch that calls into SEE constantly — a plain shared static here lets one
+        // thread's in-progress exchange corrupt another's mid-computation, silently returning a
+        // wrong score that then perturbs move ordering and produces a genuinely different search
+        // result. This was invisible until real cross-thread search concurrency existed.
+        [System.ThreadStatic]
+        private static int[] _gainBuffer;
+        private static int[] GainBuffer => _gainBuffer ??= new int[34]; // 32 pieces + 1 headroom either side
+
+        [System.ThreadStatic]
+        private static List<Vector2Int> _removedSquares;
+        private static List<Vector2Int> RemovedSquares => _removedSquares ??= new List<Vector2Int>(32);
 
         /// <summary>
         /// Finds <paramref name="team"/>'s cheapest piece that currently attacks
         /// <paramref name="targetSquare"/>, live against the real board MINUS every square already
-        /// in <see cref="_removedSquares"/> (the pieces already spent earlier in this same
+        /// in <paramref name="removedSquares"/> (the pieces already spent earlier in this same
         /// exchange). Re-deriving this fresh at every ply — rather than snapshotting the attacker
         /// list once before the loop starts — is what lets a sliding piece parked behind today's
         /// capturer be discovered the instant the piece in front of it is "removed," exactly like
         /// it would be able to recapture for real once the blocker is gone.
         /// </summary>
         private static bool TryFindCheapestAttacker(BoardState board, Vector2Int targetSquare, Team team,
+                                                      List<Vector2Int> removedSquares,
                                                       out Vector2Int attackerSquare, out ChessPieceType attackerType)
         {
             attackerSquare = default;
@@ -158,13 +171,13 @@ namespace ChessTheBetrayal.AI
                 int y = idx / board.TileCountX;
                 Vector2Int position = new Vector2Int(x, y);
 
-                if (_removedSquares.Contains(position)) continue;
+                if (removedSquares.Contains(position)) continue;
 
                 PieceData piece = board.GetPiece(x, y);
                 int value = PieceValue(piece.Type);
                 if (value >= bestValue) continue; // already have a cheaper (or equal) attacker
 
-                if (!Attacks(board, piece, position, targetSquare)) continue;
+                if (!Attacks(board, piece, position, targetSquare, removedSquares)) continue;
 
                 bestValue = value;
                 attackerSquare = position;
@@ -177,13 +190,14 @@ namespace ChessTheBetrayal.AI
         /// <summary>
         /// True if the piece at <paramref name="position"/> attacks <paramref name="targetSquare"/>
         /// against the board's real occupancy, treating every square in
-        /// <see cref="_removedSquares"/> as empty regardless of what's actually there. Implemented
-        /// directly here (rather than via IPieceMovement.GetAttackedSquares) because that interface
-        /// always reads live board occupancy with no way to override it for the pieces this
-        /// in-progress exchange has already "used up" — exactly the capability an X-ray-correct SEE
-        /// needs and ordinary check/attack detection never does.
+        /// <paramref name="removedSquares"/> as empty regardless of what's actually there.
+        /// Implemented directly here (rather than via IPieceMovement.GetAttackedSquares) because
+        /// that interface always reads live board occupancy with no way to override it for the
+        /// pieces this in-progress exchange has already "used up" — exactly the capability an
+        /// X-ray-correct SEE needs and ordinary check/attack detection never does.
         /// </summary>
-        private static bool Attacks(BoardState board, PieceData piece, Vector2Int position, Vector2Int targetSquare)
+        private static bool Attacks(BoardState board, PieceData piece, Vector2Int position, Vector2Int targetSquare,
+                                     List<Vector2Int> removedSquares)
         {
             switch (piece.Type)
             {
@@ -212,13 +226,13 @@ namespace ChessTheBetrayal.AI
                 }
 
                 case ChessPieceType.Rook:
-                    return SlidesTo(board, position, targetSquare, startDirection: 0, directionCount: 4);
+                    return SlidesTo(board, position, targetSquare, startDirection: 0, directionCount: 4, removedSquares);
 
                 case ChessPieceType.Bishop:
-                    return SlidesTo(board, position, targetSquare, startDirection: 4, directionCount: 4);
+                    return SlidesTo(board, position, targetSquare, startDirection: 4, directionCount: 4, removedSquares);
 
                 case ChessPieceType.Queen:
-                    return SlidesTo(board, position, targetSquare, startDirection: 0, directionCount: 8);
+                    return SlidesTo(board, position, targetSquare, startDirection: 0, directionCount: 8, removedSquares);
 
                 default:
                     return false;
@@ -226,14 +240,14 @@ namespace ChessTheBetrayal.AI
         }
 
         /// <summary>
-        /// Walks each ray from <paramref name="from"/>, honoring <see cref="_removedSquares"/> as
-        /// empty, and returns true if <paramref name="targetSquare"/> is reached before a real
+        /// Walks each ray from <paramref name="from"/>, honoring <paramref name="removedSquares"/>
+        /// as empty, and returns true if <paramref name="targetSquare"/> is reached before a real
         /// (non-removed) piece blocks the ray. Directions 0-3 are the rook's straight rays,
         /// 4-7 the bishop's diagonals — SlidingDirectionsX/Y lists both in that order so a Queen can
         /// just walk all 8, and a Rook/Bishop each walk their own 4-direction slice.
         /// </summary>
         private static bool SlidesTo(BoardState board, Vector2Int from, Vector2Int targetSquare,
-                                      int startDirection, int directionCount)
+                                      int startDirection, int directionCount, List<Vector2Int> removedSquares)
         {
             for (int d = startDirection; d < startDirection + directionCount; d++)
             {
@@ -247,7 +261,7 @@ namespace ChessTheBetrayal.AI
 
                     if (square == targetSquare) return true;
 
-                    bool occupied = !board.GetPiece(square).IsEmpty && !_removedSquares.Contains(square);
+                    bool occupied = !board.GetPiece(square).IsEmpty && !removedSquares.Contains(square);
                     if (occupied) break;
                 }
             }
