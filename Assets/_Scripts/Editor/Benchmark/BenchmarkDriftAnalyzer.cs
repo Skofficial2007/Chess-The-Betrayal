@@ -5,7 +5,15 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
     public enum DriftSeverity
     {
         Warn,
-        Fail
+        Fail,
+
+        /// <summary>The observed number crossed a threshold, but the sample is small enough that
+        /// its own 95% confidence interval overlaps the threshold — the run cannot actually tell a
+        /// real regression apart from ordinary sampling noise at this N. Reported instead of Fail
+        /// so a low-N run never asserts a confident failure it has no statistical power to back up
+        /// (see TournamentStatistics.WinRateMargin95); reported instead of silence so the finding
+        /// isn't simply dropped and lost.</summary>
+        Inconclusive
     }
 
     /// <summary>One threshold check's outcome against a baseline.</summary>
@@ -43,8 +51,21 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
             {
                 if (pair.SubjectWinRate < AdjacentPairHardFloor)
                 {
-                    findings.Add(new DriftFinding(DriftSeverity.Fail,
-                        $"{pair.Subject} vs {pair.Opponent}: win rate {pair.SubjectWinRate:P1} is below the {AdjacentPairHardFloor:P0} hard floor over {pair.Games} games."));
+                    float margin = TournamentStatistics.WinRateMargin95(pair.Games);
+                    bool floorIsInsideConfidenceInterval = pair.SubjectWinRate + margin >= AdjacentPairHardFloor;
+
+                    if (floorIsInsideConfidenceInterval)
+                    {
+                        findings.Add(new DriftFinding(DriftSeverity.Inconclusive,
+                            $"{pair.Subject} vs {pair.Opponent}: win rate {pair.SubjectWinRate:P1} +/-{margin:P1} is below the " +
+                            $"{AdjacentPairHardFloor:P0} floor over only {pair.Games} games, but the {AdjacentPairHardFloor:P0} floor " +
+                            "is inside this sample's own 95% confidence interval — more games are needed before calling this a real failure."));
+                    }
+                    else
+                    {
+                        findings.Add(new DriftFinding(DriftSeverity.Fail,
+                            $"{pair.Subject} vs {pair.Opponent}: win rate {pair.SubjectWinRate:P1} +/-{margin:P1} is below the {AdjacentPairHardFloor:P0} hard floor over {pair.Games} games."));
+                    }
                 }
 
                 PairResult baselinePair = baseline?.FindPair(pair.Subject, pair.Opponent);

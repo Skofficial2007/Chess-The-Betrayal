@@ -147,9 +147,13 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
-        public void Analyze_WinRateBelowHardFloor_ProducesFailFinding()
+        public void Analyze_WinRateBelowHardFloor_LargeEnoughSampleToBeConfident_ProducesFailFinding()
         {
-            BenchmarkReport current = ReportWithPair("hard", "normal", winRate: 0.40f);
+            // 400 games at 40% keeps the 95% confidence interval (~+/-4.9 points) well clear of the
+            // 55% floor — a genuinely confident failure, not a small sample that merely looks bad.
+            // See WinRateConfidenceTests for the dedicated coverage of the Inconclusive case this
+            // same shortfall produces at a small N (e.g. the suite's default 40-game helper).
+            BenchmarkReport current = ReportWithPair("hard", "normal", winRate: 0.40f, games: 400);
 
             var findings = BenchmarkDriftAnalyzer.Analyze(current, baseline: null);
 
