@@ -1,11 +1,41 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using ChessTheBetrayal.AI;
 using ChessTheBetrayal.Tests.Utilities;
 
 namespace ChessTheBetrayal.EditorTools.Benchmark
 {
+    /// <summary>Thrown when a run's TournamentWatchdog trips — no game finished for longer than the
+    /// derived stall window, meaning the run is almost certainly deadlocked rather than merely
+    /// slow. Carries the run directory so a caller can point the user straight at whatever games
+    /// did finish before the stall, per TournamentRunWriter/TournamentRunReader.</summary>
+    public sealed class TournamentStalledException : Exception
+    {
+        public string RunDirectory { get; }
+        public int GamesCompleted { get; }
+        public int TotalGames { get; }
+
+        public TournamentStalledException(string reason, string runDirectory, int gamesCompleted, int totalGames)
+            : base(BuildMessage(reason, runDirectory, gamesCompleted, totalGames))
+        {
+            RunDirectory = runDirectory;
+            GamesCompleted = gamesCompleted;
+            TotalGames = totalGames;
+        }
+
+        private static string BuildMessage(string reason, string runDirectory, int gamesCompleted, int totalGames)
+        {
+            string location = runDirectory == null
+                ? "no run directory was configured, so nothing was persisted"
+                : $"the {gamesCompleted} games that did finish are saved at: {runDirectory}";
+
+            return $"Tournament run stalled and was stopped: {reason} " +
+                $"({gamesCompleted}/{totalGames} games completed before the stall) — {location}";
+        }
+    }
+
     /// <summary>
     /// Batch entry point over TournamentSession: drains a whole tournament in one blocking call and
     /// returns the report — the shape a menu command or a CI -executeMethod invocation wants. Games
@@ -40,11 +70,17 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
         /// see TournamentRunWriter's own doc comment for why a run killed mid-way still leaves real
         /// data on disk when this is set. Left null by every existing test so persistence never
         /// touches disk unless a caller explicitly opts in.
+        ///
+        /// useWatchdog arms a TournamentWatchdog (parallel mode only) that stops the run if no game
+        /// finishes for a stall window derived from plyCap and the roster's slowest hard budget —
+        /// see TournamentWatchdog for why that targets deadlock, not slowness. A trip throws
+        /// TournamentStalledException instead of returning a report that looks complete; the
+        /// caller's runWriter (if any) still has every game that finished before the trip.
         /// </summary>
         public static BenchmarkReport RunAll(int runSeed, BenchmarkMode mode,
             IReadOnlyList<AIProfile> roster, int plyCap = MatchSimulator.DefaultPlyCap, bool parallel = true,
             MatchTimeControl timeControl = MatchTimeControl.ProductionBudget, ITournamentProgress progress = null,
-            string persistRunsUnderDirectory = null)
+            string persistRunsUnderDirectory = null, bool useWatchdog = false)
         {
             TournamentSession session = mode == BenchmarkMode.Quick
                 ? TournamentSession.CreateQuick(runSeed, roster, plyCap, timeControl)
@@ -53,12 +89,15 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
             TournamentRunWriter runWriter = persistRunsUnderDirectory == null
                 ? null
                 : CreateRunWriter(persistRunsUnderDirectory, mode, runSeed, session.TotalGames, timeControl, parallel);
+            TournamentWatchdog watchdog = useWatchdog && parallel
+                ? CreateWatchdog(roster, plyCap)
+                : null;
 
             try
             {
                 if (parallel)
                 {
-                    ParallelTournamentExecutor.RunRemainingGames(session, progress: progress, runWriter: runWriter);
+                    ParallelTournamentExecutor.RunRemainingGames(session, progress: progress, runWriter: runWriter, watchdog: watchdog);
                 }
                 else
                 {
@@ -68,6 +107,13 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
                     {
                         progress.ReportGameCompleted(session.GamesCompleted, total);
                     }
+                }
+
+                if (watchdog != null && watchdog.HasTripped)
+                {
+                    string runDirectory = runWriter?.RunDirectory;
+                    throw new TournamentStalledException(watchdog.TripReason, runDirectory,
+                        session.GamesCompleted, session.TotalGames);
                 }
 
                 BenchmarkReport report = session.BuildReport();
@@ -82,7 +128,19 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
             finally
             {
                 runWriter?.Dispose();
+                watchdog?.Dispose();
             }
+        }
+
+        private static TournamentWatchdog CreateWatchdog(IReadOnlyList<AIProfile> roster, int plyCap)
+        {
+            int slowestHardBudgetMs = 0;
+            foreach (AIProfile profile in roster)
+                if (profile.TimeBudget.HardMs > slowestHardBudgetMs) slowestHardBudgetMs = profile.TimeBudget.HardMs;
+
+            TimeSpan stallWindow = TournamentWatchdog.DeriveStallWindow(plyCap, slowestHardBudgetMs);
+            TimeSpan pollInterval = TimeSpan.FromMilliseconds(Math.Max(1000, stallWindow.TotalMilliseconds / 20));
+            return new TournamentWatchdog(stallWindow, pollInterval, CancellationToken.None);
         }
 
         private static TournamentRunWriter CreateRunWriter(string baseDirectory, BenchmarkMode mode,

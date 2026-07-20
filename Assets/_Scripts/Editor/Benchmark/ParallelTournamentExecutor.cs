@@ -54,18 +54,24 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
         /// original game order, on the caller's thread) so a run killed mid-way still has each
         /// finished game durably on disk — see TournamentRunWriter's own doc comment for why
         /// writing there rather than from a worker thread is what keeps this from ever blocking
-        /// the search itself.
+        /// the search itself. watchdog, when supplied, is fed every progress report and its Token
+        /// is the one actually passed to the parallel loop — construct it with cancellationToken
+        /// as its own externalToken so a caller-initiated cancel and a stall both flow through the
+        /// same path (see TournamentWatchdog's own doc comment). When a watchdog is supplied, the
+        /// cancellationToken parameter here is ignored in favor of watchdog.Token.
         /// </summary>
         public static void RunRemainingGames(
             TournamentSession session,
             int maxDegreeOfParallelism = -1,
             CancellationToken cancellationToken = default,
             ITournamentProgress progress = null,
-            TournamentRunWriter runWriter = null)
+            TournamentRunWriter runWriter = null,
+            TournamentWatchdog watchdog = null)
         {
             if (session == null) throw new ArgumentNullException(nameof(session));
             if (maxDegreeOfParallelism <= 0) maxDegreeOfParallelism = DefaultMaxDegreeOfParallelism;
             progress ??= NullTournamentProgress.Instance;
+            CancellationToken effectiveToken = watchdog?.Token ?? cancellationToken;
 
             int totalPending = session.PendingGameCount;
             if (totalPending == 0) return;
@@ -86,7 +92,7 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
                 var options = new ParallelOptions
                 {
                     MaxDegreeOfParallelism = maxDegreeOfParallelism,
-                    CancellationToken = cancellationToken
+                    CancellationToken = effectiveToken
                 };
 
                 try
@@ -98,6 +104,7 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
 
                         int completed = Interlocked.Increment(ref completedSoFar);
                         progress.ReportGameCompleted(completed, totalPending);
+                        watchdog?.ReportProgress(completed);
                     });
                 }
                 catch (OperationCanceledException)

@@ -85,6 +85,39 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
+        public void RunAll_WithWatchdog_NormalRun_CompletesWithoutTripping()
+        {
+            // The watchdog must not be a false-positive machine — a fast fixture run finishing
+            // well inside its (generously derived) stall window must return a normal report, not
+            // throw TournamentStalledException.
+            BenchmarkReport report = BenchmarkRunner.RunAll(runSeed: 21, BenchmarkMode.Quick,
+                FastFixtureRoster, TestPlyCap, useWatchdog: true);
+
+            Assert.That(report.PairResults.Count, Is.EqualTo(6));
+        }
+
+        [Test]
+        public void TournamentStalledException_Message_NamesGamesCompletedAndRunDirectory()
+        {
+            var ex = new TournamentStalledException("no game finished for 720s (stall window 720s).",
+                "C:/some/run/dir", gamesCompleted: 12, totalGames: 48);
+
+            Assert.That(ex.Message, Does.Contain("12/48"));
+            Assert.That(ex.Message, Does.Contain("C:/some/run/dir"));
+            Assert.That(ex.RunDirectory, Is.EqualTo("C:/some/run/dir"));
+            Assert.That(ex.GamesCompleted, Is.EqualTo(12));
+            Assert.That(ex.TotalGames, Is.EqualTo(48));
+        }
+
+        [Test]
+        public void TournamentStalledException_NoRunDirectory_MessageSaysNothingWasPersisted()
+        {
+            var ex = new TournamentStalledException("stalled", runDirectory: null, gamesCompleted: 0, totalGames: 10);
+
+            Assert.That(ex.Message, Does.Contain("nothing was persisted"));
+        }
+
+        [Test]
         public void RunAll_TierPerformances_CoverEveryTierThatAppearedInAPairing()
         {
             BenchmarkReport report = BenchmarkRunner.RunAll(runSeed: 5, BenchmarkMode.Quick, FastFixtureRoster, TestPlyCap);

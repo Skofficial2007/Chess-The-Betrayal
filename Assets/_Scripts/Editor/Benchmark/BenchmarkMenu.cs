@@ -61,9 +61,25 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
 
         private static void RunBatch(BenchmarkMode mode)
         {
-            BenchmarkReport report = BenchmarkRunner.RunAll(DefaultRunSeed, mode,
-                AIProfileTable.BuiltIn, progress: new DebugLogProgressSink($"{mode} Batch"),
-                persistRunsUnderDirectory: RunsDirectory);
+            BenchmarkReport report;
+            try
+            {
+                report = BenchmarkRunner.RunAll(DefaultRunSeed, mode,
+                    AIProfileTable.BuiltIn, progress: new DebugLogProgressSink($"{mode} Batch"),
+                    persistRunsUnderDirectory: RunsDirectory, useWatchdog: true);
+            }
+            catch (TournamentStalledException stalled)
+            {
+                // A stall means the run is almost certainly deadlocked, not just slow — exit
+                // nonzero so CI treats this as a failure rather than hanging until an external
+                // timeout kills the whole job with no explanation. Every game that DID finish is
+                // already durable on disk (stalled.RunDirectory), which is the entire point of
+                // wiring persistence in before this watchdog.
+                Debug.LogError(stalled.Message);
+                EditorApplication.Exit(2);
+                return;
+            }
+
             BenchmarkReport baseline = BenchmarkBaselineIO.TryRead(BenchmarkBaselineIO.DefaultPath);
 
             Debug.Log(BenchmarkReportFormatter.ToPlainText(report, baseline));
