@@ -104,6 +104,16 @@ namespace ChessTheBetrayal.AI
         private const int InternalIterativeReductionMinDepth = 4;
         private const int InternalIterativeReductionAmount = 1;
 
+        // Once the same root move has survived this many completed depths in a row, the search is
+        // treated as settled on it: a move that has been best for several successive, deeper
+        // searches is overwhelmingly unlikely to be overturned by one more ply, so continuing to
+        // spend budget on it is wasted time the player just experiences as the AI "thinking" about
+        // a decision it already made. This is the move-stability half of the settle-early signal —
+        // deliberately move-only, because a score that keeps drifting under a move that never
+        // changes just means the engine is refining its valuation of a decision it has already
+        // committed to, which is not a reason to keep searching.
+        private const int StableDepthsToSettle = 3;
+
         // Instability time management: once the soft half of the time budget has elapsed, whether
         // iterative deepening starts another depth depends on how settled the root looks. A root is
         // "stable" once the last two completed depths agree on both the best move AND a close-enough
@@ -374,6 +384,10 @@ namespace ChessTheBetrayal.AI
             int previousCompletedScore = 0;
             MoveCommand previousCompletedBestMove = default;
 
+            // How many completed depths in a row have agreed on the same best move (see
+            // StableDepthsToSettle). Reset to 0 whenever the best move changes between depths.
+            int consecutiveStableDepths = 0;
+
             // Only meaningful when enableAspirationWindows is on — deliberately a SEPARATE pair of
             // locals from the instability-tracking ones above, even though both record "the last
             // completed depth's score": the two flags are independent and composable, so neither
@@ -515,6 +529,14 @@ namespace ChessTheBetrayal.AI
                     {
                         long elapsedMs = stopwatch.ElapsedMilliseconds;
 
+                        // Count how many depths in a row have kept the same best move. Compared
+                        // against the previous completed depth's move BEFORE the bookkeeping below
+                        // refreshes it. A change (or the very first depth) resets the streak to 0.
+                        if (hasPriorCompletedDepth && PackMove(bestMove) == PackMove(previousCompletedBestMove))
+                            consecutiveStableDepths++;
+                        else
+                            consecutiveStableDepths = 0;
+
                         // Below the depth floor, the stability signal itself isn't trustworthy yet
                         // (same reasoning AIProfileGuardrails already applies to a shallow search
                         // being asked to vet a reshaped evaluator) — always search on regardless of
@@ -523,8 +545,19 @@ namespace ChessTheBetrayal.AI
 
                         if (depthDeepEnoughToTrustStability)
                         {
-                            bool stable = hasPriorCompletedDepth
+                            // Two independent reasons to consider the root settled, either one enough:
+                            //  - The last two depths agreed on move AND score (the original, strict
+                            //    signal — a genuinely quiet position the search has fully converged on).
+                            //  - The same move has simply survived several deeper searches in a row,
+                            //    even if its score is still drifting. A move that no amount of extra
+                            //    depth dislodges is one the engine has effectively decided on; the
+                            //    remaining budget would only refine a number, not change the move the
+                            //    player actually faces. This is what keeps the deep tiers from burning
+                            //    their whole budget every move on positions where the choice is clear.
+                            bool converged = hasPriorCompletedDepth
                                 && IsRootStable(bestScore, previousCompletedScore, bestMove, previousCompletedBestMove);
+                            bool moveWellSettled = consecutiveStableDepths >= StableDepthsToSettle;
+                            bool stable = converged || moveWellSettled;
 
                             // Settled and past the soft target: further search is unlikely to change
                             // the answer, so stop now rather than spend the rest of the budget.
