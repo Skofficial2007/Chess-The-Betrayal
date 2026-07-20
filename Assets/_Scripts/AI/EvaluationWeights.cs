@@ -3,9 +3,9 @@ namespace ChessTheBetrayal.AI
     /// <summary>
     /// Scales BetrayalAwareEvaluator's non-material terms so AIProfile.AttackDefenseBias/
     /// BetrayalAggression actually change how a tier plays, not just how deep it searches.
-    /// Identity (1,1,1) is bit-identical to the evaluator's pre-AI-25 behavior — every profile
-    /// with AttackDefenseBias=1/BetrayalAggression=0 (every tier except Aggressive/Extreme) must
-    /// still score positions exactly as before.
+    /// Identity (1,1,1) leaves the evaluator's scoring completely unchanged — every profile with
+    /// AttackDefenseBias=1/BetrayalAggression=0 (every tier except Aggressive/Extreme) must score
+    /// positions exactly as it would with no weighting at all.
     /// </summary>
     public readonly struct EvaluationWeights
     {

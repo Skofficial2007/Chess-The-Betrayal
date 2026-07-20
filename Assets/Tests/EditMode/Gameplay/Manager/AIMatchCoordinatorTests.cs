@@ -12,7 +12,7 @@ using ChessTheBetrayal.Tests.Utilities;
 namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
 {
     /// <summary>
-    /// AIMatchCoordinator is the AI-13 extraction of GameManager's AI-coordinator slice: turn
+    /// AIMatchCoordinator owns GameManager's AI-coordinator slice: turn
     /// triggering, search lifecycle, and Undo's cancel-before-pop ordering. Constructed with only
     /// IChessEngine/BoardState/a playMove delegate — no MatchDriver or GameManager reference — so
     /// these tests exercise it exactly the way GameManager composes it, minus the MonoBehaviour.

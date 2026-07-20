@@ -118,7 +118,7 @@ namespace ChessTheBetrayal.App
         #region Private Fields
 
         // Owns match setup/teardown, mode/AI-flag state, and the move executor — the deepest of
-        // the three AI-13 collaborators, since it orchestrates the other two below plus
+        // the three collaborators below, since it orchestrates the other two plus
         // MatchDriver/UndoService/GameSetup. Constructed in Awake().
         private MatchFlowCoordinator _matchFlow;
 
@@ -366,7 +366,8 @@ namespace ChessTheBetrayal.App
             _moveVisualPacingGate.Tick(Time.deltaTime);
         }
 
-        // TEMP DEBUG (AI-08 manual verification): surface any worker-thread exception.
+        // A search exception on the worker thread would otherwise vanish silently, since nothing
+        // on the main thread is waiting on that task's result.
         private void HandleAISearchException(string exception) =>
             Debug.LogError($"[GameManager][DEBUG] AI search threw:\n{exception}");
 

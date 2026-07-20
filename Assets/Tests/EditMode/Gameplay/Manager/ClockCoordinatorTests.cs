@@ -8,7 +8,7 @@ using ChessTheBetrayal.Gameplay.Manager;
 namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
 {
     /// <summary>
-    /// ClockCoordinator is the AI-13 extraction of GameManager's clock-lifecycle slice. It
+    /// ClockCoordinator owns GameManager's clock-lifecycle slice. It
     /// implements IClockEventHandler/IClockSnapshotSource directly rather than being forwarded
     /// through GameManager — these tests exercise it exactly as GameManager composes it (ctor
     /// takes GameSetup + two narrow routing delegates), including the real GameClockController

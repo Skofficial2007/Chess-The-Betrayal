@@ -12,7 +12,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
     /// MoveSelectionPolicy applies AIProfile's personality dials (blunder roll, tie-break window,
     /// Betrayal-aggression reweight) to a search's ranked root-move output. These tests construct
     /// that ranked output directly (no real search) so each dial can be exercised in isolation
-    /// against crafted scores. See ADR_AI23_Profile_EventStream_OpeningBook.md Section 2.2/2.3.
+    /// against crafted scores.
     /// </summary>
     [TestFixture]
     public class MoveSelectionPolicyTests

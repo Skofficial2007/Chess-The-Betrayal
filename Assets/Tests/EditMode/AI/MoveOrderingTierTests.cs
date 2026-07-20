@@ -7,7 +7,7 @@ using ChessTheBetrayal.Tests.Utilities;
 namespace ChessTheBetrayal.Tests.EditMode.AI
 {
     /// <summary>
-    /// Pins the concrete OrderScore tier bands (ADR Sec 2.2): TT/PV move first, then winning
+    /// Pins the concrete OrderScore tier bands: TT/PV move first, then winning
     /// captures, then promotions/equal captures, then Act, then quiets/losing captures last. This
     /// is an ORDERING-ONLY change — SearchCorrectnessTests (chosen moves) must stay green alongside
     /// these, proving demoting Act never changes which move the search ultimately picks.

@@ -209,7 +209,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         [Test]
         public void CancelledSearch_StaleResultSlot_NeverDeliveredToASubsequentTick()
         {
-            // Regression case for the low-risk edge found while auditing AI-11: cancel an in-flight
+            // Regression case for a subtle edge in the cancellation path: cancel an in-flight
             // search (as GameManager.RequestUndo does before popping the board), then pump Tick()
             // repeatedly with no new request in between. The cancelled search must never surface,
             // even if the worker was mid-flight when cancellation was observed.

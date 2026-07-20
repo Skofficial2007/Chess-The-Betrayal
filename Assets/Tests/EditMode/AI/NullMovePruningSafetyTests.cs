@@ -8,7 +8,7 @@ using ChessTheBetrayal.Tests.Utilities;
 namespace ChessTheBetrayal.Tests.EditMode.AI
 {
     /// <summary>
-    /// Proves the NMP guard set (ADR Sec 1.2/2.3) actually blocks a null move in every case it must:
+    /// Proves the NMP guard set actually blocks a null move in every case it must:
     /// a pending Betrayer at ANY sub-phase (Act-pending, Retribution-pending, ForcedSave-pending),
     /// being in check, and two consecutive null moves. These are correctness gates, not perf
     /// gates — the whole point is that FindBestMove/RunQuiescenceForTest never desyncs the turn or

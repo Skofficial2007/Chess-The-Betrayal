@@ -8,7 +8,7 @@ using ChessTheBetrayal.Tests.Utilities;
 namespace ChessTheBetrayal.Tests.EditMode.AI
 {
     /// <summary>
-    /// PVS's null-window scout + full-window re-search ladder (ADR Sec 1.4/2.4) must never change
+    /// PVS's null-window scout + full-window re-search ladder must never change
     /// which move a search reports as best — only how it gets there. These fixtures are the same
     /// mate-in-one/Betrayal shapes SearchCorrectnessTests and LateMoveReductionTests already pin,
     /// run at depths deep enough (multiple full-window siblings past the PV move) to guarantee the

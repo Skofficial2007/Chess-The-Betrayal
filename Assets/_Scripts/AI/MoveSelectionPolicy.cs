@@ -9,11 +9,10 @@ namespace ChessTheBetrayal.AI
     /// read immediately after FindBestMove returns) and applies AIProfile's personality dials —
     /// blunder roll, tie-break window, Betrayal-aggression reweight — to choose the FINAL move.
     /// Never invents a move or reorders search-ranked candidates outside these dials; always
-    /// returns a legal, search-ranked root move. See ADR_AI23_Profile_EventStream_OpeningBook.md
-    /// Section 2.2/2.3.
+    /// returns a legal, search-ranked root move.
     ///
-    /// Owns its own small pooled scratch buffers (index/weight arrays) so it stays zero-GC across
-    /// repeated calls, matching AlphaBetaSearch's own established pattern. NOT thread-safe by
+    /// Owns its own small pooled scratch buffers (index/weight arrays) so repeated calls allocate
+    /// nothing, matching AlphaBetaSearch's own established pattern. NOT thread-safe by
     /// design — one instance per AsyncAIAgent, called only from that agent's worker thread.
     /// </summary>
     public sealed class MoveSelectionPolicy

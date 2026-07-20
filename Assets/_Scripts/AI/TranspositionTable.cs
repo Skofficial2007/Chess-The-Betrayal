@@ -64,7 +64,7 @@ namespace ChessTheBetrayal.AI
         private uint _generation;
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-        /// <summary>Telemetry only (AI-21) — every counter lives behind this symbol so a release
+        /// <summary>Telemetry only — every counter lives behind this symbol so a release
         /// build pays nothing for tracking it. Reset by the owning AlphaBetaSearch per FindBestMove.</summary>
         public SearchStats Stats;
 #endif

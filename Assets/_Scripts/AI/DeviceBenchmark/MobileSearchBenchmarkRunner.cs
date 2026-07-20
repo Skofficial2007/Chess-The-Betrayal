@@ -19,9 +19,9 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
     /// TEMPORARY diagnostic tool, not shipped gameplay code — delete this whole folder once real
     /// device throughput has been measured across enough devices and a mobile-tier perf plan
     /// exists. Because of that, this class allocates freely (StringBuilder-free plain strings, a
-    /// List&lt;MoveCommand&gt; per run) rather than following the zero-GC discipline the actual
-    /// gameplay/search hot path (AlphaBetaSearch, TranspositionTable) holds itself to — a benchmark
-    /// that runs twelve times total, not sixty times a second, is not that hot path.
+    /// List&lt;MoveCommand&gt; per run) rather than avoiding allocation the way the actual
+    /// gameplay/search hot path (AlphaBetaSearch, TranspositionTable) has to — a benchmark that
+    /// runs twelve times total, not sixty times a second, is not that hot path.
     /// </summary>
     public sealed class MobileSearchBenchmarkRunner
     {

@@ -13,8 +13,8 @@ namespace ChessTheBetrayal.Gameplay.Manager
     /// <summary>
     /// Owns match setup, teardown, and mode/session state: rolling teams, placing the starting
     /// position, constructing/tearing down the move executor, driving the AI/clock coordinators
-    /// through a match's lifecycle, and answering move-execution/query requests. Extracted from
-    /// GameManager (AI-13) — the deepest and last of the three collaborators, since it is the one
+    /// through a match's lifecycle, and answering move-execution/query requests. Split out of
+    /// GameManager — the deepest of the three collaborators, since it is the one
     /// that actually orchestrates the other two (AIMatchCoordinator, ClockCoordinator) plus
     /// MatchDriver/UndoService/GameSetup. GameManager itself shrinks to Unity lifecycle,
     /// Inspector-serialized configuration, and composition-root wiring only.
@@ -66,7 +66,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
         public bool IsAiMode { get; private set; }
 
         /// <summary>Set once by GameManager after construction from its Inspector-serialized field.
-        /// Null skips opening-book play entirely — matches pre-AI-28 behavior. Read by both
+        /// Null skips opening-book play entirely, so the AI searches from move one. Read by both
         /// SetAIMode call sites (the public one below and the Practice-match auto-configure path
         /// in BeginPlay) so either entry point into AI play gets book support.</summary>
         public ChessTheBetrayal.AI.OpeningBook.OpeningBookAsset OpeningBook { get; set; }
