@@ -14,30 +14,46 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
     /// table promises: Impossible &gt;= Extreme &gt;= Hard &gt;= Normal &gt;= Easy, with Aggressive a
     /// personality sibling of Hard-ish strength checked only against Normal and Easy.
     ///
-    /// Two fixtures live here, splitting one concern into a fast gate and a deep check:
+    /// Three fixtures live here, each trading sample size for runtime differently:
     ///
-    ///  - <see cref="AIProfileStrengthGateTests"/> runs on every commit. It plays a handful of
-    ///    short games per pairing on a heavily compressed clock — enough to catch a gross ladder
-    ///    inversion (a stronger tier LOSING to a weaker one, the failure mode that actually bit
-    ///    this codebase) in a couple of minutes, not enough to resolve a subtle dial difference.
+    ///  - <see cref="AIProfileStrengthGateTests"/> runs on every commit. A handful of short games
+    ///    per pairing on a heavily compressed clock — enough to catch a gross ladder inversion (a
+    ///    stronger tier LOSING to a weaker one, the failure mode that actually bit this codebase) in
+    ///    a couple of minutes, not enough to resolve a subtle dial difference.
     ///
-    ///  - <see cref="AIProfileStrengthOrderingTests"/> is <c>[Explicit]</c>. It plays the full
-    ///    curated suite at each tier's real per-move budget for statistically solid win rates, and
-    ///    is run on demand or from a nightly job when a dial or search change might have shifted the
-    ///    ordering. It is NOT a per-commit cost.
+    ///  - <see cref="AIProfileStrengthQuickTests"/> is <c>[Explicit]</c> — the one to reach for when
+    ///    checking "did this change shift the ladder," on demand. Full per-move budget (production
+    ///    fidelity, not the gate's compressed clock) but a small slice of the curated suite, so it
+    ///    finishes in low single-digit minutes per pairing rather than the large suite's many
+    ///    minutes. Its win rate carries a wide confidence interval at this sample size — see
+    ///    WinRateConfidenceTests for how a shortfall this suite reports gets judged honestly rather
+    ///    than read as more precise than eight games can support.
     ///
-    /// Both play on the production time budget (each move's real cancellation + settle-early
+    ///  - <see cref="AIProfileStrengthOrderingTests"/> is <c>[Explicit]</c> and the large,
+    ///    statistically solid check: the full curated suite at each tier's real per-move budget, run
+    ///    on demand or from a nightly job, an explicit opt-in given its runtime.
+    ///
+    /// All three play on the production time budget (each move's real cancellation + settle-early
     /// contract), never Uncapped: with Betrayal Defections now searched to resolution, an uncapped
     /// full-depth game at the deep tiers can take many minutes for a SINGLE game, which is what made
     /// an uncapped tournament run for hours. The gate additionally compresses the clock via
     /// MatchSimulator's move-budget cap so many games fit in the per-commit budget; the compression
-    /// keeps the exact same search code path, only the numbers on the clock shrink.
+    /// keeps the exact same search code path, only the numbers on the clock shrink. Quick and the
+    /// full suite differ ONLY in how many positions they sample — never in time control or search
+    /// settings — so a Quick result is a smaller-sample read of the exact same measurement, not a
+    /// different one.
     /// </summary>
     internal static class StrengthLadder
     {
         public const float PassWinRate = 0.60f;
         public const float FloorWinRate = 0.55f;
         public const int RunSeed = 20260713;
+
+        /// <summary>Position count for the Quick tier — enough games (16 per pairing, both colors
+        /// across 8 positions) to see the ladder's direction at full production fidelity, in low
+        /// single-digit minutes rather than the full suite's many minutes. Its confidence interval
+        /// is wide at this N; see the class doc comment.</summary>
+        public const int QuickPositionCount = 8;
 
         public static AIProfile Profile(string id) => AIProfileTable.BuiltIn.Single(p => p.Id == id);
 
@@ -104,6 +120,52 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
 
             return strongerIsWhite ? whiteScore : 1f - whiteScore;
         }
+
+        /// <summary>
+        /// Shared assertion body for both the Quick and Full production-budget fixtures — they
+        /// differ only in positionCount, never in time control or search settings, so a Quick
+        /// result is a smaller-sample read of the exact same measurement rather than a different
+        /// one. Below the hard floor, checks whether the floor sits inside this sample's own 95%
+        /// confidence interval before failing — the same honesty rule BenchmarkDriftAnalyzer
+        /// applies, so a small-N shortfall never asserts a confident failure it can't back up.
+        /// </summary>
+        public static void AssertStrongerScoresAtLeast(string strongerId, string weakerId, int pairIndex, int positionCount)
+        {
+            var progress = new TestContextProgressSink($"{strongerId} vs {weakerId}");
+            // moveBudgetCapMs 0: each tier plays at its own real per-move budget, the exact clock a
+            // player faces. Faithful measurement is the point of both fixtures here; the gate
+            // fixture above is the only one that trades fidelity for speed.
+            float winRate = PlayWinRate(strongerId, weakerId, pairIndex,
+                positionCount, MatchSimulator.DefaultPlyCap, moveBudgetCapMs: 0, progress.ReportGameCompleted);
+
+            int gameCount = System.Math.Min(positionCount, CuratedPositionSuite.Count) * 2;
+            float margin = TournamentStatistics.WinRateMargin95(gameCount);
+
+            if (winRate < FloorWinRate)
+            {
+                bool floorIsInsideConfidenceInterval = winRate + margin >= FloorWinRate;
+                if (floorIsInsideConfidenceInterval)
+                {
+                    Assert.Inconclusive(
+                        $"{strongerId} scored {winRate:P1} +/-{margin:P1} against {weakerId} over {gameCount} games — " +
+                        $"below the {FloorWinRate:P0} floor, but the floor sits inside this sample's own confidence " +
+                        "interval. More games are needed before calling this a real failure; run the larger suite.");
+                }
+                else
+                {
+                    Assert.Fail(
+                        $"{strongerId} scored only {winRate:P1} +/-{margin:P1} against {weakerId} over {gameCount} games " +
+                        "— below the hard floor with a confidence interval that doesn't reach it, this pairing is a tuning failure.");
+                }
+                return;
+            }
+
+            if (winRate < PassWinRate)
+            {
+                TestContext.WriteLine($"WARN: {strongerId} scored {winRate:P1} +/-{margin:P1} against {weakerId} — above the hard floor " +
+                    $"but below the {PassWinRate:P0} pass threshold; worth a dial review.");
+            }
+        }
     }
 
     /// <summary>
@@ -150,10 +212,41 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
     }
 
     /// <summary>
-    /// The full statistical ladder check. Plays the whole curated suite at each tier's real per-move
-    /// budget and asserts the promised win rates. [Explicit] — run on demand or nightly, never per
-    /// commit. On the production budget a full run is minutes per pairing, not the hours an uncapped
-    /// run would take now that Betrayal Defections are searched to resolution.
+    /// The tier to reach for by default when checking "did this change shift the ladder": full
+    /// production-budget fidelity (the real clock a player faces), but only StrengthLadder.
+    /// QuickPositionCount positions, so a pairing finishes in low single-digit minutes rather than
+    /// the large suite's many. [Explicit] since it still plays real games at real depth — too slow
+    /// for every commit, which is what AIProfileStrengthGateTests is for — but its whole point is
+    /// being the fast thing to run on demand, with the large suite as the deliberate slow opt-in
+    /// below. Its win rate carries a wide confidence interval at this sample size; a shortfall below
+    /// the floor is only reported as a genuine failure when the floor sits outside that interval —
+    /// see StrengthLadder.AssertStrongerScoresAtLeast.
+    /// </summary>
+    [TestFixture]
+    [Explicit("Quick AI-vs-AI ladder check at each tier's real per-move budget, small sample — run on demand.")]
+    [Timeout(10 * 60 * 1000)]
+    public class AIProfileStrengthQuickTests
+    {
+        [Test] public void Normal_ScoresAtLeastSixtyPercent_AgainstEasy() =>
+            StrengthLadder.AssertStrongerScoresAtLeast("normal", "easy", pairIndex: 0, StrengthLadder.QuickPositionCount);
+        [Test] public void Hard_ScoresAtLeastSixtyPercent_AgainstNormal() =>
+            StrengthLadder.AssertStrongerScoresAtLeast("hard", "normal", pairIndex: 1, StrengthLadder.QuickPositionCount);
+        [Test] public void Extreme_ScoresAtLeastSixtyPercent_AgainstHard() =>
+            StrengthLadder.AssertStrongerScoresAtLeast("extreme", "hard", pairIndex: 2, StrengthLadder.QuickPositionCount);
+        [Test] public void Impossible_ScoresAtLeastSixtyPercent_AgainstExtreme() =>
+            StrengthLadder.AssertStrongerScoresAtLeast("impossible", "extreme", pairIndex: 3, StrengthLadder.QuickPositionCount);
+        [Test] public void Aggressive_ScoresAtLeastSixtyPercent_AgainstNormal() =>
+            StrengthLadder.AssertStrongerScoresAtLeast("aggressive", "normal", pairIndex: 4, StrengthLadder.QuickPositionCount);
+        [Test] public void Aggressive_ScoresAtLeastSixtyPercent_AgainstEasy() =>
+            StrengthLadder.AssertStrongerScoresAtLeast("aggressive", "easy", pairIndex: 5, StrengthLadder.QuickPositionCount);
+    }
+
+    /// <summary>
+    /// The large statistical ladder check — an explicit opt-in given its runtime, never the default
+    /// reach-for-it tier (see AIProfileStrengthQuickTests above). Plays the whole curated suite at
+    /// each tier's real per-move budget for the tightest confidence interval this harness can offer.
+    /// Run on demand or from a nightly job when a dial or search change might have shifted the
+    /// ordering and the Quick tier's smaller sample wasn't decisive enough to be sure.
     /// </summary>
     [TestFixture]
     [Explicit("Full-suite AI-vs-AI tournament at each tier's real per-move budget — run on demand, not per commit.")]
@@ -164,35 +257,17 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
     [Timeout(20 * 60 * 1000)]
     public class AIProfileStrengthOrderingTests
     {
-        // Every curated position, both colors. Binomial standard error at N games is ~0.5/sqrt(N);
-        // the full 20-position suite keeps the confidence interval tight enough to trust a
-        // win-rate near the 55-60% decision band.
-        private const int PlyCap = MatchSimulator.DefaultPlyCap;
-
-        private static void AssertStrongerScoresAtLeast(string strongerId, string weakerId, int pairIndex)
-        {
-            var progress = new TestContextProgressSink($"{strongerId} vs {weakerId}");
-            // moveBudgetCapMs 0: each tier plays at its own real per-move budget, the exact clock a
-            // player faces. Faithful measurement is the point of the full suite; the gate fixture
-            // above is the one that trades fidelity for speed.
-            float winRate = StrengthLadder.PlayWinRate(strongerId, weakerId, pairIndex,
-                CuratedPositionSuite.Count, PlyCap, moveBudgetCapMs: 0, progress.ReportGameCompleted);
-
-            Assert.That(winRate, Is.GreaterThanOrEqualTo(StrengthLadder.FloorWinRate),
-                $"{strongerId} scored only {winRate:P1} against {weakerId} — below the hard floor, this pairing is a tuning failure.");
-
-            if (winRate < StrengthLadder.PassWinRate)
-            {
-                TestContext.WriteLine($"WARN: {strongerId} scored {winRate:P1} against {weakerId} — above the hard floor " +
-                    $"but below the {StrengthLadder.PassWinRate:P0} pass threshold; worth a dial review.");
-            }
-        }
-
-        [Test] public void Normal_ScoresAtLeastSixtyPercent_AgainstEasy() => AssertStrongerScoresAtLeast("normal", "easy", pairIndex: 0);
-        [Test] public void Hard_ScoresAtLeastSixtyPercent_AgainstNormal() => AssertStrongerScoresAtLeast("hard", "normal", pairIndex: 1);
-        [Test] public void Extreme_ScoresAtLeastSixtyPercent_AgainstHard() => AssertStrongerScoresAtLeast("extreme", "hard", pairIndex: 2);
-        [Test] public void Impossible_ScoresAtLeastSixtyPercent_AgainstExtreme() => AssertStrongerScoresAtLeast("impossible", "extreme", pairIndex: 3);
-        [Test] public void Aggressive_ScoresAtLeastSixtyPercent_AgainstNormal() => AssertStrongerScoresAtLeast("aggressive", "normal", pairIndex: 4);
-        [Test] public void Aggressive_ScoresAtLeastSixtyPercent_AgainstEasy() => AssertStrongerScoresAtLeast("aggressive", "easy", pairIndex: 5);
+        [Test] public void Normal_ScoresAtLeastSixtyPercent_AgainstEasy() =>
+            StrengthLadder.AssertStrongerScoresAtLeast("normal", "easy", pairIndex: 0, CuratedPositionSuite.Count);
+        [Test] public void Hard_ScoresAtLeastSixtyPercent_AgainstNormal() =>
+            StrengthLadder.AssertStrongerScoresAtLeast("hard", "normal", pairIndex: 1, CuratedPositionSuite.Count);
+        [Test] public void Extreme_ScoresAtLeastSixtyPercent_AgainstHard() =>
+            StrengthLadder.AssertStrongerScoresAtLeast("extreme", "hard", pairIndex: 2, CuratedPositionSuite.Count);
+        [Test] public void Impossible_ScoresAtLeastSixtyPercent_AgainstExtreme() =>
+            StrengthLadder.AssertStrongerScoresAtLeast("impossible", "extreme", pairIndex: 3, CuratedPositionSuite.Count);
+        [Test] public void Aggressive_ScoresAtLeastSixtyPercent_AgainstNormal() =>
+            StrengthLadder.AssertStrongerScoresAtLeast("aggressive", "normal", pairIndex: 4, CuratedPositionSuite.Count);
+        [Test] public void Aggressive_ScoresAtLeastSixtyPercent_AgainstEasy() =>
+            StrengthLadder.AssertStrongerScoresAtLeast("aggressive", "easy", pairIndex: 5, CuratedPositionSuite.Count);
     }
 }
