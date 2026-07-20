@@ -68,8 +68,9 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         public void FindBestMove_PendingBetrayerPosition_SameMoveWithAndWithoutEffectiveTT()
         {
             // White to move with a Betrayer already pending (Retribution available via the Rook on
-            // a1) — exercises TT probe/store while the sub-state hash's Betrayal contribution is
-            // live, per the ADR's load-bearing correctness assumption.
+            // a1) — exercises TT probe/store while the hash's Betrayal contribution is live. If the
+            // pending-Betrayer state were missing from the hash, two genuinely different positions
+            // would collide on one entry and the search could return a move from the wrong one.
             BoardState boardTTOn = TestBoardSetupUtility.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)

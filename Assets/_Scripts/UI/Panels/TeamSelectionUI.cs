@@ -129,7 +129,8 @@ namespace ChessTheBetrayal.UI
                 // Pulse the active team, shrink the inactive
                 PulseTeamObject(isWhiteActive);
 
-                // Wait for interval (zero-GC approach)
+                // Count the interval down by hand rather than yielding a new WaitForSeconds each
+                // loop, which would allocate on every pulse.
                 float timer = 0f;
                 while (timer < toggleInterval)
                 {

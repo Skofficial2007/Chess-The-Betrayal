@@ -11,7 +11,7 @@ using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
 {
     /// <summary>
-    /// MatchFlowCoordinator is the AI-13 extraction of GameManager's match setup/teardown/mode
+    /// MatchFlowCoordinator owns GameManager's match setup/teardown/mode
     /// slice — the deepest of the three collaborators, since it orchestrates AIMatchCoordinator +
     /// ClockCoordinator + MatchDriver + UndoService + GameSetup. UIManager-touching operations
     /// (trigger roulette, show team/mode selection) are constructor delegates, exercised here as

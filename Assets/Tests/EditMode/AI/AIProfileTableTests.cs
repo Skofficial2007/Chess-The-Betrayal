@@ -6,8 +6,8 @@ using ChessTheBetrayal.AI;
 namespace ChessTheBetrayal.Tests.EditMode.AI
 {
     /// <summary>
-    /// Pins the "new tier = new data row, zero code change" contract from
-    /// ADR_AI23_Profile_EventStream_OpeningBook.md Section 1.1/1.3.
+    /// Pins the "new tier = new data row, zero code change" contract: adding a difficulty must
+    /// only ever mean adding a row to the table, never editing search or selection logic.
     /// </summary>
     [TestFixture]
     public class AIProfileTableTests

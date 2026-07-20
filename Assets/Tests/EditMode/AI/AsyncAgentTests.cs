@@ -219,8 +219,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         [Test]
         public void RequestBestMove_WithNonzeroDialProfileAndSeededRng_StillDeliversALegalSearchRankedMove()
         {
-            // Integration smoke test: a real personality profile (AI-24's MoveSelectionPolicy
-            // epilogue wired in via the full constructor) must not break the existing
+            // Integration smoke test: a real personality profile (which wires the move-selection
+            // epilogue in via the full constructor) must not break the existing
             // threading/marshalling contract — the delivered move is still legal and still arrives
             // only through Tick() on the calling thread.
             var profile = AIProfileTable.BuiltIn[0]; // "easy" — nonzero BlunderRate/TieBreakWindowCp

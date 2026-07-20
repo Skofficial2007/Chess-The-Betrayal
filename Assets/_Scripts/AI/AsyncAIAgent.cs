@@ -99,8 +99,8 @@ namespace ChessTheBetrayal.AI
 
         /// <summary>
         /// openingBook is optional (null skips book lookup entirely) and only ever consulted when
-        /// profile.UseOpeningBook is true — a profile that opts out of the book plays search moves
-        /// from move one, matching the pre-AI-28 behavior for that profile.
+        /// profile.UseOpeningBook is true — a profile that opts out of the book searches for its
+        /// own move from move one.
         /// </summary>
         public AsyncAIAgent(IChessEngine engine, IPositionEvaluator evaluator, AISearchSettings settings,
             AIProfile profile, IRandomSource rng, OpeningBookAsset openingBook)
@@ -164,7 +164,8 @@ namespace ChessTheBetrayal.AI
                     // rescoreMargin > 0 only for a personality-driven profile (BlunderMarginCp or
                     // TieBreakWindowCp nonzero) — un-biases the alpha-beta-tightened scores of the
                     // handful of candidates SelectFinalMove might actually pick. Zero for the
-                    // convenience-ctor/zero-dial (Impossible tier) path, matching pre-AI-24 cost.
+                    // convenience-ctor/zero-dial (Impossible tier) path, which skips the rescore
+                    // pass entirely and so pays nothing for it.
                     int rescoreMargin = Math.Max(_profile.BlunderMarginCp, _profile.TieBreakWindowCp);
                     MoveCommand best = _search.FindBestMove(isolated, _settings, token, rescoreMargin,
                         enableInstabilityTimeManagement: true);

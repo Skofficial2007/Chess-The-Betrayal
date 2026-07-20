@@ -10,9 +10,9 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
 {
     /// <summary>
     /// Pins SearchStats' counters against small, fully-controlled fixed trees, and re-confirms the
-    /// zero-GC search-loop contract (SearchAllocationTests' pattern) now that every counter
-    /// increment lives on the hot path behind UNITY_EDITOR||DEVELOPMENT_BUILD — the whole point of
-    /// AI-21 is measuring the other tickets' multipliers without adding cost of its own.
+    /// search loop's no-allocation contract (SearchAllocationTests' pattern) now that every counter
+    /// increment lives on the hot path behind UNITY_EDITOR||DEVELOPMENT_BUILD — telemetry exists to
+    /// measure what the search's other optimizations buy, so it must not cost anything itself.
     /// </summary>
     [TestFixture]
     public class SearchTelemetryTests
@@ -131,9 +131,9 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         [Test]
         public void FindBestMove_CaptureRichPosition_RecordsQNodesGreaterThanZero()
         {
-            // ADR_AI16b Step A: a position with immediate captures available must drive the search
-            // into quiescence at the horizon, so QNodesVisited (previously never incremented anywhere)
-            // must be positive — the headline number the whole diagnostic is built on.
+            // A position with immediate captures available must drive the search into quiescence at
+            // the horizon, so QNodesVisited must be positive. This is the number that reveals how
+            // much of the total search cost is the quiescence tail rather than the main tree.
             BoardState board = TestBoardSetupUtility.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)

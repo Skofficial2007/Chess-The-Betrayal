@@ -169,8 +169,8 @@ namespace ChessTheBetrayal.AI
         // from it once a depth actually completes, so a cancelled/partial depth's scores never
         // leak into the externally-visible array. Sized comfortably above realistic
         // Betrayal-inclusive root branching; grown lazily (mirrors _moveBuffers' own policy) so a
-        // pathological position can never index out of bounds without violating steady-state
-        // zero-GC in the common case. MoveSelectionPolicy.MaxRootMoves must match this sizing.
+        // pathological position can never index out of bounds, while an ordinary one never
+        // allocates at all. MoveSelectionPolicy.MaxRootMoves must match this sizing.
         private int[] _rootScores = new int[128];
         private int[] _rootScoresScratch = new int[128];
 
@@ -267,7 +267,7 @@ namespace ChessTheBetrayal.AI
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         /// <summary>
-        /// Telemetry for the most recently completed FindBestMove call (AI-21). Lives on the shared
+        /// Telemetry for the most recently completed FindBestMove call. Lives on the shared
         /// TranspositionTable rather than a second bag, since every AlphaBetaSearch already owns one
         /// TT reference and the TT's own counters (probe/hit/store/replace) need to live there
         /// anyway. Reset at the top of FindBestMove, so a mid-search read (there isn't one — this is
@@ -634,8 +634,8 @@ namespace ChessTheBetrayal.AI
         }
 
         /// <summary>Grows the root-score buffers to fit a pathological branching root, mirroring
-        /// _moveBuffers' own "grown lazily, never freed" policy. A no-op (and therefore zero-GC)
-        /// for every position within the initial 128-move capacity.</summary>
+        /// _moveBuffers' own "grown lazily, never freed" policy. A no-op, allocating nothing, for
+        /// every position within the initial 128-move capacity.</summary>
         private void EnsureRootScoreCapacity(int requiredCount)
         {
             if (_rootScores.Length >= requiredCount) return;
@@ -1175,7 +1175,9 @@ namespace ChessTheBetrayal.AI
         /// Quiescence: extends the search through "loud" positions to kill the horizon effect.
         /// BETRAYAL-CRITICAL: if we hit the depth limit while a Betrayer is still pending (Act
         /// played, not yet resolved), the position is NOT quiet — standing pat here would evaluate
-        /// a board mid-defection and return garbage (the report's "illusion of material loss").
+        /// a board mid-defection and return garbage — the material count is momentarily wrong,
+        /// because the betrayed piece has left its old side but the reply that answers it hasn't
+        /// been played yet.
         /// We must resolve the Retribution/Defection/ForcedSave sub-phase before we're allowed to
         /// stand pat, driving it through exactly the same rule the domain uses in
         /// TurnResolver.ResultFromDefectionOutcome (clear pending + pass the turn on a plain
