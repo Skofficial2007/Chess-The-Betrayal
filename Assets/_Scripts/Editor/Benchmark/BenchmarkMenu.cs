@@ -1,4 +1,3 @@
-using System.Text;
 using ChessTheBetrayal.AI;
 using UnityEditor;
 using UnityEngine;
@@ -42,10 +41,11 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
         private static void RunAndLog(BenchmarkMode mode)
         {
             BenchmarkReport report = BenchmarkRunner.RunAll(DefaultRunSeed, mode,
-                AIProfileTable.BuiltIn, progress: new DebugLogProgressSink(mode.ToString()));
+                AIProfileTable.BuiltIn, progress: new DebugLogProgressSink(mode.ToString()),
+                persistRunsUnderDirectory: RunsDirectory);
             BenchmarkReport baseline = BenchmarkBaselineIO.TryRead(BenchmarkBaselineIO.DefaultPath);
 
-            Debug.Log(FormatReport(report, baseline));
+            Debug.Log(BenchmarkReportFormatter.ToPlainText(report, baseline));
         }
 
         /// <summary>Batchmode/CI entry point: <c>Unity -batchmode -executeMethod
@@ -62,10 +62,11 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
         private static void RunBatch(BenchmarkMode mode)
         {
             BenchmarkReport report = BenchmarkRunner.RunAll(DefaultRunSeed, mode,
-                AIProfileTable.BuiltIn, progress: new DebugLogProgressSink($"{mode} Batch"));
+                AIProfileTable.BuiltIn, progress: new DebugLogProgressSink($"{mode} Batch"),
+                persistRunsUnderDirectory: RunsDirectory);
             BenchmarkReport baseline = BenchmarkBaselineIO.TryRead(BenchmarkBaselineIO.DefaultPath);
 
-            Debug.Log(FormatReport(report, baseline));
+            Debug.Log(BenchmarkReportFormatter.ToPlainText(report, baseline));
 
             var findings = BenchmarkDriftAnalyzer.Analyze(report, baseline);
             bool anyFailure = false;
@@ -75,38 +76,7 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
             EditorApplication.Exit(anyFailure ? 1 : 0);
         }
 
-        private static string FormatReport(BenchmarkReport report, BenchmarkReport baseline)
-        {
-            var sb = new StringBuilder();
-            sb.AppendLine($"Benchmark run — mode={report.Mode} seed={report.RunSeed}");
-
-            foreach (PairResult pair in report.PairResults)
-            {
-                sb.AppendLine($"  {pair.Subject} vs {pair.Opponent}: {pair.SubjectWinRate:P1} " +
-                    $"({pair.SubjectWins}W {pair.OpponentWins}L {pair.Draws}D over {pair.Games} games)");
-            }
-
-            foreach (TierPerformance tier in report.TierPerformances)
-            {
-                sb.AppendLine($"  [{tier.ProfileId}] {tier.MovesSampled} moves, " +
-                    $"{tier.MeanNodesPerMove:F0} nodes/move, {tier.MeanMsPerMove:F0}ms/move, " +
-                    $"depth reached {tier.DeepestCompletedDepth}, blunder-actuation {tier.ObservedBlunderActuationRate:P1}");
-            }
-
-            var findings = BenchmarkDriftAnalyzer.Analyze(report, baseline);
-            if (findings.Count == 0)
-            {
-                sb.AppendLine(baseline == null
-                    ? "  No baseline on disk yet — nothing to diff against."
-                    : "  No drift findings.");
-            }
-            else
-            {
-                foreach (var finding in findings)
-                    sb.AppendLine($"  [{finding.Severity}] {finding.Message}");
-            }
-
-            return sb.ToString();
-        }
+        private static string RunsDirectory =>
+            System.IO.Path.Combine(Application.dataPath, "..", "Docs", "Benchmarks", "Runs");
     }
 }

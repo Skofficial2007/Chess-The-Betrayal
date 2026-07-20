@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
 using ChessTheBetrayal.AI;
 using ChessTheBetrayal.Tests.Utilities;
 
@@ -32,28 +34,81 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
         /// with a tight ply cap, without paying the real tournament's search-depth-and-length cost
         /// — the real tournament (against AIProfileTable.BuiltIn, full ply cap) is only ever run
         /// from the menu/batchmode/window entry points.
+        ///
+        /// persistRunsUnderDirectory, when supplied, streams every finished game to a timestamped
+        /// subdirectory as it completes and writes the final report/summary once the run ends —
+        /// see TournamentRunWriter's own doc comment for why a run killed mid-way still leaves real
+        /// data on disk when this is set. Left null by every existing test so persistence never
+        /// touches disk unless a caller explicitly opts in.
         /// </summary>
         public static BenchmarkReport RunAll(int runSeed, BenchmarkMode mode,
             IReadOnlyList<AIProfile> roster, int plyCap = MatchSimulator.DefaultPlyCap, bool parallel = true,
-            MatchTimeControl timeControl = MatchTimeControl.ProductionBudget, ITournamentProgress progress = null)
+            MatchTimeControl timeControl = MatchTimeControl.ProductionBudget, ITournamentProgress progress = null,
+            string persistRunsUnderDirectory = null)
         {
             TournamentSession session = mode == BenchmarkMode.Quick
                 ? TournamentSession.CreateQuick(runSeed, roster, plyCap, timeControl)
                 : TournamentSession.CreateFull(runSeed, roster, plyCap, timeControl);
 
-            if (parallel)
-            {
-                ParallelTournamentExecutor.RunRemainingGames(session, progress: progress);
-            }
-            else
-            {
-                int total = session.TotalGames;
-                progress ??= NullTournamentProgress.Instance;
-                while (session.RunNextGame())
-                    progress.ReportGameCompleted(session.GamesCompleted, total);
-            }
+            TournamentRunWriter runWriter = persistRunsUnderDirectory == null
+                ? null
+                : CreateRunWriter(persistRunsUnderDirectory, mode, runSeed, session.TotalGames, timeControl, parallel);
 
-            return session.BuildReport();
+            try
+            {
+                if (parallel)
+                {
+                    ParallelTournamentExecutor.RunRemainingGames(session, progress: progress, runWriter: runWriter);
+                }
+                else
+                {
+                    int total = session.TotalGames;
+                    progress ??= NullTournamentProgress.Instance;
+                    while (session.RunNextGame())
+                    {
+                        progress.ReportGameCompleted(session.GamesCompleted, total);
+                    }
+                }
+
+                BenchmarkReport report = session.BuildReport();
+
+                if (runWriter != null)
+                {
+                    WriteCompletionArtifacts(runWriter.RunDirectory, report);
+                }
+
+                return report;
+            }
+            finally
+            {
+                runWriter?.Dispose();
+            }
+        }
+
+        private static TournamentRunWriter CreateRunWriter(string baseDirectory, BenchmarkMode mode,
+            int runSeed, int totalGames, MatchTimeControl timeControl, bool parallel)
+        {
+            DateTime startUtc = DateTime.UtcNow;
+            string runFolderName = $"{mode}-{runSeed}-{startUtc:yyyyMMdd-HHmmss}";
+            string runDirectory = Path.Combine(baseDirectory, runFolderName);
+            int workerCount = parallel ? ParallelTournamentExecutor.DefaultMaxDegreeOfParallelism : 1;
+
+            string headerLine = TournamentRunWriter.BuildHeaderLine(
+                schemaVersion: 1, mode.ToString(), runSeed, totalGames, timeControl.ToString(), workerCount, startUtc);
+
+            return new TournamentRunWriter(runDirectory, headerLine);
+        }
+
+        /// <summary>Written once, only after every game has finished — its presence is the signal
+        /// a reader uses to tell a completed run from a partial one (see TournamentRunReader), so
+        /// this must never be written from anywhere but the very end of a successful run.</summary>
+        private static void WriteCompletionArtifacts(string runDirectory, BenchmarkReport report)
+        {
+            string reportPath = Path.Combine(runDirectory, TournamentRunReader.ReportFileName);
+            BenchmarkBaselineIO.Write(report, reportPath);
+
+            string summaryPath = Path.Combine(runDirectory, "summary.md");
+            File.WriteAllText(summaryPath, BenchmarkReportFormatter.ToMarkdown(report));
         }
     }
 }
