@@ -101,13 +101,16 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
                     // run leaves a valid (just incomplete) report.
                 }
 
-                // Fold results into the session sequentially, in original game order, skipping any
-                // slot a cancelled run never reached (default(TournamentGameRecord) is null for
-                // this reference type — Parallel.For's own array-write is the only writer per
-                // slot, so a null here unambiguously means "cancelled before this one ran").
+                // Fold every game that actually finished into the session, in original game order.
+                // A cancelled run leaves holes (default(TournamentGameRecord) is null for this
+                // reference type — Parallel.For's own array-write is the only writer per slot), but
+                // those holes are not confined to the tail: workers race ahead of each other, so game
+                // 9 can finish before game 3 gets cancelled out from under a slower worker. Skipping
+                // past a hole instead of stopping at it keeps every game that did complete, rather
+                // than silently discarding real results the moment the first gap appears.
                 for (int i = 0; i < results.Length; i++)
                 {
-                    if (results[i] == null) break;
+                    if (results[i] == null) continue;
                     session.ApplyCompletedGame(results[i]);
                 }
             }

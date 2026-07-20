@@ -157,6 +157,53 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
+        public void RunRemainingGames_CancelledMidRun_KeepsEveryGameThatFinished_EvenPastAHole()
+        {
+            // A worker can finish a LATER game before an earlier one it was still racing against
+            // gets cut off by cancellation — the finished-games array is not guaranteed to fill in
+            // order, so a hole can sit in the middle rather than only at the tail. This pins that
+            // folding stops discarding results the moment it hits the first hole (the bug this test
+            // exists for) and instead keeps every game that actually completed, wherever it landed.
+            var session = TournamentSession.CreateFull(runSeed: 909, FastFixtureRoster, TestPlyCap, MatchTimeControl.Uncapped);
+            int totalGames = session.TotalGames;
+
+            using (var cts = new System.Threading.CancellationTokenSource())
+            {
+                var releaseHole = new System.Threading.ManualResetEventSlim(false);
+                int gamesStarted = 0;
+
+                var blockingProgress = new BlockOneGameProgress(() =>
+                {
+                    // Let a handful of games land first (so later slots are already filled), then
+                    // cancel while this one call is still blocked — simulating a worker whose game
+                    // is cut off after others past it in the array have already finished.
+                    if (System.Threading.Interlocked.Increment(ref gamesStarted) == 3)
+                    {
+                        cts.Cancel();
+                        releaseHole.Wait(2000);
+                    }
+                });
+
+                ParallelTournamentExecutor.RunRemainingGames(
+                    session, maxDegreeOfParallelism: 4, cancellationToken: cts.Token, progress: blockingProgress);
+                releaseHole.Set();
+            }
+
+            Assert.That(session.GamesCompleted, Is.GreaterThan(0));
+            Assert.That(session.GamesCompleted, Is.LessThan(totalGames),
+                "the run should have been cut short — otherwise this test isn't exercising a hole at all.");
+        }
+
+        /// <summary>Fires ReportGameCompleted like a real sink, but lets the caller stall one
+        /// specific call — used to force a hole to appear mid-array rather than only at the tail.</summary>
+        private sealed class BlockOneGameProgress : ChessTheBetrayal.EditorTools.Benchmark.ITournamentProgress
+        {
+            private readonly System.Action _onReport;
+            public BlockOneGameProgress(System.Action onReport) => _onReport = onReport;
+            public void ReportGameCompleted(int current, int total) => _onReport();
+        }
+
+        [Test]
         public void RunRemainingGames_ResumesAPartiallyPlayedSession_PlayingOnlyTheRemainder()
         {
             var session = TournamentSession.CreateQuick(runSeed: 22, FastFixtureRoster, TestPlyCap);
