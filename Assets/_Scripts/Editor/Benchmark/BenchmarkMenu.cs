@@ -42,7 +42,7 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
         {
             BenchmarkReport report = BenchmarkRunner.RunAll(DefaultRunSeed, mode,
                 AIProfileTable.BuiltIn, progress: new DebugLogProgressSink(mode.ToString()),
-                persistRunsUnderDirectory: RunsDirectory);
+                persistRunsUnderDirectory: RunsDirectory, logGamesToConsole: true);
             BenchmarkReport baseline = BenchmarkBaselineIO.TryRead(BenchmarkBaselineIO.DefaultPath);
 
             Debug.Log(BenchmarkReportFormatter.ToPlainText(report, baseline));
@@ -66,7 +66,7 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
             {
                 report = BenchmarkRunner.RunAll(DefaultRunSeed, mode,
                     AIProfileTable.BuiltIn, progress: new DebugLogProgressSink($"{mode} Batch"),
-                    persistRunsUnderDirectory: RunsDirectory, useWatchdog: true);
+                    persistRunsUnderDirectory: RunsDirectory, useWatchdog: true, logGamesToConsole: true);
             }
             catch (TournamentStalledException stalled)
             {

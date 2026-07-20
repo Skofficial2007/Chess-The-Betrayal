@@ -76,11 +76,15 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
         /// see TournamentWatchdog for why that targets deadlock, not slowness. A trip throws
         /// TournamentStalledException instead of returning a report that looks complete; the
         /// caller's runWriter (if any) still has every game that finished before the trip.
+        ///
+        /// logGamesToConsole logs one line per finished game (pairing, result, running score,
+        /// elapsed) via TournamentGameLogger — proves not just that the run is alive but that its
+        /// results so far look healthy, which a bare game-count counter cannot show.
         /// </summary>
         public static BenchmarkReport RunAll(int runSeed, BenchmarkMode mode,
             IReadOnlyList<AIProfile> roster, int plyCap = MatchSimulator.DefaultPlyCap, bool parallel = true,
             MatchTimeControl timeControl = MatchTimeControl.ProductionBudget, ITournamentProgress progress = null,
-            string persistRunsUnderDirectory = null, bool useWatchdog = false)
+            string persistRunsUnderDirectory = null, bool useWatchdog = false, bool logGamesToConsole = false)
         {
             TournamentSession session = mode == BenchmarkMode.Quick
                 ? TournamentSession.CreateQuick(runSeed, roster, plyCap, timeControl)
@@ -92,6 +96,9 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
             TournamentWatchdog watchdog = useWatchdog && parallel
                 ? CreateWatchdog(roster, plyCap)
                 : null;
+            TournamentGameLogger gameLogger = logGamesToConsole ? new TournamentGameLogger(mode.ToString()) : null;
+
+            if (gameLogger != null) session.OnGameCompleted += gameLogger.HandleGameCompleted;
 
             try
             {
@@ -127,6 +134,7 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
             }
             finally
             {
+                if (gameLogger != null) session.OnGameCompleted -= gameLogger.HandleGameCompleted;
                 runWriter?.Dispose();
                 watchdog?.Dispose();
             }
