@@ -120,16 +120,26 @@ namespace ChessTheBetrayal.Tests.Utilities
         private readonly IPositionEvaluator _adjudicationEvaluator = new BetrayalAwareEvaluator();
         private readonly MatchTimeControl _timeControl;
         private readonly AdjudicationRules _adjudicationRules;
+        private readonly int _moveBudgetCapMs;
         private readonly TranspositionTable _whiteTable;
         private readonly TranspositionTable _blackTable;
 
+        /// <param name="moveBudgetCapMs">When positive (and time control is ProductionBudget),
+        /// every move's hard budget is clamped to at most this many milliseconds, and its soft
+        /// budget scaled down proportionally. This runs the exact same search a real game does —
+        /// same cancellation, same settle-early logic — just on a compressed clock, so a strength
+        /// tournament can play many games fast without switching to a different, less-faithful code
+        /// path. A profile whose real budget is already under the cap is unaffected. 0 (the
+        /// default) leaves each profile's own budget in force.</param>
         public MatchSimulator(
             MatchTimeControl timeControl = MatchTimeControl.ProductionBudget,
             int transpositionTableLog2Size = ProductionTranspositionTableLog2Size,
-            AdjudicationRules? adjudicationRules = null)
+            AdjudicationRules? adjudicationRules = null,
+            int moveBudgetCapMs = 0)
         {
             _timeControl = timeControl;
             _adjudicationRules = adjudicationRules ?? AdjudicationRules.Standard;
+            _moveBudgetCapMs = moveBudgetCapMs;
             _whiteTable = new TranspositionTable(transpositionTableLog2Size);
             _blackTable = new TranspositionTable(transpositionTableLog2Size);
         }
@@ -209,7 +219,7 @@ namespace ChessTheBetrayal.Tests.Utilities
                 IRandomSource rng = isWhite ? whiteRng : blackRng;
                 SideStatsAccumulator accumulator = isWhite ? whiteAccumulator : blackAccumulator;
 
-                var settings = AISearchSettings.FromProfile(BetrayalUsage.Full, profile);
+                var settings = ApplyMoveBudgetCap(AISearchSettings.FromProfile(BetrayalUsage.Full, profile));
                 int rescoreMargin = Math.Max(profile.BlunderMarginCp, profile.TieBreakWindowCp);
 
                 var moveStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -272,6 +282,27 @@ namespace ChessTheBetrayal.Tests.Utilities
             }
 
             return new MatchResult(AdjudicateByMargin(board), ply, reachedPlyCap: true);
+        }
+
+        /// <summary>
+        /// Clamps a profile's time budget to the simulator's move-budget cap when one is set,
+        /// scaling the soft budget by the same ratio so the settle-early threshold stays in the
+        /// same relative position within the shortened budget. A no-op when no cap is set, when the
+        /// profile is already under the cap, or under Uncapped time control (which ignores the
+        /// budget entirely). Keeps the search on its exact production code path — only the numbers
+        /// on the clock change, not which logic reads them.
+        /// </summary>
+        private AISearchSettings ApplyMoveBudgetCap(AISearchSettings settings)
+        {
+            if (_moveBudgetCapMs <= 0 || settings.TimeBudget.HardMs <= _moveBudgetCapMs)
+                return settings;
+
+            int cappedHard = _moveBudgetCapMs;
+            // Preserve the soft/hard ratio so a tier that settles early still gets the same
+            // proportional window before it's allowed to stop.
+            long scaledSoft = (long)settings.TimeBudget.SoftMs * cappedHard / settings.TimeBudget.HardMs;
+            int cappedSoft = (int)Math.Max(1, Math.Min(scaledSoft, cappedHard));
+            return new AISearchSettings(settings.MaxDepth, new AITimeBudget(cappedSoft, cappedHard), settings.BetrayalUsage);
         }
 
         /// <summary>
