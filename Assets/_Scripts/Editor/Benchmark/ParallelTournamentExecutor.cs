@@ -50,12 +50,18 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
         /// shipped sinks are) — separate from the session's own OnGameCompleted (fires from the
         /// caller's thread, in order) so a progress bar/log can show live movement without a
         /// caller needing to reason about thread affinity. Defaults to reporting nothing.
+        /// runWriter, when supplied, receives every completed game on the fold loop below (in
+        /// original game order, on the caller's thread) so a run killed mid-way still has each
+        /// finished game durably on disk — see TournamentRunWriter's own doc comment for why
+        /// writing there rather than from a worker thread is what keeps this from ever blocking
+        /// the search itself.
         /// </summary>
         public static void RunRemainingGames(
             TournamentSession session,
             int maxDegreeOfParallelism = -1,
             CancellationToken cancellationToken = default,
-            ITournamentProgress progress = null)
+            ITournamentProgress progress = null,
+            TournamentRunWriter runWriter = null)
         {
             if (session == null) throw new ArgumentNullException(nameof(session));
             if (maxDegreeOfParallelism <= 0) maxDegreeOfParallelism = DefaultMaxDegreeOfParallelism;
@@ -111,9 +117,26 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
                 for (int i = 0; i < results.Length; i++)
                 {
                     if (results[i] == null) continue;
-                    session.ApplyCompletedGame(results[i]);
+                    TournamentGameRecord record = results[i];
+                    session.ApplyCompletedGame(record);
+                    runWriter?.WriteGame(ToRunRecord(record, startIndex + i));
                 }
             }
+        }
+
+        /// <summary>Converts a played game into the flat shape TournamentRunWriter persists.
+        /// Subject/opponent are re-derived from White/Black + SubjectIsWhite the same way
+        /// TournamentSession.ApplyCompletedGame does, so the run file and the in-memory report
+        /// always agree on which side is "subject."</summary>
+        private static TournamentRunRecord ToRunRecord(TournamentGameRecord record, int gameIndex)
+        {
+            string subjectId = record.SubjectIsWhite ? record.WhiteId : record.BlackId;
+            string opponentId = record.SubjectIsWhite ? record.BlackId : record.WhiteId;
+            double elapsedMs = record.Result.WhiteStats.TotalElapsedMs + record.Result.BlackStats.TotalElapsedMs;
+
+            return new TournamentRunRecord(gameIndex, record.PairIndex, subjectId, opponentId,
+                record.SubjectIsWhite, record.PositionIndex, record.Result.Result.Outcome,
+                record.Result.Result.PlyCount, record.Result.Result.ReachedPlyCap, elapsedMs);
         }
     }
 }
