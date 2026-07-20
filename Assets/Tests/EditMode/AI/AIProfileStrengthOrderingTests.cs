@@ -157,6 +157,11 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
     /// </summary>
     [TestFixture]
     [Explicit("Full-suite AI-vs-AI tournament at each tier's real per-move budget — run on demand, not per commit.")]
+    // A hard backstop only — StrengthLadder.PlayWinRate has no watchdog of its own (that lives in
+    // BenchmarkRunner's parallel path, not this direct Parallel.For call), so nothing else here
+    // catches a genuine deadlock. This should never actually fire: if it does, something is stuck
+    // badly enough that even a generous ceiling wasn't enough, which is itself worth knowing.
+    [Timeout(20 * 60 * 1000)]
     public class AIProfileStrengthOrderingTests
     {
         // Every curated position, both colors. Binomial standard error at N games is ~0.5/sqrt(N);
