@@ -103,6 +103,34 @@ namespace ChessTheBetrayal.AI
         public long ElapsedMsAfterDepth11;
         public long ElapsedMsAfterDepth12;
 
+        // Where the search's time actually goes, broken out by the four sections that dominate a node:
+        // scoring a position, generating its moves, the transposition-table probe/store, and the
+        // quiescence tail. Timing every single call would cost more than it measures at hundreds of
+        // thousands of nodes per move, so each section is timed on only a fraction of its calls (see
+        // SectionSampleInterval) and scaled back up. The raw ticks and the sampled-call count are both
+        // kept so the estimate can be scaled honestly: estimated section ms = ticks scaled by
+        // (total calls / sampled calls). "Ticks" are Stopwatch timestamp ticks, not milliseconds.
+        public long EvalSampledTicks;
+        public long EvalSamples;        // how many eval calls were actually timed
+        public long EvalCalls;          // how many eval calls happened in total
+        public long MoveGenSampledTicks;
+        public long MoveGenSamples;
+        public long MoveGenCalls;
+        public long TTSampledTicks;
+        public long TTSamples;
+        public long TTCalls;
+        public long QuiescenceSampledTicks;
+        public long QuiescenceSamples;
+        public long QuiescenceCalls;
+
+        /// <summary>One in this many calls to a section is actually timed. A power of two so the
+        /// "should I sample this one?" test is a cheap bitmask against the call counter rather than a
+        /// modulo. Large enough that the timing overhead is a rounding error even on the deepest
+        /// searches, small enough that hundreds of thousands of nodes still yield thousands of
+        /// samples per section.</summary>
+        public const long SectionSampleInterval = 1024;
+        private const long SectionSampleMask = SectionSampleInterval - 1;
+
         public void Reset()
         {
             this = default;
@@ -167,6 +195,35 @@ namespace ChessTheBetrayal.AI
             return (double)current / previous;
         }
 
+        // --- Section timing: sample gates and recorders ---
+        // Each section calls its ShouldSample* once per call (which counts the call and returns true
+        // on the sampled fraction), takes a start timestamp only when it returned true, runs the
+        // section, then hands the elapsed ticks to the matching Record*. Splitting "decide + count"
+        // from "record ticks" keeps the timed span to exactly the section itself — the sampling
+        // arithmetic sits outside the two timestamp reads.
+
+        public bool ShouldSampleEval() => (EvalCalls++ & SectionSampleMask) == 0;
+        public void RecordEvalTicks(long ticks) { EvalSampledTicks += ticks; EvalSamples++; }
+
+        public bool ShouldSampleMoveGen() => (MoveGenCalls++ & SectionSampleMask) == 0;
+        public void RecordMoveGenTicks(long ticks) { MoveGenSampledTicks += ticks; MoveGenSamples++; }
+
+        public bool ShouldSampleTT() => (TTCalls++ & SectionSampleMask) == 0;
+        public void RecordTTTicks(long ticks) { TTSampledTicks += ticks; TTSamples++; }
+
+        public bool ShouldSampleQuiescence() => (QuiescenceCalls++ & SectionSampleMask) == 0;
+        public void RecordQuiescenceTicks(long ticks) { QuiescenceSampledTicks += ticks; QuiescenceSamples++; }
+
+        /// <summary>Scales a section's sampled ticks back up to an estimated total across all its
+        /// calls, converted to milliseconds. Only a fraction of calls were timed, so the sampled ticks
+        /// are multiplied by (total calls / sampled calls). Returns 0 when nothing was sampled.</summary>
+        public double EstimatedSectionMs(long sampledTicks, long samples, long calls)
+        {
+            if (samples <= 0 || calls <= 0) return 0.0;
+            double scaledTicks = (double)sampledTicks * calls / samples;
+            return scaledTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+        }
+
         /// <summary>Records the cumulative wall-clock milliseconds elapsed at the moment a depth in
         /// 1..12 fully completes. Same ceiling and out-of-range handling as the node curve above.</summary>
         public void AssignElapsedMsAfterDepth(int depth, long elapsedMs)
@@ -196,6 +253,10 @@ namespace ChessTheBetrayal.AI
             $"q(nodes={QNodesVisited} betrayalRes={QBetrayalResolutionNodes} actExp={QActExpansions} gen={QMovesGenerated} searched={QMovesSearched} seePrune={SeeQuiescencePrunes}) " +
             $"depthCurve(d1={NodesAfterDepth1} d2={NodesAfterDepth2} d3={NodesAfterDepth3} d4={NodesAfterDepth4} d5={NodesAfterDepth5} d6={NodesAfterDepth6} d7={NodesAfterDepth7} d8={NodesAfterDepth8} d9={NodesAfterDepth9} d10={NodesAfterDepth10} d11={NodesAfterDepth11} d12={NodesAfterDepth12}) " +
             $"msCurve(d1={ElapsedMsAfterDepth1} d2={ElapsedMsAfterDepth2} d3={ElapsedMsAfterDepth3} d4={ElapsedMsAfterDepth4} d5={ElapsedMsAfterDepth5} d6={ElapsedMsAfterDepth6} d7={ElapsedMsAfterDepth7} d8={ElapsedMsAfterDepth8} d9={ElapsedMsAfterDepth9} d10={ElapsedMsAfterDepth10} d11={ElapsedMsAfterDepth11} d12={ElapsedMsAfterDepth12}) " +
-            $"ebf(d7={EffectiveBranchingFactor(7):F2} d8={EffectiveBranchingFactor(8):F2} d9={EffectiveBranchingFactor(9):F2} d10={EffectiveBranchingFactor(10):F2} d11={EffectiveBranchingFactor(11):F2} d12={EffectiveBranchingFactor(12):F2})";
+            $"ebf(d7={EffectiveBranchingFactor(7):F2} d8={EffectiveBranchingFactor(8):F2} d9={EffectiveBranchingFactor(9):F2} d10={EffectiveBranchingFactor(10):F2} d11={EffectiveBranchingFactor(11):F2} d12={EffectiveBranchingFactor(12):F2}) " +
+            $"sectionMs~1/{SectionSampleInterval}(eval={EstimatedSectionMs(EvalSampledTicks, EvalSamples, EvalCalls):F1} " +
+            $"movegen={EstimatedSectionMs(MoveGenSampledTicks, MoveGenSamples, MoveGenCalls):F1} " +
+            $"tt={EstimatedSectionMs(TTSampledTicks, TTSamples, TTCalls):F1} " +
+            $"quiescence={EstimatedSectionMs(QuiescenceSampledTicks, QuiescenceSamples, QuiescenceCalls):F1})";
     }
 }

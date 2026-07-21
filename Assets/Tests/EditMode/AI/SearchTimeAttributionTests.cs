@@ -138,6 +138,92 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
+        public void FindBestMove_CaptureRichPosition_RecordsTimeForEverySection()
+        {
+            // A real search scores positions, generates moves, probes/stores the table, and drops
+            // into quiescence at the horizon — so after one, every section must have been sampled at
+            // least once and accumulated some ticks. This proves the timers are wired into the live
+            // paths, not that any particular split is "correct" (the sampled ms is an estimate).
+            BoardState board = TestBoardSetupUtility.CreateEmpty()
+                .WithPiece("e1", Team.White, ChessPieceType.King)
+                .WithPiece("e8", Team.Black, ChessPieceType.King)
+                .WithPiece("d4", Team.White, ChessPieceType.Queen)
+                .WithPiece("d5", Team.Black, ChessPieceType.Pawn)
+                .WithPiece("a1", Team.White, ChessPieceType.Rook)
+                .WithPiece("h8", Team.Black, ChessPieceType.Rook)
+                .WithTurn(Team.White)
+                .WithComputedHash();
+            var settings = new AISearchSettings(maxDepth: 5, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
+
+            _search.FindBestMove(board, settings, CancellationToken.None);
+
+            SearchStats stats = _search.Stats;
+            Assert.That(stats.EvalCalls, Is.GreaterThan(0), "No eval calls were counted.");
+            Assert.That(stats.EvalSamples, Is.GreaterThan(0), "Eval was never sampled.");
+            Assert.That(stats.MoveGenSamples, Is.GreaterThan(0), "Move generation was never sampled.");
+            Assert.That(stats.TTSamples, Is.GreaterThan(0), "The transposition table was never sampled.");
+            Assert.That(stats.QuiescenceSamples, Is.GreaterThan(0), "Quiescence was never sampled.");
+            Assert.That(stats.EvalSampledTicks, Is.GreaterThanOrEqualTo(0), "Eval ticks went negative.");
+        }
+
+        [Test]
+        public void EstimatedSectionMs_ScalesSampledTicksBackUpByTheSamplingRate()
+        {
+            // With one call in N sampled, the estimate multiplies the sampled ticks by (calls/samples).
+            // 100 calls, 1 sampled, 1 second of ticks => ~100 seconds estimated across all calls.
+            var stats = new SearchStats();
+            long oneSecondOfTicks = System.Diagnostics.Stopwatch.Frequency;
+
+            double estimatedMs = stats.EstimatedSectionMs(sampledTicks: oneSecondOfTicks, samples: 1, calls: 100);
+
+            Assert.That(estimatedMs, Is.EqualTo(100_000.0).Within(1.0),
+                "Estimated section ms must scale the sampled ticks up by calls/samples and convert to ms.");
+            Assert.That(stats.EstimatedSectionMs(0, 0, 0), Is.EqualTo(0.0),
+                "With nothing sampled the estimate must be 0, not a divide-by-zero.");
+        }
+
+        [Test]
+        public void FindBestMove_RunTwiceFromCleanState_VisitsTheSameNodesAndPicksTheSameForcingMove()
+        {
+            // The section timers only read a clock — they never touch a score, a bound, or the move
+            // order — so they cannot change the search's decision. Pin that: two FRESH searches (each
+            // with its own table and history) on the same position must visit the exact same number
+            // of nodes and pick the same move. If a timer leaked into control flow, one would drift.
+            //
+            // The position is deliberately ASYMMETRIC with a single clearly-best capture, not the
+            // opening: from the symmetric start there are genuinely equal moves (the mirror-image
+            // knight developments score identically), and which of two equal moves wins is a
+            // tie-break the search has never promised to make deterministically — pinning it there
+            // would test tie-break luck, not instrumentation. A position with one dominant move
+            // removes the tie so this tests only what it means to.
+            BoardState board = TestBoardSetupUtility.CreateEmpty()
+                .WithPiece("e1", Team.White, ChessPieceType.King)
+                .WithPiece("e8", Team.Black, ChessPieceType.King)
+                .WithPiece("d1", Team.White, ChessPieceType.Rook)
+                .WithPiece("d7", Team.White, ChessPieceType.Knight)
+                .WithPiece("a8", Team.Black, ChessPieceType.Rook)
+                .WithPiece("h8", Team.Black, ChessPieceType.Rook)
+                .WithTurn(Team.White)
+                .WithComputedHash();
+            var settings = new AISearchSettings(maxDepth: 6, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
+
+            var firstSearch = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator(),
+                transpositionTable: new TranspositionTable(log2Size: 20));
+            MoveCommand firstMove = firstSearch.FindBestMove(board, settings, CancellationToken.None);
+            long firstNodes = firstSearch.Stats.NodesVisited;
+
+            var secondSearch = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator(),
+                transpositionTable: new TranspositionTable(log2Size: 20));
+            MoveCommand secondMove = secondSearch.FindBestMove(board, settings, CancellationToken.None);
+            long secondNodes = secondSearch.Stats.NodesVisited;
+
+            Assert.That(secondNodes, Is.EqualTo(firstNodes),
+                "Node count drifted between two identical fresh searches — a timer leaked into the search's control flow.");
+            Assert.That(secondMove, Is.EqualTo(firstMove),
+                "Two identical fresh searches picked different moves — the search is not deterministic on this position.");
+        }
+
+        [Test]
         public void FindBestMove_FixedPosition_StillAllocatesNoManagedMemory()
         {
             // The added per-depth fields are plain value-type longs behind the same guard as every

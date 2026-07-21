@@ -677,6 +677,22 @@ namespace ChessTheBetrayal.AI
             }
         }
 
+        /// <summary>Scores a position through the evaluator. Every eval call in the search routes
+        /// through here so position-scoring time can be attributed as one section; in a release build
+        /// this compiles down to a plain evaluator call with no timing at all.</summary>
+        private int EvaluateTimed(BoardState board, Team perspectiveTeam)
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            bool sample = _tt.Stats.ShouldSampleEval();
+            long start = sample ? Stopwatch.GetTimestamp() : 0;
+            int score = _evaluator.Evaluate(board, perspectiveTeam);
+            if (sample) _tt.Stats.RecordEvalTicks(Stopwatch.GetTimestamp() - start);
+            return score;
+#else
+            return _evaluator.Evaluate(board, perspectiveTeam);
+#endif
+        }
+
         /// <summary>
         /// Recursive negamax. 'perspectiveTeam' is whichever side we're currently scoring FOR
         /// (it changes only when the turn actually flips). alpha/beta are always in perspectiveTeam's frame.
@@ -695,12 +711,30 @@ namespace ChessTheBetrayal.AI
             // NodesVisited — that counter tracks the pruned tree the TT/NMP/LMR/PVS multipliers act
             // on, not the quiescence tail, which is a separate, per-design-unbounded-by-depth cost.
             if (depth <= 0)
+            {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                bool sampleQ = _tt.Stats.ShouldSampleQuiescence();
+                long qStart = sampleQ ? Stopwatch.GetTimestamp() : 0;
+                int qScore = Quiescence(board, alpha, beta, perspectiveTeam, plyFromRoot, MaxQuiescencePly, ct);
+                if (sampleQ) _tt.Stats.RecordQuiescenceTicks(Stopwatch.GetTimestamp() - qStart);
+                return qScore;
+#else
                 return Quiescence(board, alpha, beta, perspectiveTeam, plyFromRoot, MaxQuiescencePly, ct);
+#endif
+            }
 
             int alphaOriginal = alpha;
             uint ttMove = 0;
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            bool sampleTT = _tt.Stats.ShouldSampleTT();
+            long ttStart = sampleTT ? Stopwatch.GetTimestamp() : 0;
+            bool ttHit = _tt.Probe(board.ZobristHash, out int ttScore, out uint ttPackedMove, out int ttDepth, out TTFlag ttFlag);
+            if (sampleTT) _tt.Stats.RecordTTTicks(Stopwatch.GetTimestamp() - ttStart);
+            if (ttHit)
+#else
             if (_tt.Probe(board.ZobristHash, out int ttScore, out uint ttPackedMove, out int ttDepth, out TTFlag ttFlag))
+#endif
             {
                 // Always harvested for ordering, even on a depth-insufficient hit.
                 ttMove = ttPackedMove;
@@ -755,7 +789,7 @@ namespace ChessTheBetrayal.AI
                 && depth <= ReverseFutilityMaxDepth
                 && beta < MateScore - _maxSupportedDepth)
             {
-                int staticEval = _evaluator.Evaluate(board, perspectiveTeam);
+                int staticEval = EvaluateTimed(board, perspectiveTeam);
                 if (staticEval - ReverseFutilityMargin(depth) >= beta)
                 {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -803,7 +837,14 @@ namespace ChessTheBetrayal.AI
             // GetAllLegalMoves) so the search can both play Betrayal itself and see the opponent
             // threatening one, at every ply — DefendOnly strips Act from the AGENT's choices only
             // at the root (see BuildRootMoves); this recursion never filters.
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            bool sampleGen = _tt.Stats.ShouldSampleMoveGen();
+            long genStart = sampleGen ? Stopwatch.GetTimestamp() : 0;
+#endif
             _engine.GetAllLegalMovesIncludingBetrayal(board, board.CurrentTurn, moves);
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            if (sampleGen) _tt.Stats.RecordMoveGenTicks(Stopwatch.GetTimestamp() - genStart);
+#endif
 
             if (moves.Count == 0)
             {
@@ -901,7 +942,7 @@ namespace ChessTheBetrayal.AI
                 {
                     if (!staticEvalComputed)
                     {
-                        staticEvalForPruning = _evaluator.Evaluate(board, perspectiveTeam);
+                        staticEvalForPruning = EvaluateTimed(board, perspectiveTeam);
                         staticEvalComputed = true;
                     }
 
@@ -1041,7 +1082,14 @@ namespace ChessTheBetrayal.AI
                 TTFlag flag = best <= alphaOriginal ? TTFlag.UpperBound
                             : best >= beta ? TTFlag.LowerBound
                             : TTFlag.Exact;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                bool sampleStore = _tt.Stats.ShouldSampleTT();
+                long storeStart = sampleStore ? Stopwatch.GetTimestamp() : 0;
                 _tt.Store(board.ZobristHash, AdjustMateScore(best, plyFromRoot), bestPackedMove, depth, flag);
+                if (sampleStore) _tt.Stats.RecordTTTicks(Stopwatch.GetTimestamp() - storeStart);
+#else
+                _tt.Store(board.ZobristHash, AdjustMateScore(best, plyFromRoot), bestPackedMove, depth, flag);
+#endif
             }
 
             return best;
@@ -1231,7 +1279,7 @@ namespace ChessTheBetrayal.AI
                 // Backstop: if we've somehow burned the whole quiescence budget while still mid-
                 // Betrayal, stop recursing and evaluate in place rather than risk a StackOverflow.
                 if (qply <= 0)
-                    return _evaluator.Evaluate(board, perspectiveTeam);
+                    return EvaluateTimed(board, perspectiveTeam);
 
                 // Force resolution: generate Retribution moves; if none, the domain's Defection path
                 // resolves it. Either way we recurse one more ply into the resolved position.
@@ -1265,7 +1313,7 @@ namespace ChessTheBetrayal.AI
                 _tt.Stats.QBetrayalResolutionNodes++;
 #endif
                 if (qply <= 0)
-                    return _evaluator.Evaluate(board, perspectiveTeam);
+                    return EvaluateTimed(board, perspectiveTeam);
 
                 // The board already arrived here mid-ForcedSave (a prior ply's Defection left this
                 // exact obligation open) — resolve it the same way ResolveForcedDefection's own
@@ -1279,7 +1327,15 @@ namespace ChessTheBetrayal.AI
             // never evict a Search entry of depth >= 1, so there is no second table and no pollution
             // risk beyond what depth-0-vs-depth-0 entries already tolerate.
             int alphaOriginal = alpha;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            bool sampleQTT = _tt.Stats.ShouldSampleTT();
+            long qttStart = sampleQTT ? Stopwatch.GetTimestamp() : 0;
+            bool qttHit = _tt.Probe(board.ZobristHash, out int ttScore, out _, out _, out TTFlag ttFlag);
+            if (sampleQTT) _tt.Stats.RecordTTTicks(Stopwatch.GetTimestamp() - qttStart);
+            if (qttHit)
+#else
             if (_tt.Probe(board.ZobristHash, out int ttScore, out _, out _, out TTFlag ttFlag))
+#endif
             {
                 int s = UnadjustMateScore(ttScore, plyFromRoot);
                 if (ttFlag == TTFlag.Exact) return s;
@@ -1294,7 +1350,7 @@ namespace ChessTheBetrayal.AI
             // at every early-return site would be needless surface area. Fail-soft is the more
             // standard alpha-beta convention (Search itself already returns 'best', not 'beta') and
             // is provably still a valid cutoff (best >= beta here).
-            int standPat = _evaluator.Evaluate(board, perspectiveTeam);
+            int standPat = EvaluateTimed(board, perspectiveTeam);
             if (standPat >= beta) return standPat;
             if (standPat > alpha) alpha = standPat;
 
@@ -1304,8 +1360,13 @@ namespace ChessTheBetrayal.AI
             // quiescence only ever wants this subset, and full movegen was spending most of its
             // cost legality-checking quiet moves that would just get filtered out below anyway.
             List<MoveCommand> moves = QuiescenceBuffer(qply);
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            bool sampleQGen = _tt.Stats.ShouldSampleMoveGen();
+            long qGenStart = sampleQGen ? Stopwatch.GetTimestamp() : 0;
+#endif
             _engine.GetCapturesAndActsOnly(board, board.CurrentTurn, moves);
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
+            if (sampleQGen) _tt.Stats.RecordMoveGenTicks(Stopwatch.GetTimestamp() - qGenStart);
             _tt.Stats.QMovesGenerated += moves.Count;
 #endif
             OrderMoves(board, moves);
