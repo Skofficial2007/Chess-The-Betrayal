@@ -224,6 +224,35 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
+        public void FindBestMove_RealSearch_RecordsAPlausibleFirstMoveCutoffRate()
+        {
+            // A real multi-depth search on a normal position produces many beta cutoffs. The rate at
+            // which the first move tried wins the cutoff is the direct signal for whether move
+            // ordering is working — it must land in a sane 0..1 range and not stay at zero, since a
+            // healthy search wins most cutoffs immediately.
+            BoardState board = TestBoardSetupUtility.CreateStandard();
+            var settings = new AISearchSettings(maxDepth: 6, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
+
+            _search.FindBestMove(board, settings, CancellationToken.None);
+
+            SearchStats stats = _search.Stats;
+            Assert.That(stats.BetaCutoffs, Is.GreaterThan(0), "A depth-6 search from the opening should produce beta cutoffs.");
+            Assert.That(stats.FirstMoveBetaCutoffs, Is.GreaterThan(0), "Move ordering should win at least some cutoffs on the first move tried.");
+            Assert.That(stats.FirstMoveBetaCutoffs, Is.LessThanOrEqualTo(stats.BetaCutoffs),
+                "First-move cutoffs can never exceed total cutoffs.");
+            Assert.That(stats.FirstMoveCutoffRate(), Is.InRange(0.0, 1.0), "The cutoff rate must be a proper fraction.");
+        }
+
+        [Test]
+        public void FirstMoveCutoffRate_NoCutoffsYet_ReportsZeroNotADivideByZero()
+        {
+            var stats = new SearchStats();
+
+            Assert.That(stats.FirstMoveCutoffRate(), Is.EqualTo(0.0),
+                "With no cutoffs recorded the rate must report 0, not a divide-by-zero.");
+        }
+
+        [Test]
         public void FindBestMove_FixedPosition_StillAllocatesNoManagedMemory()
         {
             // The added per-depth fields are plain value-type longs behind the same guard as every
