@@ -68,7 +68,10 @@ namespace ChessTheBetrayal.AI
         public int LastCompletedDepth;
 
         // Per-depth cumulative node count (main + quiescence) at the moment each iterative-deepening
-        // depth FULLY completes — the effective-branching-factor curve. Index 0 unused (depths are 1-7).
+        // depth FULLY completes — the effective-branching-factor curve. Tracked through depth 12 so
+        // the cost of the deepest tiers' 7->8->9 transition is visible rather than dropped: those
+        // three tiers all bottom out around the same effective depth under the real move budget, and
+        // seeing exactly how the tree grows across that band is the whole point of this curve.
         public long NodesAfterDepth1;
         public long NodesAfterDepth2;
         public long NodesAfterDepth3;
@@ -76,6 +79,11 @@ namespace ChessTheBetrayal.AI
         public long NodesAfterDepth5;
         public long NodesAfterDepth6;
         public long NodesAfterDepth7;
+        public long NodesAfterDepth8;
+        public long NodesAfterDepth9;
+        public long NodesAfterDepth10;
+        public long NodesAfterDepth11;
+        public long NodesAfterDepth12;
 
         public void Reset()
         {
@@ -83,9 +91,9 @@ namespace ChessTheBetrayal.AI
         }
 
         /// <summary>Records the running node total (NodesVisited + QNodesVisited) at the moment a
-        /// depth in 1..7 fully completes. Depths beyond 7 are not tracked (the benchmark this feeds
-        /// is fixed to depth 7) — silently ignored rather than throwing, since search settings can
-        /// legitimately go deeper than 7 outside the benchmark.</summary>
+        /// depth in 1..12 fully completes. Depths beyond 12 are ignored rather than throwing, since a
+        /// search can legitimately be configured deeper than the curve tracks; the curve just stops
+        /// reporting past its last slot instead of failing the search.</summary>
         public void AssignNodesAfterDepth(int depth, long totalNodes)
         {
             switch (depth)
@@ -97,6 +105,11 @@ namespace ChessTheBetrayal.AI
                 case 5: NodesAfterDepth5 = totalNodes; break;
                 case 6: NodesAfterDepth6 = totalNodes; break;
                 case 7: NodesAfterDepth7 = totalNodes; break;
+                case 8: NodesAfterDepth8 = totalNodes; break;
+                case 9: NodesAfterDepth9 = totalNodes; break;
+                case 10: NodesAfterDepth10 = totalNodes; break;
+                case 11: NodesAfterDepth11 = totalNodes; break;
+                case 12: NodesAfterDepth12 = totalNodes; break;
             }
         }
 
@@ -106,6 +119,6 @@ namespace ChessTheBetrayal.AI
             $"fwdPrune(rfp={ReverseFutilityCutoffs} lmp={LateMovePrunes} ffp={FrontierFutilityPrunes}) betrayalExt={BetrayalExtensions} forcedDefection={ForcedDefectionResolutions} iir={IirReductions} " +
             $"aspiration(attempt={AspirationWindowAttempts} research={AspirationWindowReSearches}) " +
             $"q(nodes={QNodesVisited} betrayalRes={QBetrayalResolutionNodes} actExp={QActExpansions} gen={QMovesGenerated} searched={QMovesSearched} seePrune={SeeQuiescencePrunes}) " +
-            $"depthCurve(d1={NodesAfterDepth1} d2={NodesAfterDepth2} d3={NodesAfterDepth3} d4={NodesAfterDepth4} d5={NodesAfterDepth5} d6={NodesAfterDepth6} d7={NodesAfterDepth7})";
+            $"depthCurve(d1={NodesAfterDepth1} d2={NodesAfterDepth2} d3={NodesAfterDepth3} d4={NodesAfterDepth4} d5={NodesAfterDepth5} d6={NodesAfterDepth6} d7={NodesAfterDepth7} d8={NodesAfterDepth8} d9={NodesAfterDepth9} d10={NodesAfterDepth10} d11={NodesAfterDepth11} d12={NodesAfterDepth12})";
     }
 }
