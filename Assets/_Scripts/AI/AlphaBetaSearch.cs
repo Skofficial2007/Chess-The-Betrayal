@@ -804,11 +804,47 @@ namespace ChessTheBetrayal.AI
             // Retribution-pending, AND ForcedSave-pending alike, not just Retribution — a null move
             // mid-sequence would flip CurrentTurn while the domain mandates the SAME player
             // continues, corrupting move generation, the TT hash, and the alpha-beta frame at once.
-            if (depth >= NullMoveMinDepth(depth)
-                && forwardPruningAllowed
-                && !parentWasNull
-                && HasNonPawnMaterial(board, board.CurrentTurn)
-                && beta < MateScore - _maxSupportedDepth)
+            //
+            // The single combined condition below is unchanged from before — this is broken into a
+            // sequence of individually-named checks purely so telemetry can record WHICH guard turned
+            // a node away, not just that one did. Each branch below is mutually exclusive with the
+            // others (a node can only be counted against the first reason it fails), and together
+            // with a successful attempt they account for every node that reached this point — so the
+            // skip counters plus NullMoveAttempts should always sum to the same total across a search.
+            bool nullMoveDepthOk = depth >= NullMoveMinDepth(depth);
+            bool nullMoveBetaOk = beta < MateScore - _maxSupportedDepth;
+
+            if (!nullMoveDepthOk)
+            {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                _tt.Stats.NullMoveSkippedByDepth++;
+#endif
+            }
+            else if (!forwardPruningAllowed)
+            {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                _tt.Stats.NullMoveSkippedByGuard++;
+#endif
+            }
+            else if (parentWasNull)
+            {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                _tt.Stats.NullMoveSkippedByParentNull++;
+#endif
+            }
+            else if (!HasNonPawnMaterial(board, board.CurrentTurn))
+            {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                _tt.Stats.NullMoveSkippedByMaterial++;
+#endif
+            }
+            else if (!nullMoveBetaOk)
+            {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                _tt.Stats.NullMoveSkippedByBeta++;
+#endif
+            }
+            else
             {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                 _tt.Stats.NullMoveAttempts++;

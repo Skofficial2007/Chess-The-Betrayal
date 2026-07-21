@@ -20,6 +20,18 @@ namespace ChessTheBetrayal.AI
         public long TTReplacements;       // a Store that overwrote an existing, non-empty slot
         public long NullMoveAttempts;
         public long NullMoveCutoffs;
+
+        // Why a node that reached the null-move decision point did NOT get an attempt. Mutually
+        // exclusive with each other and with NullMoveAttempts — a node is counted against the FIRST
+        // reason it fails, so these five plus NullMoveAttempts should always sum to the number of
+        // nodes that reached this decision point at all. Exists to tell apart "null-move pruning
+        // isn't being tried here" from "it's being tried and failing," which a bare attempt/cutoff
+        // count can't distinguish.
+        public long NullMoveSkippedByDepth;       // too shallow for this depth's minimum
+        public long NullMoveSkippedByGuard;       // a pending Betrayer or being in check
+        public long NullMoveSkippedByParentNull;  // the parent ply was itself a null move
+        public long NullMoveSkippedByMaterial;    // side to move has no non-pawn material (zugzwang risk)
+        public long NullMoveSkippedByBeta;        // beta is inside the mate-score range
         public long LmrReductions;
         public long LmrReSearches;    // reduced move failed high and was re-searched at full depth
         public long PvsScouts;
@@ -258,7 +270,7 @@ namespace ChessTheBetrayal.AI
 
         public override string ToString() =>
             $"depth={LastCompletedDepth} nodes={NodesVisited} tt(probe={TTProbes} hit={TTHits} emptyMiss={TTEmptyMisses} verifyMiss={TTVerificationMisses} store={TTStores} replace={TTReplacements}) " +
-            $"null(try={NullMoveAttempts} cut={NullMoveCutoffs}) lmr(reduce={LmrReductions} research={LmrReSearches}) pvs(scout={PvsScouts} research={PvsReSearches}) " +
+            $"null(try={NullMoveAttempts} cut={NullMoveCutoffs} skip(depth={NullMoveSkippedByDepth} guard={NullMoveSkippedByGuard} parentNull={NullMoveSkippedByParentNull} material={NullMoveSkippedByMaterial} beta={NullMoveSkippedByBeta})) lmr(reduce={LmrReductions} research={LmrReSearches}) pvs(scout={PvsScouts} research={PvsReSearches}) " +
             $"fwdPrune(rfp={ReverseFutilityCutoffs} lmp={LateMovePrunes} ffp={FrontierFutilityPrunes}) betrayalExt={BetrayalExtensions} forcedDefection={ForcedDefectionResolutions} iir={IirReductions} " +
             $"cutoff(total={BetaCutoffs} firstMove={FirstMoveBetaCutoffs} rate={FirstMoveCutoffRate():F3}) " +
             $"aspiration(attempt={AspirationWindowAttempts} research={AspirationWindowReSearches}) " +
