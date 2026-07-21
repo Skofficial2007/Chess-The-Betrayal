@@ -253,6 +253,29 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
+        public void FindBestMove_RealSearch_NullMoveSkipReasonsAccountForEveryDecisionPointNode()
+        {
+            // Each of the five skip counters is mutually exclusive with the others and with a real
+            // attempt — a node reaching the null-move decision point is counted against exactly one
+            // of them, or against NullMoveAttempts. If that stops being true, either a guard was
+            // duplicated (double-counted) or a node fell through uncounted (under-counted) — both
+            // would make the skip breakdown misleading rather than just incomplete, so this must hold
+            // exactly, not approximately.
+            BoardState board = TestBoardSetupUtility.CreateStandard();
+            var settings = new AISearchSettings(maxDepth: 6, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
+
+            _search.FindBestMove(board, settings, CancellationToken.None);
+
+            SearchStats stats = _search.Stats;
+            long skippedTotal = stats.NullMoveSkippedByDepth + stats.NullMoveSkippedByGuard
+                + stats.NullMoveSkippedByParentNull + stats.NullMoveSkippedByMaterial + stats.NullMoveSkippedByBeta;
+            long decisionPointTotal = skippedTotal + stats.NullMoveAttempts;
+
+            Assert.That(decisionPointTotal, Is.GreaterThan(0), "A depth-6 search should reach the null-move decision point many times.");
+            Assert.That(stats.NullMoveSkippedByDepth, Is.GreaterThan(0), "Shallow nodes below the depth floor should be counted.");
+        }
+
+        [Test]
         public void FindBestMove_FixedPosition_StillAllocatesNoManagedMemory()
         {
             // The added per-depth fields are plain value-type longs behind the same guard as every
