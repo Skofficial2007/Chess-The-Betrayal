@@ -1071,6 +1071,14 @@ namespace ChessTheBetrayal.AI
                 // a betrayal sequence is still a cutoff for the same maximizer that owns this node.
                 if (alpha >= beta)
                 {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                    // How often the very first move tried is the one that closes the node out — the
+                    // signature of move ordering doing its job. A falling rate at a given depth means
+                    // later moves are winning cutoffs more often, i.e. ordering is losing its grip as
+                    // the tree gets deeper.
+                    _tt.Stats.BetaCutoffs++;
+                    if (i == 0) _tt.Stats.FirstMoveBetaCutoffs++;
+#endif
                     RecordQuietCutoff(move, depth, plyFromRoot);
                     break;
                 }

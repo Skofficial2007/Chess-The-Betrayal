@@ -33,6 +33,13 @@ namespace ChessTheBetrayal.AI
 
         public long BetrayalExtensions; // Acts granted a search extension for staging a forced Retribution
 
+        // How often a beta cutoff is won by the first move tried at a node, versus a later one —
+        // the direct signal for whether move ordering is doing its job. A healthy search wins the
+        // large majority of cutoffs on the first try; a falling rate at deeper nodes means ordering
+        // is losing its grip as the tree grows.
+        public long BetaCutoffs;
+        public long FirstMoveBetaCutoffs;
+
         // Main-search nodes whose pending Retribution had no legal executioner, so the Betrayer's
         // forced Defection was resolved in-line and the search continued through it (see
         // AlphaBetaSearch.ResolveForcedDefectionInSearch). Quiescence's own resolutions are counted
@@ -195,6 +202,10 @@ namespace ChessTheBetrayal.AI
             return (double)current / previous;
         }
 
+        /// <summary>Share of beta cutoffs won by the first move tried at a node, in 0..1. Returns 0
+        /// when no cutoff has happened yet rather than dividing by zero.</summary>
+        public double FirstMoveCutoffRate() => BetaCutoffs <= 0 ? 0.0 : (double)FirstMoveBetaCutoffs / BetaCutoffs;
+
         // --- Section timing: sample gates and recorders ---
         // Each section calls its ShouldSample* once per call (which counts the call and returns true
         // on the sampled fraction), takes a start timestamp only when it returned true, runs the
@@ -249,6 +260,7 @@ namespace ChessTheBetrayal.AI
             $"depth={LastCompletedDepth} nodes={NodesVisited} tt(probe={TTProbes} hit={TTHits} emptyMiss={TTEmptyMisses} verifyMiss={TTVerificationMisses} store={TTStores} replace={TTReplacements}) " +
             $"null(try={NullMoveAttempts} cut={NullMoveCutoffs}) lmr(reduce={LmrReductions} research={LmrReSearches}) pvs(scout={PvsScouts} research={PvsReSearches}) " +
             $"fwdPrune(rfp={ReverseFutilityCutoffs} lmp={LateMovePrunes} ffp={FrontierFutilityPrunes}) betrayalExt={BetrayalExtensions} forcedDefection={ForcedDefectionResolutions} iir={IirReductions} " +
+            $"cutoff(total={BetaCutoffs} firstMove={FirstMoveBetaCutoffs} rate={FirstMoveCutoffRate():F3}) " +
             $"aspiration(attempt={AspirationWindowAttempts} research={AspirationWindowReSearches}) " +
             $"q(nodes={QNodesVisited} betrayalRes={QBetrayalResolutionNodes} actExp={QActExpansions} gen={QMovesGenerated} searched={QMovesSearched} seePrune={SeeQuiescencePrunes}) " +
             $"depthCurve(d1={NodesAfterDepth1} d2={NodesAfterDepth2} d3={NodesAfterDepth3} d4={NodesAfterDepth4} d5={NodesAfterDepth5} d6={NodesAfterDepth6} d7={NodesAfterDepth7} d8={NodesAfterDepth8} d9={NodesAfterDepth9} d10={NodesAfterDepth10} d11={NodesAfterDepth11} d12={NodesAfterDepth12}) " +
