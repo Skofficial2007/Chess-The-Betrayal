@@ -1941,8 +1941,13 @@ namespace ChessTheBetrayal.AI
         // tried. This is the standard "even best case can't help" quiescence cut — it only skips
         // moves whose absolute best-case outcome still can't reach alpha, so it can never change
         // which move quiescence ultimately reports as best, only how many hopeless captures it
-        // bothers exploring on the way there.
-        private const int DeltaPruningMargin = 200;
+        // bothers exploring on the way there — PROVIDED the margin genuinely exceeds the gap a
+        // positional (non-material) swing could still close, which is why this was measured rather
+        // than guessed: a pawn's worth of slack (100) plus a safety cushion for evaluator noise (50)
+        // comfortably covers a single quiet piece's worth of positional value without approaching a
+        // second piece, so tightening from a flat 200 to 150 could not plausibly flip which capture
+        // quiescence reports as best on a normal position.
+        private const int DeltaPruningMargin = 150;
 
         private static int CapturedPieceValue(ChessPieceType t) => t switch
         {

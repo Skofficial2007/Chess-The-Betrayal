@@ -39,7 +39,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
 
         /// <summary>A developed middlegame with both sides castled, no captures pending — the "quiet"
         /// baseline. Betrayal right is live so the tree carries the real Act/Defection branching.</summary>
-        private static BoardState QuietMidgame() =>
+        internal static BoardState QuietMidgame() =>
             TestBoardSetupUtility.CreateEmpty()
                 .WithPiece("g1", Team.White, ChessPieceType.King)
                 .WithPiece("g8", Team.Black, ChessPieceType.King)
@@ -73,7 +73,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
 
         /// <summary>A sharp middlegame with pieces en prise and open lines — captures and recaptures
         /// available, so the quiescence tail is far larger than the quiet position's.</summary>
-        private static BoardState TacticalMidgame() =>
+        internal static BoardState TacticalMidgame() =>
             TestBoardSetupUtility.CreateEmpty()
                 .WithPiece("g1", Team.White, ChessPieceType.King)
                 .WithPiece("g8", Team.Black, ChessPieceType.King)
@@ -101,7 +101,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         /// <summary>A Betrayal-live middlegame with the pieces packed near both kings, where an Act and
         /// its forced follow-up are genuinely on the table — the shape whose tree the earlier
         /// benchmarks understated because they measured a quiet opening instead.</summary>
-        private static BoardState BetrayalLiveMidgame() =>
+        internal static BoardState BetrayalLiveMidgame() =>
             TestBoardSetupUtility.CreateEmpty()
                 .WithPiece("g1", Team.White, ChessPieceType.King)
                 .WithPiece("g8", Team.Black, ChessPieceType.King)
@@ -132,7 +132,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         /// Fewer pieces means a different kind of tree: less material to trade off in quiescence, but
         /// a longer horizon before anything decisive happens, which the deep tiers meet just as often
         /// as a middlegame in real play.</summary>
-        private static BoardState QuietEndgame() =>
+        internal static BoardState QuietEndgame() =>
             TestBoardSetupUtility.CreateEmpty()
                 .WithPiece("g1", Team.White, ChessPieceType.King)
                 .WithPiece("g8", Team.Black, ChessPieceType.King)
@@ -159,7 +159,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         /// d-pawn, Black a backward one), no piece en prise. This exists to separate "quiet costs a
         /// lot at depth 9" from "this one specific quiet board costs a lot" — if both quiet positions
         /// show the same kind of blowup, the finding is about quiet play, not about one board.</summary>
-        private static BoardState SemiOpenMidgame() =>
+        internal static BoardState SemiOpenMidgame() =>
             TestBoardSetupUtility.CreateEmpty()
                 .WithPiece("g1", Team.White, ChessPieceType.King)
                 .WithPiece("g8", Team.Black, ChessPieceType.King)
