@@ -85,6 +85,24 @@ namespace ChessTheBetrayal.AI
         public long NodesAfterDepth11;
         public long NodesAfterDepth12;
 
+        // Wall-clock time elapsed since the search began, sampled at the moment each depth completes —
+        // the companion to the node curve above. Node counts alone can't tell you whether a depth is
+        // expensive because it visits more positions or because each position costs more to score; the
+        // two curves side by side separate those. Cumulative from the start of the search, so a single
+        // stopwatch read per completed depth captures it with no per-node cost.
+        public long ElapsedMsAfterDepth1;
+        public long ElapsedMsAfterDepth2;
+        public long ElapsedMsAfterDepth3;
+        public long ElapsedMsAfterDepth4;
+        public long ElapsedMsAfterDepth5;
+        public long ElapsedMsAfterDepth6;
+        public long ElapsedMsAfterDepth7;
+        public long ElapsedMsAfterDepth8;
+        public long ElapsedMsAfterDepth9;
+        public long ElapsedMsAfterDepth10;
+        public long ElapsedMsAfterDepth11;
+        public long ElapsedMsAfterDepth12;
+
         public void Reset()
         {
             this = default;
@@ -113,12 +131,34 @@ namespace ChessTheBetrayal.AI
             }
         }
 
+        /// <summary>Records the cumulative wall-clock milliseconds elapsed at the moment a depth in
+        /// 1..12 fully completes. Same ceiling and out-of-range handling as the node curve above.</summary>
+        public void AssignElapsedMsAfterDepth(int depth, long elapsedMs)
+        {
+            switch (depth)
+            {
+                case 1: ElapsedMsAfterDepth1 = elapsedMs; break;
+                case 2: ElapsedMsAfterDepth2 = elapsedMs; break;
+                case 3: ElapsedMsAfterDepth3 = elapsedMs; break;
+                case 4: ElapsedMsAfterDepth4 = elapsedMs; break;
+                case 5: ElapsedMsAfterDepth5 = elapsedMs; break;
+                case 6: ElapsedMsAfterDepth6 = elapsedMs; break;
+                case 7: ElapsedMsAfterDepth7 = elapsedMs; break;
+                case 8: ElapsedMsAfterDepth8 = elapsedMs; break;
+                case 9: ElapsedMsAfterDepth9 = elapsedMs; break;
+                case 10: ElapsedMsAfterDepth10 = elapsedMs; break;
+                case 11: ElapsedMsAfterDepth11 = elapsedMs; break;
+                case 12: ElapsedMsAfterDepth12 = elapsedMs; break;
+            }
+        }
+
         public override string ToString() =>
             $"depth={LastCompletedDepth} nodes={NodesVisited} tt(probe={TTProbes} hit={TTHits} emptyMiss={TTEmptyMisses} verifyMiss={TTVerificationMisses} store={TTStores} replace={TTReplacements}) " +
             $"null(try={NullMoveAttempts} cut={NullMoveCutoffs}) lmr(reduce={LmrReductions} research={LmrReSearches}) pvs(scout={PvsScouts} research={PvsReSearches}) " +
             $"fwdPrune(rfp={ReverseFutilityCutoffs} lmp={LateMovePrunes} ffp={FrontierFutilityPrunes}) betrayalExt={BetrayalExtensions} forcedDefection={ForcedDefectionResolutions} iir={IirReductions} " +
             $"aspiration(attempt={AspirationWindowAttempts} research={AspirationWindowReSearches}) " +
             $"q(nodes={QNodesVisited} betrayalRes={QBetrayalResolutionNodes} actExp={QActExpansions} gen={QMovesGenerated} searched={QMovesSearched} seePrune={SeeQuiescencePrunes}) " +
-            $"depthCurve(d1={NodesAfterDepth1} d2={NodesAfterDepth2} d3={NodesAfterDepth3} d4={NodesAfterDepth4} d5={NodesAfterDepth5} d6={NodesAfterDepth6} d7={NodesAfterDepth7} d8={NodesAfterDepth8} d9={NodesAfterDepth9} d10={NodesAfterDepth10} d11={NodesAfterDepth11} d12={NodesAfterDepth12})";
+            $"depthCurve(d1={NodesAfterDepth1} d2={NodesAfterDepth2} d3={NodesAfterDepth3} d4={NodesAfterDepth4} d5={NodesAfterDepth5} d6={NodesAfterDepth6} d7={NodesAfterDepth7} d8={NodesAfterDepth8} d9={NodesAfterDepth9} d10={NodesAfterDepth10} d11={NodesAfterDepth11} d12={NodesAfterDepth12}) " +
+            $"msCurve(d1={ElapsedMsAfterDepth1} d2={ElapsedMsAfterDepth2} d3={ElapsedMsAfterDepth3} d4={ElapsedMsAfterDepth4} d5={ElapsedMsAfterDepth5} d6={ElapsedMsAfterDepth6} d7={ElapsedMsAfterDepth7} d8={ElapsedMsAfterDepth8} d9={ElapsedMsAfterDepth9} d10={ElapsedMsAfterDepth10} d11={ElapsedMsAfterDepth11} d12={ElapsedMsAfterDepth12})";
     }
 }
