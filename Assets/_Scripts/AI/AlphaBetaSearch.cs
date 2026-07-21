@@ -351,6 +351,12 @@ namespace ChessTheBetrayal.AI
             Stopwatch stopwatch = enableInstabilityTimeManagement ? Stopwatch.StartNew() : null;
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
+            // A telemetry-only clock start, always taken while telemetry is compiled in, so the
+            // per-depth ms curve is captured even for the ordinary searches that don't ask for
+            // instability time management (their own stopwatch above stays null). A raw timestamp
+            // rather than a Stopwatch instance so starting the clock allocates nothing — the per-depth
+            // read below subtracts against it. One read per completed depth adds nothing per node.
+            long telemetryStartTimestamp = Stopwatch.GetTimestamp();
             _tt.Stats.Reset();
 #endif
             _tt.NewSearch();
@@ -514,6 +520,8 @@ namespace ChessTheBetrayal.AI
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                     _tt.Stats.AssignNodesAfterDepth(depth, _tt.Stats.NodesVisited + _tt.Stats.QNodesVisited);
+                    _tt.Stats.AssignElapsedMsAfterDepth(depth,
+                        (Stopwatch.GetTimestamp() - telemetryStartTimestamp) * 1000L / Stopwatch.Frequency);
 #endif
 
                     // Early exit on forced mate found — no deeper search changes the decision.

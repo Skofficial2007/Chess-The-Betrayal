@@ -69,6 +69,47 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
+        public void FindBestMove_ReachesDepthNine_RecordsPerDepthElapsedMsThroughDepthNine()
+        {
+            // Alongside the node curve, each completed depth records the cumulative wall-clock ms at
+            // that point. A depth-9 search must therefore have a non-zero ms reading by depth 9 (the
+            // search takes real time to get there), and depth 8's must be recorded too.
+            BoardState board = TestBoardSetupUtility.CreateStandard();
+            var settings = new AISearchSettings(maxDepth: 9, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
+
+            _search.FindBestMove(board, settings, CancellationToken.None);
+
+            SearchStats stats = _search.Stats;
+            Assert.That(stats.LastCompletedDepth, Is.GreaterThanOrEqualTo(9),
+                "The search must actually complete depth 9 for this test to exercise the depth-8/9 ms slots.");
+            Assert.That(stats.ElapsedMsAfterDepth8, Is.GreaterThanOrEqualTo(0), "Depth-8 elapsed ms was not recorded.");
+            Assert.That(stats.ElapsedMsAfterDepth9, Is.GreaterThan(0),
+                "Depth-9 elapsed ms should be positive — reaching depth 9 takes measurable time.");
+        }
+
+        [Test]
+        public void FindBestMove_PerDepthElapsedMs_IsMonotonicThroughDepthNine()
+        {
+            // Cumulative elapsed time can only ever grow as deeper depths complete — a later depth can
+            // never report a smaller running total than an earlier one.
+            BoardState board = TestBoardSetupUtility.CreateStandard();
+            var settings = new AISearchSettings(maxDepth: 9, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
+
+            _search.FindBestMove(board, settings, CancellationToken.None);
+
+            SearchStats stats = _search.Stats;
+            long[] msCurve =
+            {
+                stats.ElapsedMsAfterDepth1, stats.ElapsedMsAfterDepth2, stats.ElapsedMsAfterDepth3,
+                stats.ElapsedMsAfterDepth4, stats.ElapsedMsAfterDepth5, stats.ElapsedMsAfterDepth6,
+                stats.ElapsedMsAfterDepth7, stats.ElapsedMsAfterDepth8, stats.ElapsedMsAfterDepth9,
+            };
+            for (int i = 1; i < msCurve.Length; i++)
+                Assert.That(msCurve[i], Is.GreaterThanOrEqualTo(msCurve[i - 1]),
+                    $"Cumulative elapsed ms at depth {i + 1} ({msCurve[i]}) fell below depth {i} ({msCurve[i - 1]}).");
+        }
+
+        [Test]
         public void FindBestMove_FixedPosition_StillAllocatesNoManagedMemory()
         {
             // The added per-depth fields are plain value-type longs behind the same guard as every
