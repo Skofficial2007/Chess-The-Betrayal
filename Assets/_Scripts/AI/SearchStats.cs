@@ -131,6 +131,42 @@ namespace ChessTheBetrayal.AI
             }
         }
 
+        /// <summary>The cumulative node total recorded when the given depth completed, or 0 for a
+        /// depth outside 1..12 or one the search never reached.</summary>
+        public long NodesAfterDepth(int depth)
+        {
+            switch (depth)
+            {
+                case 1: return NodesAfterDepth1;
+                case 2: return NodesAfterDepth2;
+                case 3: return NodesAfterDepth3;
+                case 4: return NodesAfterDepth4;
+                case 5: return NodesAfterDepth5;
+                case 6: return NodesAfterDepth6;
+                case 7: return NodesAfterDepth7;
+                case 8: return NodesAfterDepth8;
+                case 9: return NodesAfterDepth9;
+                case 10: return NodesAfterDepth10;
+                case 11: return NodesAfterDepth11;
+                case 12: return NodesAfterDepth12;
+                default: return 0;
+            }
+        }
+
+        /// <summary>How many times the tree grew going from the previous depth to this one — the
+        /// cumulative node count at <paramref name="depth"/> divided by the count at depth-1. A rough
+        /// effective branching factor: the lower it is, the better move ordering and pruning are
+        /// keeping the search from fanning out. Returns 0 when either depth wasn't reached (so there's
+        /// nothing to compare), which callers read as "not measurable here" rather than a real ratio.</summary>
+        public double EffectiveBranchingFactor(int depth)
+        {
+            if (depth < 2) return 0.0;
+            long previous = NodesAfterDepth(depth - 1);
+            long current = NodesAfterDepth(depth);
+            if (previous <= 0 || current <= 0) return 0.0;
+            return (double)current / previous;
+        }
+
         /// <summary>Records the cumulative wall-clock milliseconds elapsed at the moment a depth in
         /// 1..12 fully completes. Same ceiling and out-of-range handling as the node curve above.</summary>
         public void AssignElapsedMsAfterDepth(int depth, long elapsedMs)
@@ -159,6 +195,7 @@ namespace ChessTheBetrayal.AI
             $"aspiration(attempt={AspirationWindowAttempts} research={AspirationWindowReSearches}) " +
             $"q(nodes={QNodesVisited} betrayalRes={QBetrayalResolutionNodes} actExp={QActExpansions} gen={QMovesGenerated} searched={QMovesSearched} seePrune={SeeQuiescencePrunes}) " +
             $"depthCurve(d1={NodesAfterDepth1} d2={NodesAfterDepth2} d3={NodesAfterDepth3} d4={NodesAfterDepth4} d5={NodesAfterDepth5} d6={NodesAfterDepth6} d7={NodesAfterDepth7} d8={NodesAfterDepth8} d9={NodesAfterDepth9} d10={NodesAfterDepth10} d11={NodesAfterDepth11} d12={NodesAfterDepth12}) " +
-            $"msCurve(d1={ElapsedMsAfterDepth1} d2={ElapsedMsAfterDepth2} d3={ElapsedMsAfterDepth3} d4={ElapsedMsAfterDepth4} d5={ElapsedMsAfterDepth5} d6={ElapsedMsAfterDepth6} d7={ElapsedMsAfterDepth7} d8={ElapsedMsAfterDepth8} d9={ElapsedMsAfterDepth9} d10={ElapsedMsAfterDepth10} d11={ElapsedMsAfterDepth11} d12={ElapsedMsAfterDepth12})";
+            $"msCurve(d1={ElapsedMsAfterDepth1} d2={ElapsedMsAfterDepth2} d3={ElapsedMsAfterDepth3} d4={ElapsedMsAfterDepth4} d5={ElapsedMsAfterDepth5} d6={ElapsedMsAfterDepth6} d7={ElapsedMsAfterDepth7} d8={ElapsedMsAfterDepth8} d9={ElapsedMsAfterDepth9} d10={ElapsedMsAfterDepth10} d11={ElapsedMsAfterDepth11} d12={ElapsedMsAfterDepth12}) " +
+            $"ebf(d7={EffectiveBranchingFactor(7):F2} d8={EffectiveBranchingFactor(8):F2} d9={EffectiveBranchingFactor(9):F2} d10={EffectiveBranchingFactor(10):F2} d11={EffectiveBranchingFactor(11):F2} d12={EffectiveBranchingFactor(12):F2})";
     }
 }
