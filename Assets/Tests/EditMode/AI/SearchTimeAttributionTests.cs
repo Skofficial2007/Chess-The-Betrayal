@@ -110,6 +110,34 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
+        public void EffectiveBranchingFactor_ComputedFromCurve_IsTheRatioOfConsecutiveDepths()
+        {
+            // Pure derivation from the recorded curve — set two adjacent depths directly and confirm
+            // the branching factor is their ratio, no search required.
+            var stats = new SearchStats();
+            stats.AssignNodesAfterDepth(7, 1000);
+            stats.AssignNodesAfterDepth(8, 3500);
+
+            Assert.That(stats.EffectiveBranchingFactor(8), Is.EqualTo(3.5).Within(1e-9),
+                "Effective branching factor at depth 8 must be nodes(8)/nodes(7).");
+        }
+
+        [Test]
+        public void EffectiveBranchingFactor_WhenEitherDepthUnreached_ReportsZeroNotADivideByZero()
+        {
+            // A depth the search never reached leaves its slot at 0. The ratio must report 0
+            // ("not measurable") rather than dividing by zero or returning a garbage value.
+            var stats = new SearchStats();
+            stats.AssignNodesAfterDepth(7, 1000);
+            // Depth 8 never assigned -> stays 0.
+
+            Assert.That(stats.EffectiveBranchingFactor(8), Is.EqualTo(0.0),
+                "An unreached depth must yield a 0 branching factor, not a divide-by-zero.");
+            Assert.That(stats.EffectiveBranchingFactor(1), Is.EqualTo(0.0),
+                "Depth 1 has no previous depth to compare against, so it has no branching factor.");
+        }
+
+        [Test]
         public void FindBestMove_FixedPosition_StillAllocatesNoManagedMemory()
         {
             // The added per-depth fields are plain value-type longs behind the same guard as every
