@@ -18,9 +18,12 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
     /// budget must not cut the search off before it gets there. That is the opposite of what a real
     /// match does, and it is deliberate — this measures the tree, not the clock.
     ///
-    /// Three positions on purpose, not one. A single fixed opening understates the real cost: a quiet
-    /// position, a tactical one with a live capture chain, and a Betrayal-live one all grow their
-    /// trees differently past depth 7, and the deepest tiers meet all three in real games.
+    /// Five positions on purpose, not one. A single fixed opening understates the real cost: a quiet
+    /// middlegame, a tactical one with a live capture chain, a Betrayal-live one, a reduced-material
+    /// endgame, and a second, structurally different quiet position all grow their trees differently
+    /// past depth 7, and the deepest tiers meet all of these shapes in real games. The two quiet
+    /// positions exist so "quiet costs 24 seconds at depth 9" is a claim about quiet play in general,
+    /// not an artifact of one specific board.
     /// </summary>
     [TestFixture]
     [Explicit("Recording harness — run manually and read the per-depth profile from the log.")]
@@ -124,6 +127,66 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 .WithBetrayalRight(true)
                 .WithComputedHash();
 
+        /// <summary>A reduced-material endgame with far fewer pieces than the three middlegame
+        /// positions above — a king-and-pawns-plus-minor-pieces ending with no immediate captures.
+        /// Fewer pieces means a different kind of tree: less material to trade off in quiescence, but
+        /// a longer horizon before anything decisive happens, which the deep tiers meet just as often
+        /// as a middlegame in real play.</summary>
+        private static BoardState QuietEndgame() =>
+            TestBoardSetupUtility.CreateEmpty()
+                .WithPiece("g1", Team.White, ChessPieceType.King)
+                .WithPiece("g8", Team.Black, ChessPieceType.King)
+                .WithPiece("d3", Team.White, ChessPieceType.Rook)
+                .WithPiece("d6", Team.Black, ChessPieceType.Rook)
+                .WithPiece("e3", Team.White, ChessPieceType.Bishop)
+                .WithPiece("e6", Team.Black, ChessPieceType.Knight)
+                .WithPiece("a2", Team.White, ChessPieceType.Pawn)
+                .WithPiece("b2", Team.White, ChessPieceType.Pawn)
+                .WithPiece("f2", Team.White, ChessPieceType.Pawn)
+                .WithPiece("g2", Team.White, ChessPieceType.Pawn)
+                .WithPiece("h2", Team.White, ChessPieceType.Pawn)
+                .WithPiece("a7", Team.Black, ChessPieceType.Pawn)
+                .WithPiece("b7", Team.Black, ChessPieceType.Pawn)
+                .WithPiece("f7", Team.Black, ChessPieceType.Pawn)
+                .WithPiece("g7", Team.Black, ChessPieceType.Pawn)
+                .WithPiece("h7", Team.Black, ChessPieceType.Pawn)
+                .WithTurn(Team.White)
+                .WithBetrayalRight(true)
+                .WithComputedHash();
+
+        /// <summary>A second quiet middlegame, structurally different from QuietMidgame above: an
+        /// open f-file with rooks already facing off on it, unbalanced pawns (White has an isolated
+        /// d-pawn, Black a backward one), no piece en prise. This exists to separate "quiet costs a
+        /// lot at depth 9" from "this one specific quiet board costs a lot" — if both quiet positions
+        /// show the same kind of blowup, the finding is about quiet play, not about one board.</summary>
+        private static BoardState SemiOpenMidgame() =>
+            TestBoardSetupUtility.CreateEmpty()
+                .WithPiece("g1", Team.White, ChessPieceType.King)
+                .WithPiece("g8", Team.Black, ChessPieceType.King)
+                .WithPiece("d1", Team.White, ChessPieceType.Queen)
+                .WithPiece("d8", Team.Black, ChessPieceType.Queen)
+                .WithPiece("f1", Team.White, ChessPieceType.Rook)
+                .WithPiece("f8", Team.Black, ChessPieceType.Rook)
+                .WithPiece("a1", Team.White, ChessPieceType.Rook)
+                .WithPiece("a8", Team.Black, ChessPieceType.Rook)
+                .WithPiece("c3", Team.White, ChessPieceType.Knight)
+                .WithPiece("c6", Team.Black, ChessPieceType.Knight)
+                .WithPiece("b2", Team.White, ChessPieceType.Bishop)
+                .WithPiece("b7", Team.Black, ChessPieceType.Bishop)
+                .WithPiece("a2", Team.White, ChessPieceType.Pawn)
+                .WithPiece("b3", Team.White, ChessPieceType.Pawn)
+                .WithPiece("d4", Team.White, ChessPieceType.Pawn)
+                .WithPiece("g2", Team.White, ChessPieceType.Pawn)
+                .WithPiece("h2", Team.White, ChessPieceType.Pawn)
+                .WithPiece("a7", Team.Black, ChessPieceType.Pawn)
+                .WithPiece("b6", Team.Black, ChessPieceType.Pawn)
+                .WithPiece("d6", Team.Black, ChessPieceType.Pawn)
+                .WithPiece("g7", Team.Black, ChessPieceType.Pawn)
+                .WithPiece("h7", Team.Black, ChessPieceType.Pawn)
+                .WithTurn(Team.White)
+                .WithBetrayalRight(true)
+                .WithComputedHash();
+
         private static readonly int[] CaptureDepths = { 7, 8, 9 };
 
         private void CaptureProfile(string positionName, BoardState board)
@@ -151,5 +214,11 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
 
         [Test]
         public void CaptureDepthProfile_BetrayalLiveMidgame() => CaptureProfile("betrayal-live-midgame", BetrayalLiveMidgame());
+
+        [Test]
+        public void CaptureDepthProfile_QuietEndgame() => CaptureProfile("quiet-endgame", QuietEndgame());
+
+        [Test]
+        public void CaptureDepthProfile_SemiOpenMidgame() => CaptureProfile("semi-open-midgame", SemiOpenMidgame());
     }
 }
