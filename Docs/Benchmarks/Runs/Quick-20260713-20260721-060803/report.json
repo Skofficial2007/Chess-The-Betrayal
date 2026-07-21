@@ -1,0 +1,110 @@
+{
+    "RunSeed": 20260713,
+    "Mode": "Quick",
+    "PairResults": [
+        {
+            "Subject": "normal",
+            "Opponent": "easy",
+            "Games": 8,
+            "SubjectWins": 5,
+            "OpponentWins": 1,
+            "Draws": 2,
+            "SubjectWinRate": 0.75
+        },
+        {
+            "Subject": "hard",
+            "Opponent": "normal",
+            "Games": 8,
+            "SubjectWins": 7,
+            "OpponentWins": 0,
+            "Draws": 1,
+            "SubjectWinRate": 0.9375
+        },
+        {
+            "Subject": "extreme",
+            "Opponent": "hard",
+            "Games": 8,
+            "SubjectWins": 3,
+            "OpponentWins": 0,
+            "Draws": 5,
+            "SubjectWinRate": 0.6875
+        },
+        {
+            "Subject": "impossible",
+            "Opponent": "extreme",
+            "Games": 8,
+            "SubjectWins": 1,
+            "OpponentWins": 3,
+            "Draws": 4,
+            "SubjectWinRate": 0.375
+        },
+        {
+            "Subject": "aggressive",
+            "Opponent": "normal",
+            "Games": 8,
+            "SubjectWins": 8,
+            "OpponentWins": 0,
+            "Draws": 0,
+            "SubjectWinRate": 1.0
+        },
+        {
+            "Subject": "aggressive",
+            "Opponent": "easy",
+            "Games": 8,
+            "SubjectWins": 7,
+            "OpponentWins": 0,
+            "Draws": 1,
+            "SubjectWinRate": 0.9375
+        }
+    ],
+    "TierPerformances": [
+        {
+            "ProfileId": "normal",
+            "MovesSampled": 734,
+            "MeanNodesPerMove": 51334.607629427795,
+            "MeanMsPerMove": 1193.337252043597,
+            "DeepestCompletedDepth": 5,
+            "ObservedBlunderActuationRate": 0.06675749272108078
+        },
+        {
+            "ProfileId": "easy",
+            "MovesSampled": 444,
+            "MeanNodesPerMove": 6781.8175675675675,
+            "MeanMsPerMove": 164.88638333333337,
+            "DeepestCompletedDepth": 3,
+            "ObservedBlunderActuationRate": 0.2747747600078583
+        },
+        {
+            "ProfileId": "hard",
+            "MovesSampled": 633,
+            "MeanNodesPerMove": 148092.17219589259,
+            "MeanMsPerMove": 2716.4421805687207,
+            "DeepestCompletedDepth": 8,
+            "ObservedBlunderActuationRate": 0.0015797788510099054
+        },
+        {
+            "ProfileId": "extreme",
+            "MovesSampled": 743,
+            "MeanNodesPerMove": 180936.16823687755,
+            "MeanMsPerMove": 2776.1230847913866,
+            "DeepestCompletedDepth": 9,
+            "ObservedBlunderActuationRate": 0.0
+        },
+        {
+            "ProfileId": "impossible",
+            "MovesSampled": 357,
+            "MeanNodesPerMove": 113590.65546218488,
+            "MeanMsPerMove": 1958.1644112044823,
+            "DeepestCompletedDepth": 9,
+            "ObservedBlunderActuationRate": 0.0
+        },
+        {
+            "ProfileId": "aggressive",
+            "MovesSampled": 448,
+            "MeanNodesPerMove": 121092.18303571429,
+            "MeanMsPerMove": 2688.5745850446433,
+            "DeepestCompletedDepth": 7,
+            "ObservedBlunderActuationRate": 0.004464285913854837
+        }
+    ]
+}
