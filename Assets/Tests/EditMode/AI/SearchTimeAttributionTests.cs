@@ -196,25 +196,37 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             // tie-break the search has never promised to make deterministically — pinning it there
             // would test tie-break luck, not instrumentation. A position with one dominant move
             // removes the tie so this tests only what it means to.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
-                .WithPiece("e1", Team.White, ChessPieceType.King)
-                .WithPiece("e8", Team.Black, ChessPieceType.King)
-                .WithPiece("d1", Team.White, ChessPieceType.Rook)
-                .WithPiece("d7", Team.White, ChessPieceType.Knight)
-                .WithPiece("a8", Team.Black, ChessPieceType.Rook)
-                .WithPiece("h8", Team.Black, ChessPieceType.Rook)
-                .WithTurn(Team.White)
-                .WithComputedHash();
+            //
+            // Two SEPARATE board instances, not one reused across both searches: BoardState.SetPiece
+            // removes and re-appends a piece's index on every capture/undo, so a board that has been
+            // searched once can come out of that search with its internal piece-index ORDER permuted
+            // even though its content (and Zobrist hash) is unchanged. Move generation reads that
+            // same order, so a reused board's second search is not guaranteed to explore ties in the
+            // same order its first search did — a real, pre-existing property of the engine that a
+            // square-sensitive evaluator (the tapered King table) is what actually exposed it here,
+            // not something the taper broke. Building the position twice sidesteps it entirely and
+            // tests what this fixture actually means to: two independent searches, not one board's
+            // before/after state.
+            BoardState PositionForRepeatability() =>
+                TestBoardSetupUtility.CreateEmpty()
+                    .WithPiece("e1", Team.White, ChessPieceType.King)
+                    .WithPiece("e8", Team.Black, ChessPieceType.King)
+                    .WithPiece("d1", Team.White, ChessPieceType.Rook)
+                    .WithPiece("d7", Team.White, ChessPieceType.Knight)
+                    .WithPiece("a8", Team.Black, ChessPieceType.Rook)
+                    .WithPiece("h8", Team.Black, ChessPieceType.Rook)
+                    .WithTurn(Team.White)
+                    .WithComputedHash();
             var settings = new AISearchSettings(maxDepth: 6, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             var firstSearch = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator(),
                 transpositionTable: new TranspositionTable(log2Size: 20));
-            MoveCommand firstMove = firstSearch.FindBestMove(board, settings, CancellationToken.None);
+            MoveCommand firstMove = firstSearch.FindBestMove(PositionForRepeatability(), settings, CancellationToken.None);
             long firstNodes = firstSearch.Stats.NodesVisited;
 
             var secondSearch = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator(),
                 transpositionTable: new TranspositionTable(log2Size: 20));
-            MoveCommand secondMove = secondSearch.FindBestMove(board, settings, CancellationToken.None);
+            MoveCommand secondMove = secondSearch.FindBestMove(PositionForRepeatability(), settings, CancellationToken.None);
             long secondNodes = secondSearch.Stats.NodesVisited;
 
             Assert.That(secondNodes, Is.EqualTo(firstNodes),

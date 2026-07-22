@@ -18,6 +18,13 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
     ///
     /// The margin has since been measured back to 200 (see its comment in AlphaBetaSearch for the
     /// reasoning), which is why these expectations did not need to move with it.
+    ///
+    /// SemiOpenMidgame's expected move changed when the King's piece-square table was split into
+    /// midgame/endgame halves — that position sits at roughly 80% of full phase weight (a bishop
+    /// and a knight already off the board on each side), so the King's evaluation genuinely shifted
+    /// enough to reorder two close-scored root candidates. Re-verified this is the taper's doing and
+    /// not a regression: the position's material and legal moves are unaffected, only which of two
+    /// similarly-scored rook moves comes out ahead.
     /// </summary>
     [TestFixture]
     public class QuiescenceDeltaMarginRetuneTests
@@ -55,8 +62,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             MoveCommand best = SearchAt(SearchDepthProfileCaptureTests.SemiOpenMidgame(), 7);
             Assert.That(best.StartPosition.x, Is.EqualTo(5));
             Assert.That(best.StartPosition.y, Is.EqualTo(0));
-            Assert.That(best.EndPosition.x, Is.EqualTo(5));
-            Assert.That(best.EndPosition.y, Is.EqualTo(7));
+            Assert.That(best.EndPosition.x, Is.EqualTo(4));
+            Assert.That(best.EndPosition.y, Is.EqualTo(0));
             Assert.That(best.Stage, Is.EqualTo(BetrayalStage.None));
         }
 
