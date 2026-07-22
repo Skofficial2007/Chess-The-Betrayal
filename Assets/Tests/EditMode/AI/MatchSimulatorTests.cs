@@ -317,5 +317,44 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             Assert.That(board.CurrentTurn, Is.EqualTo(Team.Black),
                 "a resolved Defection with no ForcedSave passes the turn.");
         }
+
+        private static AIProfile BlunderCapable(string id, int maxDepth, int softMs, int hardMs) =>
+            new AIProfile(id, maxDepth, timeBudget: new AITimeBudget(softMs, hardMs), blunderRate: 1f, blunderMarginCp: 200,
+                betrayalAggression: 0f, attackDefenseBias: 1f, tieBreakWindowCp: 0, useOpeningBook: false);
+
+        [Test]
+        public void PlayGame_RescorePassCompletes_CountsEveryMoveAsBlunderRollOffered()
+        {
+            // A shallow search under a generous budget always finishes its candidate-rescore pass,
+            // so RootScoresExactForSelection is true on every move — every move should count as an
+            // offered roll.
+            AIProfile shallowGenerous = BlunderCapable("shallow", maxDepth: 2, softMs: 2000, hardMs: 3000);
+
+            MatchStatsResult result = new MatchSimulator().PlayGameWithStats(
+                CuratedPositionSuite.Build(0), shallowGenerous, shallowGenerous, rngSeedWhite: 1, rngSeedBlack: 2, plyCap: 6);
+
+            Assert.That(result.WhiteStats.BlunderRollOffered, Is.EqualTo(result.WhiteStats.MoveCount));
+            Assert.That(result.BlackStats.BlunderRollOffered, Is.EqualTo(result.BlackStats.MoveCount));
+        }
+
+        [Test]
+        public void PlayGame_RescorePassNeverCompletes_NeverCountsABlunderRollAsOffered()
+        {
+            // A deep search under a starved move-budget cap never gets far enough to run its
+            // candidate-rescore pass, so RootScoresExactForSelection is false on every move — none
+            // of those moves should count as an offered roll, even though BlunderRate is nonzero.
+            // Before this fix, MatchSimulator counted every move here as "offered" regardless,
+            // which silently deflated the observed actuation rate on any budget-bound tier.
+            AIProfile deepStarved = BlunderCapable("deep", maxDepth: 8, softMs: 2000, hardMs: 3000);
+
+            var starvedSimulator = new MatchSimulator(MatchTimeControl.ProductionBudget, moveBudgetCapMs: 3);
+
+            MatchStatsResult result = starvedSimulator.PlayGameWithStats(
+                CuratedPositionSuite.Build(0), deepStarved, deepStarved, rngSeedWhite: 1, rngSeedBlack: 2, plyCap: 6);
+
+            Assert.That(result.WhiteStats.MoveCount, Is.GreaterThan(0));
+            Assert.That(result.WhiteStats.BlunderRollOffered, Is.Zero);
+            Assert.That(result.BlackStats.BlunderRollOffered, Is.Zero);
+        }
     }
 }
