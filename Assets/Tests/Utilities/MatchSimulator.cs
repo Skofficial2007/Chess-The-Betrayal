@@ -45,9 +45,15 @@ namespace ChessTheBetrayal.Tests.Utilities
 
         /// <summary>How many of this side's moves rolled a real blunder (see
         /// MoveSelectionPolicy.SelectFinalMove's blunderRollFired out param) versus how many moves
-        /// had a nonzero chance to (BlunderRate &gt; 0). A tier whose observed rate drifts far from
-        /// its configured BlunderRate means the roll isn't expressing at the probability the preset
-        /// table claims.</summary>
+        /// actually reached that roll — a nonzero BlunderRate AND a completed candidate-rescore
+        /// pass (see RootScoresExactForSelection). A move where the rescore pass never completed
+        /// never gets a chance to roll at all, so it must not count toward either side of this
+        /// ratio; counting it in Offered without ever being able to count in Fired would silently
+        /// deflate the observed rate below what the roll itself is actually doing. Even with that
+        /// counted correctly, ObservedBlunderActuationRate is still expected to sit somewhat below
+        /// the configured rate — a roll can succeed and still find no candidate within
+        /// BlunderMarginCp to land on (see SelectFinalMove) — so a small gap here is not itself a
+        /// bug; the useful signal is a LARGE or tier-dependent one.</summary>
         public readonly int BlunderRollOffered;
         public readonly int BlunderRollFired;
 
@@ -277,10 +283,13 @@ namespace ChessTheBetrayal.Tests.Utilities
                 // spent its whole time budget on the depth loop never rescored its candidate
                 // scores to exact values, and applying blunder/tie-break windows to the leftover
                 // alpha-beta bounds selects near-random moves — the exact failure that once made
-                // every time-capped tier lose to shallower ones in this very harness.
+                // every time-capped tier lose to shallower ones in this very harness. A move that
+                // doesn't clear this guard never gets a chance to roll for a blunder at all, so it
+                // must not count as an offered roll either — see BlunderRollOffered's doc comment.
+                bool blunderRollOffered = (profile.BlunderRate > 0f || profile.TieBreakWindowCp > 0)
+                    && search.RootScoresExactForSelection;
                 bool blunderRollFired = false;
-                if ((profile.BlunderRate > 0f || profile.TieBreakWindowCp > 0)
-                    && search.RootScoresExactForSelection)
+                if (blunderRollOffered)
                 {
                     move = policy.SelectFinalMove(
                         search.RootMoves, search.RootScores, search.RootMoveCount, search.BestRootIndex,
@@ -295,7 +304,7 @@ namespace ChessTheBetrayal.Tests.Utilities
                 int scoreFromMoverPerspective = search.RootMoveCount > 0 ? search.RootScores[search.BestRootIndex] : 0;
                 int scoreForWhiteCp = isWhite ? scoreFromMoverPerspective : -scoreFromMoverPerspective;
 
-                accumulator.Record(search.Stats, moveStopwatch.Elapsed.TotalMilliseconds, profile.BlunderRate > 0f, blunderRollFired);
+                accumulator.Record(search.Stats, moveStopwatch.Elapsed.TotalMilliseconds, blunderRollOffered, blunderRollFired);
 
                 // Retribution is always played by the SAME side that Acted (an ally executes its
                 // own betrayer — see ChessEngine.GetRetributionMoves), and Act/Retribution never
