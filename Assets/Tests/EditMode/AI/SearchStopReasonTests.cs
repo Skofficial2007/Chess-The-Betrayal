@@ -225,6 +225,34 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
+        public void FindBestMove_CancelledDuringTheFinalDepth_ReportsBudgetNotCeiling()
+        {
+            // The one case that does not go through any of the loop's own exits: cancellation lands
+            // while the LAST configured depth is still being searched, so that depth is abandoned
+            // without committing and the loop then ends on its own counter — never reaching the
+            // cancellation check at the top. Reporting a ceiling stop there would claim the search
+            // finished what it was asked to do when the clock actually cut it short, which is
+            // exactly backwards for deciding whether a deeper ceiling would ever be used. Any run
+            // that stopped short of its configured depth was stopped by something other than the
+            // ceiling, and this pins that.
+            BoardState board = QuietPosition();
+            var settings = new AISearchSettings(maxDepth: 9, new AITimeBudget(1200, 1200), BetrayalUsage.Full);
+
+            using (var cts = new CancellationTokenSource())
+            {
+                cts.CancelAfter(1200);
+                _search.FindBestMove(board, settings, cts.Token, enableInstabilityTimeManagement: true);
+            }
+
+            Assume.That(_search.Stats.LastCompletedDepth, Is.LessThan(9),
+                "This fixture only exercises the intended case when the budget genuinely stops the " +
+                "search short of its configured depth.");
+            Assert.That(_search.Stats.StopReason, Is.EqualTo(SearchStopReason.Budget),
+                "A search that stopped short of its configured depth was stopped by the clock, not " +
+                "by reaching its ceiling.");
+        }
+
+        [Test]
         public void FindBestMove_FixedPosition_StillAllocatesNoManagedMemory()
         {
             // The stop-reason field is a plain enum write behind the same guard as every other

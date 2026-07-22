@@ -629,10 +629,19 @@ namespace ChessTheBetrayal.AI
             }
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-            // None of the loop's own break sites fired, so depth ran all the way through MaxDepth on
-            // its own — the tier's configured ceiling ended the search, not the clock or a decision.
+            // None of the loop's own break sites fired. That usually means depth ran all the way
+            // through MaxDepth on its own, but not always: when cancellation lands while the LAST
+            // configured depth is still in flight, that depth is abandoned without committing, and
+            // the loop then ends on its own counter rather than reaching the cancellation check at
+            // the top — so no break site runs even though the clock is what actually stopped the
+            // search. Completing every configured depth is the honest test for a ceiling stop, and
+            // it separates the two cases exactly.
             if (_tt.Stats.StopReason == SearchStopReason.Unset)
-                _tt.Stats.StopReason = SearchStopReason.Ceiling;
+            {
+                _tt.Stats.StopReason = lastCompletedDepth >= settings.MaxDepth
+                    ? SearchStopReason.Ceiling
+                    : SearchStopReason.Budget;
+            }
 #endif
 
             RescoreCandidatesWithFullWindow(board, rootTeam, lastCompletedDepth, candidateRescoreMarginCp, ct);
