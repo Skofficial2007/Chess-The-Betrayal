@@ -51,8 +51,32 @@ namespace ChessTheBetrayal.Tests.Utilities
         public readonly int BlunderRollOffered;
         public readonly int BlunderRollFired;
 
+        /// <summary>Sum and count behind MeanCompletedDepth, kept separately from the totals above so
+        /// a parallel merge across games can add two of these structs together and still get an exact
+        /// mean — dividing two already-divided means would not. The deepest single move a tier reached
+        /// (DeepestCompletedDepth) answers "what is reachable"; this answers "what does a move
+        /// typically get," which is the number a depth-ceiling decision actually needs, since one
+        /// cheap position can make the deepest-reached number look like the typical one when it
+        /// isn't.</summary>
+        public readonly long CompletedDepthSum;
+        public readonly int ShallowestCompletedDepth;
+
+        /// <summary>Count of moves that completed each depth, indexed by depth (index 0 unused,
+        /// depths run 1..DepthHistogramCapacity-1). Fixed-size and allocated once per accumulator, no
+        /// per-move allocation. A depth beyond the ceiling is folded into the last slot rather than
+        /// indexing out of range — no configured tier is anywhere near this deep, so folding there
+        /// only matters if a future tier is misconfigured, and losing precision on that count is far
+        /// better than an index-out-of-range fault mid-tournament.</summary>
+        public readonly int[] DepthHistogram;
+
+        /// <summary>One more than the deepest depth any built-in tier is configured to search to
+        /// today — wide enough that no real profile's MaxDepth ever folds into the overflow slot,
+        /// without sizing the histogram off AlphaBetaSearch's own much larger internal ceiling.</summary>
+        public const int DepthHistogramCapacity = 16;
+
         public MatchSideStats(int moveCount, long totalNodesVisited, long totalQNodesVisited,
-            int deepestCompletedDepth, double totalElapsedMs, int blunderRollOffered, int blunderRollFired)
+            int deepestCompletedDepth, double totalElapsedMs, int blunderRollOffered, int blunderRollFired,
+            long completedDepthSum, int shallowestCompletedDepth, int[] depthHistogram)
         {
             MoveCount = moveCount;
             TotalNodesVisited = totalNodesVisited;
@@ -61,11 +85,15 @@ namespace ChessTheBetrayal.Tests.Utilities
             TotalElapsedMs = totalElapsedMs;
             BlunderRollOffered = blunderRollOffered;
             BlunderRollFired = blunderRollFired;
+            CompletedDepthSum = completedDepthSum;
+            ShallowestCompletedDepth = shallowestCompletedDepth;
+            DepthHistogram = depthHistogram;
         }
 
         public double MeanNodesPerMove => MoveCount == 0 ? 0 : (double)(TotalNodesVisited + TotalQNodesVisited) / MoveCount;
         public double MeanMsPerMove => MoveCount == 0 ? 0 : TotalElapsedMs / MoveCount;
         public float ObservedBlunderActuationRate => BlunderRollOffered == 0 ? 0f : (float)BlunderRollFired / BlunderRollOffered;
+        public double MeanCompletedDepth => MoveCount == 0 ? 0 : (double)CompletedDepthSum / MoveCount;
     }
 
     /// <summary>A completed game plus each side's aggregated search telemetry for it.</summary>
@@ -337,6 +365,9 @@ namespace ChessTheBetrayal.Tests.Utilities
             private long _totalNodesVisited;
             private long _totalQNodesVisited;
             private int _deepestCompletedDepth;
+            private int _shallowestCompletedDepth;
+            private long _completedDepthSum;
+            private readonly int[] _depthHistogram = new int[MatchSideStats.DepthHistogramCapacity];
             private double _totalElapsedMs;
             private int _blunderRollOffered;
             private int _blunderRollFired;
@@ -348,6 +379,11 @@ namespace ChessTheBetrayal.Tests.Utilities
                 _totalQNodesVisited += stats.QNodesVisited;
                 if (stats.LastCompletedDepth > _deepestCompletedDepth)
                     _deepestCompletedDepth = stats.LastCompletedDepth;
+                if (_moveCount == 1 || stats.LastCompletedDepth < _shallowestCompletedDepth)
+                    _shallowestCompletedDepth = stats.LastCompletedDepth;
+                _completedDepthSum += stats.LastCompletedDepth;
+                int histogramSlot = Math.Min(Math.Max(stats.LastCompletedDepth, 0), _depthHistogram.Length - 1);
+                _depthHistogram[histogramSlot]++;
                 _totalElapsedMs += elapsedMs;
                 if (blunderRollOffered) _blunderRollOffered++;
                 if (blunderRollFired) _blunderRollFired++;
@@ -355,7 +391,8 @@ namespace ChessTheBetrayal.Tests.Utilities
 
             public MatchSideStats ToStats() => new MatchSideStats(
                 _moveCount, _totalNodesVisited, _totalQNodesVisited, _deepestCompletedDepth,
-                _totalElapsedMs, _blunderRollOffered, _blunderRollFired);
+                _totalElapsedMs, _blunderRollOffered, _blunderRollFired,
+                _completedDepthSum, _shallowestCompletedDepth, (int[])_depthHistogram.Clone());
         }
 
         /// <summary>

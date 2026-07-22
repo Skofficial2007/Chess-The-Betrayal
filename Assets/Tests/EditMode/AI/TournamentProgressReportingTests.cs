@@ -18,8 +18,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             bool subjectIsWhite, MatchOutcome outcome)
         {
             var matchResult = new MatchResult(outcome, plyCount: 40, reachedPlyCap: false);
-            var whiteStats = new MatchSideStats(4, 100, 20, 5, 500.0, 0, 0);
-            var blackStats = new MatchSideStats(4, 90, 18, 5, 450.0, 0, 0);
+            var whiteStats = new MatchSideStats(4, 100, 20, 5, 500.0, 0, 0, completedDepthSum: 20, shallowestCompletedDepth: 5, depthHistogram: null);
+            var blackStats = new MatchSideStats(4, 90, 18, 5, 450.0, 0, 0, completedDepthSum: 20, shallowestCompletedDepth: 5, depthHistogram: null);
             var statsResult = new MatchStatsResult(matchResult, whiteStats, blackStats);
 
             return new TournamentGameRecord(pairIndex, positionIndex: 0, whiteId, blackId, statsResult, subjectIsWhite);

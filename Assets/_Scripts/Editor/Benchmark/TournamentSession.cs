@@ -318,16 +318,28 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
             private double _totalNodes;
             private double _totalElapsedMs;
             private int _deepestCompletedDepth;
+            private int _shallowestCompletedDepth;
+            private long _completedDepthSum;
+            private readonly int[] _depthHistogram = new int[MatchSideStats.DepthHistogramCapacity];
+            private bool _hasAnyMoves;
             private int _blunderRollOffered;
             private int _blunderRollFired;
 
             public void Add(MatchSideStats stats)
             {
+                if (stats.MoveCount == 0) return;
+
                 _movesSampled += stats.MoveCount;
                 _totalNodes += stats.TotalNodesVisited + stats.TotalQNodesVisited;
                 _totalElapsedMs += stats.TotalElapsedMs;
                 if (stats.DeepestCompletedDepth > _deepestCompletedDepth)
                     _deepestCompletedDepth = stats.DeepestCompletedDepth;
+                if (!_hasAnyMoves || stats.ShallowestCompletedDepth < _shallowestCompletedDepth)
+                    _shallowestCompletedDepth = stats.ShallowestCompletedDepth;
+                _hasAnyMoves = true;
+                _completedDepthSum += stats.CompletedDepthSum;
+                for (int i = 0; i < _depthHistogram.Length; i++)
+                    _depthHistogram[i] += stats.DepthHistogram[i];
                 _blunderRollOffered += stats.BlunderRollOffered;
                 _blunderRollFired += stats.BlunderRollFired;
             }
@@ -338,6 +350,9 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
                 meanNodesPerMove: _movesSampled == 0 ? 0 : _totalNodes / _movesSampled,
                 meanMsPerMove: _movesSampled == 0 ? 0 : _totalElapsedMs / _movesSampled,
                 deepestCompletedDepth: _deepestCompletedDepth,
+                meanCompletedDepth: _movesSampled == 0 ? 0 : (double)_completedDepthSum / _movesSampled,
+                shallowestCompletedDepth: _shallowestCompletedDepth,
+                depthHistogram: (int[])_depthHistogram.Clone(),
                 observedBlunderActuationRate: _blunderRollOffered == 0 ? 0f : (float)_blunderRollFired / _blunderRollOffered);
         }
     }

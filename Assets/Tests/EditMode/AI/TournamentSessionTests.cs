@@ -156,5 +156,29 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         {
             Assert.That(TournamentStatistics.WinRateMargin95(0), Is.EqualTo(1f));
         }
+
+        [Test]
+        public void BuildReport_TierPerformance_MeanDepthIsWithinMinMaxAndHistogramSumsToMovesSampled()
+        {
+            // End-to-end pin on the whole accumulator chain (SideStatsAccumulator -> TierAccumulator
+            // -> TierPerformance), not just the struct's own math — proves the per-game merge across
+            // a real multi-game session preserves the sum/count invariant instead of averaging
+            // already-averaged numbers, which would silently corrupt the mean on every merge.
+            var session = TournamentSession.CreateHeadToHead(
+                runSeed: 3, Find("hard"), Find("normal"), positionCount: 3, plyCap: TestPlyCap);
+
+            while (session.RunNextGame()) { }
+
+            BenchmarkReport report = session.BuildReport();
+            foreach (TierPerformance tier in report.TierPerformances)
+            {
+                Assert.That(tier.MeanCompletedDepth, Is.LessThanOrEqualTo(tier.DeepestCompletedDepth),
+                    $"[{tier.ProfileId}] mean depth must never exceed the deepest single move reached.");
+                Assert.That(tier.MeanCompletedDepth, Is.GreaterThanOrEqualTo(tier.ShallowestCompletedDepth),
+                    $"[{tier.ProfileId}] mean depth must never fall below the shallowest single move reached.");
+                Assert.That(tier.DepthHistogram.Sum(), Is.EqualTo(tier.MovesSampled),
+                    $"[{tier.ProfileId}] every sampled move must land in exactly one histogram slot.");
+            }
+        }
     }
 }
