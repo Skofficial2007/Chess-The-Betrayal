@@ -406,7 +406,13 @@ namespace ChessTheBetrayal.AI
             // partial depth and return the previous complete one.
             for (int depth = 1; depth <= settings.MaxDepth; depth++)
             {
-                if (ct.IsCancellationRequested) break;
+                if (ct.IsCancellationRequested)
+                {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                    _tt.Stats.StopReason = SearchStopReason.Budget;
+#endif
+                    break;
+                }
 
                 // Killers are a per-iteration hint (last depth's cutoff-causing quiet moves), not a
                 // cross-iteration guarantee — clearing them each time keeps a stale slot from a
@@ -525,7 +531,13 @@ namespace ChessTheBetrayal.AI
 #endif
 
                     // Early exit on forced mate found — no deeper search changes the decision.
-                    if (bestScore >= MateScore) break;
+                    if (bestScore >= MateScore)
+                    {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                        _tt.Stats.StopReason = SearchStopReason.MateFound;
+#endif
+                        break;
+                    }
 
                     if (enableAspirationWindows)
                     {
@@ -569,13 +581,25 @@ namespace ChessTheBetrayal.AI
 
                             // Settled and past the soft target: further search is unlikely to change
                             // the answer, so stop now rather than spend the rest of the budget.
-                            if (stable && elapsedMs >= settings.TimeBudget.SoftMs) break;
+                            if (stable && elapsedMs >= settings.TimeBudget.SoftMs)
+                            {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                                _tt.Stats.StopReason = SearchStopReason.SettledEarly;
+#endif
+                                break;
+                            }
 
                             // Unsettled: allowed to spend into the soft-to-hard gap for one more
                             // depth, but never past the hard ceiling — that ceiling is also what the
                             // external CancelAfter(HardMs) timer backstops independently, so the two
                             // never disagree about what "hard" means.
-                            if (!stable && elapsedMs >= settings.TimeBudget.HardMs) break;
+                            if (!stable && elapsedMs >= settings.TimeBudget.HardMs)
+                            {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                                _tt.Stats.StopReason = SearchStopReason.Budget;
+#endif
+                                break;
+                            }
                         }
 
                         hasPriorCompletedDepth = true;
@@ -584,6 +608,13 @@ namespace ChessTheBetrayal.AI
                     }
                 }
             }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            // None of the loop's own break sites fired, so depth ran all the way through MaxDepth on
+            // its own — the tier's configured ceiling ended the search, not the clock or a decision.
+            if (_tt.Stats.StopReason == SearchStopReason.Unset)
+                _tt.Stats.StopReason = SearchStopReason.Ceiling;
+#endif
 
             RescoreCandidatesWithFullWindow(board, rootTeam, lastCompletedDepth, candidateRescoreMarginCp, ct);
 
