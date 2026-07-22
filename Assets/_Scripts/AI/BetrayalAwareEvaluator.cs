@@ -50,8 +50,14 @@ namespace ChessTheBetrayal.AI
 
         public int Evaluate(BoardState board, Team forTeam)
         {
-            int whiteScore = MaterialAndPosition(board, Team.White);
-            int blackScore = MaterialAndPosition(board, Team.Black);
+            // Computed once per call, never cached: a Defection can flip a piece's team on the
+            // very next move, and the search applies/undoes moves constantly, so any cached value
+            // would be stale within a ply. Both sides read the SAME whole-board weight — how far
+            // the game has progressed isn't a property of one team's own pieces.
+            int phaseWeight = MaterialPhase.Weight(board);
+
+            int whiteScore = MaterialAndPosition(board, Team.White, phaseWeight);
+            int blackScore = MaterialAndPosition(board, Team.Black, phaseWeight);
 
             int score = whiteScore - blackScore; // White's perspective
 
@@ -74,9 +80,13 @@ namespace ChessTheBetrayal.AI
         /// Material is NEVER scaled — asymmetric material weighting breaks negamax's zero-sum
         /// frame. Everything positional splits into two buckets by whether the piece square sits
         /// on the scoring side's own half (Defense, including the new king-shelter term) or past
-        /// the midline into enemy territory (Attack), each independently scaled.
+        /// the midline into enemy territory (Attack), each independently scaled. The mg/eg blend
+        /// happens INSIDE PieceSquareTables.Bonus, before this split — each piece contributes one
+        /// already-blended number, so the attack/defense bucketing below sees exactly the same
+        /// shape it always has and the personality dials keep applying to whichever bucket a piece
+        /// actually landed in.
         /// </summary>
-        private int MaterialAndPosition(BoardState board, Team team)
+        private int MaterialAndPosition(BoardState board, Team team, int phaseWeight)
         {
             int material = 0;
             int attackPst = 0;
@@ -92,7 +102,7 @@ namespace ChessTheBetrayal.AI
 
                 material += BaseValue(piece.Type);
 
-                int bonus = PieceSquareTables.Bonus(piece.Type, x, y, team, board.TileCountX, board.TileCountY);
+                int bonus = PieceSquareTables.Bonus(piece.Type, x, y, team, board.TileCountX, board.TileCountY, phaseWeight);
                 // Same row normalization PieceSquareTables.Bonus uses internally — row 0 is the
                 // scoring side's own back rank, row 7 is the opponent's. row >= 4 means the piece
                 // is on/past the midline into enemy territory.
