@@ -398,7 +398,8 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
             {
                 EditorGUILayout.LabelField(
                     tier.ProfileId,
-                    $"{tier.MeanMsPerMove:F0} ms/move, {tier.MeanNodesPerMove:F0} nodes/move, depth {tier.DeepestCompletedDepth}, " +
+                    $"{tier.MeanMsPerMove:F0} ms/move, {tier.MeanNodesPerMove:F0} nodes/move, " +
+                    $"depth mean {tier.MeanCompletedDepth:F1} (min {tier.ShallowestCompletedDepth}, max {tier.DeepestCompletedDepth}), " +
                     $"blunder-actuation {tier.ObservedBlunderActuationRate:P1} ({tier.MovesSampled} moves)");
             }
 
@@ -461,7 +462,9 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
             }
             foreach (TierPerformance tier in report.TierPerformances)
             {
-                sb.AppendLine($"  [{tier.ProfileId}] {tier.MeanMsPerMove:F0}ms/move, {tier.MeanNodesPerMove:F0} nodes/move, depth {tier.DeepestCompletedDepth}, blunder-actuation {tier.ObservedBlunderActuationRate:P1}");
+                sb.AppendLine($"  [{tier.ProfileId}] {tier.MeanMsPerMove:F0}ms/move, {tier.MeanNodesPerMove:F0} nodes/move, " +
+                    $"depth mean {tier.MeanCompletedDepth:F1} (min {tier.ShallowestCompletedDepth}, max {tier.DeepestCompletedDepth}), " +
+                    $"blunder-actuation {tier.ObservedBlunderActuationRate:P1}");
             }
             return sb.ToString();
         }

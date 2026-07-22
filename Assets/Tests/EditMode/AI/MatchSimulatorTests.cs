@@ -177,5 +177,55 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         {
             Assert.That(CuratedPositionSuite.Count, Is.GreaterThanOrEqualTo(20));
         }
+
+        [Test]
+        public void MatchSideStats_MeanCompletedDepth_IsGenuinelyDistinctFromTheMaximum()
+        {
+            // A hand-built two-move fixture: one move completed depth 3, the other depth 9. A mean
+            // of 6 proves this reads as an actual average, not the deepest single move relabeled —
+            // the failure mode this field exists to fix (DeepestCompletedDepth alone lets one cheap
+            // position make a whole tier look like it typically reaches a depth it rarely does).
+            var histogram = new int[MatchSideStats.DepthHistogramCapacity];
+            histogram[3] = 1;
+            histogram[9] = 1;
+            var stats = new MatchSideStats(
+                moveCount: 2, totalNodesVisited: 100, totalQNodesVisited: 20,
+                deepestCompletedDepth: 9, totalElapsedMs: 500.0, blunderRollOffered: 0, blunderRollFired: 0,
+                completedDepthSum: 3 + 9, shallowestCompletedDepth: 3, depthHistogram: histogram);
+
+            Assert.That(stats.MeanCompletedDepth, Is.EqualTo(6.0));
+            Assert.That(stats.DeepestCompletedDepth, Is.EqualTo(9));
+            Assert.That(stats.ShallowestCompletedDepth, Is.EqualTo(3));
+            Assert.That(stats.MeanCompletedDepth, Is.Not.EqualTo(stats.DeepestCompletedDepth),
+                "the mean must not silently collapse to the maximum on a mixed-depth sample.");
+        }
+
+        [Test]
+        public void MatchSideStats_MeanCompletedDepth_ZeroMoves_DoesNotDivideByZero()
+        {
+            var stats = new MatchSideStats(
+                moveCount: 0, totalNodesVisited: 0, totalQNodesVisited: 0,
+                deepestCompletedDepth: 0, totalElapsedMs: 0.0, blunderRollOffered: 0, blunderRollFired: 0,
+                completedDepthSum: 0, shallowestCompletedDepth: 0, depthHistogram: null);
+
+            Assert.That(stats.MeanCompletedDepth, Is.EqualTo(0.0));
+        }
+
+        [Test]
+        public void PlayGameWithStats_RealGame_ReportsMeanAtOrBelowTheMaximum()
+        {
+            // Not a synthetic fixture — a real played game, proving the invariant holds against the
+            // actual accumulator wiring (SideStatsAccumulator), not just the struct's own math.
+            AIProfile shallow = Fast("shallow", maxDepth: 3);
+            BoardState position = CuratedPositionSuite.Build(0);
+
+            MatchStatsResult result = new MatchSimulator(MatchTimeControl.Uncapped)
+                .PlayGameWithStats(position, shallow, shallow, rngSeedWhite: 1, rngSeedBlack: 2, plyCap: 10);
+
+            Assert.That(result.WhiteStats.MeanCompletedDepth, Is.LessThanOrEqualTo(result.WhiteStats.DeepestCompletedDepth));
+            Assert.That(result.WhiteStats.MeanCompletedDepth, Is.GreaterThanOrEqualTo(result.WhiteStats.ShallowestCompletedDepth));
+            Assert.That(result.WhiteStats.DepthHistogram.Sum(), Is.EqualTo(result.WhiteStats.MoveCount),
+                "every completed move must land in exactly one histogram slot.");
+        }
     }
 }

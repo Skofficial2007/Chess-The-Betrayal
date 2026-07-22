@@ -197,7 +197,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         {
             var current = new BenchmarkReport { RunSeed = 1, Mode = "Quick" };
             current.TierPerformances.Add(new TierPerformance("hard", movesSampled: 10,
-                meanNodesPerMove: 100000, meanMsPerMove: 5000, deepestCompletedDepth: 7, observedBlunderActuationRate: 0f));
+                meanNodesPerMove: 100000, meanMsPerMove: 5000, deepestCompletedDepth: 7,
+                meanCompletedDepth: 7, shallowestCompletedDepth: 7, depthHistogram: null, observedBlunderActuationRate: 0f));
 
             var findings = BenchmarkDriftAnalyzer.Analyze(current, baseline: null);
 
@@ -209,7 +210,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         {
             var current = new BenchmarkReport { RunSeed = 1, Mode = "Quick" };
             current.TierPerformances.Add(new TierPerformance("easy", movesSampled: 10,
-                meanNodesPerMove: 3000, meanMsPerMove: 300, deepestCompletedDepth: 3, observedBlunderActuationRate: 0.3f));
+                meanNodesPerMove: 3000, meanMsPerMove: 300, deepestCompletedDepth: 3,
+                meanCompletedDepth: 3, shallowestCompletedDepth: 3, depthHistogram: null, observedBlunderActuationRate: 0.3f));
 
             var findings = BenchmarkDriftAnalyzer.Analyze(current, baseline: null);
 
@@ -221,11 +223,13 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         {
             var baseline = new BenchmarkReport { RunSeed = 1, Mode = "Quick" };
             baseline.TierPerformances.Add(new TierPerformance("hard", movesSampled: 10,
-                meanNodesPerMove: 100000, meanMsPerMove: 1000, deepestCompletedDepth: 7, observedBlunderActuationRate: 0f)); // 100k nodes/sec
+                meanNodesPerMove: 100000, meanMsPerMove: 1000, deepestCompletedDepth: 7,
+                meanCompletedDepth: 7, shallowestCompletedDepth: 7, depthHistogram: null, observedBlunderActuationRate: 0f)); // 100k nodes/sec
 
             var current = new BenchmarkReport { RunSeed = 1, Mode = "Quick" };
             current.TierPerformances.Add(new TierPerformance("hard", movesSampled: 10,
-                meanNodesPerMove: 60000, meanMsPerMove: 1000, deepestCompletedDepth: 7, observedBlunderActuationRate: 0f)); // 60k nodes/sec, 40% drop
+                meanNodesPerMove: 60000, meanMsPerMove: 1000, deepestCompletedDepth: 7,
+                meanCompletedDepth: 7, shallowestCompletedDepth: 7, depthHistogram: null, observedBlunderActuationRate: 0f)); // 60k nodes/sec, 40% drop
 
             var findings = BenchmarkDriftAnalyzer.Analyze(current, baseline);
 
@@ -238,7 +242,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             // "easy" is configured with BlunderRate 0.30 in AIProfileTable.BuiltIn.
             var current = new BenchmarkReport { RunSeed = 1, Mode = "Quick" };
             current.TierPerformances.Add(new TierPerformance("easy", movesSampled: 100,
-                meanNodesPerMove: 3000, meanMsPerMove: 300, deepestCompletedDepth: 3, observedBlunderActuationRate: 0.05f));
+                meanNodesPerMove: 3000, meanMsPerMove: 300, deepestCompletedDepth: 3,
+                meanCompletedDepth: 3, shallowestCompletedDepth: 3, depthHistogram: null, observedBlunderActuationRate: 0.05f));
 
             var findings = BenchmarkDriftAnalyzer.Analyze(current, baseline: null);
 
@@ -255,7 +260,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             {
                 var written = new BenchmarkReport { RunSeed = 42, Mode = "Full" };
                 written.PairResults.Add(new PairResult("hard", "normal", 40, 26, 10, 4));
-                written.TierPerformances.Add(new TierPerformance("hard", 80, 95000, 2800, 7, 0.02f));
+                written.TierPerformances.Add(new TierPerformance("hard", 80, 95000, 2800, 7, 7, 7, null, 0.02f));
 
                 BenchmarkBaselineIO.Write(written, path);
                 BenchmarkReport read = BenchmarkBaselineIO.TryRead(path);

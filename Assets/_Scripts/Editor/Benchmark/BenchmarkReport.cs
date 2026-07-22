@@ -47,19 +47,35 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
         public int MovesSampled;
         public double MeanNodesPerMove;
         public double MeanMsPerMove;
+
+        /// <summary>The single deepest ply any one move reached this run — a "what is reachable"
+        /// number. It is a maximum, not typical, so one cheap position can make a tier look like it
+        /// reaches a depth it rarely does in practice; MeanCompletedDepth below is the typical-play
+        /// number a depth-ceiling decision should actually read.</summary>
         public int DeepestCompletedDepth;
+        public double MeanCompletedDepth;
+        public int ShallowestCompletedDepth;
+
+        /// <summary>Move count per completed depth, index = depth (0 unused). See
+        /// MatchSideStats.DepthHistogramCapacity for the fixed size and overflow-folding rule.</summary>
+        public int[] DepthHistogram;
+
         public float ObservedBlunderActuationRate;
 
         public TierPerformance() { }
 
         public TierPerformance(string profileId, int movesSampled, double meanNodesPerMove,
-            double meanMsPerMove, int deepestCompletedDepth, float observedBlunderActuationRate)
+            double meanMsPerMove, int deepestCompletedDepth, double meanCompletedDepth,
+            int shallowestCompletedDepth, int[] depthHistogram, float observedBlunderActuationRate)
         {
             ProfileId = profileId;
             MovesSampled = movesSampled;
             MeanNodesPerMove = meanNodesPerMove;
             MeanMsPerMove = meanMsPerMove;
             DeepestCompletedDepth = deepestCompletedDepth;
+            MeanCompletedDepth = meanCompletedDepth;
+            ShallowestCompletedDepth = shallowestCompletedDepth;
+            DepthHistogram = depthHistogram;
             ObservedBlunderActuationRate = observedBlunderActuationRate;
         }
     }
