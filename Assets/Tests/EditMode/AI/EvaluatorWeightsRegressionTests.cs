@@ -53,16 +53,19 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 .WithPiece("f2", Team.White, ChessPieceType.Pawn);
 
         /// <summary>
-        /// Nearly full material on both sides (15 White pieces, 16 Black), an asymmetric
-        /// development (White's queenside knight already traded off and relocated to g5, both
-        /// sides pushed their e-pawn) so the score is a real, table-value-sensitive number rather
-        /// than cancelling out by symmetry the way SymmetricQueens and a mirrored full setup would.
-        /// This is the fixture a tapered evaluator has the most room to get wrong at full phase,
-        /// since it is the one closest to what an opening move actually looks like.
+        /// Exactly full non-pawn material on both sides (identical piece COUNTS, both full
+        /// opening sets — 2 rooks/2 knights/2 bishops/1 queen each), so this genuinely sits at
+        /// MaterialPhase.FullPhaseWeight and is a real full-phase pin, not merely close to one. The
+        /// asymmetry (one White knight developed to g5 instead of its home square, both sides
+        /// pushed their e-pawn) keeps the score a real, table-value-sensitive number rather than
+        /// cancelling out by symmetry the way SymmetricQueens and a mirrored full setup would. This
+        /// is the fixture a tapered evaluator has the most room to get wrong, since it is the one
+        /// closest to what an opening move actually looks like.
         /// </summary>
         private static BoardState FullMaterialAsymmetricOpening() =>
             TestBoardSetupUtility.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.Rook)
+                .WithPiece("b1", Team.White, ChessPieceType.Knight)
                 .WithPiece("c1", Team.White, ChessPieceType.Bishop)
                 .WithPiece("d1", Team.White, ChessPieceType.Queen)
                 .WithPiece("g1", Team.White, ChessPieceType.King)
@@ -177,8 +180,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             Assert.That(evaluator.Evaluate(ShelteredKing(), Team.White), Is.EqualTo(300));
             Assert.That(evaluator.Evaluate(ShelteredKing(), Team.Black), Is.EqualTo(-300));
 
-            Assert.That(evaluator.Evaluate(FullMaterialAsymmetricOpening(), Team.White), Is.EqualTo(-195));
-            Assert.That(evaluator.Evaluate(FullMaterialAsymmetricOpening(), Team.Black), Is.EqualTo(195));
+            Assert.That(evaluator.Evaluate(FullMaterialAsymmetricOpening(), Team.White), Is.EqualTo(85));
+            Assert.That(evaluator.Evaluate(FullMaterialAsymmetricOpening(), Team.Black), Is.EqualTo(-85));
         }
     }
 }
