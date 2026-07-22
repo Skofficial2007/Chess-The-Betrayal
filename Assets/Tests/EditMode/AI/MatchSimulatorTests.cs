@@ -1,7 +1,10 @@
+using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
 using ChessTheBetrayal.AI;
 using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.Core.Engine;
+using ChessTheBetrayal.Gameplay.Manager;
 using ChessTheBetrayal.Tests.Utilities;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI
@@ -226,6 +229,93 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             Assert.That(result.WhiteStats.MeanCompletedDepth, Is.GreaterThanOrEqualTo(result.WhiteStats.ShallowestCompletedDepth));
             Assert.That(result.WhiteStats.DepthHistogram.Sum(), Is.EqualTo(result.WhiteStats.MoveCount),
                 "every completed move must land in exactly one histogram slot.");
+        }
+
+        [Test]
+        public void PlayGameWithStats_NoBetrayalOnTheBoard_ReportsZeroActsForBothSides()
+        {
+            AIProfile shallow = Fast("shallow", maxDepth: 2);
+            BoardState position = CuratedPositionSuite.Build(0);
+
+            MatchStatsResult result = new MatchSimulator(MatchTimeControl.Uncapped)
+                .PlayGameWithStats(position, shallow, shallow, rngSeedWhite: 1, rngSeedBlack: 2, plyCap: 6);
+
+            Assert.That(result.WhiteStats.ActsPlayed, Is.Zero);
+            Assert.That(result.BlackStats.ActsPlayed, Is.Zero);
+            Assert.That(result.WhiteStats.ActsResolvedByRetribution, Is.Zero);
+            Assert.That(result.WhiteStats.ActsResolvedByDefection, Is.Zero);
+        }
+
+        [Test]
+        public void ActThatLeavesALegalRetribution_KeepsPendingBetrayerSquareSetAndTheSameSideToMove()
+        {
+            // MatchSimulator's Act/Retribution/Defection counting reads exactly this signal after
+            // playing an Act: PendingBetrayerSquare still set means a legal Retribution genuinely
+            // exists and is about to be played by the SAME side (an ally executes its own
+            // betrayer); this fixture is the SearchCorrectnessTests position where White's Knight
+            // can Act its own Pawn on a3 and White's Rook on a1 can then execute it. Driving the
+            // move through MatchDriver directly (rather than depending on search preference,
+            // which correctly avoids this Act as a losing trade) proves the state transition the
+            // counting logic relies on, independent of whether any tier would ever choose it.
+            BoardState board = TestBoardSetupUtility.CreateEmpty()
+                .WithPiece("e1", Team.White, ChessPieceType.King)
+                .WithPiece("e8", Team.Black, ChessPieceType.King)
+                .WithPiece("b1", Team.White, ChessPieceType.Knight)
+                .WithPiece("a3", Team.White, ChessPieceType.Pawn)
+                .WithPiece("a1", Team.White, ChessPieceType.Rook)
+                .WithTurn(Team.White)
+                .WithBetrayalRight(true)
+                .WithComputedHash();
+
+            // The Rook can ALSO Act the Knight directly (its own separate legal Act), so the
+            // Knight-Acts-the-Pawn move — the one this fixture is actually about — must be
+            // selected explicitly rather than assuming there is only one Act available.
+            var moves = new List<MoveCommand>();
+            ChessEngine.GetAllLegalMovesIncludingBetrayal(board, Team.White, moves);
+            MoveCommand act = moves.Single(m => m.Stage == BetrayalStage.Act && m.PieceType == ChessPieceType.Knight);
+
+            var driver = new MatchDriver(new ChessEngineAdapter(), board, logMoves: false, domainLogger: null,
+                gameOverChannel: null, turnChangedChannel: null, moveExecutedChannel: null,
+                moveRejectedChannel: null, checkDetectedChannel: null, betrayalChannel: null);
+            driver.TransitionToPhase(TurnPhase.Normal);
+            driver.PlayMove(act);
+
+            Assert.That(board.PendingBetrayerSquare, Is.EqualTo(act.EndPosition),
+                "a legal Retribution exists (White's own Rook can reach the betrayer), so the sequence must still be open.");
+            Assert.That(board.CurrentTurn, Is.EqualTo(Team.White),
+                "Retribution is owed by the SAME side that Acted — the turn must not have flipped yet.");
+        }
+
+        [Test]
+        public void ActWithNoLegalRetribution_ClearsPendingBetrayerSquareAndFlipsTheTurn()
+        {
+            // The counting logic's other branch: no legal Retribution means the engine resolves a
+            // Defection inline inside PlayMove/TurnResolver.Advance, with no Retribution move ever
+            // reaching MatchSimulator's ply loop. White's Knight on h8 can only Act its own Pawn on
+            // g6, and nothing else on the board can reach h8 to execute it.
+            BoardState board = TestBoardSetupUtility.CreateEmpty()
+                .WithPiece("a1", Team.White, ChessPieceType.King)
+                .WithPiece("e8", Team.Black, ChessPieceType.King)
+                .WithPiece("h8", Team.White, ChessPieceType.Knight)
+                .WithPiece("g6", Team.White, ChessPieceType.Pawn)
+                .WithTurn(Team.White)
+                .WithBetrayalRight(true)
+                .WithComputedHash();
+
+            var moves = new List<MoveCommand>();
+            ChessEngine.GetAllLegalMovesIncludingBetrayal(board, Team.White, moves);
+            MoveCommand act = moves.Single(m => m.Stage == BetrayalStage.Act);
+
+            var driver = new MatchDriver(new ChessEngineAdapter(), board, logMoves: false, domainLogger: null,
+                gameOverChannel: null, turnChangedChannel: null, moveExecutedChannel: null,
+                moveRejectedChannel: null, checkDetectedChannel: null, betrayalChannel: null);
+            driver.TransitionToPhase(TurnPhase.Normal);
+            driver.PlayMove(act);
+
+            Assert.That(board.PendingBetrayerSquare, Is.Null,
+                "no legal Retribution exists in this fixture, so the Defection must have resolved inline.");
+            Assert.That(board.CurrentTurn, Is.EqualTo(Team.Black),
+                "a resolved Defection with no ForcedSave passes the turn.");
         }
     }
 }

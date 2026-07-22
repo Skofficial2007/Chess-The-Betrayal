@@ -62,11 +62,21 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
 
         public float ObservedBlunderActuationRate;
 
+        /// <summary>How many of this tier's played moves this run were a Betrayal Act, and how
+        /// that Act resolved — an ally executing the betrayer (Retribution) versus the betrayer
+        /// permanently switching sides (Defection, resolved with no move of its own whenever no
+        /// legal Retribution existed). The two branches cost the initiator very differently, so
+        /// they're reported separately rather than as one undifferentiated Act count.</summary>
+        public int ActsPlayed;
+        public int ActsResolvedByRetribution;
+        public int ActsResolvedByDefection;
+
         public TierPerformance() { }
 
         public TierPerformance(string profileId, int movesSampled, double meanNodesPerMove,
             double meanMsPerMove, int deepestCompletedDepth, double meanCompletedDepth,
-            int shallowestCompletedDepth, int[] depthHistogram, float observedBlunderActuationRate)
+            int shallowestCompletedDepth, int[] depthHistogram, float observedBlunderActuationRate,
+            int actsPlayed = 0, int actsResolvedByRetribution = 0, int actsResolvedByDefection = 0)
         {
             ProfileId = profileId;
             MovesSampled = movesSampled;
@@ -77,7 +87,12 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
             ShallowestCompletedDepth = shallowestCompletedDepth;
             DepthHistogram = depthHistogram;
             ObservedBlunderActuationRate = observedBlunderActuationRate;
+            ActsPlayed = actsPlayed;
+            ActsResolvedByRetribution = actsResolvedByRetribution;
+            ActsResolvedByDefection = actsResolvedByDefection;
         }
+
+        public float ActRate => MovesSampled == 0 ? 0f : (float)ActsPlayed / MovesSampled;
     }
 
     /// <summary>

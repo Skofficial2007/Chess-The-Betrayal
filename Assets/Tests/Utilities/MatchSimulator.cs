@@ -74,9 +74,25 @@ namespace ChessTheBetrayal.Tests.Utilities
         /// without sizing the histogram off AlphaBetaSearch's own much larger internal ceiling.</summary>
         public const int DepthHistogramCapacity = 16;
 
+        /// <summary>How many of this side's played moves were a Betrayal Act — the move actually
+        /// chosen and applied to the board, not a count of Acts merely considered somewhere in the
+        /// search tree (SearchStats.QActExpansions already covers that, and answers a different
+        /// question). This is the number a valuation audit needs: how often does the AI actually
+        /// choose to betray, in real games, at this tier.</summary>
+        public readonly int ActsPlayed;
+
+        /// <summary>Of this side's played Acts, how many were answered by a legal Retribution
+        /// (the ally executes the betrayer) versus resolved as a Defection (no legal executioner,
+        /// so the betrayer permanently switches sides) — the two branches have very different
+        /// costs to the initiator, so lumping them into one Act count would hide which kind of
+        /// Betrayal the AI is actually choosing.</summary>
+        public readonly int ActsResolvedByRetribution;
+        public readonly int ActsResolvedByDefection;
+
         public MatchSideStats(int moveCount, long totalNodesVisited, long totalQNodesVisited,
             int deepestCompletedDepth, double totalElapsedMs, int blunderRollOffered, int blunderRollFired,
-            long completedDepthSum, int shallowestCompletedDepth, int[] depthHistogram)
+            long completedDepthSum, int shallowestCompletedDepth, int[] depthHistogram,
+            int actsPlayed = 0, int actsResolvedByRetribution = 0, int actsResolvedByDefection = 0)
         {
             MoveCount = moveCount;
             TotalNodesVisited = totalNodesVisited;
@@ -88,12 +104,16 @@ namespace ChessTheBetrayal.Tests.Utilities
             CompletedDepthSum = completedDepthSum;
             ShallowestCompletedDepth = shallowestCompletedDepth;
             DepthHistogram = depthHistogram;
+            ActsPlayed = actsPlayed;
+            ActsResolvedByRetribution = actsResolvedByRetribution;
+            ActsResolvedByDefection = actsResolvedByDefection;
         }
 
         public double MeanNodesPerMove => MoveCount == 0 ? 0 : (double)(TotalNodesVisited + TotalQNodesVisited) / MoveCount;
         public double MeanMsPerMove => MoveCount == 0 ? 0 : TotalElapsedMs / MoveCount;
         public float ObservedBlunderActuationRate => BlunderRollOffered == 0 ? 0f : (float)BlunderRollFired / BlunderRollOffered;
         public double MeanCompletedDepth => MoveCount == 0 ? 0 : (double)CompletedDepthSum / MoveCount;
+        public float ActRate => MoveCount == 0 ? 0f : (float)ActsPlayed / MoveCount;
     }
 
     /// <summary>A completed game plus each side's aggregated search telemetry for it.</summary>
@@ -277,6 +297,18 @@ namespace ChessTheBetrayal.Tests.Utilities
 
                 accumulator.Record(search.Stats, moveStopwatch.Elapsed.TotalMilliseconds, profile.BlunderRate > 0f, blunderRollFired);
 
+                // Retribution is always played by the SAME side that Acted (an ally executes its
+                // own betrayer — see ChessEngine.GetRetributionMoves), and Act/Retribution never
+                // flip the turn, so a Retribution move always lands on the accumulator of the Act
+                // that preceded it. A Defection, by contrast, is resolved inline inside
+                // MatchDriver.PlayMove/TurnResolver.Advance whenever no legal Retribution exists —
+                // it never becomes a MoveCommand this loop sees at all, so it has no move stage of
+                // its own to count here. Every played Act resolves exactly one way or the other, so
+                // counting Retributions directly and treating the remainder as Defections (done at
+                // the accumulator/report level, see ActsResolvedByDefection) is exact.
+                if (move.Stage == BetrayalStage.Act) accumulator.RecordActPlayed();
+                else if (move.Stage == BetrayalStage.Retribution) accumulator.RecordActResolvedByRetribution();
+
                 matchDriver.PlayMove(move);
 
                 // Betrayal sub-sequence moves (Act/Retribution/DefensiveOverride) don't end a turn
@@ -371,6 +403,8 @@ namespace ChessTheBetrayal.Tests.Utilities
             private double _totalElapsedMs;
             private int _blunderRollOffered;
             private int _blunderRollFired;
+            private int _actsPlayed;
+            private int _actsResolvedByRetribution;
 
             public void Record(SearchStats stats, double elapsedMs, bool blunderRollOffered, bool blunderRollFired)
             {
@@ -389,10 +423,14 @@ namespace ChessTheBetrayal.Tests.Utilities
                 if (blunderRollFired) _blunderRollFired++;
             }
 
+            public void RecordActPlayed() => _actsPlayed++;
+            public void RecordActResolvedByRetribution() => _actsResolvedByRetribution++;
+
             public MatchSideStats ToStats() => new MatchSideStats(
                 _moveCount, _totalNodesVisited, _totalQNodesVisited, _deepestCompletedDepth,
                 _totalElapsedMs, _blunderRollOffered, _blunderRollFired,
-                _completedDepthSum, _shallowestCompletedDepth, (int[])_depthHistogram.Clone());
+                _completedDepthSum, _shallowestCompletedDepth, (int[])_depthHistogram.Clone(),
+                _actsPlayed, _actsResolvedByRetribution, _actsPlayed - _actsResolvedByRetribution);
         }
 
         /// <summary>
