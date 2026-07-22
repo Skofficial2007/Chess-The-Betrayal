@@ -1988,16 +1988,22 @@ namespace ChessTheBetrayal.AI
         // Quiescence delta-pruning margin, in the evaluator's centipawn scale (BetrayalAwareEvaluator:
         // P=100..Q=975). Covers promotion upside on a capturing pawn push plus general evaluator
         // noise, so a capture that's only borderline-hopeless is never wrongly pruned before it's
-        // tried. This is the standard "even best case can't help" quiescence cut — it only skips
-        // moves whose absolute best-case outcome still can't reach alpha, so it can never change
-        // which move quiescence ultimately reports as best, only how many hopeless captures it
-        // bothers exploring on the way there — PROVIDED the margin genuinely exceeds the gap a
-        // positional (non-material) swing could still close, which is why this was measured rather
-        // than guessed: a pawn's worth of slack (100) plus a safety cushion for evaluator noise (50)
-        // comfortably covers a single quiet piece's worth of positional value without approaching a
-        // second piece, so tightening from a flat 200 to 150 could not plausibly flip which capture
-        // quiescence reports as best on a normal position.
-        private const int DeltaPruningMargin = 150;
+        // tried. This is the standard "even best case can't help" quiescence cut — it skips moves
+        // whose absolute best-case outcome still can't reach alpha.
+        //
+        // This margin was briefly tightened to 150 and then measured back to 200, which is worth
+        // recording because the reason is not obvious. Skipping a capture leaves quiescence
+        // reporting its coarse stand-pat estimate rather than a genuinely searched score, and the
+        // main search orders its moves on exactly those scores. A tighter margin therefore trades
+        // a smaller quiescence tail for less accurate leaf scores, and when those coarser scores
+        // blur the ranking of the moves above them, the main tree fans out and costs far more than
+        // the tail ever saved. Measured across twelve real opening positions under the live
+        // per-move time budget, the tighter margin reached exactly the same total depth while
+        // leaving fewer searches able to finish early on a settled position, and its per-position
+        // node counts swung heavily in BOTH directions — the swings tracking move-ordering quality
+        // (first-move cutoff rate) almost exactly. A change that buys no depth and adds that much
+        // variance is not worth carrying, so the wider, more forgiving margin stays.
+        private const int DeltaPruningMargin = 200;
 
         private static int CapturedPieceValue(ChessPieceType t) => t switch
         {
