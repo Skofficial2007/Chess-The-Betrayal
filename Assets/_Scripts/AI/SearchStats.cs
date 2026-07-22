@@ -1,5 +1,31 @@
 namespace ChessTheBetrayal.AI
 {
+    /// <summary>Why iterative deepening stopped where it did. The default, Unset, only ever shows up
+    /// if telemetry is compiled out or a search somehow returns without taking any of the loop's exit
+    /// paths — every real search sets this to one of the other four before returning.</summary>
+    public enum SearchStopReason
+    {
+        Unset = 0,
+
+        /// <summary>The position was judged settled (the instability-management logic decided
+        /// further depth was unlikely to change the answer) and the soft time budget had already
+        /// elapsed, so the search stopped early rather than spend the rest of the budget.</summary>
+        SettledEarly,
+
+        /// <summary>The external cancellation token fired, or the search's own instability-management
+        /// logic hit the hard time budget without the position ever settling — time ran out before
+        /// the position was decided.</summary>
+        Budget,
+
+        /// <summary>A forced mate was found; no deeper search can change that decision.</summary>
+        MateFound,
+
+        /// <summary>Iterative deepening completed every depth up to and including MaxDepth without
+        /// being stopped by any of the above — the tier's configured ceiling, not the clock, is what
+        /// ended the search.</summary>
+        Ceiling
+    }
+
     /// <summary>
     /// Search telemetry. Plain counters, no allocation, reset once per FindBestMove — exists purely
     /// to measure each pruning mechanism's node-count impact on fixed regression positions.
@@ -85,6 +111,13 @@ namespace ChessTheBetrayal.AI
         /// cap (e.g. two devices both capped at a profile's TimeBudget) — the elapsed time
         /// alone is identical in that case, but the depth reached is not.</summary>
         public int LastCompletedDepth;
+
+        /// <summary>Why FindBestMove stopped where it did. A budget-capped run and a settled-early
+        /// run can land on the same LastCompletedDepth for entirely different reasons — one ran out
+        /// of time, the other decided further search wouldn't change the answer — and those two
+        /// cases mean opposite things for whether a deeper MaxDepth would ever actually get used.
+        /// Written once per search, at whichever exit the loop actually takes.</summary>
+        public SearchStopReason StopReason;
 
         // Per-depth cumulative node count (main + quiescence) at the moment each iterative-deepening
         // depth FULLY completes — the effective-branching-factor curve. Tracked through depth 12 so
@@ -269,7 +302,7 @@ namespace ChessTheBetrayal.AI
         }
 
         public override string ToString() =>
-            $"depth={LastCompletedDepth} nodes={NodesVisited} tt(probe={TTProbes} hit={TTHits} emptyMiss={TTEmptyMisses} verifyMiss={TTVerificationMisses} store={TTStores} replace={TTReplacements}) " +
+            $"depth={LastCompletedDepth} stopReason={StopReason} nodes={NodesVisited} tt(probe={TTProbes} hit={TTHits} emptyMiss={TTEmptyMisses} verifyMiss={TTVerificationMisses} store={TTStores} replace={TTReplacements}) " +
             $"null(try={NullMoveAttempts} cut={NullMoveCutoffs} skip(depth={NullMoveSkippedByDepth} guard={NullMoveSkippedByGuard} parentNull={NullMoveSkippedByParentNull} material={NullMoveSkippedByMaterial} beta={NullMoveSkippedByBeta})) lmr(reduce={LmrReductions} research={LmrReSearches}) pvs(scout={PvsScouts} research={PvsReSearches}) " +
             $"fwdPrune(rfp={ReverseFutilityCutoffs} lmp={LateMovePrunes} ffp={FrontierFutilityPrunes}) betrayalExt={BetrayalExtensions} forcedDefection={ForcedDefectionResolutions} iir={IirReductions} " +
             $"cutoff(total={BetaCutoffs} firstMove={FirstMoveBetaCutoffs} rate={FirstMoveCutoffRate():F3}) " +
