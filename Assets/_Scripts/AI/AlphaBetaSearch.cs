@@ -39,6 +39,17 @@ namespace ChessTheBetrayal.AI
         private const int Infinity = 1_000_000;
         private const int MateScore = 900_000;
 
+        // How far below the exact MateScore constant a score still counts as "this is a mate,
+        // just found some plies away from here" rather than an ordinary evaluation. A mate's score
+        // is MateScore minus however many plies of remaining depth were searched at the moment it
+        // was found (see the mate-detection branch in Search), so the exact constant itself is only
+        // ever reached by a mate discovered with zero remaining depth — everywhere else the score
+        // sits some small distance below it. 1000 is comfortably wider than that distance can ever
+        // get in this engine (bounded by the deepest depth/ply the search supports, a small double-
+        // digit number), while staying far below where a real positional evaluation could ever
+        // wander, so the two can never be confused for each other.
+        private const int MateScoreBand = 1000;
+
         // Null Move Pruning: the reduction grows with depth so a deep node skips more of the
         // opponent's reply before deciding a null move is safe, while a shallow node stays
         // conservative. Minimum search depth to even attempt it scales the same way, so the
@@ -530,8 +541,16 @@ namespace ChessTheBetrayal.AI
                         (Stopwatch.GetTimestamp() - telemetryStartTimestamp) * 1000L / Stopwatch.Frequency);
 #endif
 
-                    // Early exit on forced mate found — no deeper search changes the decision.
-                    if (bestScore >= MateScore)
+                    // Early exit on forced mate found — no deeper search changes the decision. A
+                    // mate's score is MateScore minus the remaining depth at the moment it was
+                    // found (see the mate-detection branch in Search), so it approaches MateScore
+                    // but reaches the EXACT constant only when a mate is found with zero remaining
+                    // depth left to search — comparing against the same mate band the TT's own
+                    // AdjustMateScore/UnadjustMateScore already use is what makes this fire for a
+                    // real mate found at any realistic depth, not just that one edge case. Still
+                    // one-sided: a position where THIS side is being mated scores near -MateScore,
+                    // nowhere near this positive band, so only a winning mate ever triggers it.
+                    if (bestScore >= MateScore - MateScoreBand)
                     {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                         _tt.Stats.StopReason = SearchStopReason.MateFound;
@@ -1178,15 +1197,15 @@ namespace ChessTheBetrayal.AI
         /// </summary>
         private static int AdjustMateScore(int score, int plyFromRoot)
         {
-            if (score >= MateScore - 1000) return score + plyFromRoot;
-            if (score <= -(MateScore - 1000)) return score - plyFromRoot;
+            if (score >= MateScore - MateScoreBand) return score + plyFromRoot;
+            if (score <= -(MateScore - MateScoreBand)) return score - plyFromRoot;
             return score;
         }
 
         private static int UnadjustMateScore(int score, int plyFromRoot)
         {
-            if (score >= MateScore - 1000) return score - plyFromRoot;
-            if (score <= -(MateScore - 1000)) return score + plyFromRoot;
+            if (score >= MateScore - MateScoreBand) return score - plyFromRoot;
+            if (score <= -(MateScore - MateScoreBand)) return score + plyFromRoot;
             return score;
         }
 

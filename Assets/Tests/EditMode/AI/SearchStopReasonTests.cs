@@ -12,9 +12,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
     /// it ran out of budget and one that reaches depth 7 because it decided the position was settled
     /// look identical in LastCompletedDepth alone — telling those apart is what a depth-ceiling
     /// decision actually needs, since raising MaxDepth only helps the search that was budget-bound in
-    /// the first place. One test below (the mate one) pins a genuine finding rather than the
-    /// originally-intended behavior: see its own comment for why "mate found" does not actually stop
-    /// the search early today.
+    /// the first place.
     /// </summary>
     [TestFixture]
     public class SearchStopReasonTests
@@ -97,23 +95,10 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             Assert.That(_search.Stats.StopReason, Is.EqualTo(SearchStopReason.Budget));
         }
 
-        [Test]
-        public void FindBestMove_ForcedMateAlreadyFound_StillReportsCeilingNotMateFound()
-        {
-            // Black King boxed in on g8 by its own pawns; White Rook on a1 delivers Ra1-a8# — a real
-            // mate the search finds from depth 2 on. This PINS a genuine finding from building this
-            // stop-reason telemetry, not the originally-intended behavior: the root's own
-            // "bestScore >= MateScore" early exit is unreachable as written. A mate scores
-            // MateScore MINUS at least one ply's worth of remaining depth at the moment it's detected
-            // (see the mate-scoring branch inside Search), so bestScore can get arbitrarily close to
-            // MateScore but a genuinely deeper MaxDepth always keeps it strictly below the threshold —
-            // confirmed directly (temporary diagnostic, removed): depths 2/3/4/5 on this exact position
-            // scored 899999/899998/899997/899996 against a MateScore of 900000, never >=. The search
-            // therefore keeps re-searching every configured depth even after it has already found a
-            // forced mate, which this test pins as the CURRENT behavior rather than papering over it.
-            // Fixing the early exit itself is out of scope here — a search behavior change needs its
-            // own investigation and safety pass, not a side effect of adding stop-reason telemetry.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+        /// <summary>Black King boxed in on g8 by its own pawns; White Rook on a1 delivers Ra1-a8#
+        /// as a genuine forced mate.</summary>
+        private static BoardState BackRankMateInOne() =>
+            TestBoardSetupUtility.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("a1", Team.White, ChessPieceType.Rook)
                 .WithPiece("g8", Team.Black, ChessPieceType.King)
@@ -122,11 +107,83 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 .WithPiece("h7", Team.Black, ChessPieceType.Pawn)
                 .WithTurn(Team.White)
                 .WithComputedHash();
-            var settings = new AISearchSettings(maxDepth: 5, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
+
+        [Test]
+        public void FindBestMove_ForcedMateFound_ReportsMateFoundAndStopsBeforeMaxDepth()
+        {
+            // Ra1-a8# is a real mate the search finds from depth 2 on. Once found, no deeper search
+            // can change the decision, so the deepening loop should stop right there instead of
+            // burning through every remaining configured depth for nothing — a genuine fix, not the
+            // pre-fix behavior this same fixture used to pin (see the mate-early-exit finding this
+            // ticket recorded: the root check compared against the exact MateScore constant, but a
+            // mate's score only ever gets close to it, never equal, at any real search depth).
+            BoardState board = BackRankMateInOne();
+            var settings = new AISearchSettings(maxDepth: 9, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             _search.FindBestMove(board, settings, CancellationToken.None);
 
-            Assert.That(_search.Stats.StopReason, Is.EqualTo(SearchStopReason.Ceiling));
+            Assert.That(_search.Stats.StopReason, Is.EqualTo(SearchStopReason.MateFound));
+            Assert.That(_search.Stats.LastCompletedDepth, Is.LessThan(9),
+                "A mate found well short of MaxDepth 9 should stop the search there, not run every depth.");
+        }
+
+        [Test]
+        public void FindBestMove_ForcedMateFound_StopsAtTheSameDepthRegardlessOfHowMuchDeeperMaxDepthIs()
+        {
+            // The search should stop at whatever depth it FIRST finds the mate, independent of how
+            // much further MaxDepth would have allowed it to go — proof the exit is actually firing
+            // on discovery, not coincidentally landing on the same depth for an unrelated reason.
+            BoardState shallowCeiling = BackRankMateInOne();
+            var shallowSettings = new AISearchSettings(maxDepth: 3, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
+            _search.FindBestMove(shallowCeiling, shallowSettings, CancellationToken.None);
+            int depthWithShallowCeiling = _search.Stats.LastCompletedDepth;
+
+            var deepSearch = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator(),
+                transpositionTable: new TranspositionTable(log2Size: 20));
+            BoardState deepCeiling = BackRankMateInOne();
+            var deepSettings = new AISearchSettings(maxDepth: 9, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
+            deepSearch.FindBestMove(deepCeiling, deepSettings, CancellationToken.None);
+            int depthWithDeepCeiling = deepSearch.Stats.LastCompletedDepth;
+
+            Assert.That(depthWithDeepCeiling, Is.EqualTo(depthWithShallowCeiling),
+                "The mate should be found and stopped on at the same depth regardless of how much " +
+                "further MaxDepth would allow — a MaxDepth-independent result is what proves this is " +
+                "a genuine mate-found exit, not just two searches happening to agree.");
+        }
+
+        [Test]
+        public void FindBestMove_SideAboutToBeMated_NeverEarlyExitsOnItsOwnLoss()
+        {
+            // The mate-found exit is one-sided: it must only fire when THIS side (the search's own
+            // root perspective) has found a WINNING mate, never when this side is the one about to
+            // be mated. The exact BackRankMateInOne position, but with BLACK to move instead of
+            // White — Black has no way to stop Ra1-a8# next move, so Black's own search (root
+            // perspective = Black, the losing side) must score this near -MateScore for itself and
+            // must never report MateFound for what is actually its own forthcoming loss.
+            BoardState board = BackRankMateInOne().WithTurn(Team.Black).WithComputedHash();
+
+            var settings = new AISearchSettings(maxDepth: 4, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
+            _search.FindBestMove(board, settings, CancellationToken.None);
+
+            Assert.That(_search.Stats.StopReason, Is.Not.EqualTo(SearchStopReason.MateFound),
+                "A position where this side is about to be mated must never report MateFound — that " +
+                "would mean the one-sided check fired on the losing side's score instead of the " +
+                "winning one's.");
+        }
+
+        [Test]
+        public void FindBestMove_BetrayalLiveForcedMate_StillReportsMateFound()
+        {
+            // Same mate as above, but with the Betrayal right live so PlayForcedSaveMoves' own,
+            // DIFFERENT mate-scoring convention (a raw +/-MateScore rather than the depth-adjusted
+            // one Search itself uses) is reachable too — the fix must cover both conventions, not
+            // just the common one.
+            BoardState board = BackRankMateInOne().WithBetrayalRight(true).WithComputedHash();
+            var settings = new AISearchSettings(maxDepth: 9, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
+
+            _search.FindBestMove(board, settings, CancellationToken.None);
+
+            Assert.That(_search.Stats.StopReason, Is.EqualTo(SearchStopReason.MateFound));
         }
 
         [Test]
