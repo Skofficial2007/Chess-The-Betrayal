@@ -100,7 +100,7 @@ namespace ChessTheBetrayal.AI
         public long QBetrayalResolutionNodes;   // qnodes spent inside the betrayerPending forced-sequence branch
         public long QActExpansions;             // qsearch-loop moves surviving the filter with Stage == Act
         public long QMovesGenerated;            // total moves returned by the captures/Acts generator per standard qnode
-        public long QMovesSearched;             // of those, how many survived the delta-prune filter
+        public long QMovesSearched;             // of those, how many survived the Act re-expansion gate (counted before the delta-prune check, not after)
         public long SeeQuiescencePrunes;        // qsearch captures skipped for having a losing static-exchange result
 
         /// <summary>The deepest iterative-deepening depth FindBestMove fully completed before
