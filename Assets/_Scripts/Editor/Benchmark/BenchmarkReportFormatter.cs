@@ -32,7 +32,8 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
                 sb.AppendLine($"  [{tier.ProfileId}] {tier.MovesSampled} moves, " +
                     $"{tier.MeanNodesPerMove:F0} nodes/move, {tier.MeanMsPerMove:F0}ms/move, " +
                     $"depth mean {tier.MeanCompletedDepth:F1} (min {tier.ShallowestCompletedDepth}, max {tier.DeepestCompletedDepth}), " +
-                    $"blunder-actuation {tier.ObservedBlunderActuationRate:P1}");
+                    $"blunder-actuation {tier.ObservedBlunderActuationRate:P1}, " +
+                    $"Acts {tier.ActsPlayed} ({tier.ActRate:P1} of moves; {tier.ActsResolvedByRetribution} retribution / {tier.ActsResolvedByDefection} defection)");
             }
 
             var findings = BenchmarkDriftAnalyzer.Analyze(report, baseline);
@@ -89,13 +90,14 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
             sb.AppendLine();
             sb.AppendLine("## Tier performance");
             sb.AppendLine();
-            sb.AppendLine("| Tier | Moves | Nodes/move | Ms/move | Depth mean | Depth min | Depth max | Blunder actuation |");
-            sb.AppendLine("|---|---|---|---|---|---|---|---|");
+            sb.AppendLine("| Tier | Moves | Nodes/move | Ms/move | Depth mean | Depth min | Depth max | Blunder actuation | Acts | Act rate | Retribution | Defection |");
+            sb.AppendLine("|---|---|---|---|---|---|---|---|---|---|---|---|");
             foreach (TierPerformance tier in report.TierPerformances)
             {
                 sb.AppendLine($"| {tier.ProfileId} | {tier.MovesSampled} | {tier.MeanNodesPerMove:F0} | " +
                     $"{tier.MeanMsPerMove:F0} | {tier.MeanCompletedDepth:F1} | {tier.ShallowestCompletedDepth} | " +
-                    $"{tier.DeepestCompletedDepth} | {tier.ObservedBlunderActuationRate:P1} |");
+                    $"{tier.DeepestCompletedDepth} | {tier.ObservedBlunderActuationRate:P1} | {tier.ActsPlayed} | " +
+                    $"{tier.ActRate:P1} | {tier.ActsResolvedByRetribution} | {tier.ActsResolvedByDefection} |");
             }
 
             return sb.ToString();

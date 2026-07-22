@@ -180,5 +180,27 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                     $"[{tier.ProfileId}] every sampled move must land in exactly one histogram slot.");
             }
         }
+
+        [Test]
+        public void BuildReport_TierPerformance_EveryPlayedActResolvesToExactlyOneOutcome()
+        {
+            // Same accumulator-chain concern as the depth invariant above, applied to the new Act
+            // counters: every Act a tier plays resolves either by Retribution or by Defection,
+            // never both and never neither, so the two must always sum back to the total exactly,
+            // across a real multi-game merge.
+            var session = TournamentSession.CreateHeadToHead(
+                runSeed: 3, Find("hard"), Find("normal"), positionCount: 3, plyCap: TestPlyCap);
+
+            while (session.RunNextGame()) { }
+
+            BenchmarkReport report = session.BuildReport();
+            foreach (TierPerformance tier in report.TierPerformances)
+            {
+                Assert.That(tier.ActsResolvedByRetribution + tier.ActsResolvedByDefection, Is.EqualTo(tier.ActsPlayed),
+                    $"[{tier.ProfileId}] every played Act must resolve by exactly one of Retribution or Defection.");
+                Assert.That(tier.ActsPlayed, Is.LessThanOrEqualTo(tier.MovesSampled),
+                    $"[{tier.ProfileId}] Acts played can never exceed total moves played.");
+            }
+        }
     }
 }

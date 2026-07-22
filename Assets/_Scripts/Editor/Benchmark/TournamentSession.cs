@@ -324,6 +324,9 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
             private bool _hasAnyMoves;
             private int _blunderRollOffered;
             private int _blunderRollFired;
+            private int _actsPlayed;
+            private int _actsResolvedByRetribution;
+            private int _actsResolvedByDefection;
 
             public void Add(MatchSideStats stats)
             {
@@ -342,6 +345,9 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
                     _depthHistogram[i] += stats.DepthHistogram[i];
                 _blunderRollOffered += stats.BlunderRollOffered;
                 _blunderRollFired += stats.BlunderRollFired;
+                _actsPlayed += stats.ActsPlayed;
+                _actsResolvedByRetribution += stats.ActsResolvedByRetribution;
+                _actsResolvedByDefection += stats.ActsResolvedByDefection;
             }
 
             public TierPerformance ToTierPerformance(string profileId) => new TierPerformance(
@@ -353,7 +359,10 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
                 meanCompletedDepth: _movesSampled == 0 ? 0 : (double)_completedDepthSum / _movesSampled,
                 shallowestCompletedDepth: _shallowestCompletedDepth,
                 depthHistogram: (int[])_depthHistogram.Clone(),
-                observedBlunderActuationRate: _blunderRollOffered == 0 ? 0f : (float)_blunderRollFired / _blunderRollOffered);
+                observedBlunderActuationRate: _blunderRollOffered == 0 ? 0f : (float)_blunderRollFired / _blunderRollOffered,
+                actsPlayed: _actsPlayed,
+                actsResolvedByRetribution: _actsResolvedByRetribution,
+                actsResolvedByDefection: _actsResolvedByDefection);
         }
     }
 

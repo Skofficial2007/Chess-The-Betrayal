@@ -260,7 +260,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             {
                 var written = new BenchmarkReport { RunSeed = 42, Mode = "Full" };
                 written.PairResults.Add(new PairResult("hard", "normal", 40, 26, 10, 4));
-                written.TierPerformances.Add(new TierPerformance("hard", 80, 95000, 2800, 7, 7, 7, null, 0.02f));
+                written.TierPerformances.Add(new TierPerformance("hard", 80, 95000, 2800, 7, 7, 7, null, 0.02f,
+                    actsPlayed: 5, actsResolvedByRetribution: 3, actsResolvedByDefection: 2));
 
                 BenchmarkBaselineIO.Write(written, path);
                 BenchmarkReport read = BenchmarkBaselineIO.TryRead(path);
@@ -270,6 +271,9 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 Assert.That(read.PairResults[0].SubjectWinRate, Is.EqualTo(written.PairResults[0].SubjectWinRate));
                 Assert.That(read.TierPerformances.Count, Is.EqualTo(1));
                 Assert.That(read.TierPerformances[0].MeanMsPerMove, Is.EqualTo(2800));
+                Assert.That(read.TierPerformances[0].ActsPlayed, Is.EqualTo(5));
+                Assert.That(read.TierPerformances[0].ActsResolvedByRetribution, Is.EqualTo(3));
+                Assert.That(read.TierPerformances[0].ActsResolvedByDefection, Is.EqualTo(2));
             }
             finally
             {
