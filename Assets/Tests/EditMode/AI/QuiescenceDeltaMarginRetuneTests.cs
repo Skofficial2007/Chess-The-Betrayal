@@ -8,13 +8,16 @@ using ChessTheBetrayal.Tests.Utilities;
 namespace ChessTheBetrayal.Tests.EditMode.AI
 {
     /// <summary>
-    /// Tightening the quiescence delta-pruning margin can, unlike most of this codebase's pruning
+    /// Changing the quiescence delta-pruning margin can, unlike most of this codebase's pruning
     /// levers, change which move a search reports as best — a positional swing the plain material
-    /// margin doesn't account for could in principle be big enough to matter once the margin is cut.
-    /// Every move below was captured with the margin temporarily reverted to its pre-retune value of
-    /// 200 and confirmed identical on the tightened value of 150 across all five of the depth-wall
-    /// diagnosis's positions before being locked in here — proving the smaller margin changed how
-    /// much tree gets explored, not which move the search settles on.
+    /// margin doesn't account for could in principle be big enough to matter once the margin moves.
+    /// Every move below was captured at a margin of 200 and confirmed identical at 150 across all
+    /// five of the depth-wall diagnosis's positions, so these assertions hold on both values and
+    /// pin the property that actually matters: the margin changes how much tree gets explored, not
+    /// which move the search settles on.
+    ///
+    /// The margin has since been measured back to 200 (see its comment in AlphaBetaSearch for the
+    /// reasoning), which is why these expectations did not need to move with it.
     /// </summary>
     [TestFixture]
     public class QuiescenceDeltaMarginRetuneTests
@@ -91,11 +94,11 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
-        public void RunQuiescenceForTest_WinningQueenCapture_StillFindsItAtTheTighterMargin()
+        public void RunQuiescenceForTest_WinningQueenCapture_StillFindsItAtTheConfiguredMargin()
         {
-            // Regression re-check of QuiescenceDeltaPruningTests' own winning-capture case at the
-            // NEW margin value — a genuinely winning capture must still clear whatever margin is
-            // currently configured.
+            // Regression re-check of QuiescenceDeltaPruningTests' own winning-capture case — a
+            // genuinely winning capture must still clear whatever margin is currently configured,
+            // which is the invariant that has to survive any future retune in either direction.
             BoardState board = TestBoardSetupUtility.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
