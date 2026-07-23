@@ -49,12 +49,35 @@ namespace ChessTheBetrayal.AI
         }
 
         /// <summary>
-        /// Full evaluation. Today this is identical to EvaluateCheap — every term this evaluator
-        /// has is cheap enough to always compute. The split exists so a future, genuinely
-        /// expensive term (pawn structure, king-zone attack mapping) has somewhere to live that a
-        /// caller can skip when the cheap score already decides the outcome.
+        /// Full evaluation: everything EvaluateCheap does, plus pawn structure (passed, isolated,
+        /// doubled pawns) — the first term expensive enough to live behind the lazy stand-pat cut
+        /// rather than always being computed. On a pawn-bare position this equals EvaluateCheap
+        /// exactly; the two diverge only once real pawns are on the board.
         /// </summary>
-        public int Evaluate(BoardState board, Team forTeam) => EvaluateCheap(board, forTeam);
+        public int Evaluate(BoardState board, Team forTeam)
+        {
+            int score = EvaluateCheap(board, forTeam);
+
+            // White-relative delta, same convention MaterialAndPosition's own White-minus-Black
+            // score uses, so it flips the same way EvaluateCheap's total already flipped above.
+            int pawnScore = PawnStructureDelta(board);
+            return forTeam == Team.White ? score + pawnScore : score - pawnScore;
+        }
+
+        /// <summary>
+        /// White's pawn-structure score minus Black's, already scaled by the same attack/defense
+        /// weights the rest of the evaluator uses.
+        /// </summary>
+        private int PawnStructureDelta(BoardState board)
+        {
+            PawnStructure.Score(board, Team.White, out int whiteAttack, out int whiteDefense);
+            PawnStructure.Score(board, Team.Black, out int blackAttack, out int blackDefense);
+
+            int whitePawnScore = (int)(whiteAttack * _weights.AttackScale) + (int)(whiteDefense * _weights.DefenseScale);
+            int blackPawnScore = (int)(blackAttack * _weights.AttackScale) + (int)(blackDefense * _weights.DefenseScale);
+
+            return whitePawnScore - blackPawnScore;
+        }
 
         public int EvaluateCheap(BoardState board, Team forTeam)
         {
