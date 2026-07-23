@@ -25,6 +25,18 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
     /// enough to reorder two close-scored root candidates. Re-verified this is the taper's doing and
     /// not a regression: the position's material and legal moves are unaffected, only which of two
     /// similarly-scored rook moves comes out ahead.
+    ///
+    /// QuietMidgame's expected move was checked again when pawn structure was added: Black's e5 pawn
+    /// scores as isolated now, which briefly favored a bishop capture of it while the lazy hatch's
+    /// swing bound was still zero -- but with the hatch's real, proven bound active the root move
+    /// lands back on the original queen trade (the hatch legally cuts full evaluation at enough
+    /// quiescence nodes to change which line gets explored deeply enough to matter). Re-verified
+    /// this position's expectation is unchanged, not silently left alone.
+    ///
+    /// SemiOpenMidgame's expected move changed again for the same reason: with the pawn term and the
+    /// active lazy hatch both wired in, the search now prefers Rxf8 (the straight rook capture on the
+    /// open f-file) over the earlier Rf1-e1 repositioning -- both b6 and d6 read as isolated for
+    /// Black now, sharpening the position enough that taking the exchange outright wins out.
     /// </summary>
     [TestFixture]
     public class QuiescenceDeltaMarginRetuneTests
@@ -62,8 +74,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             MoveCommand best = SearchAt(SearchDepthProfileCaptureTests.SemiOpenMidgame(), 7);
             Assert.That(best.StartPosition.x, Is.EqualTo(5));
             Assert.That(best.StartPosition.y, Is.EqualTo(0));
-            Assert.That(best.EndPosition.x, Is.EqualTo(4));
-            Assert.That(best.EndPosition.y, Is.EqualTo(0));
+            Assert.That(best.EndPosition.x, Is.EqualTo(5));
+            Assert.That(best.EndPosition.y, Is.EqualTo(7));
             Assert.That(best.Stage, Is.EqualTo(BetrayalStage.None));
         }
 
