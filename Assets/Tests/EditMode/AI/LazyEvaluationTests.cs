@@ -96,6 +96,42 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
+        public void MaxPositionalSwing_BoundsTheWorstCaseGapBetweenCheapAndFull_OnAnExposedKing()
+        {
+            // A board built to push king safety toward its own clamped extreme: White's king has no
+            // pawn shield at all (all three of its own files open) and is ringed by enough Black
+            // material within its zone to blow well past MaxKingSafetyPerSide before clamping, plus
+            // White's own Knight standing in that same zone flagged as a pending self-Betrayer (the
+            // defector-tempo term). Black's king, by contrast, is fully shielded and has nothing in
+            // its own zone, so its king-safety score is exactly zero -- maximizing the gap between the
+            // two sides exactly the way the bound's derivation assumes (one side clamped at its
+            // ceiling, the other at zero).
+            BoardState board = TestBoardSetupUtility.CreateEmpty()
+                .WithPiece("e1", Team.White, ChessPieceType.King)
+                .WithPiece("d2", Team.White, ChessPieceType.Knight)
+                .WithPiece("c1", Team.Black, ChessPieceType.Queen)
+                .WithPiece("d3", Team.Black, ChessPieceType.Queen)
+                .WithPiece("f3", Team.Black, ChessPieceType.Rook)
+                .WithPiece("g3", Team.Black, ChessPieceType.Rook)
+                .WithPiece("c3", Team.Black, ChessPieceType.Bishop)
+                .WithPiece("g1", Team.Black, ChessPieceType.Bishop)
+                .WithPiece("c2", Team.Black, ChessPieceType.Knight)
+                .WithPendingBetrayer("d2", Team.White)
+                .WithPiece("e8", Team.Black, ChessPieceType.King)
+                .WithPiece("d7", Team.Black, ChessPieceType.Pawn)
+                .WithPiece("e7", Team.Black, ChessPieceType.Pawn)
+                .WithPiece("f7", Team.Black, ChessPieceType.Pawn)
+                .WithComputedHash();
+
+            var evaluator = new BetrayalAwareEvaluator(new EvaluationWeights(2f, 2f, 1f)); // documented ceiling on both scales
+
+            int cheapScore = evaluator.EvaluateCheap(board, Team.White);
+            int fullScore = evaluator.Evaluate(board, Team.White);
+
+            Assert.That(System.Math.Abs(fullScore - cheapScore), Is.LessThanOrEqualTo(AlphaBetaSearch.MaxPositionalSwing));
+        }
+
+        [Test]
         public void EvaluateStandPat_RetributionPending_NeverTakesTheLazyPath()
         {
             // White Acted the Knight onto its own Pawn; the Rook on a1 owes Retribution. A pending
