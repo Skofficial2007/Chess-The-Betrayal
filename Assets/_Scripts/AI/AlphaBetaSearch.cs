@@ -112,16 +112,19 @@ namespace ChessTheBetrayal.AI
         // The largest amount the evaluator's full-only terms could possibly move a score away from
         // its cheap partial score, so the stand-pat lazy cut below can skip real work whenever the
         // cheap score is already outside the search window by more than this much — no full-only
-        // term could still pull the result back to the other side. Pawn structure is the one term
-        // living behind the full path today: PawnStructure clamps each side's passed-pawn bonus to
-        // at most MaxPassedBonusPerSide and its doubled/isolated penalty to at most MaxPenaltyPerSide,
-        // and the evaluator's attack/defense scaling can multiply either bucket by as much as 2 (the
-        // documented ceiling on AttackDefenseBias in EvaluationWeights, not just today's table
-        // values) — so the worst possible gap between one side maxed on bonus and the other maxed on
-        // penalty, both fully scaled, is (MaxPassedBonusPerSide + MaxPenaltyPerSide) * 2. Pinned by a
+        // term could still pull the result back to the other side. Two terms live behind the full
+        // path today: PawnStructure clamps each side's passed-pawn bonus to at most
+        // MaxPassedBonusPerSide and its doubled/isolated penalty to at most MaxPenaltyPerSide;
+        // KingSafety clamps each side's total exposure (zone attackers, open files, a pending
+        // self-Betrayer near the king) to at most MaxKingSafetyPerSide. The evaluator's attack/
+        // defense scaling can multiply either bucket by as much as 2 (the documented ceiling on
+        // AttackDefenseBias in EvaluationWeights, not just today's table values) — so the worst
+        // possible gap between one side maxed on every bonus and the other maxed on every penalty,
+        // both fully scaled, is the sum of all three ceilings times that same factor. Pinned by a
         // dedicated worst-case probe test; raise this again, with the same reasoning, whenever a new
         // full-only term is added.
-        internal const int MaxPositionalSwing = (PawnStructure.MaxPassedBonusPerSide + PawnStructure.MaxPenaltyPerSide) * 2;
+        internal const int MaxPositionalSwing =
+            (PawnStructure.MaxPassedBonusPerSide + PawnStructure.MaxPenaltyPerSide + KingSafety.MaxKingSafetyPerSide) * 2;
 
         // A node deep enough to matter but with no TT move at all gets a cheap shallower probe first,
         // purely to seed move ordering for the real search that follows. Below this depth the node is
