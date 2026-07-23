@@ -185,21 +185,38 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         /// <summary>
-        /// EvaluateCheap exists as a home for a future expensive term to skip; today no such term
-        /// exists, so it must return exactly what the full evaluation does on every position. This
-        /// is the identity a lazy-evaluation cut leans on: cheap and full only need to agree UNTIL a
-        /// costly term lands behind the full path, and that day hasn't come yet.
+        /// EvaluateCheap exists as a home for a lazy caller to skip whatever full-only terms exist.
+        /// The three PAWNLESS golden fixtures have nothing for a pawn term to add, so cheap and full
+        /// must match EXACTLY on these regardless of what full-only terms exist now or later — this
+        /// is the identity the lazy-evaluation stand-pat cut leans on for any position with no pawns.
         /// </summary>
         [Test]
-        public void EvaluateCheap_MatchesFull_OnEveryGoldenFixture()
+        public void EvaluateCheap_MatchesFull_OnEveryPawnlessGoldenFixture()
         {
             var evaluator = new BetrayalAwareEvaluator();
 
-            foreach (BoardState board in new[]
-                     {
-                         SymmetricQueens(), MirroredRookKnight(), ExtraQueen(),
-                         ShelteredKing(), FullMaterialAsymmetricOpening()
-                     })
+            foreach (BoardState board in new[] { SymmetricQueens(), MirroredRookKnight(), ExtraQueen() })
+            {
+                Assert.That(evaluator.EvaluateCheap(board, Team.White), Is.EqualTo(evaluator.Evaluate(board, Team.White)));
+                Assert.That(evaluator.EvaluateCheap(board, Team.Black), Is.EqualTo(evaluator.Evaluate(board, Team.Black)));
+            }
+        }
+
+        /// <summary>
+        /// The two fixtures that DO have pawns (ShelteredKing, FullMaterialAsymmetricOpening) are no
+        /// longer required to match cheap==full now that pawn structure lives behind the full path —
+        /// each of these two happens to still land at a zero pawn-structure delta today (ShelteredKing's
+        /// three pawns are all on their home rank, before the passed-pawn bonus ramps up; the opening
+        /// fixture is pawn-symmetric except for one isolated pawn on each side that exactly cancels).
+        /// That is a property of these SPECIFIC boards, not a guarantee — this test pins it explicitly
+        /// so a future change to either fixture's pawns can't silently start diverging unnoticed.
+        /// </summary>
+        [Test]
+        public void EvaluateCheap_MatchesFull_OnTheseTwoPawnBearingFixturesToday()
+        {
+            var evaluator = new BetrayalAwareEvaluator();
+
+            foreach (BoardState board in new[] { ShelteredKing(), FullMaterialAsymmetricOpening() })
             {
                 Assert.That(evaluator.EvaluateCheap(board, Team.White), Is.EqualTo(evaluator.Evaluate(board, Team.White)));
                 Assert.That(evaluator.EvaluateCheap(board, Team.Black), Is.EqualTo(evaluator.Evaluate(board, Team.Black)));
