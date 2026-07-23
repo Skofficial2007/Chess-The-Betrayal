@@ -8,13 +8,11 @@ using ChessTheBetrayal.Tests.Utilities;
 namespace ChessTheBetrayal.Tests.EditMode.AI
 {
     /// <summary>
-    /// The lazy-evaluation hatch is a speed enabler, not a strength term: it must never change
-    /// which move the search reports as best, and it must never fire while a Betrayer is pending
-    /// (a Defection can swing a full piece past any static margin). Today the cheap and full
-    /// evaluators are IDENTICAL by construction (there is no expensive term behind the full path
-    /// yet), so every assertion below is a correctness pin proving the seam is inert now — it
-    /// becomes a real optimisation only once a future evaluator term raises MaxPositionalSwing
-    /// above zero.
+    /// The lazy-evaluation hatch must never fire while a Betrayer is pending (a Defection can swing
+    /// a full piece past any static margin), and whenever it DOES fire it must never return a value
+    /// that lands on the wrong side of the search window from what full evaluation would have
+    /// produced — that soundness, not exact value agreement, is the real contract now that pawn
+    /// structure lives behind the full path and can genuinely differ from the cheap score.
     /// </summary>
     [TestFixture]
     public class LazyEvaluationTests
@@ -32,12 +30,11 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 transpositionTable: new TranspositionTable(log2Size: 20));
 
         [Test]
-        public void EvaluateStandPat_NarrowWindow_MatchesFullEvaluationToday()
+        public void EvaluateStandPat_WindowWideEnoughThatTheCutCannotFire_MatchesFullEvaluation()
         {
-            // With MaxPositionalSwing == 0, the lazy cut's own window test degenerates to
-            // "cheap >= beta or cheap <= alpha" -- exactly the ordinary stand-pat comparison a
-            // caller would apply to a full score. Pin that the returned score matches full
-            // evaluation exactly, on a position with no pending Betrayer.
+            // A window wider than MaxPositionalSwing on both sides can never be beaten by the cheap
+            // score alone, so this always falls through to full evaluation regardless of how large
+            // the pawn-structure term's swing gets.
             BoardState board = SearchDepthProfileCaptureTests.QuietMidgame();
             var search = NewSearch();
 
@@ -48,21 +45,54 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
-        public void EvaluateStandPat_WindowAlreadyBeatenByCheapScore_StillReturnsTheExactFullScore()
+        public void EvaluateStandPat_WhenTheCutFires_ReturnsTheCheapScoreWithinTheProvenSwingOfFull()
         {
             // A window narrow enough that the cheap score alone already decides it (cheap >= beta)
-            // takes the lazy branch. Since cheap == full today, the returned value must still be
-            // exactly what full evaluation would have produced -- the cut can never be observed to
-            // change the number, only whether the full evaluator was called to get it.
+            // takes the lazy branch and returns the cheap score directly -- no longer necessarily
+            // identical to full now that a real term lives behind it, but it must always be within
+            // MaxPositionalSwing of what full would have produced. That gap is exactly why the
+            // window test itself subtracts/adds the swing before comparing.
             BoardState board = SearchDepthProfileCaptureTests.QuietMidgame();
             var search = NewSearch();
             Team perspective = board.CurrentTurn;
+            var evaluator = new BetrayalAwareEvaluator();
 
-            int fullScore = new BetrayalAwareEvaluator().Evaluate(board, perspective);
-            int standPat = search.EvaluateStandPatForTest(board, perspective, alpha: fullScore - 500, beta: fullScore - 100);
+            int cheapScore = evaluator.EvaluateCheap(board, perspective);
+            int fullScore = evaluator.Evaluate(board, perspective);
 
-            Assert.That(standPat, Is.EqualTo(fullScore),
-                "The lazy cut fired (a narrower window than the score), but must still return the identical value full evaluation would.");
+            int standPat = search.EvaluateStandPatForTest(board, perspective, alpha: cheapScore - 500, beta: cheapScore - 100);
+
+            Assert.That(standPat, Is.EqualTo(cheapScore), "A narrow-enough window must take the lazy branch and return the cheap score.");
+            Assert.That(System.Math.Abs(fullScore - cheapScore), Is.LessThanOrEqualTo(AlphaBetaSearch.MaxPositionalSwing),
+                "The gap between cheap and full must never exceed the bound the cut relies on to stay sound.");
+        }
+
+        [Test]
+        public void MaxPositionalSwing_BoundsTheWorstCaseGapBetweenCheapAndFull_OnAConstructedExtremePosition()
+        {
+            // A position built to push pawn structure toward its clamped extremes on both sides:
+            // White gets several advanced, unopposed (passed) pawns; Black gets a cluster of
+            // doubled/isolated pawns with no passed-pawn credit. This is the kind of board the
+            // MaxPositionalSwing bound has to survive, not just an ordinary midgame.
+            BoardState board = TestBoardSetupUtility.CreateEmpty()
+                .WithPiece("e1", Team.White, ChessPieceType.King)
+                .WithPiece("e8", Team.Black, ChessPieceType.King)
+                .WithPiece("a6", Team.White, ChessPieceType.Pawn)
+                .WithPiece("c6", Team.White, ChessPieceType.Pawn)
+                .WithPiece("e6", Team.White, ChessPieceType.Pawn)
+                .WithPiece("g6", Team.White, ChessPieceType.Pawn)
+                .WithPiece("b2", Team.Black, ChessPieceType.Pawn)
+                .WithPiece("b3", Team.Black, ChessPieceType.Pawn)
+                .WithPiece("d2", Team.Black, ChessPieceType.Pawn)
+                .WithPiece("d3", Team.Black, ChessPieceType.Pawn)
+                .WithComputedHash();
+
+            var evaluator = new BetrayalAwareEvaluator(new EvaluationWeights(2f, 2f, 1f)); // documented ceiling on both scales
+
+            int cheapScore = evaluator.EvaluateCheap(board, Team.White);
+            int fullScore = evaluator.Evaluate(board, Team.White);
+
+            Assert.That(System.Math.Abs(fullScore - cheapScore), Is.LessThanOrEqualTo(AlphaBetaSearch.MaxPositionalSwing));
         }
 
         [Test]
@@ -162,8 +192,15 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         [Test]
         public void FindBestMove_QuietMidgame_StillMatchesTheRecordedBestMove()
         {
-            // Re-assert the existing move-identity pin (QuiescenceDeltaMarginRetuneTests' own
-            // fixture) with the lazy hatch wired in -- an inert hatch must not move this.
+            // Re-assert the existing move-identity pin with the pawn term and the now-active lazy
+            // hatch both wired in. Pawn structure does change which move looks best in isolation
+            // (with the hatch inert it briefly favored Bxc3-e5, capturing Black's isolated e-pawn
+            // outright) -- but with MaxPositionalSwing at its real, proven bound the hatch legally
+            // cuts full evaluation at enough quiescence nodes to change which line gets explored
+            // deeply enough to matter, and the root move lands back on the original queen trade.
+            // That is the same "a pruning lever can reorder root moves without being unsound" shape
+            // AI-47/48 already established for the delta-pruning margin, not a soundness bug: the
+            // cut's own per-node contract (bounded by MaxPositionalSwing) still held throughout.
             var settings = new AISearchSettings(maxDepth: 7, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
             MoveCommand best = NewSearch().FindBestMove(SearchDepthProfileCaptureTests.QuietMidgame(), settings, CancellationToken.None);
 
