@@ -1,6 +1,9 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using NUnit.Framework;
 using ChessTheBetrayal.AI;
 using ChessTheBetrayal.EditorTools.Benchmark;
@@ -33,6 +36,125 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             new AIProfile("extreme", maxDepth: 2, timeBudget: new AITimeBudget(60_000, 60_000), blunderRate: 0f, blunderMarginCp: 0, betrayalAggression: 0.3f, attackDefenseBias: 1.2f, tieBreakWindowCp: 10, useOpeningBook: false),
             new AIProfile("impossible", maxDepth: 1, timeBudget: new AITimeBudget(60_000, 60_000), blunderRate: 0f, blunderMarginCp: 0, betrayalAggression: 0f, attackDefenseBias: 1f, tieBreakWindowCp: 0, useOpeningBook: false),
         };
+
+        private string _tempRoot;
+
+        [SetUp]
+        public void CreateTempRoot()
+        {
+            _tempRoot = Path.Combine(Path.GetTempPath(), "ParallelTournamentExecutorTests_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(_tempRoot);
+        }
+
+        [TearDown]
+        public void DeleteTempRoot()
+        {
+            if (Directory.Exists(_tempRoot)) Directory.Delete(_tempRoot, recursive: true);
+        }
+
+        [Test]
+        public void RunRemainingGames_RunWriterSupplied_LeavesFinishedGamesOnDiskBeforeTheWholeRunEnds()
+        {
+            // The whole point of runWriter: a run killed partway must still have every game that
+            // finished before the kill sitting on disk, not just a header. Proves this without
+            // actually killing the process by hooking progress to stall once several games have
+            // reported complete, THEN polling run.jsonl on disk (while the remaining games are
+            // still in flight) until it holds at least that many records or a timeout expires -- if
+            // WriteGame only ran in a post-loop fold after every game finished, that poll would
+            // never see more than the header no matter how long it waited, since nothing reaches
+            // disk until the whole run is over.
+            var session = TournamentSession.CreateFull(runSeed: 606, FastFixtureRoster, TestPlyCap, MatchTimeControl.Uncapped);
+            int totalGames = session.TotalGames;
+            string runDirectory = Path.Combine(_tempRoot, "incremental-run");
+            string headerLine = TournamentRunWriter.BuildHeaderLine(
+                1, "Full", runSeed: 606, totalGames, "Uncapped", workerCount: 4, DateTime.UtcNow);
+            string runFilePath = Path.Combine(runDirectory, TournamentRunReader.RunFileName);
+
+            const int StallAfterGames = 5;
+            var reachedStallPoint = new ManualResetEventSlim(false);
+            var releaseStall = new ManualResetEventSlim(false);
+            int linesAtStall = -1;
+
+            using (var writer = new TournamentRunWriter(runDirectory, headerLine))
+            {
+                var progress = new StallingProgress(current =>
+                {
+                    if (current == StallAfterGames)
+                    {
+                        reachedStallPoint.Set();
+                        releaseStall.Wait(TimeSpan.FromSeconds(10));
+                    }
+                });
+
+                // The stalled worker blocks ONE of RunRemainingGames' Parallel.For iterations, so
+                // RunRemainingGames itself does not return until releaseStall fires -- the file
+                // check has to happen from a SEPARATE thread while RunRemainingGames is still
+                // running, not after it, or this would only ever observe the fully-finished state.
+                Task<int> checkerTask = Task.Run(() =>
+                {
+                    reachedStallPoint.Wait(TimeSpan.FromSeconds(10));
+                    int count = CountLinesWithRetry(runFilePath, minimumExpected: StallAfterGames, timeout: TimeSpan.FromSeconds(5));
+                    releaseStall.Set();
+                    return count;
+                });
+
+                ParallelTournamentExecutor.RunRemainingGames(
+                    session, maxDegreeOfParallelism: 4, progress: progress, runWriter: writer);
+
+                linesAtStall = checkerTask.Result;
+            }
+
+            Assert.That(reachedStallPoint.IsSet, Is.True, "the run finished before the stall point fired -- widen StallAfterGames or slow the fixture roster.");
+            Assert.That(linesAtStall, Is.GreaterThanOrEqualTo(StallAfterGames),
+                "run.jsonl must already hold at least as many game records as have been reported complete, " +
+                "not just the header -- persistence must happen as each game finishes, not all at once at the end.");
+
+            TournamentRunResult result = TournamentRunReader.Read(runDirectory);
+            Assert.That(result.Games.Count, Is.EqualTo(totalGames));
+        }
+
+        /// <summary>Polls a run file's line count (minus the header) until it reaches
+        /// minimumExpected or timeout elapses -- the writer flushes on its own 250ms timer, so a
+        /// single immediate read could under-count even on correct, working persistence. Opens
+        /// with FileShare.ReadWrite explicitly: the writer thread still holds the file open for
+        /// appending while this polls, and a plain File.ReadLines can hit a sharing violation
+        /// against that open handle depending on timing.</summary>
+        private static int CountLinesWithRetry(string runFilePath, int minimumExpected, TimeSpan timeout)
+        {
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            int lastCount = 0;
+            while (stopwatch.Elapsed < timeout)
+            {
+                if (File.Exists(runFilePath))
+                {
+                    try
+                    {
+                        using var stream = new FileStream(runFilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                        using var reader = new StreamReader(stream);
+                        int lineCount = 0;
+                        while (reader.ReadLine() != null) lineCount++;
+                        lastCount = lineCount - 1; // minus header
+                        if (lastCount >= minimumExpected) return lastCount;
+                    }
+                    catch (IOException)
+                    {
+                        // Transient sharing conflict with the writer's own open handle -- retry.
+                    }
+                }
+                Thread.Sleep(50);
+            }
+            return lastCount;
+        }
+
+        /// <summary>Fires ReportGameCompleted like a real sink, but lets the caller run arbitrary
+        /// code (stall, inspect state) on a specific completion count -- same shape as
+        /// BlockOneGameProgress below, generalized to take the count.</summary>
+        private sealed class StallingProgress : ChessTheBetrayal.EditorTools.Benchmark.ITournamentProgress
+        {
+            private readonly Action<int> _onReport;
+            public StallingProgress(Action<int> onReport) => _onReport = onReport;
+            public void ReportGameCompleted(int current, int total) => _onReport(current);
+        }
 
         [Test]
         public void RunRemainingGames_QuickTournament_ProducesTheSameReportAsSequentialRunNextGame()
