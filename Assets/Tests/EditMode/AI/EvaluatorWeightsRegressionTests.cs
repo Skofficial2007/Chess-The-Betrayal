@@ -183,5 +183,27 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             Assert.That(evaluator.Evaluate(FullMaterialAsymmetricOpening(), Team.White), Is.EqualTo(85));
             Assert.That(evaluator.Evaluate(FullMaterialAsymmetricOpening(), Team.Black), Is.EqualTo(-85));
         }
+
+        /// <summary>
+        /// EvaluateCheap exists as a home for a future expensive term to skip; today no such term
+        /// exists, so it must return exactly what the full evaluation does on every position. This
+        /// is the identity a lazy-evaluation cut leans on: cheap and full only need to agree UNTIL a
+        /// costly term lands behind the full path, and that day hasn't come yet.
+        /// </summary>
+        [Test]
+        public void EvaluateCheap_MatchesFull_OnEveryGoldenFixture()
+        {
+            var evaluator = new BetrayalAwareEvaluator();
+
+            foreach (BoardState board in new[]
+                     {
+                         SymmetricQueens(), MirroredRookKnight(), ExtraQueen(),
+                         ShelteredKing(), FullMaterialAsymmetricOpening()
+                     })
+            {
+                Assert.That(evaluator.EvaluateCheap(board, Team.White), Is.EqualTo(evaluator.Evaluate(board, Team.White)));
+                Assert.That(evaluator.EvaluateCheap(board, Team.Black), Is.EqualTo(evaluator.Evaluate(board, Team.Black)));
+            }
+        }
     }
 }
