@@ -109,6 +109,13 @@ namespace ChessTheBetrayal.AI
         // forced-Defection loop once did — if we ever hit it we stand pat rather than recurse forever.
         private const int MaxQuiescencePly = 64;
 
+        // The largest amount the evaluator's full-only terms could possibly move a score away from
+        // its cheap partial score. Zero today because every term the evaluator has is already cheap
+        // enough to always compute — there is nothing behind the full path yet. A future expensive
+        // positional term raises this to its own true bound when it lands, which is what lets the
+        // stand-pat lazy cut below start skipping real work instead of being a no-op.
+        private const int MaxPositionalSwing = 0;
+
         // A node deep enough to matter but with no TT move at all gets a cheap shallower probe first,
         // purely to seed move ordering for the real search that follows. Below this depth the node is
         // already cheap enough that skipping straight to the real search costs less than the probe would.
@@ -750,6 +757,32 @@ namespace ChessTheBetrayal.AI
 #else
             return _evaluator.Evaluate(board, perspectiveTeam);
 #endif
+        }
+
+        /// <summary>
+        /// Quiescence's stand-pat score, computed through the cheap/full lazy hatch: the cheap
+        /// score is always cheap enough to just compute, and if it already sits far enough outside
+        /// (alpha, beta) that nothing the full evaluator could still add or subtract
+        /// (MaxPositionalSwing) would pull it back into the window, the full evaluation would only
+        /// have confirmed what the cheap score already decided — so it's skipped. Never used
+        /// anywhere a Betrayer is mid-sequence: the caller only reaches this once both Retribution
+        /// and ForcedSave obligations have already resolved, but the explicit guard below keeps
+        /// that true even if a future change to the caller ever stopped guaranteeing it.</summary>
+        private int EvaluateStandPat(BoardState board, Team perspectiveTeam, int alpha, int beta)
+        {
+            if (board.PendingBetrayerSquare.HasValue)
+                return EvaluateTimed(board, perspectiveTeam);
+
+            int cheap = _evaluator.EvaluateCheap(board, perspectiveTeam);
+            if (cheap - MaxPositionalSwing >= beta || cheap + MaxPositionalSwing <= alpha)
+            {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                _tt.Stats.LazyStandPatCuts++;
+#endif
+                return cheap;
+            }
+
+            return EvaluateTimed(board, perspectiveTeam);
         }
 
         /// <summary>
@@ -1453,7 +1486,7 @@ namespace ChessTheBetrayal.AI
             // at every early-return site would be needless surface area. Fail-soft is the more
             // standard alpha-beta convention (Search itself already returns 'best', not 'beta') and
             // is provably still a valid cutoff (best >= beta here).
-            int standPat = EvaluateTimed(board, perspectiveTeam);
+            int standPat = EvaluateStandPat(board, perspectiveTeam, alpha, beta);
             if (standPat >= beta) return standPat;
             if (standPat > alpha) alpha = standPat;
 
@@ -1564,6 +1597,23 @@ namespace ChessTheBetrayal.AI
         /// </summary>
         internal int RunQuiescenceForTest(BoardState board, Team perspectiveTeam, CancellationToken ct) =>
             Quiescence(board, -Infinity, Infinity, perspectiveTeam, plyFromRoot: 0, MaxQuiescencePly, ct);
+
+        /// <summary>
+        /// Test seam: run quiescence with a caller-supplied (alpha, beta) window instead of the
+        /// standard open one. Lets LazyEvaluationTests put the stand-pat lazy cut's own decision
+        /// (does the cheap score already fall outside this window?) under direct control, rather
+        /// than hoping a real position happens to produce a tight window naturally.
+        /// </summary>
+        internal int RunQuiescenceForTest(BoardState board, Team perspectiveTeam, int alpha, int beta, CancellationToken ct) =>
+            Quiescence(board, alpha, beta, perspectiveTeam, plyFromRoot: 0, MaxQuiescencePly, ct);
+
+        /// <summary>
+        /// Test seam: the stand-pat lazy hatch's own decision in isolation, without running the
+        /// rest of quiescence around it. Lets a test assert directly whether a position's cheap
+        /// score was used as-is or the full evaluator was consulted, for a given window.
+        /// </summary>
+        internal int EvaluateStandPatForTest(BoardState board, Team perspectiveTeam, int alpha, int beta) =>
+            EvaluateStandPat(board, perspectiveTeam, alpha, beta);
 
         /// <summary>
         /// The forced-Defection branch of quiescence: no legal Executioner exists, so the Betrayer

@@ -102,6 +102,7 @@ namespace ChessTheBetrayal.AI
         public long QMovesGenerated;            // total moves returned by the captures/Acts generator per standard qnode
         public long QMovesSearched;             // of those, how many survived the Act re-expansion gate (counted before the delta-prune check, not after)
         public long SeeQuiescencePrunes;        // qsearch captures skipped for having a losing static-exchange result
+        public long LazyStandPatCuts;           // quiescence stand-pats decided from the cheap score alone, full eval skipped
 
         /// <summary>The deepest iterative-deepening depth FindBestMove fully completed before
         /// returning — via a soft-time-budget cancellation, MaxDepth being reached, or an early
