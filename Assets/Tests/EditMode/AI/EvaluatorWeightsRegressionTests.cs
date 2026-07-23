@@ -177,8 +177,11 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             Assert.That(evaluator.Evaluate(ExtraQueen(), Team.White), Is.EqualTo(970));
             Assert.That(evaluator.Evaluate(ExtraQueen(), Team.Black), Is.EqualTo(-970));
 
-            Assert.That(evaluator.Evaluate(ShelteredKing(), Team.White), Is.EqualTo(300));
-            Assert.That(evaluator.Evaluate(ShelteredKing(), Team.Black), Is.EqualTo(-300));
+            // Rose from 300 to 336 when king safety landed (AI-53): Black's bare king has all three
+            // of its files fully open (no Black pawns anywhere), while White's three sheltering pawns
+            // also close White's own king's files, so only Black's exposure is penalized (+36).
+            Assert.That(evaluator.Evaluate(ShelteredKing(), Team.White), Is.EqualTo(336));
+            Assert.That(evaluator.Evaluate(ShelteredKing(), Team.Black), Is.EqualTo(-336));
 
             Assert.That(evaluator.Evaluate(FullMaterialAsymmetricOpening(), Team.White), Is.EqualTo(85));
             Assert.That(evaluator.Evaluate(FullMaterialAsymmetricOpening(), Team.Black), Is.EqualTo(-85));
@@ -203,24 +206,44 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         /// <summary>
-        /// The two fixtures that DO have pawns (ShelteredKing, FullMaterialAsymmetricOpening) are no
-        /// longer required to match cheap==full now that pawn structure lives behind the full path —
-        /// each of these two happens to still land at a zero pawn-structure delta today (ShelteredKing's
-        /// three pawns are all on their home rank, before the passed-pawn bonus ramps up; the opening
-        /// fixture is pawn-symmetric except for one isolated pawn on each side that exactly cancels).
-        /// That is a property of these SPECIFIC boards, not a guarantee — this test pins it explicitly
-        /// so a future change to either fixture's pawns can't silently start diverging unnoticed.
+        /// FullMaterialAsymmetricOpening still lands at a zero pawn-structure AND zero king-safety
+        /// delta today (pawn-symmetric except for one isolated pawn on each side that exactly cancels;
+        /// neither king has an open file or an enemy piece in its zone). That is a property of this
+        /// SPECIFIC board, not a guarantee — this test pins it explicitly so a future change to the
+        /// fixture's pawns or king exposure can't silently start diverging unnoticed.
         /// </summary>
         [Test]
-        public void EvaluateCheap_MatchesFull_OnTheseTwoPawnBearingFixturesToday()
+        public void EvaluateCheap_MatchesFull_OnFullMaterialAsymmetricOpeningToday()
         {
             var evaluator = new BetrayalAwareEvaluator();
+            BoardState board = FullMaterialAsymmetricOpening();
 
-            foreach (BoardState board in new[] { ShelteredKing(), FullMaterialAsymmetricOpening() })
-            {
-                Assert.That(evaluator.EvaluateCheap(board, Team.White), Is.EqualTo(evaluator.Evaluate(board, Team.White)));
-                Assert.That(evaluator.EvaluateCheap(board, Team.Black), Is.EqualTo(evaluator.Evaluate(board, Team.Black)));
-            }
+            Assert.That(evaluator.EvaluateCheap(board, Team.White), Is.EqualTo(evaluator.Evaluate(board, Team.White)));
+            Assert.That(evaluator.EvaluateCheap(board, Team.Black), Is.EqualTo(evaluator.Evaluate(board, Team.Black)));
+        }
+
+        /// <summary>
+        /// ShelteredKing now diverges cheap != full by design: its zero pawn-structure delta (three
+        /// pawns all on their home rank, before the passed-pawn bonus ramps up) is unchanged from
+        /// AI-52, but AI-53's king-safety term adds a real, nonzero open-file penalty for Black's
+        /// completely bare king that White's own sheltering pawns spare White from. This pins that the
+        /// full-minus-cheap gap on this board is EXACTLY the king-safety contribution (36 from White's
+        /// perspective) and nothing else — proving the full path adds precisely what the two new terms
+        /// are supposed to add, not something else leaking in.
+        /// </summary>
+        [Test]
+        public void EvaluateCheap_MatchesFull_PlusKingSafety_OnShelteredKing()
+        {
+            var evaluator = new BetrayalAwareEvaluator();
+            BoardState board = ShelteredKing();
+
+            int cheapWhite = evaluator.EvaluateCheap(board, Team.White);
+            int fullWhite = evaluator.Evaluate(board, Team.White);
+            int cheapBlack = evaluator.EvaluateCheap(board, Team.Black);
+            int fullBlack = evaluator.Evaluate(board, Team.Black);
+
+            Assert.That(fullWhite - cheapWhite, Is.EqualTo(36));
+            Assert.That(fullBlack - cheapBlack, Is.EqualTo(-36));
         }
     }
 }
