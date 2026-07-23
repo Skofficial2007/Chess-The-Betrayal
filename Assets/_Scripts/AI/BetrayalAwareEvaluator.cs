@@ -48,7 +48,15 @@ namespace ChessTheBetrayal.AI
             _weights = weights;
         }
 
-        public int Evaluate(BoardState board, Team forTeam)
+        /// <summary>
+        /// Full evaluation. Today this is identical to EvaluateCheap — every term this evaluator
+        /// has is cheap enough to always compute. The split exists so a future, genuinely
+        /// expensive term (pawn structure, king-zone attack mapping) has somewhere to live that a
+        /// caller can skip when the cheap score already decides the outcome.
+        /// </summary>
+        public int Evaluate(BoardState board, Team forTeam) => EvaluateCheap(board, forTeam);
+
+        public int EvaluateCheap(BoardState board, Team forTeam)
         {
             // Computed once per call, never cached: a Defection can flip a piece's team on the
             // very next move, and the search applies/undoes moves constantly, so any cached value
