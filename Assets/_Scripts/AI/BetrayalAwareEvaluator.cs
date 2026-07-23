@@ -49,19 +49,22 @@ namespace ChessTheBetrayal.AI
         }
 
         /// <summary>
-        /// Full evaluation: everything EvaluateCheap does, plus pawn structure (passed, isolated,
-        /// doubled pawns) — the first term expensive enough to live behind the lazy stand-pat cut
-        /// rather than always being computed. On a pawn-bare position this equals EvaluateCheap
-        /// exactly; the two diverge only once real pawns are on the board.
+        /// Full evaluation: everything EvaluateCheap does, plus the terms expensive enough to live
+        /// behind the lazy stand-pat cut rather than always being computed — pawn structure (passed,
+        /// isolated, doubled pawns) and king safety (zone pressure, open files, a pending Betrayer of
+        /// your own standing in your own king's zone). On a position with no pawns and no live
+        /// Betrayal sequence near either king this equals EvaluateCheap exactly; the two diverge once
+        /// either condition is present.
         /// </summary>
         public int Evaluate(BoardState board, Team forTeam)
         {
             int score = EvaluateCheap(board, forTeam);
 
-            // White-relative delta, same convention MaterialAndPosition's own White-minus-Black
-            // score uses, so it flips the same way EvaluateCheap's total already flipped above.
+            // White-relative deltas, same convention MaterialAndPosition's own White-minus-Black
+            // score uses, so they flip the same way EvaluateCheap's total already flipped above.
             int pawnScore = PawnStructureDelta(board);
-            return forTeam == Team.White ? score + pawnScore : score - pawnScore;
+            int kingSafetyScore = KingSafetyDelta(board);
+            return forTeam == Team.White ? score + pawnScore + kingSafetyScore : score - pawnScore - kingSafetyScore;
         }
 
         /// <summary>
@@ -77,6 +80,18 @@ namespace ChessTheBetrayal.AI
             int blackPawnScore = (int)(blackAttack * _weights.AttackScale) + (int)(blackDefense * _weights.DefenseScale);
 
             return whitePawnScore - blackPawnScore;
+        }
+
+        /// <summary>
+        /// White's king-safety score minus Black's, already scaled by DefenseScale — king danger is
+        /// always a defense-bucket concept, the same convention KingShelterBonus already uses.
+        /// </summary>
+        private int KingSafetyDelta(BoardState board)
+        {
+            int whiteKingSafety = (int)(KingSafety.Score(board, Team.White) * _weights.DefenseScale);
+            int blackKingSafety = (int)(KingSafety.Score(board, Team.Black) * _weights.DefenseScale);
+
+            return whiteKingSafety - blackKingSafety;
         }
 
         public int EvaluateCheap(BoardState board, Team forTeam)
