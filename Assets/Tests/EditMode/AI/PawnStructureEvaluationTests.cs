@@ -161,9 +161,12 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         [Test]
         public void PawnlessPosition_ScoresIdenticallyBetweenCheapAndFull()
         {
-            // No pawn term exists to add when there are no pawns on the board — full must still
-            // equal cheap exactly, the same invariant EvaluatorWeightsRegressionTests pins on its
-            // pawnless golden fixtures.
+            // No pawn term exists to add with no pawns on the board, so pawn structure alone
+            // contributes nothing here. King safety (also full-only, AI-53) is NOT automatically
+            // zero on a pawnless board -- open files are about missing PAWNS specifically, and both
+            // bare kings on this mirrored setup are equally exposed on all three of their own files,
+            // so their king-safety deltas cancel by symmetry rather than by having nothing to add.
+            // KingSafetyEvaluationTests covers the asymmetric case where they do NOT cancel.
             BoardState board = TestBoardSetupUtility.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
