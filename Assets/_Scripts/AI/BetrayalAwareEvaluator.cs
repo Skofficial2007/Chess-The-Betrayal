@@ -51,10 +51,12 @@ namespace ChessTheBetrayal.AI
         /// <summary>
         /// Full evaluation: everything EvaluateCheap does, plus the terms expensive enough to live
         /// behind the lazy stand-pat cut rather than always being computed — pawn structure (passed,
-        /// isolated, doubled pawns) and king safety (zone pressure, open files, a pending Betrayer of
-        /// your own standing in your own king's zone). On a position with no pawns and no live
-        /// Betrayal sequence near either king this equals EvaluateCheap exactly; the two diverge once
-        /// either condition is present.
+        /// isolated, doubled pawns), king safety (zone pressure, open files, a pending Betrayer of
+        /// your own standing in your own king's zone), and king approach (closing the distance on a
+        /// confined lone enemy king once this side holds mating material and the enemy has none). On
+        /// a position with no pawns, no live Betrayal sequence near either king, and no bare-king
+        /// mating scenario this equals EvaluateCheap exactly; the two diverge once any of those
+        /// conditions is present.
         /// </summary>
         public int Evaluate(BoardState board, Team forTeam)
         {
@@ -64,7 +66,10 @@ namespace ChessTheBetrayal.AI
             // score uses, so they flip the same way EvaluateCheap's total already flipped above.
             int pawnScore = PawnStructureDelta(board);
             int kingSafetyScore = KingSafetyDelta(board);
-            return forTeam == Team.White ? score + pawnScore + kingSafetyScore : score - pawnScore - kingSafetyScore;
+            int kingApproachScore = KingApproachDelta(board);
+            return forTeam == Team.White
+                ? score + pawnScore + kingSafetyScore + kingApproachScore
+                : score - pawnScore - kingSafetyScore - kingApproachScore;
         }
 
         /// <summary>
@@ -92,6 +97,20 @@ namespace ChessTheBetrayal.AI
             int blackKingSafety = (int)(KingSafety.Score(board, Team.Black) * _weights.DefenseScale);
 
             return whiteKingSafety - blackKingSafety;
+        }
+
+        /// <summary>
+        /// White's king-approach score minus Black's, scaled by AttackScale — closing the distance
+        /// on a confined enemy king is offense, the mirror of KingSafetyDelta's defense-only term.
+        /// Zero for either side outside a genuine bare-king mating scenario (see
+        /// EndgameKingApproach's own gate), so this is inert in the vast majority of positions.
+        /// </summary>
+        private int KingApproachDelta(BoardState board)
+        {
+            int whiteApproach = (int)(EndgameKingApproach.Score(board, Team.White) * _weights.AttackScale);
+            int blackApproach = (int)(EndgameKingApproach.Score(board, Team.Black) * _weights.AttackScale);
+
+            return whiteApproach - blackApproach;
         }
 
         public int EvaluateCheap(BoardState board, Team forTeam)

@@ -132,6 +132,30 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
+        public void MaxPositionalSwing_BoundsTheWorstCaseGapBetweenCheapAndFull_OnABareKingMatingPosition()
+        {
+            // A position built to push the king-approach term to its own clamped ceiling: White has
+            // mating material (a Queen) and Black is a bare king, with the two kings placed adjacent
+            // (Chebyshev distance 1) so EndgameKingApproach.Score(White) sits at its maximum. Black
+            // has no mating material of its own, so its own approach score is exactly zero --
+            // maximizing the gap the same way the pawn-structure and king-safety worst-case probes
+            // above do (one side clamped at its ceiling, the other at zero).
+            BoardState board = TestBoardSetupUtility.CreateEmpty()
+                .WithPiece("d4", Team.White, ChessPieceType.King)
+                .WithPiece("a1", Team.White, ChessPieceType.Queen)
+                .WithPiece("d5", Team.Black, ChessPieceType.King)
+                .WithBetrayalRight(false)
+                .WithComputedHash();
+
+            var evaluator = new BetrayalAwareEvaluator(new EvaluationWeights(2f, 2f, 1f)); // documented ceiling on both scales
+
+            int cheapScore = evaluator.EvaluateCheap(board, Team.White);
+            int fullScore = evaluator.Evaluate(board, Team.White);
+
+            Assert.That(System.Math.Abs(fullScore - cheapScore), Is.LessThanOrEqualTo(AlphaBetaSearch.MaxPositionalSwing));
+        }
+
+        [Test]
         public void EvaluateStandPat_RetributionPending_NeverTakesTheLazyPath()
         {
             // White Acted the Knight onto its own Pawn; the Rook on a1 owes Retribution. A pending
