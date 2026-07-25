@@ -37,6 +37,13 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             return board;
         }
 
+        private static BoardState BoardWithHash(ulong hash, bool betrayalRightAvailable)
+        {
+            BoardState board = BoardWithHash(hash);
+            board.BetrayalRightAvailable = betrayalRightAvailable;
+            return board;
+        }
+
         [Test]
         public void RecordPly_SamePositionThreeTimes_AdjudicatesDraw()
         {
@@ -220,6 +227,68 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 result = adjudicator.RecordPly(BoardWithHash((ulong)(ply + 2)), QuietKnightMove(), ply, scoreForWhiteCp: 5);
 
             Assert.That(result, Is.EqualTo(MatchOutcome.Draw));
+        }
+
+        [Test]
+        public void RecordPly_SmallScoreSustained_WhileBetrayalRightIsLive_DoesNotAdjudicateDraw()
+        {
+            // The same sustained-small-score shape as RecordPly_SmallScoreSustained_AdjudicatesDraw,
+            // but with the Betrayal right still live -- a single Defection can still swing the
+            // material count, so a currently-equal score is not yet a reliable "this is really a
+            // draw" signal. Repetition and the fifty-move rule are untouched by this gate; only the
+            // score-margin path checks the right.
+            var rules = new AdjudicationRules(
+                threefoldRepetitionCount: int.MaxValue, fiftyMoveRulePlies: int.MaxValue, minPlyForScoreAdjudication: 0,
+                winAdjudicationMarginCp: int.MaxValue, winAdjudicationConsecutivePlies: int.MaxValue,
+                drawAdjudicationMarginCp: 20, drawAdjudicationConsecutivePlies: 4);
+            var adjudicator = new MatchAdjudicator(rules);
+            adjudicator.RecordStartingPosition(BoardWithHash(1UL, betrayalRightAvailable: true));
+
+            MatchOutcome? result = null;
+            for (int ply = 0; ply < 10; ply++)
+                result = adjudicator.RecordPly(BoardWithHash((ulong)(ply + 2), betrayalRightAvailable: true), QuietKnightMove(), ply, scoreForWhiteCp: 5);
+
+            Assert.That(result, Is.Null,
+                "a sustained small score must not be adjudicated a draw while the Betrayal right is still live -- a Defection could still swing the material count.");
+        }
+
+        [Test]
+        public void RecordPly_SmallScoreSustained_OnceTheBetrayalRightIsSpent_AdjudicatesDraw()
+        {
+            // The right becomes unavailable partway through the same sustained-small-score run --
+            // once it's gone, a Defection can no longer swing anything, so the existing streak (which
+            // kept accumulating while the right was live, just not firing) is honored immediately
+            // rather than needing to re-accumulate from zero.
+            var rules = new AdjudicationRules(
+                threefoldRepetitionCount: int.MaxValue, fiftyMoveRulePlies: int.MaxValue, minPlyForScoreAdjudication: 0,
+                winAdjudicationMarginCp: int.MaxValue, winAdjudicationConsecutivePlies: int.MaxValue,
+                drawAdjudicationMarginCp: 20, drawAdjudicationConsecutivePlies: 4);
+            var adjudicator = new MatchAdjudicator(rules);
+            adjudicator.RecordStartingPosition(BoardWithHash(1UL, betrayalRightAvailable: true));
+
+            Assert.That(adjudicator.RecordPly(BoardWithHash(2UL, betrayalRightAvailable: true), QuietKnightMove(), 0, scoreForWhiteCp: 5), Is.Null);
+            Assert.That(adjudicator.RecordPly(BoardWithHash(3UL, betrayalRightAvailable: true), QuietKnightMove(), 1, scoreForWhiteCp: 5), Is.Null);
+            Assert.That(adjudicator.RecordPly(BoardWithHash(4UL, betrayalRightAvailable: true), QuietKnightMove(), 2, scoreForWhiteCp: 5), Is.Null);
+
+            MatchOutcome? result = adjudicator.RecordPly(BoardWithHash(5UL, betrayalRightAvailable: false), QuietKnightMove(), 3, scoreForWhiteCp: 5);
+
+            Assert.That(result, Is.EqualTo(MatchOutcome.Draw));
+        }
+
+        [Test]
+        public void RecordPly_ThreefoldRepetition_StillAdjudicatesDraw_WhileBetrayalRightIsLive()
+        {
+            // Repetition is a draw by the game's own rules regardless of the Betrayal right -- unlike
+            // the score-margin path, it doesn't depend on the position being materially settled, so
+            // this gate must not touch it.
+            var adjudicator = new MatchAdjudicator(AdjudicationRules.Standard);
+            BoardState repeated = BoardWithHash(12345UL, betrayalRightAvailable: true);
+
+            adjudicator.RecordStartingPosition(repeated);
+            adjudicator.RecordPly(repeated, QuietKnightMove(), plyIndex: 0, scoreForWhiteCp: 0);
+            MatchOutcome? afterThird = adjudicator.RecordPly(repeated, QuietKnightMove(), plyIndex: 1, scoreForWhiteCp: 0);
+
+            Assert.That(afterThird, Is.EqualTo(MatchOutcome.Draw));
         }
 
         [Test]
