@@ -39,17 +39,6 @@ namespace ChessTheBetrayal.Tests.Utilities
             ProgressTrace = progressTrace;
         }
 
-        /// <summary>True only if the trace is monotonically non-worsening across its whole length —
-        /// the attacker never let the defender claw back distance already given up. A stalled or
-        /// drawn result can still show real, if incomplete, progress; this only asks "did it ever
-        /// go backward."</summary>
-        public bool ProgressNeverRegressed()
-        {
-            for (int i = 1; i < ProgressTrace.Count; i++)
-                if (ProgressTrace[i] > ProgressTrace[i - 1]) return false;
-            return true;
-        }
-
         public string DescribeFailure() =>
             $"[{Position.Name}] verdict {Verdict} after {PliesPlayed} plies. " +
             $"Progress trace (lower is closer to the goal): {string.Join(",", ProgressTrace)}. {Position.Note}";
