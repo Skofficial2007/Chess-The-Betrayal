@@ -19,13 +19,11 @@ namespace ChessTheBetrayal.AI
     /// </summary>
     internal static class EndgameKingApproach
     {
-        // Maximum Chebyshev distance between two kings on an 8x8 board is 7 (corner to corner).
         // Scaled so fully closing the distance is worth a clean fraction of a pawn — enough to break
         // a tie between "approach" and "shuffle" without competing with material or mate-distance
         // scoring, which this term never overrides (both sides route through full search, so an
         // actual mate always outscores getting one square closer).
         private const int MaxApproachBonus = 60;
-        private const int MaxKingDistance = 7;
 
         internal const int MaxKingApproachPerSide = MaxApproachBonus;
 
@@ -43,11 +41,17 @@ namespace ChessTheBetrayal.AI
             if (!board.TryFindKing(team, out Vector2Int king)) return 0;
             if (!board.TryFindKing(enemy, out Vector2Int enemyKing)) return 0;
 
+            // The board's own largest possible Chebyshev distance (corner to corner) — read live
+            // rather than assumed as 8x8, since BoardState supports other dimensions elsewhere
+            // (GameManager can construct a board with a configurable size).
+            int maxKingDistance = System.Math.Max(board.TileCountX, board.TileCountY) - 1;
+            if (maxKingDistance <= 0) return 0;
+
             int distance = ChebyshevDistance(king, enemyKing);
-            int closed = MaxKingDistance - distance;
+            int closed = maxKingDistance - distance;
             if (closed < 0) closed = 0;
 
-            int bonus = (closed * MaxApproachBonus) / MaxKingDistance;
+            int bonus = (closed * MaxApproachBonus) / maxKingDistance;
             return bonus > MaxApproachBonus ? MaxApproachBonus : bonus;
         }
 
