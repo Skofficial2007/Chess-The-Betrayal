@@ -48,12 +48,14 @@ namespace ChessTheBetrayal.Tests.Utilities
 
         /// <summary>
         /// Builds the game list: every profile in <paramref name="profiles"/> plays every curated
-        /// position against itself, both colors (color-swapping cancels first-move advantage, same
-        /// reasoning CuratedPositionSuite's own consumers use), repeated <paramref name="gamesPerPosition"/>
-        /// times per color to accumulate more samples from profiles whose search has any nondeterminism
-        /// (blunder rolls, tie-break picks) — a deterministic zero-dial profile just produces
-        /// duplicate games in that case, which is harmless, not wasted: the caller controls
-        /// gamesPerPosition and can set it to 1 for such profiles.
+        /// position against itself, repeated <paramref name="gamesPerPosition"/> times to accumulate
+        /// more samples from profiles whose search has any nondeterminism (blunder rolls, tie-break
+        /// picks) — a deterministic zero-dial profile just produces duplicate games in that case,
+        /// which is harmless, not wasted: the caller controls gamesPerPosition and can set it to 1
+        /// for such profiles. There is no separate White/Black color swap to play, unlike a
+        /// cross-tier tournament pairing (see TournamentSession) — the same profile is on both sides
+        /// regardless of which color plays first, so swapping colors here would just replay the same
+        /// matchup a second time for no new information.
         ///
         /// A profile plays against ITSELF (not against a different tier) because a Texel corpus needs
         /// positions labelled by realistic self-play outcomes at a coherent strength level, not
@@ -73,7 +75,7 @@ namespace ChessTheBetrayal.Tests.Utilities
             if (gamesPerPosition <= 0)
                 throw new ArgumentOutOfRangeException(nameof(gamesPerPosition), gamesPerPosition, "Must be positive.");
 
-            var games = new List<PlannedGame>(profiles.Count * positionCount * gamesPerPosition * 2);
+            var games = new List<PlannedGame>(profiles.Count * positionCount * gamesPerPosition);
             int gameIndex = 0;
 
             // pairIndex here is purely a seeding-stream discriminator (mirrors TournamentSeeding's

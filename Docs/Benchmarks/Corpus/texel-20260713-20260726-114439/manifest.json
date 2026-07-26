@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "runSeed": 20260713,
+  "startUtc": "2026-07-26T11:44:39.5687899Z",
+  "endUtc": "2026-07-26T12:02:22.3448808Z",
+  "positionCountPerProfile": 20,
+  "gamesPerPosition": 3,
+  "totalGames": 60,
+  "totalPositions": 4526,
+  "profiles": ["aggressive"]
+}
