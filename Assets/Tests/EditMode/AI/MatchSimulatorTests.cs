@@ -26,11 +26,11 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         /// so a test can assert on the raw sequence without needing a real corpus writer.</summary>
         private sealed class RecordingPositionSampler : IPositionSampler
         {
-            public readonly List<(BoardState Board, Team SideToMove, int Ply)> QuietPositions = new();
+            public readonly List<(BoardState Board, Team SideToMove, int Ply, bool PostDefectionOccurred)> QuietPositions = new();
             public readonly List<MatchOutcome> CompletedOutcomes = new();
 
-            public void OnQuietPosition(BoardState board, Team sideToMove, int ply) =>
-                QuietPositions.Add((board.CloneForSnapshot(), sideToMove, ply));
+            public void OnQuietPosition(BoardState board, Team sideToMove, int ply, bool postDefectionOccurred) =>
+                QuietPositions.Add((board.CloneForSnapshot(), sideToMove, ply, postDefectionOccurred));
 
             public void OnGameComplete(MatchOutcome outcome) => CompletedOutcomes.Add(outcome);
         }
@@ -401,7 +401,9 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
 
             Assert.That(sampler.QuietPositions, Is.Not.Empty,
                 "a 20-ply game from a quiet opening position must offer at least one quiet sample.");
-            foreach (var (board, sideToMove, _) in sampler.QuietPositions)
+            Assert.That(sampler.QuietPositions, Has.All.Matches<(BoardState Board, Team SideToMove, int Ply, bool PostDefectionOccurred)>(p => !p.PostDefectionOccurred),
+                "no Defection occurred anywhere in this zero-BetrayalAggression opening game, so the flag must stay false on every sample.");
+            foreach (var (board, sideToMove, _, _) in sampler.QuietPositions)
             {
                 Assert.That(board.PendingBetrayerSquare, Is.Null,
                     "a position with a Betrayer awaiting Retribution/Defection must never be offered as quiet.");

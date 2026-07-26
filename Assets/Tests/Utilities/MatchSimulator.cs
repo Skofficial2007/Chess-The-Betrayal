@@ -278,6 +278,11 @@ namespace ChessTheBetrayal.Tests.Utilities
                 return new MatchResult(outcome, plyCount, reachedPlyCap);
             }
 
+            // True once any Act earlier in this game resolved with no legal Retribution — the board's
+            // piece placement already reflects the swapped team, but a sampler needs to know a quiet
+            // position sits downstream of that swap without re-deriving it from move history.
+            bool defectionHasOccurred = false;
+
             int ply = 0;
             for (; ply < plyCap && !board.IsGameOver; ply++)
             {
@@ -294,7 +299,7 @@ namespace ChessTheBetrayal.Tests.Utilities
                     && !board.PendingBetrayerSquare.HasValue
                     && !_engine.IsKingInCheck(board, mover))
                 {
-                    _sampler.OnQuietPosition(board, mover, ply);
+                    _sampler.OnQuietPosition(board, mover, ply, defectionHasOccurred);
                 }
 
                 AIProfile profile = isWhite ? whiteProfile : blackProfile;
@@ -349,6 +354,13 @@ namespace ChessTheBetrayal.Tests.Utilities
                 else if (move.Stage == BetrayalStage.Retribution) accumulator.RecordActResolvedByRetribution();
 
                 matchDriver.PlayMove(move);
+
+                // Same "no legal Retribution existed" signal the accumulator infers as a remainder
+                // (ActsPlayed - ActsResolvedByRetribution) at the report level — read directly here,
+                // right after the move that could have triggered it, since defectionHasOccurred needs
+                // to be current for the very next sampling check at the top of the loop.
+                if (move.Stage == BetrayalStage.Act && !board.PendingBetrayerSquare.HasValue)
+                    defectionHasOccurred = true;
 
                 // Betrayal sub-sequence moves (Act/Retribution/DefensiveOverride) don't end a turn
                 // and can leave the board in a state a repetition/fifty-move count shouldn't

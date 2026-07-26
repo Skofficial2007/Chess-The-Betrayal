@@ -27,8 +27,12 @@ namespace ChessTheBetrayal.Tests.Utilities
         /// Offered one quiet position the game is about to move from: the side to move is not in check,
         /// there is no Betrayer pending, and the board is settled in Normal phase (not mid-Betrayal
         /// sub-sequence). The board is the live, about-to-be-mutated instance — clone it to keep it.
+        /// postDefectionOccurred is true once any Act earlier in THIS game resolved as a Defection (no
+        /// legal Retribution existed) — the board's own piece placement already reflects the swapped
+        /// team, but a consumer building a Betrayal-aware training corpus needs to know this position
+        /// sits downstream of that swap without re-deriving it from move history.
         /// </summary>
-        void OnQuietPosition(BoardState board, Team sideToMove, int ply);
+        void OnQuietPosition(BoardState board, Team sideToMove, int ply, bool postDefectionOccurred);
 
         /// <summary>
         /// The game just ended with this outcome (from White's point of view). Fires exactly once per
