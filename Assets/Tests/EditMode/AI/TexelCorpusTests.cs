@@ -122,6 +122,23 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
+        public void TexelPositionRecord_ToBoardState_ZobristHashStaysConsistentAfterOverridingTurnAndBetrayalRight()
+        {
+            // Decode computes a hash assuming its own defaults (White to move, Betrayal right
+            // available); ToBoardState then overrides both from the record. Without recomputing, the
+            // hash would silently disagree with the board it claims to describe on every record where
+            // either override actually changes something from that default.
+            BoardState original = TestBoardSetupUtility.CreateStandard();
+            var record = new TexelPositionRecord(
+                TexelBoardCodec.Encode(original), Team.Black, betrayalRightAvailable: false,
+                postDefectionOccurred: false, label: 1.0);
+
+            BoardState reconstructed = record.ToBoardState();
+
+            Assert.DoesNotThrow(() => reconstructed.AssertZobristConsistency());
+        }
+
+        [Test]
         public void TexelCorpusSampler_BuffersUntilGameCompletes_ThenStampsEveryPositionWithTheSameLabel()
         {
             string tempDir = Path.Combine(Path.GetTempPath(), "TexelCorpusSamplerTest_" + Guid.NewGuid().ToString("N"));

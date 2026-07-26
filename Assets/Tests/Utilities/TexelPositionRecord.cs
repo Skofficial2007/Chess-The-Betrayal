@@ -48,6 +48,11 @@ namespace ChessTheBetrayal.Tests.Utilities
             BoardState board = TexelBoardCodec.Decode(BoardEncoding);
             board.CurrentTurn = SideToMove;
             board.BetrayalRightAvailable = BetrayalRightAvailable;
+            // Decode already computed the hash assuming its own defaults (White to move, Betrayal
+            // right available) — recompute now that both have potentially been overridden above, so
+            // a consumer that checks ZobristHash (a future tuner, a cache key, a debug assertion)
+            // never sees a hash that disagrees with the board it was actually taken from.
+            board.ComputeFullZobristHash();
             return board;
         }
 
