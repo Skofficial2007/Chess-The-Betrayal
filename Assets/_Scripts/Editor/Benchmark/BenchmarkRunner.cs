@@ -80,15 +80,21 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
         /// logGamesToConsole logs one line per finished game (pairing, result, running score,
         /// elapsed) via TournamentGameLogger — proves not just that the run is alive but that its
         /// results so far look healthy, which a bare game-count counter cannot show.
+        ///
+        /// repeats multiplies how many times the whole position list is played per pairing, which
+        /// is how a caller buys a tighter confidence interval than one pass over the curated
+        /// positions can reach — see TournamentSession's own doc comment. Costs wall clock in
+        /// direct proportion, so it is opt-in rather than the default.
         /// </summary>
         public static BenchmarkReport RunAll(int runSeed, BenchmarkMode mode,
             IReadOnlyList<AIProfile> roster, int plyCap = MatchSimulator.DefaultPlyCap, bool parallel = true,
             MatchTimeControl timeControl = MatchTimeControl.ProductionBudget, ITournamentProgress progress = null,
-            string persistRunsUnderDirectory = null, bool useWatchdog = false, bool logGamesToConsole = false)
+            string persistRunsUnderDirectory = null, bool useWatchdog = false, bool logGamesToConsole = false,
+            int repeats = 1)
         {
             TournamentSession session = mode == BenchmarkMode.Quick
-                ? TournamentSession.CreateQuick(runSeed, roster, plyCap, timeControl)
-                : TournamentSession.CreateFull(runSeed, roster, plyCap, timeControl);
+                ? TournamentSession.CreateQuick(runSeed, roster, plyCap, timeControl, repeats)
+                : TournamentSession.CreateFull(runSeed, roster, plyCap, timeControl, repeats);
 
             TournamentRunWriter runWriter = persistRunsUnderDirectory == null
                 ? null

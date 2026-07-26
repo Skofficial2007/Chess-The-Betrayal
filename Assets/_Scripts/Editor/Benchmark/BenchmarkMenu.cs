@@ -14,11 +14,20 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
     {
         private const int DefaultRunSeed = 20260713;
 
+        /// <summary>How many times the high-confidence pass replays the whole position list per
+        /// pairing. Five passes is 200 games per pairing, tightening the 95% interval from roughly
+        /// +/-15% to +/-7% — enough to tell a real result from a coin flip near a decision
+        /// boundary, which a single pass cannot do.</summary>
+        private const int HighConfidenceRepeats = 5;
+
         [MenuItem("Chess: The Betrayal/AI/Run Strength Benchmark (Quick)")]
         private static void RunQuickFromMenu() => RunAndLog(BenchmarkMode.Quick);
 
         [MenuItem("Chess: The Betrayal/AI/Run Strength Benchmark (Full, slow)")]
         private static void RunFullFromMenu() => RunAndLog(BenchmarkMode.Full);
+
+        [MenuItem("Chess: The Betrayal/AI/Run Strength Benchmark (High confidence, slowest)")]
+        private static void RunHighConfidenceFromMenu() => RunAndLog(BenchmarkMode.Full, HighConfidenceRepeats);
 
         [MenuItem("Chess: The Betrayal/AI/Update Benchmark Baseline...")]
         private static void UpdateBaselineFromMenu()
@@ -38,11 +47,11 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
             Debug.Log($"Benchmark baseline updated: {report.PairResults.Count} pairing(s), {report.TierPerformances.Count} tier(s) recorded.");
         }
 
-        private static void RunAndLog(BenchmarkMode mode)
+        private static void RunAndLog(BenchmarkMode mode, int repeats = 1)
         {
             BenchmarkReport report = BenchmarkRunner.RunAll(DefaultRunSeed, mode,
                 AIProfileTable.BuiltIn, progress: new DebugLogProgressSink(mode.ToString()),
-                persistRunsUnderDirectory: RunsDirectory, logGamesToConsole: true);
+                persistRunsUnderDirectory: RunsDirectory, logGamesToConsole: true, repeats: repeats);
             BenchmarkReport baseline = BenchmarkBaselineIO.TryRead(BenchmarkBaselineIO.DefaultPath);
 
             Debug.Log(BenchmarkReportFormatter.ToPlainText(report, baseline));
@@ -59,14 +68,21 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
 
         public static void RunFullBatch() => RunBatch(BenchmarkMode.Full);
 
-        private static void RunBatch(BenchmarkMode mode)
+        /// <summary>The run to reach for when a number has to be trusted rather than merely
+        /// glanced at — a full matrix replayed HighConfidenceRepeats times, which is what it takes
+        /// to separate a genuine result from noise near a decision boundary. Costs proportionally
+        /// more wall clock than RunFullBatch, so it is a deliberate choice, not the default.</summary>
+        public static void RunHighConfidenceBatch() => RunBatch(BenchmarkMode.Full, HighConfidenceRepeats);
+
+        private static void RunBatch(BenchmarkMode mode, int repeats = 1)
         {
             BenchmarkReport report;
             try
             {
                 report = BenchmarkRunner.RunAll(DefaultRunSeed, mode,
                     AIProfileTable.BuiltIn, progress: new DebugLogProgressSink($"{mode} Batch"),
-                    persistRunsUnderDirectory: RunsDirectory, useWatchdog: true, logGamesToConsole: true);
+                    persistRunsUnderDirectory: RunsDirectory, useWatchdog: true, logGamesToConsole: true,
+                    repeats: repeats);
             }
             catch (TournamentStalledException stalled)
             {

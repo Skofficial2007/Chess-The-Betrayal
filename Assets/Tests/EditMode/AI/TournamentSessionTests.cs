@@ -32,6 +32,67 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         private static AIProfile Find(string id) => FastFixtureRoster.Single(p => p.Id == id);
 
         [Test]
+        public void Repeats_MultiplyTheGameCount_WithoutChangingThePairingCount()
+        {
+            var single = TournamentSession.CreateHeadToHead(
+                runSeed: 7, Find("normal"), Find("impossible"), positionCount: 3, plyCap: TestPlyCap);
+            var repeated = TournamentSession.CreateHeadToHead(
+                runSeed: 7, Find("normal"), Find("impossible"), positionCount: 3, plyCap: TestPlyCap, repeats: 4);
+
+            Assert.That(single.TotalGames, Is.EqualTo(6), "3 positions x 2 colors.");
+            Assert.That(repeated.TotalGames, Is.EqualTo(24), "3 positions x 2 colors x 4 repeats.");
+
+            while (repeated.RunNextGame()) { }
+            BenchmarkReport report = repeated.BuildReport();
+
+            Assert.That(report.PairResults.Count, Is.EqualTo(1), "Repeats add games, never pairings.");
+            Assert.That(report.PairResults[0].Games, Is.EqualTo(24));
+            Assert.That(report.PairResults[0].SubjectWins + report.PairResults[0].OpponentWins
+                + report.PairResults[0].Draws, Is.EqualTo(24));
+        }
+
+        [Test]
+        public void Repeats_DefaultToOne_LeavingTheSinglePassGameListUnchanged()
+        {
+            // The default must remain exactly what every caller got before repeats existed —
+            // otherwise every committed run artifact silently changes shape.
+            var explicitlyOne = TournamentSession.CreateFull(
+                runSeed: 11, FastFixtureRoster, plyCap: TestPlyCap, repeats: 1);
+            var defaulted = TournamentSession.CreateFull(runSeed: 11, FastFixtureRoster, plyCap: TestPlyCap);
+
+            Assert.That(defaulted.TotalGames, Is.EqualTo(explicitlyOne.TotalGames));
+            Assert.That(defaulted.TotalGames,
+                Is.EqualTo(CuratedPositionSuite.Count * 2 * AllPairCountFor(FastFixtureRoster.Count)));
+        }
+
+        [Test]
+        public void Repeats_SeedEachPassIndependently_SoAPassIsANewSampleNotAReplay()
+        {
+            // The entire justification for repeats is that pass 2 is a genuinely new sample. If both
+            // passes shared a seed they would be the same game twice, and the extra games would
+            // narrow the reported confidence interval without adding any real information — worse
+            // than not running them at all, because the number would look more trustworthy than it is.
+            var seeds = new HashSet<int>();
+            for (int repeatIndex = 0; repeatIndex < 5; repeatIndex++)
+            {
+                seeds.Add(TournamentSeeding.DeriveSeed(
+                    runSeed: 20260713, positionIndex: 0, pairIndex: 0, gameIndex: repeatIndex, side: 0));
+            }
+
+            Assert.That(seeds.Count, Is.EqualTo(5),
+                "Every repeat of the same position must draw its own RNG stream.");
+        }
+
+        [Test]
+        public void Repeats_BelowOne_IsRejectedRatherThanSilentlyPlayingNothing()
+        {
+            Assert.Throws<System.ArgumentOutOfRangeException>(() => TournamentSession.CreateHeadToHead(
+                runSeed: 1, Find("easy"), Find("normal"), positionCount: 2, plyCap: TestPlyCap, repeats: 0));
+        }
+
+        private static int AllPairCountFor(int rosterSize) => rosterSize * (rosterSize - 1) / 2;
+
+        [Test]
         public void HeadToHead_TwoPositions_PlaysExactlyFourGames()
         {
             var session = TournamentSession.CreateHeadToHead(
