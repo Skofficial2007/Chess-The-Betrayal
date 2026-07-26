@@ -25,8 +25,15 @@ namespace ChessTheBetrayal.Tests.Utilities
         private readonly Thread _writerThread;
         private readonly string _corpusFilePath;
         private Exception _writerFault;
+        private int _positionsWritten;
 
         public string CorpusDirectory { get; }
+
+        /// <summary>How many positions have been enqueued so far — incremented the moment
+        /// WritePosition is called, not once the background thread actually appends the line, so a
+        /// caller reading this right after the last WritePosition call (before Dispose) sees the
+        /// true total even though some lines may still be in flight to disk.</summary>
+        public int PositionsWritten => _positionsWritten;
 
         /// <summary>Creates the corpus directory and starts the background writer. header is written
         /// as the file's first line immediately, before any position record, so even a run killed
@@ -52,6 +59,7 @@ namespace ChessTheBetrayal.Tests.Utilities
         public void WritePosition(TexelPositionRecord record)
         {
             _pendingLines.Add(record.ToLine());
+            Interlocked.Increment(ref _positionsWritten);
         }
 
         private void WriterLoop()
