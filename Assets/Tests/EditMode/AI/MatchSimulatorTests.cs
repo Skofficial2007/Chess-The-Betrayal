@@ -22,6 +22,19 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             new AIProfile(id, maxDepth, timeBudget: new AITimeBudget(2000, 3000), blunderRate: 0f, blunderMarginCp: 0,
                 betrayalAggression: 0f, attackDefenseBias: 1f, tieBreakWindowCp: 0, useOpeningBook: false);
 
+        /// <summary>Test double recording every callback MatchSimulator makes on the sampling seam,
+        /// so a test can assert on the raw sequence without needing a real corpus writer.</summary>
+        private sealed class RecordingPositionSampler : IPositionSampler
+        {
+            public readonly List<(BoardState Board, Team SideToMove, int Ply)> QuietPositions = new();
+            public readonly List<MatchOutcome> CompletedOutcomes = new();
+
+            public void OnQuietPosition(BoardState board, Team sideToMove, int ply) =>
+                QuietPositions.Add((board.CloneForSnapshot(), sideToMove, ply));
+
+            public void OnGameComplete(MatchOutcome outcome) => CompletedOutcomes.Add(outcome);
+        }
+
         [Test]
         public void PlayGame_SameSeeds_ProducesBitIdenticalOutcomeAndPlyCount()
         {
@@ -355,6 +368,111 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             Assert.That(result.WhiteStats.MoveCount, Is.GreaterThan(0));
             Assert.That(result.WhiteStats.BlunderRollOffered, Is.Zero);
             Assert.That(result.BlackStats.BlunderRollOffered, Is.Zero);
+        }
+
+        [Test]
+        public void PlayGame_NullSampler_PlaysByteIdenticallyToNoSamplerAtAll()
+        {
+            // The hook must be provably inert on the path every existing benchmark/tournament run
+            // takes today — same outcome, same ply count, with or without the constructor parameter
+            // present in the call.
+            AIProfile shallow = Fast("shallow", maxDepth: 2);
+            BoardState position = CuratedPositionSuite.Build(0);
+
+            MatchResult withoutParam = new MatchSimulator()
+                .PlayGame(position, shallow, shallow, rngSeedWhite: 111, rngSeedBlack: 222, plyCap: 20);
+            MatchResult withNullSampler = new MatchSimulator(sampler: null)
+                .PlayGame(position, shallow, shallow, rngSeedWhite: 111, rngSeedBlack: 222, plyCap: 20);
+
+            Assert.That(withNullSampler.Outcome, Is.EqualTo(withoutParam.Outcome));
+            Assert.That(withNullSampler.PlyCount, Is.EqualTo(withoutParam.PlyCount));
+        }
+
+        [Test]
+        public void PlayGame_WithSampler_EveryOfferedPositionIsQuiet()
+        {
+            AIProfile shallow = Fast("shallow", maxDepth: 2);
+            BoardState position = CuratedPositionSuite.Build(0);
+            var sampler = new RecordingPositionSampler();
+            var engine = new ChessEngineAdapter();
+
+            new MatchSimulator(sampler: sampler)
+                .PlayGame(position, shallow, shallow, rngSeedWhite: 111, rngSeedBlack: 222, plyCap: 20);
+
+            Assert.That(sampler.QuietPositions, Is.Not.Empty,
+                "a 20-ply game from a quiet opening position must offer at least one quiet sample.");
+            foreach (var (board, sideToMove, _) in sampler.QuietPositions)
+            {
+                Assert.That(board.PendingBetrayerSquare, Is.Null,
+                    "a position with a Betrayer awaiting Retribution/Defection must never be offered as quiet.");
+                Assert.That(engine.IsKingInCheck(board, sideToMove), Is.False,
+                    "a position where the side to move is in check must never be offered as quiet.");
+            }
+        }
+
+        [Test]
+        public void PlayGame_DecisiveNaturalCheckmate_FiresOnGameCompleteExactlyOnceWithTheRealOutcome()
+        {
+            // Back-rank mate in one: White's Rook on a1 delivers Ra8#, hitting the natural
+            // board.IsGameOver return path (not adjudication, not the ply cap). The king's own three
+            // pawns wall it onto the back rank (a-file is clear all the way from a1 to a8 — unlike a
+            // rook trying to reach h8 behind an h7 pawn, which is not a legal path at all). plyCap: 1
+            // and adjudication disabled so nothing but the search's own choice of Ra8# can end this
+            // game — if the search ever failed to find the only mate here, the test would fail loudly
+            // on a ply-cap result instead of masking it behind a multi-ply adjudicated draw.
+            BoardState board = TestBoardSetupUtility.CreateEmpty()
+                .WithPiece("e1", Team.White, ChessPieceType.King)
+                .WithPiece("a1", Team.White, ChessPieceType.Rook)
+                .WithPiece("g8", Team.Black, ChessPieceType.King)
+                .WithPiece("f7", Team.Black, ChessPieceType.Pawn)
+                .WithPiece("g7", Team.Black, ChessPieceType.Pawn)
+                .WithPiece("h7", Team.Black, ChessPieceType.Pawn)
+                .WithTurn(Team.White)
+                .WithComputedHash();
+            AIProfile mateFinder = Fast("matefinder", maxDepth: 3);
+            var sampler = new RecordingPositionSampler();
+
+            MatchResult result = new MatchSimulator(MatchTimeControl.Uncapped, adjudicationRules: AdjudicationRules.Disabled, sampler: sampler)
+                .PlayGame(board, mateFinder, mateFinder, rngSeedWhite: 1, rngSeedBlack: 2, plyCap: 1);
+
+            Assert.That(result.Outcome, Is.EqualTo(MatchOutcome.WhiteWon));
+            Assert.That(result.ReachedPlyCap, Is.False);
+            Assert.That(sampler.CompletedOutcomes, Has.Count.EqualTo(1));
+            Assert.That(sampler.CompletedOutcomes[0], Is.EqualTo(MatchOutcome.WhiteWon));
+        }
+
+        [Test]
+        public void PlayGame_AdjudicatedEarly_FiresOnGameCompleteExactlyOnceWithTheAdjudicatedOutcome()
+        {
+            // The same quiet/repeating-line fixture AdjudicationEndsItBeforeThePlyCap already proves
+            // ends before the ply cap via MatchAdjudicator.RecordPly — this exercises the OTHER
+            // return path (adjudicated-early) rather than the natural-checkmate or ply-cap ones.
+            AIProfile shallow = Fast("shallow", maxDepth: 2);
+            BoardState position = CuratedPositionSuite.Build(0);
+            var sampler = new RecordingPositionSampler();
+
+            MatchResult result = new MatchSimulator(MatchTimeControl.Uncapped, adjudicationRules: AdjudicationRules.Standard, sampler: sampler)
+                .PlayGame(position, shallow, shallow, rngSeedWhite: 111, rngSeedBlack: 222);
+
+            Assert.That(result.PlyCount, Is.LessThan(MatchSimulator.DefaultPlyCap));
+            Assert.That(result.ReachedPlyCap, Is.False);
+            Assert.That(sampler.CompletedOutcomes, Has.Count.EqualTo(1));
+            Assert.That(sampler.CompletedOutcomes[0], Is.EqualTo(result.Outcome));
+        }
+
+        [Test]
+        public void PlayGame_ReachesPlyCap_FiresOnGameCompleteExactlyOnceWithTheMarginAdjudicatedOutcome()
+        {
+            AIProfile veryShallow = Fast("veryshallow", maxDepth: 1);
+            BoardState position = CuratedPositionSuite.Build(0);
+            var sampler = new RecordingPositionSampler();
+
+            MatchResult result = new MatchSimulator(sampler: sampler)
+                .PlayGame(position, veryShallow, veryShallow, rngSeedWhite: 1, rngSeedBlack: 2, plyCap: 4);
+
+            Assert.That(result.ReachedPlyCap, Is.True);
+            Assert.That(sampler.CompletedOutcomes, Has.Count.EqualTo(1));
+            Assert.That(sampler.CompletedOutcomes[0], Is.EqualTo(result.Outcome));
         }
     }
 }

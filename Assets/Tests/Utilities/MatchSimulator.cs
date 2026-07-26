@@ -177,6 +177,7 @@ namespace ChessTheBetrayal.Tests.Utilities
         private readonly int _moveBudgetCapMs;
         private readonly TranspositionTable _whiteTable;
         private readonly TranspositionTable _blackTable;
+        private readonly IPositionSampler _sampler;
 
         /// <param name="moveBudgetCapMs">When positive (and time control is ProductionBudget),
         /// every move's hard budget is clamped to at most this many milliseconds, and its soft
@@ -185,17 +186,24 @@ namespace ChessTheBetrayal.Tests.Utilities
         /// tournament can play many games fast without switching to a different, less-faithful code
         /// path. A profile whose real budget is already under the cap is unaffected. 0 (the
         /// default) leaves each profile's own budget in force.</param>
+        /// <param name="sampler">When supplied, is offered every quiet position each game passes
+        /// through and told each game's final outcome — see IPositionSampler. Null (the default, the
+        /// entire benchmark/tournament path) makes the hook completely inert: one null check per ply
+        /// and nothing else, no added allocation and no behaviour change, so a run that isn't
+        /// collecting a corpus plays exactly as it always did.</param>
         public MatchSimulator(
             MatchTimeControl timeControl = MatchTimeControl.ProductionBudget,
             int transpositionTableLog2Size = ProductionTranspositionTableLog2Size,
             AdjudicationRules? adjudicationRules = null,
-            int moveBudgetCapMs = 0)
+            int moveBudgetCapMs = 0,
+            IPositionSampler sampler = null)
         {
             _timeControl = timeControl;
             _adjudicationRules = adjudicationRules ?? AdjudicationRules.Standard;
             _moveBudgetCapMs = moveBudgetCapMs;
             _whiteTable = new TranspositionTable(transpositionTableLog2Size);
             _blackTable = new TranspositionTable(transpositionTableLog2Size);
+            _sampler = sampler;
         }
 
         /// <summary>
@@ -261,11 +269,33 @@ namespace ChessTheBetrayal.Tests.Utilities
             var adjudicator = new MatchAdjudicator(_adjudicationRules);
             adjudicator.RecordStartingPosition(board);
 
+            // Fires OnGameComplete exactly once, from whichever of this method's three return points
+            // ends the game — a local function rather than duplicating the call at each return site,
+            // where a future edit could easily add a fourth exit and forget it.
+            MatchResult Finish(MatchOutcome outcome, int plyCount, bool reachedPlyCap)
+            {
+                _sampler?.OnGameComplete(outcome);
+                return new MatchResult(outcome, plyCount, reachedPlyCap);
+            }
+
             int ply = 0;
             for (; ply < plyCap && !board.IsGameOver; ply++)
             {
                 Team mover = board.CurrentTurn;
                 bool isWhite = mover == Team.White;
+
+                // Offered before this ply's move is played, on the position the mover is about to
+                // move FROM — quiet here means no in-check escape forced, no Betrayer awaiting
+                // Retribution/Defection, and the board settled in Normal phase (never mid-sequence).
+                // Note this check cannot reuse the CurrentPhase!=Normal `continue` further below: that
+                // one runs AFTER PlayMove and gates adjudication, not sampling.
+                if (_sampler != null
+                    && matchDriver.CurrentPhase == TurnPhase.Normal
+                    && !board.PendingBetrayerSquare.HasValue
+                    && !_engine.IsKingInCheck(board, mover))
+                {
+                    _sampler.OnQuietPosition(board, mover, ply);
+                }
 
                 AIProfile profile = isWhite ? whiteProfile : blackProfile;
                 AlphaBetaSearch search = isWhite ? whiteSearch : blackSearch;
@@ -332,7 +362,7 @@ namespace ChessTheBetrayal.Tests.Utilities
                 {
                     whiteStats = whiteAccumulator.ToStats();
                     blackStats = blackAccumulator.ToStats();
-                    return new MatchResult(adjudicated.Value, ply + 1, reachedPlyCap: false);
+                    return Finish(adjudicated.Value, ply + 1, reachedPlyCap: false);
                 }
             }
 
@@ -347,10 +377,10 @@ namespace ChessTheBetrayal.Tests.Utilities
                     Team.Black => MatchOutcome.BlackWon,
                     _ => MatchOutcome.Draw
                 };
-                return new MatchResult(outcome, ply, reachedPlyCap: false);
+                return Finish(outcome, ply, reachedPlyCap: false);
             }
 
-            return new MatchResult(AdjudicateByMargin(board), ply, reachedPlyCap: true);
+            return Finish(AdjudicateByMargin(board), ply, reachedPlyCap: true);
         }
 
         /// <summary>
