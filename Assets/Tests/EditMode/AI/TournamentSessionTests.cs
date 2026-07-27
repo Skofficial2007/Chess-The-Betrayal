@@ -84,6 +84,30 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
+        public void ForPairings_PlaysOnlyTheRequestedPairings_AtTheRequestedDepthOfSampling()
+        {
+            var chosen = new[] { ("extreme", "hard"), ("impossible", "extreme") };
+            var session = TournamentSession.CreateForPairings(
+                runSeed: 5, FastFixtureRoster, chosen, plyCap: TestPlyCap, repeats: 3);
+
+            Assert.That(session.TotalGames,
+                Is.EqualTo(chosen.Length * CuratedPositionSuite.Count * 2 * 3),
+                "2 pairings x every curated position x both colors x 3 passes.");
+
+            BenchmarkReport report = session.BuildReport();
+            Assert.That(report.PairResults.Count, Is.EqualTo(2));
+            Assert.That(report.PairResults[0].Subject, Is.EqualTo("extreme"));
+            Assert.That(report.PairResults[1].Subject, Is.EqualTo("impossible"));
+        }
+
+        [Test]
+        public void ForPairings_WithNoPairings_IsRejected()
+        {
+            Assert.Throws<System.ArgumentException>(() => TournamentSession.CreateForPairings(
+                runSeed: 5, FastFixtureRoster, new (string, string)[0], plyCap: TestPlyCap));
+        }
+
+        [Test]
         public void Repeats_BelowOne_IsRejectedRatherThanSilentlyPlayingNothing()
         {
             Assert.Throws<System.ArgumentOutOfRangeException>(() => TournamentSession.CreateHeadToHead(

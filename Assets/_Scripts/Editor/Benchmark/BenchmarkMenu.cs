@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using ChessTheBetrayal.AI;
 using UnityEditor;
 using UnityEngine;
@@ -29,6 +30,10 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
         [MenuItem("Chess: The Betrayal/AI/Run Strength Benchmark (High confidence, slowest)")]
         private static void RunHighConfidenceFromMenu() => RunAndLog(BenchmarkMode.Full, HighConfidenceRepeats);
 
+        [MenuItem("Chess: The Betrayal/AI/Run Strength Benchmark (Top of ladder only)")]
+        private static void RunTopOfLadderFromMenu() =>
+            RunAndLog(BenchmarkMode.Full, TopOfLadderRepeats, TopOfLadderPairings);
+
         [MenuItem("Chess: The Betrayal/AI/Update Benchmark Baseline...")]
         private static void UpdateBaselineFromMenu()
         {
@@ -47,11 +52,13 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
             Debug.Log($"Benchmark baseline updated: {report.PairResults.Count} pairing(s), {report.TierPerformances.Count} tier(s) recorded.");
         }
 
-        private static void RunAndLog(BenchmarkMode mode, int repeats = 1)
+        private static void RunAndLog(BenchmarkMode mode, int repeats = 1,
+            IReadOnlyList<(string Subject, string Opponent)> pairings = null)
         {
             BenchmarkReport report = BenchmarkRunner.RunAll(DefaultRunSeed, mode,
                 AIProfileTable.BuiltIn, progress: new DebugLogProgressSink(mode.ToString()),
-                persistRunsUnderDirectory: RunsDirectory, logGamesToConsole: true, repeats: repeats);
+                persistRunsUnderDirectory: RunsDirectory, logGamesToConsole: true, repeats: repeats,
+                pairings: pairings);
             BenchmarkReport baseline = BenchmarkBaselineIO.TryRead(BenchmarkBaselineIO.DefaultPath);
 
             Debug.Log(BenchmarkReportFormatter.ToPlainText(report, baseline));
@@ -74,7 +81,30 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
         /// more wall clock than RunFullBatch, so it is a deliberate choice, not the default.</summary>
         public static void RunHighConfidenceBatch() => RunBatch(BenchmarkMode.Full, HighConfidenceRepeats);
 
-        private static void RunBatch(BenchmarkMode mode, int repeats = 1)
+        /// <summary>How many passes the top-of-ladder run plays. Eight passes is 320 games per
+        /// pairing and a 95% interval near +/-5.5%, tight enough that a result close to the 55%
+        /// strength floor lands decisively on one side of it instead of straddling it — which is
+        /// the whole reason to spend a long run on these two pairings rather than a wider one.</summary>
+        private const int TopOfLadderRepeats = 8;
+
+        /// <summary>The two relationships the difficulty ladder actually stands or falls on. Every
+        /// other pairing in the roster is settled by a wide margin, so more games there change no
+        /// conclusion; these two sit close enough to the floor that only a large sample can
+        /// separate a real ordering from a coin flip.</summary>
+        private static readonly (string Subject, string Opponent)[] TopOfLadderPairings =
+        {
+            ("extreme", "hard"),
+            ("impossible", "extreme"),
+        };
+
+        /// <summary>Spends a long run entirely on the top of the ladder — see TopOfLadderPairings
+        /// for why that beats a wider matrix when the question is whether the deepest tiers are
+        /// genuinely ordered.</summary>
+        public static void RunTopOfLadderBatch() =>
+            RunBatch(BenchmarkMode.Full, TopOfLadderRepeats, TopOfLadderPairings);
+
+        private static void RunBatch(BenchmarkMode mode, int repeats = 1,
+            IReadOnlyList<(string Subject, string Opponent)> pairings = null)
         {
             BenchmarkReport report;
             try
@@ -82,7 +112,7 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
                 report = BenchmarkRunner.RunAll(DefaultRunSeed, mode,
                     AIProfileTable.BuiltIn, progress: new DebugLogProgressSink($"{mode} Batch"),
                     persistRunsUnderDirectory: RunsDirectory, useWatchdog: true, logGamesToConsole: true,
-                    repeats: repeats);
+                    repeats: repeats, pairings: pairings);
             }
             catch (TournamentStalledException stalled)
             {

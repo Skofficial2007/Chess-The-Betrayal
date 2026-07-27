@@ -85,15 +85,21 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
         /// is how a caller buys a tighter confidence interval than one pass over the curated
         /// positions can reach — see TournamentSession's own doc comment. Costs wall clock in
         /// direct proportion, so it is opt-in rather than the default.
+        ///
+        /// pairings, when supplied, replaces the mode's own pairing list with an explicit subset —
+        /// mode is then ignored. Combined with repeats, this is how a fixed budget gets spent on
+        /// the relationships a question actually turns on instead of being spread thin across a
+        /// matrix whose other rows are already settled.
         /// </summary>
         public static BenchmarkReport RunAll(int runSeed, BenchmarkMode mode,
             IReadOnlyList<AIProfile> roster, int plyCap = MatchSimulator.DefaultPlyCap, bool parallel = true,
             MatchTimeControl timeControl = MatchTimeControl.ProductionBudget, ITournamentProgress progress = null,
             string persistRunsUnderDirectory = null, bool useWatchdog = false, bool logGamesToConsole = false,
-            int repeats = 1)
+            int repeats = 1, IReadOnlyList<(string Subject, string Opponent)> pairings = null)
         {
-            TournamentSession session = mode == BenchmarkMode.Quick
-                ? TournamentSession.CreateQuick(runSeed, roster, plyCap, timeControl, repeats)
+            TournamentSession session =
+                pairings != null ? TournamentSession.CreateForPairings(runSeed, roster, pairings, plyCap, timeControl, repeats)
+                : mode == BenchmarkMode.Quick ? TournamentSession.CreateQuick(runSeed, roster, plyCap, timeControl, repeats)
                 : TournamentSession.CreateFull(runSeed, roster, plyCap, timeControl, repeats);
 
             TournamentRunWriter runWriter = persistRunsUnderDirectory == null

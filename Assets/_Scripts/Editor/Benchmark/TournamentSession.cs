@@ -184,6 +184,28 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
                 Math.Min(QuickPositionCount, CuratedPositionSuite.Count), repeats);
         }
 
+        /// <summary>
+        /// A tournament over a caller-chosen subset of pairings. Spending the whole budget on the
+        /// one or two relationships a question actually turns on buys far more confidence per hour
+        /// than spreading it across a matrix whose other rows are already decided by wide margins —
+        /// a pairing settled at 0% or 95% learns nothing from more games, while one sitting near a
+        /// decision boundary needs every sample it can get.
+        ///
+        /// Pairings are given Subject-first, Subject being the side expected to win, matching how
+        /// AdjacentPairs reads and how a win rate is graded.
+        /// See CreateQuick's doc comment for the timeControl parameter.
+        /// </summary>
+        public static TournamentSession CreateForPairings(int runSeed, IReadOnlyList<AIProfile> roster,
+            IReadOnlyList<(string Subject, string Opponent)> pairings, int plyCap = MatchSimulator.DefaultPlyCap,
+            MatchTimeControl timeControl = MatchTimeControl.ProductionBudget, int repeats = 1)
+        {
+            if (pairings == null || pairings.Count == 0)
+                throw new ArgumentException("A tournament needs at least one pairing to play.", nameof(pairings));
+
+            return new TournamentSession("Focused", runSeed, plyCap, timeControl,
+                pairings, id => ResolveInRoster(roster, id), CuratedPositionSuite.Count, repeats);
+        }
+
         /// <summary>See CreateQuick's doc comment for the timeControl parameter, and the class
         /// summary for what repeats buys.</summary>
         public static TournamentSession CreateFull(int runSeed, IReadOnlyList<AIProfile> roster,
