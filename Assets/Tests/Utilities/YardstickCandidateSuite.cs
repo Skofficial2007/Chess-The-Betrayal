@@ -16,6 +16,23 @@ namespace ChessTheBetrayal.Tests.Utilities
     ///
     /// Nothing here is trusted by any strength test. A candidate earns its way into YardstickSuite
     /// by passing both gates; until then it lives here and is only ever read by the screening probe.
+    ///
+    /// MEASURED OUTCOME, across all sixteen candidates below: none is usable, and the reason is a
+    /// property of the method rather than of the positions. A proof standard has to be blind to the
+    /// evaluation terms it is vetting positions for, or it proves only that the evaluator agrees
+    /// with itself. Material is the one standard that qualifies. But a position whose answer turns
+    /// on pawn structure or king safety is precisely one where material is level, so a material-only
+    /// search rates every reasonable move identically — eleven of the first twelve candidates came
+    /// back with an exact 0cp margin across many moves.
+    ///
+    /// Searching deeper does not rescue it. Once a pawn queens in every line the scores converge on
+    /// the promotion value instead of separating, and the only candidate that ever did separate did
+    /// so on a hanging pawn — a tactic the top tier already solves in 21ms, which by the suite's own
+    /// standard adds no resolution at all.
+    ///
+    /// Kept in full because that is a real and reusable result: it says this class of position does
+    /// not exist for this engine under a material proof standard, and anyone proposing to grow the
+    /// yardstick that way can see the measurement rather than repeat it.
     /// </summary>
     public static class YardstickCandidateSuite
     {
@@ -221,6 +238,62 @@ namespace ChessTheBetrayal.Tests.Utilities
                     .WithBetrayalRight(true)
                     .WithComputedHash(),
                 At("e3"), At("d5"), 8),
+
+            // --- Near-promotion races. The candidates above put their pawns on the fourth rank,
+            // which needs roughly ten plies just to reach the queening square — further than a
+            // material-only proof can see, so every move tied. These start much closer, on the
+            // sixth and seventh ranks, so the promotion itself lands inside a reachable depth and
+            // the proof has a material fact to hold on to. The structural point is unchanged: a
+            // search blind to pawn structure has to see the queening to prefer these.
+            new Candidate(
+                "SeventhRankPasserQueensByForce",
+                "A passer one square from promotion with the enemy king a tempo too far away. "
+                + "Pushing queens by force; any other move lets the king step across.",
+                () => TestBoardSetupUtility.CreateEmpty()
+                    .WithPiece("a1", Team.White, ChessPieceType.King)
+                    .WithPiece("b7", Team.White, ChessPieceType.Pawn)
+                    .WithPiece("g4", Team.Black, ChessPieceType.King)
+                    .WithTurn(Team.White)
+                    .WithComputedHash(),
+                At("b7"), At("b8"), 6),
+
+            new Candidate(
+                "RaceTheRightPawnHome",
+                "Two passers, one a tempo ahead of the other. Only the leading pawn queens before "
+                + "the king arrives; pushing the wrong one throws the win away.",
+                () => TestBoardSetupUtility.CreateEmpty()
+                    .WithPiece("a1", Team.White, ChessPieceType.King)
+                    .WithPiece("b6", Team.White, ChessPieceType.Pawn)
+                    .WithPiece("g2", Team.White, ChessPieceType.Pawn)
+                    .WithPiece("f4", Team.Black, ChessPieceType.King)
+                    .WithTurn(Team.White)
+                    .WithComputedHash(),
+                At("b6"), At("b7"), 8),
+
+            new Candidate(
+                "OutrunTheKingWithTheDistantPasser",
+                "The b-pawn is outside the black king's square and the e-pawn is not. Only the "
+                + "distant passer promotes.",
+                () => TestBoardSetupUtility.CreateEmpty()
+                    .WithPiece("h1", Team.White, ChessPieceType.King)
+                    .WithPiece("b6", Team.White, ChessPieceType.Pawn)
+                    .WithPiece("e5", Team.White, ChessPieceType.Pawn)
+                    .WithPiece("e7", Team.Black, ChessPieceType.King)
+                    .WithTurn(Team.White)
+                    .WithComputedHash(),
+                At("b6"), At("b7"), 8),
+
+            new Candidate(
+                "PushPastTheBlockaderNotAroundIt",
+                "A sixth-rank passer with the defending king one file off. The straight push "
+                + "promotes; the king move allows the blockade.",
+                () => TestBoardSetupUtility.CreateEmpty()
+                    .WithPiece("c4", Team.White, ChessPieceType.King)
+                    .WithPiece("d6", Team.White, ChessPieceType.Pawn)
+                    .WithPiece("f6", Team.Black, ChessPieceType.King)
+                    .WithTurn(Team.White)
+                    .WithComputedHash(),
+                At("d6"), At("d7"), 8),
 
             new Candidate(
                 "CentralisedKnightBeatsTheRimGrab",
