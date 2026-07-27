@@ -123,6 +123,13 @@ namespace ChessTheBetrayal.AI
         // Depth spent uniformly buys more strength than depth spent there, so the cap is 0. The
         // machinery stays wired so re-enabling is a one-constant change if a future measured pass
         // finds positions where it earns its cost.
+        //
+        // Re-measured since, under real match budgets across eight positions and four deep tiers.
+        // Allowing two extensions per line cost a ply on four of the thirty-two and won one back on
+        // a single one, for a net loss. The reason is that the extension spends its depth inside
+        // Betrayal lines, while the positions actually short of depth are crowded quiet ones where
+        // no Betrayal is pending at all - so it deepens the searches that were already comfortable
+        // and takes budget from the ones that were not. Still 0.
         private const int MaxBetrayalExtensionsPerLine = 0;
 
         // Hard backstop for quiescence recursion. A Betrayal sub-phase (Act -> Retribution/Defection
