@@ -62,8 +62,14 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
 
         /// <summary>The strength-chain adjacency the preset table promises — same pairs
         /// AIProfileStrengthOrderingTests checks, so Quick mode measures the exact relationships
-        /// the table's own regression tests already gate on.</summary>
-        private static readonly (string Subject, string Opponent)[] AdjacentPairs =
+        /// the table's own regression tests already gate on.
+        ///
+        /// Subject is always the side expected to WIN. That direction is load-bearing beyond
+        /// Quick mode's own game list: it is also the only reason a win-rate floor means anything,
+        /// so BenchmarkDriftAnalyzer reads this same list rather than keeping its own copy —
+        /// a second copy would eventually disagree, and a floor applied in the wrong direction
+        /// grades a correctly-working ladder as a failure.</summary>
+        public static readonly (string Subject, string Opponent)[] AdjacentPairs =
         {
             ("normal", "easy"),
             ("hard", "normal"),

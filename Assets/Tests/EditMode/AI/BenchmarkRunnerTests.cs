@@ -171,6 +171,76 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
+        public void Analyze_WeakerTierListedFirst_IsNotGradedAgainstTheFloor()
+        {
+            // A full round-robin lists every pair in roster order, so plenty of its rows read
+            // weaker-vs-stronger. `easy` scoring 0% against `hard` is the ladder working exactly as
+            // designed — the preset table never promised easy would beat hard, so there is no claim
+            // here to fail. Grading it against a floor meant for the opposite direction turned a
+            // healthy run into a wall of failures and made the Full batchmode entry point exit
+            // nonzero no matter how strong the AI was.
+            BenchmarkReport current = ReportWithPair("easy", "hard", winRate: 0.0f, games: 400);
+
+            var findings = BenchmarkDriftAnalyzer.Analyze(current, baseline: null);
+
+            Assert.That(findings, Has.None.Matches<DriftFinding>(f => f.Severity == DriftSeverity.Fail),
+                "A pairing the table makes no ordering claim about must not be graded against the win-rate floor.");
+        }
+
+        [Test]
+        public void Analyze_NonAdjacentPairing_IsNotGradedAgainstTheFloor()
+        {
+            // The table claims each step beats the step below it and leans on transitivity for the
+            // rest, so a tier several rungs down carries no promise of its own in either direction.
+            BenchmarkReport current = ReportWithPair("impossible", "easy", winRate: 0.20f, games: 400);
+
+            var findings = BenchmarkDriftAnalyzer.Analyze(current, baseline: null);
+
+            Assert.That(findings, Has.None.Matches<DriftFinding>(f => f.Severity == DriftSeverity.Fail));
+        }
+
+        [Test]
+        public void Analyze_EveryAdjacentClaim_IsStillGradedInItsOwnDirection()
+        {
+            // The complement of the two tests above: narrowing what gets graded must not silently
+            // stop grading the pairings the floor actually exists for.
+            foreach ((string Subject, string Opponent) claim in TournamentSession.AdjacentPairs)
+            {
+                BenchmarkReport current = ReportWithPair(claim.Subject, claim.Opponent, winRate: 0.10f, games: 400);
+
+                var findings = BenchmarkDriftAnalyzer.Analyze(current, baseline: null);
+
+                Assert.That(findings, Has.Some.Matches<DriftFinding>(f => f.Severity == DriftSeverity.Fail),
+                    $"{claim.Subject} vs {claim.Opponent} is a promised ordering and must still fail when it is not met.");
+            }
+        }
+
+        [Test]
+        public void Analyze_AFullRoundRobinOfAHealthyLadder_ProducesNoOrderingFailures()
+        {
+            // End-to-end guard on the real shape this bug appeared in: a round-robin report where
+            // every claimed ordering genuinely holds must come back clean, even though most of its
+            // rows are weaker-vs-stronger and therefore show very low subject win rates.
+            var report = new BenchmarkReport { RunSeed = 1, Mode = "Full" };
+            string[] ladder = { "easy", "normal", "hard", "aggressive", "extreme", "impossible" };
+            for (int i = 0; i < ladder.Length; i++)
+                for (int j = i + 1; j < ladder.Length; j++)
+                {
+                    bool subjectIsPromisedStronger = false;
+                    foreach ((string Subject, string Opponent) claim in TournamentSession.AdjacentPairs)
+                        if (claim.Subject == ladder[i] && claim.Opponent == ladder[j]) subjectIsPromisedStronger = true;
+
+                    float winRate = subjectIsPromisedStronger ? 0.70f : 0.05f;
+                    int wins = (int)(winRate * 400);
+                    report.PairResults.Add(new PairResult(ladder[i], ladder[j], 400, wins, 400 - wins, 0));
+                }
+
+            var findings = BenchmarkDriftAnalyzer.Analyze(report, baseline: null);
+
+            Assert.That(findings, Has.None.Matches<DriftFinding>(f => f.Severity == DriftSeverity.Fail));
+        }
+
+        [Test]
         public void Analyze_WinRateDriftedFromBaseline_ProducesWarnFinding()
         {
             BenchmarkReport baseline = ReportWithPair("hard", "normal", winRate: 0.70f);

@@ -30,6 +30,24 @@ or the Full benchmark from the menu/batchmode. The same measurement as Quick, ju
 curated position set, for a tighter confidence interval. Takes many minutes; reach for Quick first
 and only fall back to this when Quick's result isn't decisive enough.
 
+**When the number has to be trusted — the high-confidence run.** Menu: `Chess: The Betrayal/AI/Run
+Strength Benchmark (High confidence, slowest)`, or batchmode via `-executeMethod ChessTheBetrayal.
+EditorTools.Benchmark.BenchmarkMenu.RunHighConfidenceBatch`. Even the Full suite is bounded by how
+many positions the curated set contains — one pass in both colors is forty games per pairing, and
+forty games carries a confidence interval of roughly `+/-15%`, wide enough to swallow any result
+that sits near a decision boundary. This run replays the whole position set several times over,
+each pass seeded independently so it is a genuinely new sample rather than a replay, reaching two
+hundred games per pairing and roughly `+/-7%`. Reach for it when you need to tell a real difference
+from a coin flip — comparing two closely-matched tiers, or deciding whether an evaluation change
+actually bought strength. It costs proportionally more wall clock than Full, so it is a deliberate
+choice rather than a routine check.
+
+If you are tuning your own AI values and want a confident answer about whether your change helped,
+this is the run to use. Confidence narrows with the square root of the sample size, so quadrupling
+the games roughly halves the interval — that relationship is what decides how long a run you
+actually need, and it is why simply re-reading a small sample more carefully cannot substitute for
+playing more games.
+
 ## Reading a win rate
 
 Every win rate this tooling reports comes with a `+/-` margin — its 95% confidence interval. An
