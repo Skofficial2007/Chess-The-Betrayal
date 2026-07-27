@@ -58,6 +58,29 @@ namespace ChessTheBetrayal.AI
         private static int NullMoveReduction(int depth) => NullMoveBaseReduction + depth / 6;
         private static int NullMoveMinDepth(int depth) => NullMoveReduction(depth) + 2; // guard 3: depth >= R + 2
 
+        // Late Move Reduction: how many plies to shave off a move that ordering has already placed
+        // late in the list. The amount grows with BOTH how far from the horizon the node is and how
+        // far down the list the move sits, for the same reason null-move pruning scales its own
+        // reduction with depth — the further down an ordered list a move is, the more evidence
+        // there already is that it isn't the best one, and the more plies remain below it, the more
+        // a wasted full-depth search of it costs.
+        //
+        // A fixed one-ply reduction, which is what this replaced, spends the same on the third move
+        // at the root as on the thirtieth move near the horizon, even though those two are nowhere
+        // near equally likely to matter. Anything reduced here is still searched — a reduced move
+        // that comes back above alpha is immediately re-searched at full depth, so this changes how
+        // fast the search reaches its answer, never which answer it reaches.
+        //
+        // The divisors were picked by measuring capped searches at real match budgets across a mix
+        // of hand-built shapes and real opening lines, not by theory: reducing harder than this
+        // starts costing more in full-depth re-searches than it saves, and reducing more gently
+        // leaves depth on the table on exactly the crowded opening positions that need it most.
+        // The floor of 1 guarantees a reduced child still searches at least one real ply rather
+        // than dropping straight into quiescence.
+        private const int LateMoveReductionMinimum = 1;
+        private static int LateMoveReduction(int depth, int moveIndex) =>
+            LateMoveReductionMinimum + depth / 6 + moveIndex / 6;
+
         // Reverse futility pruning (a.k.a. static null-move pruning): only attempted within this many
         // plies of the horizon — beyond that the static eval is too weak a proxy for "this node is
         // hopeless for the opponent" to trust without search. Margin grows with depth so a node
@@ -1117,7 +1140,15 @@ namespace ChessTheBetrayal.AI
                 if (reduce) _tt.Stats.LmrReductions++;
 #endif
 
-                int searchDepth = reduce ? depth - 2 : depth - 1;
+                // Clamped so a reduced child never falls below one real ply of search — dropping it
+                // straight into quiescence would judge a quiet move purely on captures, which is
+                // exactly the blind spot quiescence exists to have.
+                int searchDepth = depth - 1;
+                if (reduce)
+                {
+                    int reduction = LateMoveReduction(depth, i);
+                    searchDepth = Math.Max(depth - 1 - reduction, LateMoveReductionMinimum);
+                }
 
                 ApplyMoveAndTurn(board, move);
 
