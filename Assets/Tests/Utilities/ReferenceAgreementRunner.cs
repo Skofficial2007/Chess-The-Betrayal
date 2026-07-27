@@ -4,6 +4,7 @@ using ChessTheBetrayal.AI;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Core.Utils;
+using ChessTheBetrayal.Gameplay.Manager;
 
 namespace ChessTheBetrayal.Tests.Utilities
 {
