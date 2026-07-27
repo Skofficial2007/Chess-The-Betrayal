@@ -104,11 +104,11 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
 
             TournamentRunWriter runWriter = persistRunsUnderDirectory == null
                 ? null
-                : CreateRunWriter(persistRunsUnderDirectory, mode, runSeed, session.TotalGames, timeControl, parallel);
+                : CreateRunWriter(persistRunsUnderDirectory, session.ModeLabel, runSeed, session.TotalGames, timeControl, parallel);
             TournamentWatchdog watchdog = useWatchdog && parallel
                 ? CreateWatchdog(roster, plyCap)
                 : null;
-            TournamentGameLogger gameLogger = logGamesToConsole ? new TournamentGameLogger(mode.ToString()) : null;
+            TournamentGameLogger gameLogger = logGamesToConsole ? new TournamentGameLogger(session.ModeLabel) : null;
 
             if (gameLogger != null) session.OnGameCompleted += gameLogger.HandleGameCompleted;
 
@@ -163,16 +163,16 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
             return new TournamentWatchdog(stallWindow, pollInterval, CancellationToken.None);
         }
 
-        private static TournamentRunWriter CreateRunWriter(string baseDirectory, BenchmarkMode mode,
+        private static TournamentRunWriter CreateRunWriter(string baseDirectory, string modeLabel,
             int runSeed, int totalGames, MatchTimeControl timeControl, bool parallel)
         {
             DateTime startUtc = DateTime.UtcNow;
-            string runFolderName = $"{mode}-{runSeed}-{startUtc:yyyyMMdd-HHmmss}";
+            string runFolderName = $"{modeLabel}-{runSeed}-{startUtc:yyyyMMdd-HHmmss}";
             string runDirectory = Path.Combine(baseDirectory, runFolderName);
             int workerCount = parallel ? ParallelTournamentExecutor.DefaultMaxDegreeOfParallelism : 1;
 
             string headerLine = TournamentRunWriter.BuildHeaderLine(
-                schemaVersion: 1, mode.ToString(), runSeed, totalGames, timeControl.ToString(), workerCount, startUtc);
+                schemaVersion: 1, modeLabel, runSeed, totalGames, timeControl.ToString(), workerCount, startUtc);
 
             return new TournamentRunWriter(runDirectory, headerLine);
         }

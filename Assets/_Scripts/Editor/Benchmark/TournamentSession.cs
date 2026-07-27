@@ -111,6 +111,12 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
             public int SubjectWins, OpponentWins, Draws, Games;
         }
 
+        /// <summary>What this run is, for anything that labels it to a human — the run directory's
+        /// name, progress lines, and the report's own Mode field. A focused run says so rather than
+        /// inheriting the name of the mode whose pairing list it replaced, so a persisted artifact
+        /// is never mistaken for a whole-matrix run it did not perform.</summary>
+        public string ModeLabel => _modeLabel;
+
         private readonly string _modeLabel;
         private readonly int _runSeed;
         private readonly int _plyCap;
