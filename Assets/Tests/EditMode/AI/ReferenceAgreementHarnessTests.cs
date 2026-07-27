@@ -129,6 +129,40 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 "the top tier has no blunder roll and no tie-break window, so it always plays its own best move");
         }
 
+        /// <summary>
+        /// A position whose best move is the same at the reference depth and the two plies below it
+        /// is reported stable; one that changes its mind is not. This matters because some positions
+        /// genuinely alternate their answer from one ply to the next, and on those the reference
+        /// says more about the depth that was chosen than about the position — agreement measured
+        /// there is parity noise dressed up as a strength signal.
+        /// </summary>
+        [Test]
+        public void StabilityCheck_AgreesWithSearchingEachDepthDirectly()
+        {
+            var oracle = new ReferenceMoveOracle(TopTier, TestReferenceDepth);
+            BoardState board = CuratedPositionSuite.Build(0);
+
+            bool reportedStable = oracle.IsStableAcrossDepths(board);
+
+            // Independently derive the same verdict by asking a separate oracle at each depth in
+            // the window, so the check is verified against something other than itself.
+            bool independentlyStable = true;
+            ReferenceMove deep = new ReferenceMoveOracle(TopTier, TestReferenceDepth).Answer(board);
+            for (int depth = TestReferenceDepth - 2; depth < TestReferenceDepth; depth++)
+            {
+                ReferenceMove shallow = new ReferenceMoveOracle(TopTier, depth).Answer(board);
+                if (shallow.Move.StartPosition != deep.Move.StartPosition
+                    || shallow.Move.EndPosition != deep.Move.EndPosition
+                    || shallow.Move.Stage != deep.Move.Stage)
+                {
+                    independentlyStable = false;
+                }
+            }
+
+            Assert.That(reportedStable, Is.EqualTo(independentlyStable),
+                "the stability check must agree with searching each depth in the window directly");
+        }
+
         /// <summary>Rebuilds a profile at a different search depth, leaving every personality dial
         /// untouched — the depth is the only thing these tests need to vary.</summary>
         private static AIProfile ProfileAtDepth(AIProfile profile, int maxDepth) =>

@@ -26,9 +26,15 @@ namespace ChessTheBetrayal.Tests.Utilities
         /// <summary>
         /// The reference must be deeper than any profile it will ever judge, otherwise it is just a
         /// peer opinion rather than an oracle. The deepest configured profile ceiling is 9, so this
-        /// clears every one of them with room to spare rather than by a single ply.
+        /// clears every one of them rather than matching them.
+        ///
+        /// Measured cost on ordinary midgame positions climbs roughly two and a half times per ply:
+        /// about 14s per position at depth 9, 40s at 10, 93s at 11 and 227s at 12. Depth 10 is the
+        /// chosen balance — clear of every profile ceiling, and cheap enough that a full set can be
+        /// answered in minutes rather than hours. Going deeper is affordable for a one-off
+        /// investigation, which is why this is a default rather than a fixed value.
         /// </summary>
-        public const int DefaultReferenceDepth = 12;
+        public const int DefaultReferenceDepth = 10;
 
         private readonly Dictionary<ulong, ReferenceMove> _cache = new Dictionary<ulong, ReferenceMove>();
         private readonly AIProfile _referenceProfile;
@@ -48,6 +54,39 @@ namespace ChessTheBetrayal.Tests.Utilities
         {
             _referenceProfile = referenceProfile;
             ReferenceDepth = referenceDepth;
+        }
+
+        /// <summary>
+        /// Whether this position's answer actually holds still, or merely happens to be whatever the
+        /// chosen depth landed on.
+        ///
+        /// Some positions genuinely alternate their best move between one ply and the next — a
+        /// long-known effect of the last ply belonging to one side or the other — and on those, the
+        /// reference's answer is a fact about the depth that was picked rather than about the
+        /// position. Measuring agreement against such a position is measuring nothing useful, so a
+        /// caller can ask here and exclude it instead of quietly folding parity noise into the
+        /// headline number.
+        ///
+        /// Answers the question by searching the two plies below the reference depth and requiring
+        /// all three to name the same move. Expensive, which is why it is a separate deliberate call
+        /// rather than something Answer does automatically.
+        /// </summary>
+        public bool IsStableAcrossDepths(BoardState board)
+        {
+            ReferenceMove atReferenceDepth = Answer(board);
+
+            for (int depth = ReferenceDepth - 2; depth < ReferenceDepth; depth++)
+            {
+                MoveCommand shallower = SearchToDepth(board, depth);
+                if (shallower.StartPosition != atReferenceDepth.Move.StartPosition
+                    || shallower.EndPosition != atReferenceDepth.Move.EndPosition
+                    || shallower.Stage != atReferenceDepth.Move.Stage)
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         /// <summary>
@@ -83,21 +122,37 @@ namespace ChessTheBetrayal.Tests.Utilities
 
             CacheMisses++;
 
-            var engine = new ChessEngineAdapter();
-            var search = new AlphaBetaSearch(engine,
-                new BetrayalAwareEvaluator(EvaluationWeights.FromProfile(_referenceProfile)));
-            var settings = new AISearchSettings(ReferenceDepth, _referenceProfile.TimeBudget, BetrayalUsage.Full);
-
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-            MoveCommand move = search.FindBestMove(board.CloneForSnapshot(), settings, CancellationToken.None);
+            MoveCommand move = SearchToDepth(board, ReferenceDepth, out int scoreCp);
             stopwatch.Stop();
-
-            int scoreCp = search.RootMoveCount > 0 ? search.RootScores[search.BestRootIndex] : 0;
 
             var answer = new ReferenceMove(hash, scheme, move, scoreCp, ReferenceDepth,
                 stopwatch.Elapsed.TotalMilliseconds);
             _cache[hash] = answer;
             return answer;
+        }
+
+        private MoveCommand SearchToDepth(BoardState board, int depth) =>
+            SearchToDepth(board, depth, out _);
+
+        /// <summary>
+        /// One depth-bound search with the reference evaluator. Deliberately builds a fresh search
+        /// each call so no transposition table carries over between depths — a shared table would
+        /// let a shallower answer leak into a deeper one, and the whole point here is that each
+        /// depth reports its own independent conclusion.
+        ///
+        /// The board is cloned because searching mutates the board it is handed.
+        /// </summary>
+        private MoveCommand SearchToDepth(BoardState board, int depth, out int scoreCp)
+        {
+            var engine = new ChessEngineAdapter();
+            var search = new AlphaBetaSearch(engine,
+                new BetrayalAwareEvaluator(EvaluationWeights.FromProfile(_referenceProfile)));
+            var settings = new AISearchSettings(depth, _referenceProfile.TimeBudget, BetrayalUsage.Full);
+
+            MoveCommand move = search.FindBestMove(board.CloneForSnapshot(), settings, CancellationToken.None);
+            scoreCp = search.RootMoveCount > 0 ? search.RootScores[search.BestRootIndex] : 0;
+            return move;
         }
     }
 }
