@@ -64,8 +64,14 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
 
         /// <summary>Runs one search exactly the way AsyncAIAgent does in a real match — a hard-budget
         /// cancellation timer plus the settle-early logic — and prints the position/tier/depth/
-        /// stop-reason/node-count line this whole harness exists to produce.</summary>
-        private void CaptureOne(string positionName, BoardState board, string tierId)
+        /// stop-reason/node-count line this whole harness exists to produce.
+        ///
+        /// The first-move-cutoff rate rides along because it is the one signal that tells a depth
+        /// change apart from an ordering change: a reduction or pruning tweak that reaches deeper
+        /// while ordering holds steady is a real gain, whereas one that reaches deeper only because
+        /// ordering collapsed elsewhere is borrowing from the same budget it claims to have saved.
+        /// Reading it here costs nothing — the counters are already maintained for editor builds.</summary>
+        private int CaptureOne(string positionName, BoardState board, string tierId)
         {
             AIProfile profile = FindProfile(tierId);
             var search = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator(),
@@ -83,15 +89,32 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 $"[capped-reverify] position={positionName} tier={tierId} maxDepth={profile.MaxDepth} " +
                 $"softMs={settings.TimeBudget.SoftMs} hardMs={settings.TimeBudget.HardMs} " +
                 $"stopReason={stats.StopReason} lastDepth={stats.LastCompletedDepth} " +
-                $"nodes={stats.NodesVisited} qnodes={stats.QNodesVisited}");
+                $"nodes={stats.NodesVisited} qnodes={stats.QNodesVisited} " +
+                $"cutoffRate={stats.FirstMoveCutoffRate():F3}");
+
+            return stats.LastCompletedDepth;
         }
 
         [Test]
         public void CapturePositionSweep_AllDeepTiers()
         {
+            // Total and mean depth across every cell are printed as one line at the end because that
+            // is the number a search change is actually judged on. A change that trades a ply on one
+            // position for a ply on another has bought nothing, and per-cell lines alone make that
+            // easy to misread as an improvement — a single total cannot be cherry-picked.
+            int totalDepth = 0;
+            int cells = 0;
+
             foreach ((string name, System.Func<BoardState> build) in Positions)
                 foreach (string tierId in DeepTierIds)
-                    CaptureOne(name, build(), tierId);
+                {
+                    totalDepth += CaptureOne(name, build(), tierId);
+                    cells++;
+                }
+
+            System.Console.WriteLine(
+                $"[capped-reverify] SUMMARY cells={cells} totalDepth={totalDepth} " +
+                $"meanDepth={(double)totalDepth / cells:F3}");
         }
     }
 }
