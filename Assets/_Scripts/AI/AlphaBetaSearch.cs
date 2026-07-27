@@ -94,6 +94,13 @@ namespace ChessTheBetrayal.AI
         // with the enemy king already confined.
         private const int LateMoveReductionMinimum = 1;
         private const int LateMoveReductionListBuckets = 6;
+
+        // Total pieces left on the board, both sides, at or below which no move is reduced at all.
+        // Six covers the classic won endings (two kings plus a queen or rook, with a little room for
+        // a pawn or a second piece) without switching reduction off for anything still resembling a
+        // real middlegame - by the time a board is down to six pieces the move lists are short
+        // enough that reduction was saving very little anyway.
+        private const int MinimumPiecesForReduction = 6;
         private static int LateMoveReduction(int depth, int moveIndex, int moveCount) =>
             LateMoveReductionMinimum + depth / 5
             + moveIndex * LateMoveReductionListBuckets / Math.Max(moveCount, 1) / 2;
@@ -1084,7 +1091,20 @@ namespace ChessTheBetrayal.AI
             // LMR eligibility for THIS node is fixed once, before the loop: a pending Betrayer means
             // every child here is part of a forced tactical sequence (same reasoning as the null-move
             // guard above), so nothing at this node may ever be reduced.
-            bool nodeAllowsReduction = depth >= 3 && !board.PendingBetrayerSquare.HasValue;
+            //
+            // A position stripped down to a bare king and a piece or two is also exempt, because the
+            // assumption reduction rests on has stopped holding there. Reducing late moves is a bet
+            // that a move ordering has already ranked low is unlikely to be best - reasonable when
+            // there are captures, threats and developing moves to rank against each other. Forcing a
+            // lone king to mate has none of that: the whole technique is quiet king and rook moves
+            // that look identical to a move ordering heuristic, and the one that matters is often not
+            // the one tried first. Reduce there and the search confines the enemy king, then shuffles
+            // forever without finding the mate.
+            bool endgameTooSparseToReduce =
+                board.GetPieceIndices(Team.White).Count + board.GetPieceIndices(Team.Black).Count
+                    <= MinimumPiecesForReduction;
+            bool nodeAllowsReduction = depth >= 3 && !board.PendingBetrayerSquare.HasValue
+                && !endgameTooSparseToReduce;
 
             // Move-count pruning and frontier futility are both members of the forward-pruning
             // family gated by the same shared guard as NMP/reverse-futility above. A node with only
