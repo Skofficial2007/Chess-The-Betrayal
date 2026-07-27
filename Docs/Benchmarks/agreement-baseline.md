@@ -98,3 +98,31 @@ So this instrument measures agreement-with-the-reference-evaluator, not strength
 directly comparable across tiers that share the reference's dials. **Read `extreme`'s number
 against its own history, never against `hard` or `impossible`.** Grading it properly would need a
 reference built from its own weights.
+
+## Reference cost, re-measured
+
+The reference depth is a cost/quality trade, so the curve behind it was re-measured on the same tip
+as the second table above, over three positions.
+
+| Depth | Mean per position | Ratio to previous |
+|---|---:|---:|
+| 8 | 2,093 ms | — |
+| 9 | 3,316 ms | 1.58x |
+| 10 | 10,732 ms | 3.24x |
+| 11 | 20,271 ms | 1.89x |
+| 12 | 27,231 ms | 1.34x |
+
+**The curve flattens above depth 10.** Each extra ply costs proportionally less than the one before
+it, so a depth-12 reference is roughly 2.5x a depth-10 one rather than the far steeper multiple a
+constant per-ply cost would predict. Raising the reference depth is cheaper than it looks.
+
+There is a reason to consider doing so. **The depth-10 reference has not converged on these
+positions.** Position 0 answers differently at 10, 11 and 12; position 2 changes at 12 and returns
+to its depth-10 answer. An oracle that still changes its mind is reporting which depth it searched
+as much as what the position holds, which is the same instability the position-stability screen
+above found in a majority of the curated set - here it is in the reference itself rather than in
+the positions.
+
+That does not invalidate the agreement numbers, which are all measured against the same reference
+and so remain comparable to each other. It does mean the reference's answer is not a ground truth,
+and a future pass wanting a firmer one can buy depth 12 for less than the old curve suggested.
