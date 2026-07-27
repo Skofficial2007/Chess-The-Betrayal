@@ -77,9 +77,26 @@ namespace ChessTheBetrayal.AI
         // leaves depth on the table on exactly the crowded opening positions that need it most.
         // The floor of 1 guarantees a reduced child still searches at least one real ply rather
         // than dropping straight into quiescence.
+        //
+        // The list-position term deliberately measures how far THROUGH the move list a move sits
+        // rather than its raw index, because the two only agree when the list is long. In a bare
+        // endgame the whole list can be shorter than a single step of a raw-index scale, so every
+        // legal move would land in the same bucket and the scale would silently stop working -
+        // while in a crowded midgame the same raw index means something quite different. Being
+        // tenth of twelve moves is real evidence that ordering has already dismissed a move;
+        // being tenth of forty is not.
+        //
+        // This matters most in exactly the place it is easiest to miss, and it was found by a test
+        // rather than by reasoning. Forcing a bare king into a mate is done with quiet king and
+        // rook moves, which is precisely what this reduces, and a position with almost no pieces
+        // left generates almost no moves - so a raw-index scale reduced the mating manoeuvre
+        // hardest at the moment it needed the most depth. Won endgames stalled out short of mate
+        // with the enemy king already confined.
         private const int LateMoveReductionMinimum = 1;
-        private static int LateMoveReduction(int depth, int moveIndex) =>
-            LateMoveReductionMinimum + depth / 6 + moveIndex / 6;
+        private const int LateMoveReductionListBuckets = 6;
+        private static int LateMoveReduction(int depth, int moveIndex, int moveCount) =>
+            LateMoveReductionMinimum + depth / 5
+            + moveIndex * LateMoveReductionListBuckets / Math.Max(moveCount, 1) / 2;
 
         // Reverse futility pruning (a.k.a. static null-move pruning): only attempted within this many
         // plies of the horizon — beyond that the static eval is too weak a proxy for "this node is
@@ -1153,7 +1170,7 @@ namespace ChessTheBetrayal.AI
                 int searchDepth = depth - 1;
                 if (reduce)
                 {
-                    int reduction = LateMoveReduction(depth, i);
+                    int reduction = LateMoveReduction(depth, i, moves.Count);
                     searchDepth = Math.Max(depth - 1 - reduction, LateMoveReductionMinimum);
                 }
 
