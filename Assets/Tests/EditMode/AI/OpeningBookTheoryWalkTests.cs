@@ -45,13 +45,26 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             Assert.That(_book, Is.Not.Null, $"No compiled opening book found at '{CompiledAssetPath}'.");
         }
 
+        /// <summary>A tier that plays the book for as long as the book has an answer — the shape
+        /// the walk had before difficulty tiers could cut it short.</summary>
+        private static readonly AIProfile UnlimitedBook = new AIProfile(
+            "walk", maxDepth: 5, timeBudget: new AITimeBudget(1000, 1500), blunderRate: 0f,
+            blunderMarginCp: 0, betrayalAggression: 0f, attackDefenseBias: 1f, tieBreakWindowCp: 0,
+            useOpeningBook: true, openingBookDepthPlies: 0);
+
+        private List<string> WalkBookLine(IRandomSource rng) => WalkBookLine(rng, UnlimitedBook);
+
         /// <summary>
         /// Follows the book from the starting position until it declines to answer, returning the
         /// moves played in coordinate notation. Applies each move exactly the way the compiler and
         /// a real match do — the engine applies it, then the turn flips separately — because
         /// ApplyMove does not flip the turn on its own.
+        ///
+        /// Asks OpeningBookPolicy before every lookup, in the same order the live agent does, so a
+        /// tier that is only allowed a few moves of theory stops here exactly where it stops in a
+        /// real game.
         /// </summary>
-        private List<string> WalkBookLine(IRandomSource rng)
+        private List<string> WalkBookLine(IRandomSource rng, AIProfile profile)
         {
             BoardState board = OpeningBookCompiler.CreateStandardStartingPosition();
             var played = new List<string>();
@@ -59,6 +72,9 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
 
             for (int ply = 0; ply < WalkSafetyLimit; ply++)
             {
+                if (!OpeningBookPolicy.ShouldConsult(profile, board))
+                    return played;
+
                 MoveCommand? bookMove = OpeningBookLookup.TryGetBookMove(_book, board, _engine, rng);
                 if (bookMove == null)
                     return played;
@@ -165,6 +181,87 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
 
             Assert.That(distinctFirstMoves.Count, Is.GreaterThan(1),
                 "The book always opened with the same move across 50 seeds — the weighted pick is not offering variety.");
+        }
+
+        [Test]
+        public void ShippedBook_EachTier_StopsExactlyAtItsOwnAllowance()
+        {
+            const int Seed = 20260728;
+            int uncapped = WalkBookLine(new SystemRandomSource(Seed)).Count;
+
+            foreach (AIProfile tier in AIProfileTable.BuiltIn)
+            {
+                int expected = tier.OpeningBookDepthPlies <= 0
+                    ? uncapped
+                    : System.Math.Min(tier.OpeningBookDepthPlies, uncapped);
+
+                int actual = WalkBookLine(new SystemRandomSource(Seed), tier).Count;
+
+                TestContext.Out.WriteLine(
+                    $"{tier.Id}: allowance {(tier.OpeningBookDepthPlies == 0 ? "whole book" : tier.OpeningBookDepthPlies + " plies")} " +
+                    $"-> played {actual} plies of theory (uncapped walk is {uncapped}).");
+
+                Assert.That(actual, Is.EqualTo(expected),
+                    $"'{tier.Id}' should stop after {expected} plies of theory but played {actual}.");
+            }
+        }
+
+        [Test]
+        public void ShippedBook_EveryTierAllowance_IsOneRealOpeningsActuallyReach()
+        {
+            // An allowance longer than the openings the book offers would be a setting that never
+            // does anything: it reads as a deliberate difficulty choice in the table while changing
+            // nothing at all. Openings vary in length, so an allowance is not expected to cut every
+            // one of them short — the check is that it cuts most of them short, which is what
+            // separates a live difficulty setting from a decorative number.
+            const int SeedCount = 40;
+
+            foreach (AIProfile tier in AIProfileTable.BuiltIn)
+            {
+                if (tier.OpeningBookDepthPlies <= 0) continue;
+
+                int shortened = 0;
+                for (int seed = 0; seed < SeedCount; seed++)
+                {
+                    if (WalkBookLine(new SystemRandomSource(seed)).Count > tier.OpeningBookDepthPlies)
+                        shortened++;
+                }
+
+                TestContext.Out.WriteLine(
+                    $"{tier.Id}: {tier.OpeningBookDepthPlies}-ply allowance shortens {shortened} of {SeedCount} openings.");
+
+                Assert.That(shortened, Is.GreaterThanOrEqualTo(SeedCount / 2),
+                    $"'{tier.Id}' allows {tier.OpeningBookDepthPlies} plies of theory, which only shortened " +
+                    $"{shortened} of {SeedCount} openings — that allowance is barely doing anything.");
+            }
+        }
+
+        [Test]
+        public void ShippedBook_TheLadder_PlaysSteadilyMoreTheoryAsItGetsHarder()
+        {
+            // The allowances only read as a difficulty ladder if they are ordered like one. This is
+            // the property a future retune is most likely to break by editing a single row.
+            const int Seed = 4242;
+
+            int Theory(string id)
+            {
+                foreach (AIProfile tier in AIProfileTable.BuiltIn)
+                {
+                    if (tier.Id == id) return WalkBookLine(new SystemRandomSource(Seed), tier).Count;
+                }
+
+                Assert.Fail($"No '{id}' row in the built-in roster.");
+                return 0;
+            }
+
+            int easy = Theory("easy"), normal = Theory("normal"), aggressive = Theory("aggressive");
+            int hard = Theory("hard"), extreme = Theory("extreme"), impossible = Theory("impossible");
+
+            Assert.That(easy, Is.LessThan(normal), "easy should play less theory than normal.");
+            Assert.That(normal, Is.LessThan(aggressive), "normal should play less theory than aggressive.");
+            Assert.That(aggressive, Is.LessThan(hard), "aggressive should play less theory than hard.");
+            Assert.That(hard, Is.LessThanOrEqualTo(extreme), "hard should never out-read extreme.");
+            Assert.That(extreme, Is.EqualTo(impossible), "the top two tiers both get the whole book.");
         }
 
         [Test]
