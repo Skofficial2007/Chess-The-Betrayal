@@ -1,5 +1,6 @@
 using System;
 using ChessTheBetrayal.AI;
+using ChessTheBetrayal.AI.OpeningBook;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Core.Utils;
@@ -222,6 +223,29 @@ namespace ChessTheBetrayal.Tests.Utilities
         }
 
         /// <summary>
+        /// Same game as <see cref="PlayGame"/>, but each side may be given an opening book to answer
+        /// from before it searches — the seam that lets a book be measured at all, since the normal
+        /// tournament path builds the search directly and so never opens one.
+        ///
+        /// Passing null for a side is exactly the normal path for that side, so a game with two
+        /// nulls plays identically to <see cref="PlayGame"/>. That matters: every existing benchmark
+        /// keeps running through the same code and stays comparable to the results already recorded.
+        ///
+        /// Give the two sides the same profile and only one of them a book, and the score answers
+        /// what the book is worth to that tier. Start such a game from the standard opening position
+        /// rather than a curated one, or the book is being asked about an opening that has already
+        /// been played for it.
+        /// </summary>
+        public MatchResult PlayGameWithBooks(
+            BoardState startingPosition, AIProfile whiteProfile, AIProfile blackProfile,
+            OpeningBookAsset whiteBook, OpeningBookAsset blackBook,
+            int rngSeedWhite, int rngSeedBlack, int plyCap = DefaultPlyCap)
+        {
+            return PlayGameCore(startingPosition, whiteProfile, blackProfile, rngSeedWhite, rngSeedBlack, plyCap,
+                out _, out _, whiteBook, blackBook);
+        }
+
+        /// <summary>
         /// Same game as <see cref="PlayGame"/>, but also returns each side's search telemetry
         /// summed across every move it made — the benchmark suite's whole reason for existing is
         /// to capture strength drift and performance drift from the SAME tournament pass, since a
@@ -240,7 +264,8 @@ namespace ChessTheBetrayal.Tests.Utilities
         private MatchResult PlayGameCore(
             BoardState startingPosition, AIProfile whiteProfile, AIProfile blackProfile,
             int rngSeedWhite, int rngSeedBlack, int plyCap,
-            out MatchSideStats whiteStats, out MatchSideStats blackStats)
+            out MatchSideStats whiteStats, out MatchSideStats blackStats,
+            OpeningBookAsset whiteBook = null, OpeningBookAsset blackBook = null)
         {
             BoardState board = startingPosition.CloneForSnapshot();
 
@@ -307,6 +332,53 @@ namespace ChessTheBetrayal.Tests.Utilities
                 MoveSelectionPolicy policy = isWhite ? whitePolicy : blackPolicy;
                 IRandomSource rng = isWhite ? whiteRng : blackRng;
                 SideStatsAccumulator accumulator = isWhite ? whiteAccumulator : blackAccumulator;
+
+                OpeningBookAsset book = isWhite ? whiteBook : blackBook;
+
+                // Asked before anything else, in the same order and under the same rule the live
+                // agent uses, so a measured book move here is the move a real game would have
+                // played. A hit skips the search completely — which is the whole point, and also
+                // why the telemetry below has to be stepped around rather than filled with zeroes.
+                MoveCommand? bookMove = book != null && OpeningBookPolicy.ShouldConsult(profile, board)
+                    ? OpeningBookLookup.TryGetBookMove(book, board, _engine, rng)
+                    : null;
+
+                if (bookMove.HasValue)
+                {
+                    MoveCommand fromBook = bookMove.Value;
+
+                    // No search ran, so there is no root score to hand the adjudicator. Its
+                    // sustained-score rule would otherwise read whatever the PREVIOUS move's search
+                    // left behind and treat a stale number as this position's verdict. A static
+                    // evaluation is the honest stand-in, and it is what the adjudicator falls back
+                    // on at the end of a game anyway.
+                    int bookScoreForWhite = _adjudicationEvaluator.Evaluate(board, Team.White);
+
+                    // Deliberately NOT recorded on the accumulator. Every tier statistic — nodes,
+                    // ms and depth per move — is divided by its move count, so counting an instant
+                    // move that searched nothing would drag all three toward zero and read as a
+                    // performance change that never happened. The tier's numbers describe the moves
+                    // it actually thought about.
+                    if (fromBook.Stage == BetrayalStage.Act) accumulator.RecordActPlayed();
+                    else if (fromBook.Stage == BetrayalStage.Retribution) accumulator.RecordActResolvedByRetribution();
+
+                    matchDriver.PlayMove(fromBook);
+
+                    if (fromBook.Stage == BetrayalStage.Act && !board.PendingBetrayerSquare.HasValue)
+                        defectionHasOccurred = true;
+
+                    if (matchDriver.CurrentPhase != TurnPhase.Normal) continue;
+
+                    MatchOutcome? adjudicatedFromBook = adjudicator.RecordPly(board, fromBook, ply, bookScoreForWhite);
+                    if (adjudicatedFromBook.HasValue)
+                    {
+                        whiteStats = whiteAccumulator.ToStats();
+                        blackStats = blackAccumulator.ToStats();
+                        return Finish(adjudicatedFromBook.Value, ply + 1, reachedPlyCap: false);
+                    }
+
+                    continue;
+                }
 
                 var settings = ApplyMoveBudgetCap(AISearchSettings.FromProfile(BetrayalUsage.Full, profile));
                 int rescoreMargin = Math.Max(profile.BlunderMarginCp, profile.TieBreakWindowCp);
