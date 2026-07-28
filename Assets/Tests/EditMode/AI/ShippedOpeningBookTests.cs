@@ -24,19 +24,18 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
     [TestFixture]
     public class ShippedOpeningBookTests
     {
-        // Both files are fixed project locations rather than anything the code discovers at
-        // runtime: the import menu deliberately takes an arbitrary user-chosen file, so there is
-        // no shared constant to borrow. If either file moves, these paths move with it.
-        private const string SourceRelativePath = "_Scripts/AI/OpeningBook/Data/openings.book.txt";
-        private const string CompiledAssetPath = "Assets/AI/Opening Book/OpeningBook.asset";
+        // Taken from the builder rather than restated here, so the test can only ever check the
+        // same two files a rebuild actually writes.
+        private const string SourcePath = OpeningBookBuilder.DefaultSourcePath;
+        private const string CompiledAssetPath = OpeningBookBuilder.DefaultAssetPath;
 
         private const string RecompileHint =
-            "Recompile it with the 'Chess: The Betrayal/AI/Compile Opening Book...' menu command, " +
-            "selecting " + SourceRelativePath + " as the source, and commit the regenerated asset " +
-            "alongside the source change.";
+            "Rebuild it with the 'Chess: The Betrayal/AI/Rebuild Opening Book' menu command, and " +
+            "commit the regenerated asset alongside the source change.";
 
         private static string ReadSourceText() =>
-            File.ReadAllText(Path.Combine(Application.dataPath, SourceRelativePath));
+            File.ReadAllText(Path.Combine(
+                Path.GetDirectoryName(Application.dataPath) ?? string.Empty, SourcePath));
 
         private static OpeningBookAsset LoadShippedAsset()
         {

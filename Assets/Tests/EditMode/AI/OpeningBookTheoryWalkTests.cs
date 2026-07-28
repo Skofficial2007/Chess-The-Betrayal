@@ -28,7 +28,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
     [TestFixture]
     public class OpeningBookTheoryWalkTests
     {
-        private const string CompiledAssetPath = "Assets/AI/Opening Book/OpeningBook.asset";
+        private const string CompiledAssetPath = OpeningBookBuilder.DefaultAssetPath;
 
         // Far beyond the longest line the book could hold, so a walk that somehow never ends fails
         // as a bounded assertion instead of hanging the test run.
