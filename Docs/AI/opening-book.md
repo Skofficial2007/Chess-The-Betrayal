@@ -131,21 +131,51 @@ Verified automatically, all in seconds:
 | No opening leaves the AI in a position it already considers lost | `OpeningBookExitBalanceTests` |
 | A tier keeps its allowance through profile resolution | `AIProfileGuardrailTests` |
 
-**Not verified: that the book makes the AI play better.** Nothing measures that, and it is worth
-being precise about why rather than leaving it as a gap someone tries to close casually.
+The checks above are all about the book's *content*: that it is correct, current, varied, and does
+not walk into a lost game. None of them claims a strength gain. What the book is worth in games is a
+separate question, and it has now been measured — see below.
 
-The tournament harness builds the search directly and never constructs the agent that owns the
-book, so no tournament — quick, full or focused — can observe a book change at all. Teaching it the
-book was considered and rejected: it already starts its games from curated opening positions four to
-eight plies deep, so both sides would recite matching theory for another ten plies on top of that,
-compressing the part of each game that actually decides anything and pushing up a draw rate that is
-already high between the top tiers. It would also make every tournament result recorded so far
-incomparable with everything measured after it.
+## What the book is worth: measured
 
-Grading book exits against a deeper reference search was also considered and rejected. That
-instrument measures agreement with the reference evaluator rather than strength, and its own
-reference has not converged on these positions, so it would answer a question about the search
-rather than about the book.
+**Over 640 games it is worth nothing measurable: 49.8%, −1 Elo, 95% interval [46.0%, 53.7%].**
 
-So the checks above are all about the book's *content*: that it is correct, current, varied, and
-does not walk into a lost game. None of them claims a strength gain, and none should be read as one.
+Measured by playing each tier against a copy of itself where only one side may open the book, from
+the standard starting position, colours alternating. The normal tournament path cannot see a book at
+all — it builds the search directly and never constructs the agent that owns one — so this runs
+through its own harness (`OpeningBookImpactRunner`), with the tournament path left untouched.
+
+| Tier | Games | Score | 95% CI | Elo |
+|---|---:|---:|---:|---:|
+| easy | 40 | 53.8% | ±15.5% | +26 |
+| normal | 240 | 52.7% | ±6.3% | +19 |
+| hard | 40 | 47.5% | ±15.5% | −17 |
+| aggressive | 240 | 47.1% | ±6.3% | −20 |
+| extreme | 40 | 50.0% | ±15.5% | ±0 |
+| impossible | 40 | 47.5% | ±15.5% | −17 |
+| **all pooled** | **640** | **49.8%** | **±3.9%** | **−1** |
+
+No tier shows an effect that clears its own interval. The pooled interval is now tight enough that a
+book worth more than about 26 Elo, or costing more than about 28, would have shown up.
+
+**Three reasons this is the expected answer, not a disappointing one:**
+
+- **The opening is a small slice of a game** — eight to sixteen plies out of sixty to a hundred and
+  twenty. A small edge there is diluted by everything after it.
+- **This engine has no chess clock, by design.** Every move is bounded on its own, so the time a
+  side saves by answering instantly from memory cannot be spent later. The largest practical benefit
+  a book gives a real engine is structurally unavailable here.
+- **Against a human it rarely fires for long.** The book answers only positions it knows exactly, and
+  a club player leaves known theory within a few moves.
+
+**What the book is actually for, then:** instant opening moves instead of a three-second think,
+recognisable named theory instead of improvisation, and a different game every time instead of the
+same opening on repeat. Those are real and player-facing. They are simply not strength, and should
+not be reported as strength.
+
+**A caution about small samples, learned here.** A first pass at forty games a tier suggested the
+book was worth +61 Elo to `normal` and costing `aggressive` 70 Elo — the latter looking like a real
+bug, with a plausible story attached (`aggressive` is the one tier with a deliberately reshaped
+evaluator, so neutral theory steering it into calm positions sounded convincing). Both effects
+vanished at two hundred games a tier: `normal` fell to +10, `aggressive` rose to −10. They were
+noise wearing an explanation. Acting on the first pass would have removed a tier's opening book for
+no reason.
