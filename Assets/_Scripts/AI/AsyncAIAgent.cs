@@ -35,6 +35,18 @@ namespace ChessTheBetrayal.AI
         /// of the usual AI_MoveDecided/elapsed-ms telemetry, since a book hit has no search time.</summary>
         public event Action<MoveCommand> OnBookMovePlayed;
 
+        /// <summary>
+        /// Fires once, on the first move this agent has to work out for itself after a run of book
+        /// moves. It is the moment the AI stops reciting and starts playing, which is worth being
+        /// able to see in a log when a game is being diagnosed: a move that looks weak reads very
+        /// differently depending on whether it was the engine's own idea or the last line of a
+        /// memorised opening.
+        ///
+        /// An agent that never played a book move at all never raises this — there was no book to
+        /// leave — so its absence means "searched from move one", not "still in book".
+        /// </summary>
+        public event Action<MoveCommand> OnLeftOpeningBook;
+
         private readonly IChessEngine _engine;
         private readonly AlphaBetaSearch _search;
         private readonly AISearchSettings _settings;
@@ -48,6 +60,13 @@ namespace ChessTheBetrayal.AI
         private volatile bool _pendingResultFromBook;
         private MoveCommand _pendingResult;
         private CancellationTokenSource _cts;
+
+        // Whether this agent has played a book move yet, and whether it has already announced
+        // leaving the book. Both are main-thread only: they are written in Tick(), which is the
+        // main-thread pump, and never touched by the worker. Together they make OnLeftOpeningBook
+        // fire on the first searched move that follows a book move, and only on that one.
+        private bool _hasPlayedFromBook;
+        private bool _hasLeftBook;
 
         /// <summary>
         /// True from the moment RequestBestMove kicks off a search until either a result is
@@ -237,9 +256,22 @@ namespace ChessTheBetrayal.AI
             _pendingResultFromBook = false;
 
             if (fromBook)
+            {
+                _hasPlayedFromBook = true;
                 OnBookMovePlayed?.Invoke(_pendingResult);
-            else
-                OnMoveDecided?.Invoke(_pendingResult);
+                return;
+            }
+
+            // Announced before the move itself so a listener sees the boundary and then the move
+            // that crossed it, rather than having to look back at the previous line to work out
+            // which move was the first one the AI actually thought about.
+            if (_hasPlayedFromBook && !_hasLeftBook)
+            {
+                _hasLeftBook = true;
+                OnLeftOpeningBook?.Invoke(_pendingResult);
+            }
+
+            OnMoveDecided?.Invoke(_pendingResult);
         }
 
         private void CancelInFlight()

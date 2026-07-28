@@ -82,5 +82,6 @@ namespace ChessTheBetrayal.Core.Diagnostics
         AI_MoveDecided                  = 4102,
         AI_SearchCancelled              = 4103,
         AI_BookMovePlayed               = 4104,
+        AI_LeftOpeningBook              = 4105,
     }
 }
