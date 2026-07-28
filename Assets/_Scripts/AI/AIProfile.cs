@@ -9,9 +9,11 @@ namespace ChessTheBetrayal.AI
     /// <see cref="MaxDepth"/>/<see cref="TimeBudget"/> shape the search itself (via
     /// AISearchSettings.FromProfile); <see cref="BlunderRate"/>/<see cref="BlunderMarginCp"/>/
     /// <see cref="TieBreakWindowCp"/>/<see cref="BetrayalAggression"/> shape which of the search's
-    /// own ranked root moves gets picked (via MoveSelectionPolicy). <see cref="AttackDefenseBias"/>
-    /// and <see cref="UseOpeningBook"/> remain inert data for the evaluator-weighting and
-    /// opening-book tickets that follow.
+    /// own ranked root moves gets picked (via MoveSelectionPolicy); <see cref="AttackDefenseBias"/>
+    /// reweights the evaluator (via EvaluationWeights.FromProfile); and
+    /// <see cref="UseOpeningBook"/>/<see cref="OpeningBookDepthPlies"/> decide how much opening
+    /// theory the tier plays from memory before it starts thinking for itself (via
+    /// OpeningBookPolicy).
     /// </summary>
     public readonly struct AIProfile
     {
@@ -25,6 +27,19 @@ namespace ChessTheBetrayal.AI
         public readonly int TieBreakWindowCp;
         public readonly bool UseOpeningBook;
 
+        /// <summary>
+        /// How far into a game this tier is allowed to answer from the opening book, counted in
+        /// plies (single moves) played so far, or 0 for "as far as the book goes". Once the game
+        /// passes this point the tier searches for every move even if the book still knows the
+        /// position, which is what stops a beginner-level tier from reciting eight moves of
+        /// flawless theory and then hanging a piece on the ninth.
+        ///
+        /// Counted in game plies rather than in book moves the AI itself played, so it means the
+        /// same thing whichever colour the AI has, and so taking back a move puts the AI back
+        /// where it was instead of leaving a private counter running ahead of the board.
+        /// </summary>
+        public readonly int OpeningBookDepthPlies;
+
         public AIProfile(
             string id,
             int maxDepth,
@@ -34,7 +49,8 @@ namespace ChessTheBetrayal.AI
             float betrayalAggression,
             float attackDefenseBias,
             int tieBreakWindowCp,
-            bool useOpeningBook)
+            bool useOpeningBook,
+            int openingBookDepthPlies = 0)
         {
             Id = id;
             MaxDepth = maxDepth;
@@ -45,6 +61,7 @@ namespace ChessTheBetrayal.AI
             AttackDefenseBias = attackDefenseBias;
             TieBreakWindowCp = tieBreakWindowCp;
             UseOpeningBook = useOpeningBook;
+            OpeningBookDepthPlies = openingBookDepthPlies;
         }
 
         /// <summary>Zero-dial sentinel used where no AI personality is being modeled (e.g. a bare

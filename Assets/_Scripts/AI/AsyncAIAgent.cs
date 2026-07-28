@@ -129,7 +129,9 @@ namespace ChessTheBetrayal.AI
             // Book lookup runs synchronously, on the calling (main) thread, against the LIVE board —
             // it's a binary search plus a legal-move regeneration, not a tree search, so it's cheap
             // enough to never need a worker thread or a clone. A hit skips FindBestMove entirely.
-            if (_profile.UseOpeningBook && _openingBook != null)
+            // OpeningBookPolicy gates it because a tier is allowed to stop trusting the book part
+            // way through the opening even while the book still knows the position.
+            if (_openingBook != null && OpeningBook.OpeningBookPolicy.ShouldConsult(_profile, board))
             {
                 MoveCommand? bookMove = OpeningBook.OpeningBookLookup.TryGetBookMove(_openingBook, board, _engine, _rng);
                 if (bookMove != null)

@@ -83,7 +83,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         {
             var source = new AIProfile("test", maxDepth: 2, timeBudget: new AITimeBudget(1234, 1999),
                 blunderRate: 0.5f, blunderMarginCp: 77, betrayalAggression: 1f,
-                attackDefenseBias: 2f, tieBreakWindowCp: 99, useOpeningBook: true);
+                attackDefenseBias: 2f, tieBreakWindowCp: 99, useOpeningBook: true,
+                openingBookDepthPlies: 6);
 
             AIProfile result = AIProfileGuardrails.Apply(source);
 
@@ -95,6 +96,41 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             Assert.That(result.BlunderMarginCp, Is.EqualTo(77));
             Assert.That(result.TieBreakWindowCp, Is.EqualTo(99));
             Assert.That(result.UseOpeningBook, Is.True);
+            Assert.That(result.OpeningBookDepthPlies, Is.EqualTo(6));
+        }
+
+        [Test]
+        public void Apply_ShallowDepth_KeepsTheOpeningBookAllowance()
+        {
+            // The clamp only rebuilds a profile when the search is shallow, and 'easy' is the only
+            // shipped tier shallow enough to go down that path. So a field the rebuild forgets to
+            // carry is lost on exactly one tier while every other tier keeps working — which is
+            // both the hardest version of this bug to notice and, for a book allowance, the tier
+            // that most needs one.
+            AIProfile shallow = new AIProfile("shallow", maxDepth: AIProfileGuardrails.ShallowSearchDepthThreshold - 1,
+                timeBudget: new AITimeBudget(1000, 1500), blunderRate: 0f, blunderMarginCp: 0,
+                betrayalAggression: 0f, attackDefenseBias: 1f, tieBreakWindowCp: 0,
+                useOpeningBook: true, openingBookDepthPlies: 4);
+
+            Assert.That(AIProfileGuardrails.Apply(shallow).OpeningBookDepthPlies, Is.EqualTo(4),
+                "The clamp rebuilds shallow profiles field by field and dropped the book allowance.");
+        }
+
+        [Test]
+        public void Resolve_EveryTier_KeepsItsOpeningBookAllowance()
+        {
+            IAIProfileProvider provider = new AIProfileTableProvider();
+
+            foreach (AIProfile expected in AIProfileTable.BuiltIn)
+            {
+                AIProfile resolved = provider.Resolve(expected.Id);
+
+                Assert.That(resolved.OpeningBookDepthPlies, Is.EqualTo(expected.OpeningBookDepthPlies),
+                    $"Resolving '{expected.Id}' dropped its opening-book allowance " +
+                    $"({expected.OpeningBookDepthPlies} plies) somewhere on the way through the guardrail.");
+                Assert.That(resolved.UseOpeningBook, Is.EqualTo(expected.UseOpeningBook),
+                    $"Resolving '{expected.Id}' changed whether it uses the opening book at all.");
+            }
         }
 
         [Test]

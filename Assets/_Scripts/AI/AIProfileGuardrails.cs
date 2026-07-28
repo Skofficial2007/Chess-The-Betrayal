@@ -33,7 +33,14 @@ namespace ChessTheBetrayal.AI
             return Clamp(betrayalAggression, MinClampedBetrayalAggression, MaxClampedBetrayalAggression);
         }
 
-        /// <summary>Applies both clamps at once, returning a profile that's always safe to search with.</summary>
+        /// <summary>
+        /// Applies both clamps at once, returning a profile that's always safe to search with.
+        ///
+        /// This rebuilds the profile field by field, so a field added to AIProfile and not added
+        /// here silently reverts to its default — and only for shallow profiles, since deeper ones
+        /// return early above. That makes the omission very easy to miss: every tier except the
+        /// shallowest keeps working perfectly.
+        /// </summary>
         public static AIProfile Apply(AIProfile profile)
         {
             if (!RequiresClamp(profile.MaxDepth)) return profile;
@@ -47,7 +54,8 @@ namespace ChessTheBetrayal.AI
                 ClampBetrayalAggression(profile.MaxDepth, profile.BetrayalAggression),
                 ClampAttackDefenseBias(profile.MaxDepth, profile.AttackDefenseBias),
                 profile.TieBreakWindowCp,
-                profile.UseOpeningBook);
+                profile.UseOpeningBook,
+                profile.OpeningBookDepthPlies);
         }
 
         private static float Clamp(float value, float min, float max)
