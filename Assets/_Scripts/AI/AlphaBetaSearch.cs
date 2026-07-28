@@ -210,6 +210,33 @@ namespace ChessTheBetrayal.AI
         // "a shallow search can't be trusted" threshold rather than inventing a second one.
         private const int StabilityThresholdCp = 25;
 
+        // Both settle signals above read the same evidence: the best move at the root stopped
+        // changing. That is only evidence of convergence when the search was ordering its moves
+        // well enough to have found the refutation if one existed. When ordering is poor the root
+        // move also stops changing — but for the opposite reason, because the search is not seeing
+        // deep enough to dislodge it. Move persistence looks identical in both cases and the
+        // settle rule cannot tell them apart on its own.
+        //
+        // That failure is not hypothetical and it lands on the worst positions. Measured across a
+        // mix of hand-built shapes and real opening lines under real match budgets, the three
+        // positions with the weakest move ordering were precisely the ones stopping two plies short
+        // of their ceiling with most of their time unspent, while well-ordered positions ran on.
+        // The budget was being spent backwards: the searches that needed extra depth most were the
+        // ones giving it up first.
+        //
+        // So a settle is only trusted when the first-move cutoff rate says ordering is actually
+        // doing its job. Below this share of cutoffs won on the first move tried, the root's
+        // apparent stability is treated as unproven and the search keeps going on its remaining
+        // time. This never extends past the hard budget — an unhealthy search gets the rest of its
+        // existing budget, never more, so the per-move ceiling the whole engine is held to is
+        // untouched.
+        //
+        // The threshold sits below where healthy positions in that measurement sat and above where
+        // the starved ones did, which is what makes it separate the two cases rather than simply
+        // disabling early exit. Raising it makes the engine more willing to spend its full budget;
+        // lowering it toward zero restores the previous always-trust-the-settle behaviour.
+        private const double MinimumCutoffRateToTrustSettle = 0.42;
+
         // Aspiration windows (experimental, off by default — see FindBestMove's own doc comment):
         // instead of always searching a fresh depth with the full [-Infinity, +Infinity] window,
         // guess that the score won't move far from the previous depth's answer and search a narrow
@@ -296,6 +323,24 @@ namespace ChessTheBetrayal.AI
         // same ceiling as _moveBuffers' individual lists and grown lazily on the same "never shrink"
         // policy as _rootScores.
         private int[] _seeScoreCache = new int[64];
+
+        // Move-ordering health for the current search, counted on every build rather than only in
+        // the editor. SearchStats carries the same two numbers, but everything in there is compiled
+        // out of a release build because it exists purely to be read by tests — and the settle-early
+        // decision below has to make the SAME choice in a shipped game that it makes under
+        // measurement. A search whose stopping rule quietly changes between the build being measured
+        // and the build being played is not measurable at all, so these two live here instead, as
+        // ordinary fields the search itself owns and reads. Two long increments per beta cutoff,
+        // no allocation.
+        private long _betaCutoffs;
+        private long _firstMoveBetaCutoffs;
+
+        /// <summary>Share of this search's beta cutoffs that were won by the first move tried, in
+        /// 0..1 — the standard signal for whether move ordering is doing its job. Returns 1 before
+        /// any cutoff has happened, so a search with no evidence yet is treated as healthy rather
+        /// than being held back by a statistic it has not had the chance to earn.</summary>
+        private double CurrentFirstMoveCutoffRate =>
+            _betaCutoffs <= 0 ? 1.0 : (double)_firstMoveBetaCutoffs / _betaCutoffs;
 
         public AlphaBetaSearch(IChessEngine engine, IPositionEvaluator evaluator, int maxSupportedDepth = 32,
                                 TranspositionTable transpositionTable = null)
@@ -445,6 +490,12 @@ namespace ChessTheBetrayal.AI
 #endif
             _tt.NewSearch();
             Array.Clear(_historyScores, 0, _historyScores.Length);
+
+            // Ordering health is per-search, so it resets here rather than with the editor-only
+            // telemetry above — the settle-early rule reads it on every build and must never see a
+            // previous search's cutoffs.
+            _betaCutoffs = 0;
+            _firstMoveBetaCutoffs = 0;
 
             // Build the root move list ONCE. This is where the agent-level Betrayal policy applies.
             BuildRootMoves(board, rootTeam, settings.BetrayalUsage);
@@ -669,7 +720,16 @@ namespace ChessTheBetrayal.AI
                             bool converged = hasPriorCompletedDepth
                                 && IsRootStable(bestScore, previousCompletedScore, bestMove, previousCompletedBestMove);
                             bool moveWellSettled = consecutiveStableDepths >= StableDepthsToSettle;
-                            bool stable = converged || moveWellSettled;
+
+                            // Both signals above are only meaningful if move ordering was healthy
+                            // enough for a refutation to have surfaced had one existed — see
+                            // MinimumCutoffRateToTrustSettle. A poorly-ordered search holds onto the
+                            // same root move because it cannot see past it, which is the opposite of
+                            // having converged on it, and the two are indistinguishable from move
+                            // persistence alone.
+                            bool orderingHealthyEnoughToTrustSettle =
+                                CurrentFirstMoveCutoffRate >= MinimumCutoffRateToTrustSettle;
+                            bool stable = (converged || moveWellSettled) && orderingHealthyEnoughToTrustSettle;
 
                             // Settled and past the soft target: further search is unlikely to change
                             // the answer, so stop now rather than spend the rest of the budget.
@@ -1286,11 +1346,15 @@ namespace ChessTheBetrayal.AI
                 // a betrayal sequence is still a cutoff for the same maximizer that owns this node.
                 if (alpha >= beta)
                 {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
                     // How often the very first move tried is the one that closes the node out — the
                     // signature of move ordering doing its job. A falling rate at a given depth means
                     // later moves are winning cutoffs more often, i.e. ordering is losing its grip as
-                    // the tree gets deeper.
+                    // the tree gets deeper. Counted on every build because iterative deepening reads
+                    // it to decide whether this search's apparent stability can be trusted; the
+                    // telemetry copy alongside it stays editor-only like the rest of SearchStats.
+                    _betaCutoffs++;
+                    if (i == 0) _firstMoveBetaCutoffs++;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
                     _tt.Stats.BetaCutoffs++;
                     if (i == 0) _tt.Stats.FirstMoveBetaCutoffs++;
 #endif
