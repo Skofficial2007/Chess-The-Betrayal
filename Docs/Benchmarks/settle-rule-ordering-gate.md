@@ -38,7 +38,7 @@ Nothing extends past the hard budget, so the per-move ceiling is unchanged.
 
 The threshold sits in the gap between the two groups above — beneath where healthy positions sit,
 above where starved ones do. That is what makes it separate the two cases rather than simply
-switching early exit off. Measured alternatives:
+switching early exit off. Measured alternatives, single runs:
 
 | threshold | total depth over 32 cells |
 |---|---:|
@@ -49,6 +49,20 @@ switching early exit off. Measured alternatives:
 
 Raising it further starts overriding searches that had genuinely converged, which costs time
 without buying depth.
+
+Those are single runs of a measurement that depends on wall-clock timing, and the spread between
+the candidates is the same size as the run-to-run noise, so the choice between them is not
+separable on one reading each. Repeating the two endpoints three times apiece:
+
+| | runs | mean |
+|---|---|---:|
+| no gate | 247, 246, 246 | 246.3 |
+| 0.42 | 249, 250, 251 | **250.0** |
+
+The two ranges do not overlap, so the change itself is measurable at roughly four plies across the
+thirty-two cells. The differences between 0.42, 0.45 and 0.50 are not — anything in that band is
+defensible on this evidence, and 0.42 is kept because it is the value the held-out set below was
+checked against.
 
 ## Held out from the tuning
 
@@ -62,7 +76,9 @@ saw:
 | with the gate | **509** | **7.485** |
 
 The gain on unseen positions is proportionally larger than on the ones used to pick the threshold,
-which is the evidence that it reflects a real effect rather than a fit to those eight.
+which is the evidence that it reflects a real effect rather than a fit to those eight. These are
+one run each; the repeated readings above put the tuning-set effect well outside run-to-run noise,
+and a fourteen-ply difference here is far wider still.
 
 ## Gates
 
