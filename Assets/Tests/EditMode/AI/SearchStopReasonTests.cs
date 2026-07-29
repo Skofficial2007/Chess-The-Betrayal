@@ -24,9 +24,14 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         public void Setup()
         {
             _engine = new ChessEngineAdapter();
-            _search = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator(),
-                transpositionTable: new TranspositionTable(log2Size: 20));
+            _search = NewSearch();
         }
+
+        /// <summary>A search with its own empty table, for the cases that run several searches and
+        /// must not let one warm the next into stopping for a different reason.</summary>
+        private AlphaBetaSearch NewSearch() =>
+            new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator(),
+                transpositionTable: new TranspositionTable(log2Size: 20));
 
         /// <summary>A quiet, materially balanced, fully-developed position with no immediate
         /// tactics — the best move is obvious from a shallow depth on and stays obvious as the
@@ -252,11 +257,104 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 "by reaching its ceiling.");
         }
 
+        /// <summary>
+        /// The search reports the depth it reached and why it stopped on every build it can be
+        /// compiled into; the telemetry struct keeps a copy of both, but only for the editor and
+        /// development builds the measurement suites run against. This walks every exit the
+        /// deepening loop has and pins that the two never disagree — a shipped build and a measured
+        /// build have to be describing the same search, or a timing taken on a device says nothing
+        /// about what a player actually runs.
+        ///
+        /// Each case asserts the stop reason it was built to produce before comparing the copies,
+        /// because two values that are both still unset would agree with each other perfectly while
+        /// proving nothing at all.
+        /// </summary>
+        [Test]
+        public void EveryStopReason_IsReportedIdenticallyByTheSearchAndItsTelemetryCopy()
+        {
+            void AssertBothCopiesAgree(string exit, SearchStopReason expected, AlphaBetaSearch search)
+            {
+                Assert.That(search.StopReason, Is.EqualTo(expected),
+                    $"The {exit} case no longer produces the stop reason it was written to cover, so " +
+                    "it is not exercising the exit it claims to.");
+                Assert.That(search.Stats.StopReason, Is.EqualTo(search.StopReason),
+                    $"The telemetry copy of the stop reason disagrees with the search's own after the {exit} exit.");
+                Assert.That(search.Stats.LastCompletedDepth, Is.EqualTo(search.LastCompletedDepth),
+                    $"The telemetry copy of the completed depth disagrees with the search's own after the {exit} exit.");
+            }
+
+            AlphaBetaSearch ceiling = NewSearch();
+            ceiling.FindBestMove(QuietPosition(),
+                new AISearchSettings(maxDepth: 4, TestTimeBudgets.Generous, BetrayalUsage.Full),
+                CancellationToken.None);
+            AssertBothCopiesAgree("ceiling", SearchStopReason.Ceiling, ceiling);
+
+            AlphaBetaSearch mate = NewSearch();
+            mate.FindBestMove(BackRankMateInOne(),
+                new AISearchSettings(maxDepth: 9, TestTimeBudgets.Generous, BetrayalUsage.Full),
+                CancellationToken.None);
+            AssertBothCopiesAgree("mate-found", SearchStopReason.MateFound, mate);
+
+            AlphaBetaSearch outOfTime = NewSearch();
+            using (var cts = new CancellationTokenSource())
+            {
+                cts.CancelAfter(5);
+                outOfTime.FindBestMove(QuietPosition(),
+                    new AISearchSettings(maxDepth: 9, new AITimeBudget(5, 5), BetrayalUsage.Full),
+                    cts.Token);
+            }
+            AssertBothCopiesAgree("out-of-time", SearchStopReason.Budget, outOfTime);
+
+            AlphaBetaSearch settled = NewSearch();
+            using (var cts = new CancellationTokenSource())
+            {
+                cts.CancelAfter(10_000);
+                settled.FindBestMove(QuietPosition(),
+                    new AISearchSettings(maxDepth: 9, new AITimeBudget(50, 10_000), BetrayalUsage.Full),
+                    cts.Token, enableInstabilityTimeManagement: true);
+            }
+            AssertBothCopiesAgree("settled-early", SearchStopReason.SettledEarly, settled);
+        }
+
+        [Test]
+        public void ASearchThatCompletesNoDepth_ReportsNothingCarriedOverFromTheSearchBefore()
+        {
+            // Both values are per-search state on a search object that outlives any one call, so a
+            // call that gets no work done has to say so rather than leave the previous answer
+            // standing. A pre-cancelled token is the one way to guarantee that case: the deepening
+            // loop checks for cancellation before its very first depth, so nothing can complete.
+            _search.FindBestMove(BackRankMateInOne(),
+                new AISearchSettings(maxDepth: 9, TestTimeBudgets.Generous, BetrayalUsage.Full),
+                CancellationToken.None);
+
+            Assume.That(_search.LastCompletedDepth, Is.GreaterThan(0),
+                "The first search has to have gotten somewhere for the second one to be able to " +
+                "inherit anything from it.");
+            Assume.That(_search.StopReason, Is.EqualTo(SearchStopReason.MateFound));
+
+            using (var cts = new CancellationTokenSource())
+            {
+                cts.Cancel();
+                _search.FindBestMove(QuietPosition(),
+                    new AISearchSettings(maxDepth: 9, TestTimeBudgets.Generous, BetrayalUsage.Full),
+                    cts.Token);
+            }
+
+            Assert.That(_search.LastCompletedDepth, Is.EqualTo(0),
+                "A search that completed no depth at all must report 0, not the depth the previous " +
+                "search on this instance reached.");
+            Assert.That(_search.StopReason, Is.EqualTo(SearchStopReason.Budget),
+                "A search cancelled before it started ran out of time; reporting the previous " +
+                "search's mate would credit it with a result it never produced.");
+        }
+
         [Test]
         public void FindBestMove_FixedPosition_StillAllocatesNoManagedMemory()
         {
-            // The stop-reason field is a plain enum write behind the same guard as every other
-            // counter — recording it must not introduce any boxing/GC on the search hot path.
+            // The stop reason and the depth reached are plain field writes, a couple per search —
+            // recording them must not introduce any boxing/GC on the search hot path. This covers
+            // them on every build, since unlike the counters beside them they are not compiled out
+            // of one.
             BoardState warmup = QuietPosition();
             _search.FindBestMove(warmup, new AISearchSettings(2, TestTimeBudgets.Generous, BetrayalUsage.Full), CancellationToken.None);
 
