@@ -44,8 +44,6 @@ e2e4 e7e5 g1f3 b8c6 f1c4 g8f6 f3g5 d7d5 e4d5 f6d5 d2d4 | avoid=f8e7 best=e5d4 | 
 # ===========================================================================
 d2d4 g8f6 c2c4 e7e5 d4e5 f6g4 c1f4 b8c6 g1f3 f8b4 b1d2 d8e7 | avoid=a2a3 best=e2e3 | Budapest Kieninger Trap in Budapest Gambit
 d2d4 g8f6 c2c4 e7e5 d4e5 f6g4 c1f4 b8c6 g1f3 f8b4 b1d2 d8e7 a2a3 g4e5 | avoid=a3b4 best=f3e5 | Budapest Kieninger Trap in Budapest Gambit - Kieninger Trap
-d2d4 d7d5 c2c4 e7e6 b1c3 g8f6 c1g5 b8d7 e2e3 c7c6 g1f3 d8a5 | avoid=f3d2 best=c4d5 | Cambridge Springs Trap in Queen's Gambit Declined
-d2d4 d7d5 c2c4 e7e6 b1c3 g8f6 c1g5 b8d7 g1f3 c7c6 e2e3 d8a5 | avoid=f3d2 best=c4d5 | Cambridge Springs Trap in Queen's Gambit Declined - Cambridge Springs Defense
 d2d4 d7d5 c2c4 e7e6 b1c3 g8f6 c1g5 b8d7 c4d5 e6d5 | avoid=c3d5 best=e2e3 | Elephant Trap in Queen's Gambit Declined - Rubinstein Line
 d2d4 e7e5 d4e5 b8c6 g1f3 d8e7 c1f4 e7b4 f4d2 b4b2 | avoid=d2c3 best=b1c3 | Englund Gambit Trap in Englund Gambit - Mainline Trap
 d2d4 d7d5 c2c4 e7e5 d4e5 d5d4 | avoid=e2e3 best=g1f3 | Lasker Trap in Albin Countergambit

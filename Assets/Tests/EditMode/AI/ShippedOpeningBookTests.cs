@@ -113,8 +113,10 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             // new lines that only ever transposes into positions the book already knew would add
             // no entries at all while looking like real coverage in the diff. Raise the floor
             // whenever families are added, so that no-op case has to be noticed and explained.
-            const int MinimumEntries = 3506;
-            const int MinimumVariations = 324;
+            // Lowered once, deliberately: a line was removed because it played a known losing move
+            // (see OpeningBookTrapSafetyTests). Coverage is not the only thing that matters.
+            const int MinimumEntries = 3496;
+            const int MinimumVariations = 323;
 
             string sourceText = ReadSourceText();
             var (keys, _, _, _) = OpeningBookCompiler.Compile(sourceText);
