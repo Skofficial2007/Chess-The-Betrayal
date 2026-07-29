@@ -101,7 +101,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             // A ratchet, not a target. Records that only ever restate positions already covered
             // would add nothing while looking like real coverage in the diff, so the floor has to
             // be raised deliberately whenever traps are added.
-            const int MinimumTraps = 23;
+            const int MinimumTraps = 48;
 
             var (keys, _, _, names, _) = TrapBookCompiler.Compile(ReadSourceText());
 

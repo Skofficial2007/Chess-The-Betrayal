@@ -115,8 +115,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             // whenever families are added, so that no-op case has to be noticed and explained.
             // Lowered once, deliberately: a line was removed because it played a known losing move
             // (see OpeningBookTrapSafetyTests). Coverage is not the only thing that matters.
-            const int MinimumEntries = 3567;
-            const int MinimumVariations = 343;
+            const int MinimumEntries = 3792;
+            const int MinimumVariations = 366;
 
             string sourceText = ReadSourceText();
             var (keys, _, _, _) = OpeningBookCompiler.Compile(sourceText);
