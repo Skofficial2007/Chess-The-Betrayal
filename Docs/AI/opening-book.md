@@ -13,7 +13,7 @@ That is the same shape most engines use. Two things follow from it that are wort
 
 - **Move order does not matter.** Any sequence that arrives at a position the book knows gets an
   answer, so a line reached by transposition is free. In practice this book barely benefits: its
-  252 lines produce 2,647 distinct move sequences and only 8 entries are shared by transposition,
+  the lines produce almost as many distinct move sequences, and only a handful of entries are shared by transposition,
   so the mechanism is right but currently earns very little.
 - **There is no partial matching.** One move either side plays that is not in the book and the book
   is silent from then on, unless play happens to transpose back into something it knows.
@@ -55,7 +55,7 @@ and the book narrows quickly after that — see the shape below.
 
 ## What the book contains
 
-252 variations across six families, compiled to 2,887 positions.
+366 variations across six families, compiled to 3,792 positions.
 
 | Family | Openings covered |
 |---|---|
@@ -64,13 +64,24 @@ and the book narrows quickly after that — see the shape below.
 | Semi-Open Games | French, Caro-Kann, Pirc, Modern, Scandinavian, Alekhine |
 | Queen's Gambit | Declined, Accepted, Slav, Semi-Slav, Tarrasch, Chigorin, Albin Counter-Gambit, Baltic |
 | Flank and system openings | English, Réti, King's Indian Attack, London, Trompowsky, Colle and Colle-Zukertort, Stonewall, Bird's, Dutch, Sokolsky, Nimzo-Larsen |
-| Indian Defences | King's Indian, Nimzo-Indian, Queen's Indian, Grünfeld, Benoni, Benko Gambit |
+| Indian Defences | King's Indian, Nimzo-Indian, Queen's Indian, Bogo-Indian, Grünfeld, Benoni, Benko Gambit, Budapest, Catalan |
+
+It also answers **all twenty legal first moves**. Thirteen of them — 1.g3, 1.Nc3, 1.e3, 1.d3 and
+the rest — carry a handful of lines each at weight 1, purely so the AI is not improvising from its
+very first reply as Black. A club player opens 1.g3 far more often than they reach move twenty of a
+Najdorf. They are weight 1 deliberately: a line teaches the engine the position it starts from as
+much as the answers that follow, so at any higher weight the AI would start opening 1.g4 itself.
+
+A final section answers positions the [trap book](trap-book.md) records, playing the sound reply
+rather than the mistake, so the book has an answer ready where a natural move loses.
 
 ### Its shape
 
-Lines run from 8 to 38 plies, median 16. First moves come out at roughly e4 54%, d4 37%, c4 5%, with
-Nf3, f4, b3 and b4 making up the rest — close to how the openings are distributed in real play, and
-reached by accumulating the source weights rather than by hand-tuning them.
+Lines run from 8 to 38 plies, median 16. The first-move mix is roughly half 1.e4 and a little under
+half 1.d4, with 1.c4 a distant third and everything else in the low single digits — close to how the
+openings are distributed in real play, and reached by accumulating the source weights rather than by
+hand-tuning them. It shifts slightly whenever lines are added, so treat the exact split as something
+to measure rather than a figure to quote.
 
 The book is **deep but narrow**. Counting how many replies it knows per position:
 
@@ -84,7 +95,7 @@ The book is **deep but narrow**. Counting how many replies it knows per position
 | 11 | 1.02 |
 | 18 and beyond | 1.00 |
 
-So it is closer to 252 long corridors than to a tree. Past roughly ply 11 it holds a single reply
+So it is closer to a set of long corridors than to a tree. Past roughly ply 11 it holds a single reply
 per position, and past ply 18 that is strictly true. All of its variety lives in the first eight
 plies, and its deep tail only ever fires when an opponent plays the one scripted continuation.
 
@@ -129,6 +140,7 @@ Verified automatically, all in seconds:
 | Openings vary across seeds, and repeat for a fixed seed | `OpeningBookTheoryWalkTests` |
 | Each tier stops at its own allowance, and the allowances form a ladder | `OpeningBookTheoryWalkTests` |
 | No opening leaves the AI in a position it already considers lost | `OpeningBookExitBalanceTests` |
+| No line plays a move the trap book records as losing | `OpeningBookTrapSafetyTests` |
 | A tier keeps its allowance through profile resolution | `AIProfileGuardrailTests` |
 
 The checks above are all about the book's *content*: that it is correct, current, varied, and does
