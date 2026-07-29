@@ -725,3 +725,99 @@ d2d4 g8f6 c2c4 e7e6 g1f3 d7d5 g2g3 d5c4 f1g2 a7a6 e1g1 b8c6 e2e3 c8d7 d1e2 f8d6 
 d2d4 g8f6 c2c4 e7e6 g1f3 d7d5 g2g3 d5c4 f1g2 c7c5 e1g1 b8c6 d1a4 c8d7 a4c4 b7b5 c4d3 c5c4 d3d1 f8e7 | w=9
 # Closed Catalan (Main Line)
 d2d4 g8f6 c2c4 e7e6 g1f3 d7d5 g2g3 f8e7 f1g2 e8g8 e1g1 c7c6 d1c2 b7b6 b1d2 c8b7 e2e4 b8a6 | w=10
+
+# ===========================================================================
+# Irregular Openings (offbeat first moves)
+# ===========================================================================
+#
+# Answers to the thirteen first moves the rest of the book has nothing to say
+# about. A club player opens 1.g3 or 1.Nc3 far more often than they reach move
+# twenty of a Najdorf, and without these the AI is improvising from Black's very
+# first reply.
+#
+# Every line here is weight 1 deliberately. A line teaches the engine the position
+# it starts from as much as the answers that follow, so each of these also adds its
+# first move to what the AI plays as White. At weight 1 the whole group is about
+# one percent of its opening choices, which is the intent — give it an answer, not
+# a new habit. Weighted like the main lines they sit beside, the AI would start
+# opening 1.g4 several times a session.
+
+# --- Benko Opening (1.g3) ---
+# Classical d5/e5 (transposes into the King's Indian Attack)
+g2g3 d7d5 f1g2 e7e5 d2d3 g8f6 g1f3 b8c6 e1g1 f8e7 | w=1
+# Closed Catalan setup (transposes into the Catalan)
+g2g3 d7d5 f1g2 g8f6 g1f3 e7e6 e1g1 f8e7 d2d4 e8g8 | w=1
+# Slav / London setup (transposes into Reti and London structures)
+g2g3 d7d5 f1g2 c7c6 g1f3 c8f5 e1g1 e7e6 d2d3 g8f6 | w=1
+
+# --- Dunst Opening (1.Nc3) ---
+# Central Push
+b1c3 d7d5 e2e4 d5d4 c3e2 e7e5 e2g3 c8e6 g1f3 f7f6 | w=1
+# King's Pawn transposition (transposes into the Four Knights)
+b1c3 e7e5 e2e4 g8f6 g1f3 b8c6 f1b5 f8b4 | w=1
+# Sicilian transposition (transposes into the Accelerated Dragon)
+b1c3 c7c5 e2e4 b8c6 g1f3 g7g6 d2d4 c5d4 f3d4 f8g7 | w=1
+
+# --- Van 't Kruijs Opening (1.e3) ---
+# King's English setup (transposes into the English)
+e2e3 e7e5 c2c4 g8f6 b1c3 d7d5 c4d5 f6d5 | w=1
+# Classical QGD setup (transposes into the Queen's Gambit Declined)
+e2e3 d7d5 d2d4 g8f6 g1f3 e7e6 c2c4 f8e7 | w=1
+# Anglo-Slav setup (transposes into Slav and Reti structures)
+e2e3 d7d5 g1f3 g8f6 c2c4 c7c6 b2b3 c8f5 | w=1
+
+# --- Mieses Opening (1.d3) ---
+# Open Game setup (transposes into the Four Knights)
+d2d3 e7e5 e2e4 g8f6 g1f3 b8c6 f1e2 f8c5 | w=1
+# Reversed KIA setup (transposes into the King's Indian Attack)
+d2d3 d7d5 g1f3 g8f6 g2g3 c7c5 f1g2 b8c6 e1g1 e7e5 | w=1
+# Sicilian KIA setup (transposes into the Closed Sicilian)
+d2d3 c7c5 e2e4 b8c6 g1f3 g7g6 f1e2 f8g7 | w=1
+
+# --- Saragossa Opening (1.c3) ---
+# Exchange Caro setup (transposes into the Exchange Caro-Kann)
+c2c3 e7e5 d2d4 e5d4 c3d4 d7d5 g1f3 g8f6 | w=1
+# London / Slav setup (transposes into London and Slav structures)
+c2c3 d7d5 d2d4 g8f6 c1f4 c7c5 e2e3 b8c6 | w=1
+# Center Counter setup (transposes into a Centre Counter structure)
+c2c3 e7e5 d2d4 e5d4 d1d4 b8c6 d4a4 g8f6 | w=1
+
+# --- Grob's Attack (1.g4) ---
+# Main Line Grob Accepted
+g2g4 d7d5 f1g2 c8g4 c2c4 c7c6 c4d5 c6d5 d1b3 g8f6 | w=1
+# Solid Big-Centre Refusal
+g2g4 e7e5 f1g2 d7d5 h2h3 b8c6 d2d3 c8e6 | w=1
+
+# --- Barnes Opening (1.f3) ---
+# Classical E5 Centre
+f2f3 e7e5 e2e4 g8f6 b1c3 f8c5 g1e2 b8c6 | w=1
+# Classical D5 Centre
+f2f3 d7d5 e2e3 e7e5 d2d4 b8c6 f1b5 e5d4 | w=1
+
+# --- Anderssen's Opening (1.a3) ---
+# Open Game setup (transposes into the Four Knights)
+a2a3 e7e5 e2e4 g8f6 b1c3 b8c6 g1f3 f8c5 | w=1
+# Closed Game setup (transposes into the Queen's Gambit Declined)
+a2a3 d7d5 d2d4 g8f6 g1f3 c7c5 e2e3 b8c6 | w=1
+
+# --- Clemenz Opening (1.h3) ---
+# Classical E5 setup (transposes into a King's Pawn game)
+h2h3 e7e5 e2e4 g8f6 b1c3 b8c6 g1f3 f8c5 | w=1
+# Classical D5 setup (transposes into Queen's Gambit and London structures)
+h2h3 d7d5 d2d4 g8f6 g1f3 c8f5 c2c4 e7e6 | w=1
+
+# --- Desprez Opening (1.h4) ---
+# Solid Big-Centre setup (transposes into a King's Pawn game)
+h2h4 e7e5 e2e4 g8f6 b1c3 b8c6 g1f3 f8c5 | w=1
+
+# --- Ware Opening (1.a4) ---
+# Solid Big-Centre setup (transposes into a King's Pawn game)
+a2a4 e7e5 e2e4 g8f6 b1c3 b8c6 g1f3 f8c5 | w=1
+
+# --- Amar Opening (1.Nh3) ---
+# Solid Big-Centre setup
+g1h3 d7d5 g2g3 e7e5 f1g2 g8f6 e1g1 f8e7 | w=1
+
+# --- Sodium Attack (1.Na3) ---
+# Solid Big-Centre setup (transposes into a Queen's Pawn Slav)
+b1a3 d7d5 d2d4 g8f6 g1f3 e7e6 c2c4 c7c6 | w=1
