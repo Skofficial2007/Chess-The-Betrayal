@@ -1,0 +1,38 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fbba068141f1c6e4db4667e94132cc6e, type: 3}
+  m_Name: TrapBook
+  m_EditorClassIdentifier: ChessTheBetrayal.AI::ChessTheBetrayal.AI.OpeningBook.TrapBookAsset
+  _positionKeys: 970cbc3da1c67b015f425314bb13470270151a484e28920b0e0418f7ceb760108ec362514884112831f9ecda1def023a19c79dfae698176ac7f568486cfc828f038f8e121f60fd997bef0041adc6089e6d9f0d2a909e4aa3c92cbec1d563d5b5784493235acbc2be48a1802daccad2cb576dee30a48502ceb39141ff7def57d03c05cf6b096cdceaf2f2698126e6a0f71f4347e8bef28af9
+  _blunderMoves: 50060000cb040000080400002d070000150900000c050000f30a0000da0800008b040000d5060000e700000015090000cf0500005b040000cf050000d5020000ed080000c3060000660d0000
+  _bestMoves: 15090000430500000c050000f3080000d506000046050000b30a00000c05000081040000c10200002a090000810400008a04000040000000c5000000da0800002a0800008a0400005a0d0000
+  _names:
+  - Budapest Kieninger Trap in Budapest Gambit - Kieninger Trap
+  - "W\xFCrzburger Trap in Vienna Game - Vienna Gambit"
+  - Budapest Kieninger Trap in Budapest Gambit
+  - Monticelli Trap in Bogo-Indian Defense
+  - Blackburne Shilling Trap in Italian Game - Kostic Gambit
+  - Lasker Trap in Albin Countergambit
+  - Rigel Trap in Petroff Defence - Kostic Trap Line
+  - Elephant Trap in Queen's Gambit Declined - Rubinstein Line
+  - Englund Gambit Trap in Englund Gambit - Mainline Trap
+  - Tarrasch Trap in Ruy Lopez - Open Variation
+  - "L\xE9gal Trap in Italian Game / Bishop's Opening"
+  - Mortimer Trap in Ruy Lopez - Mortimer Defense
+  - Fishing Pole Trap in Ruy Lopez / Berlin Defence / Open Games
+  - Najdorf Poisoned Pawn Trap in Sicilian Defense
+  - Siberian Trap in Smith-Morra Gambit Accepted
+  - Cambridge Springs Trap in Queen's Gambit Declined
+  - Fried Liver / Fegatello Trap in Italian Game - Two Knights Defence
+  - Noah's Ark Trap in Ruy Lopez - Modern Steinitz Defence
+  - Traxler Counterattack Trap in Italian Game - Two Knights Defence (Traxler)
+  _schemeVersion: 5400580076393095345
