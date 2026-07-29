@@ -211,3 +211,4 @@ desktop.ini
 crashlytics-build.properties
 # Test result XML written by a command-line test run
 /TestResults-*.xml
+Docs/Benchmarks/baseline.proposed.json
