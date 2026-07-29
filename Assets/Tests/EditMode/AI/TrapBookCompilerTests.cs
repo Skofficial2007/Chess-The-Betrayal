@@ -117,16 +117,36 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
-        public void Compile_TwoRecordsDisagreeingOnAPosition_ThrowsNamingBoth()
+        public void Compile_TwoRecordsDisagreeingOnWhichMoveLoses_ThrowsNamingBoth()
         {
             // Whichever was read last would otherwise win silently.
             string source = LegalTrap + "\n" +
-                "e2e4 e7e5 g1f3 d7d6 f1c4 b8c6 b1c3 c8g4 h2h3 g4h5 f3e5 | avoid=h5d1 best=g8f6 | Rival Trap";
+                "e2e4 e7e5 g1f3 d7d6 f1c4 b8c6 b1c3 c8g4 h2h3 g4h5 f3e5 | avoid=g8f6 best=c6e5 | Rival Trap";
 
             var ex = Assert.Throws<TrapBookParseException>(() => TrapBookCompiler.Compile(source));
 
             Assert.That(ex.Message, Does.Contain("Rival Trap"));
             Assert.That(ex.Message, Does.Contain("Legal Trap"));
+            Assert.That(ex.Message, Does.Contain("which move loses"));
+        }
+
+        [Test]
+        public void Compile_TwoRecordsNamingDifferentGoodReplies_MergeRatherThanFail()
+        {
+            // A position with one losing move usually has several sound replies, so two sources
+            // naming different ones are both right. Two separate research runs did exactly this
+            // for the Mortimer and the Fishing Pole, agreeing on the mistake and differing on the
+            // developing move to prefer instead.
+            string source = LegalTrap + "\n" +
+                "e2e4 e7e5 g1f3 d7d6 f1c4 b8c6 b1c3 c8g4 h2h3 g4h5 f3e5 | avoid=h5d1 best=g8f6 | Same Trap, Other Source";
+
+            var (keys, _, bests, names, _) = TrapBookCompiler.Compile(source);
+
+            Assert.That(keys.Length, Is.EqualTo(1));
+            Assert.That(names[0], Is.EqualTo("Legal Trap"));
+
+            var (_, _, expectedBests, _, _) = TrapBookCompiler.Compile(LegalTrap);
+            Assert.That(bests[0], Is.EqualTo(expectedBests[0]), "The first record's reply should win.");
         }
 
         [Test]

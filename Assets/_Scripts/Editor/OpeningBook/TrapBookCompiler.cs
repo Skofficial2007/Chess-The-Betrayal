@@ -43,15 +43,21 @@ namespace ChessTheBetrayal.EditorTools.OpeningBook
                 if (byPosition.TryGetValue(key, out var existing))
                 {
                     // The same position can legitimately be reached by two records — the Fried Liver
-                    // and the Lolli reach one identical position, for instance. Agreeing records
-                    // merge and keep the first name. Disagreeing ones are a contradiction in the
-                    // source that would otherwise resolve by whichever happened to be read last.
-                    if (existing.Blunder != blunder || existing.Best != best)
+                    // and the Lolli reach one identical position, for instance, and two records can
+                    // arrive by different move orders that transpose.
+                    //
+                    // Which move LOSES is the fact a trap records, so two records disagreeing about
+                    // that contradict each other and would otherwise resolve by whichever happened
+                    // to be read last. Which move to play INSTEAD is not unique — a position with one
+                    // losing move usually has several sound replies, and two sources naming
+                    // different ones are both right. So that difference merges, keeping the first,
+                    // rather than failing a build over a disagreement that isn't one.
+                    if (existing.Blunder != blunder)
                     {
                         throw new TrapBookParseException(
                             sourceLineNumber,
                             $"'{line.Name}' describes the same position as '{existing.Name}' on line " +
-                            $"{existing.Line} but disagrees about which move loses or which to play instead.");
+                            $"{existing.Line} but disagrees about which move loses.");
                     }
 
                     continue;
