@@ -855,3 +855,62 @@ g1h3 d7d5 g2g3 e7e5 f1g2 g8f6 e1g1 f8e7 | w=1
 # --- Sodium Attack (1.Na3) ---
 # Solid Big-Centre setup (transposes into a Queen's Pawn Slav)
 b1a3 d7d5 d2d4 g8f6 g1f3 e7e6 c2c4 c7c6 | w=1
+
+# ===========================================================================
+# Known trap positions, answered correctly
+# ===========================================================================
+#
+# One line per position the trap book records, ending on the sound reply rather
+# than the mistake. These exist so the book has an answer ready where a natural
+# move loses: without them the AI leaves book exactly where the position is
+# sharpest and has to find the move for itself.
+#
+# Weight 2 on purpose. They are correct play, not main-line theory, and several
+# run through gambit and trap bait that should stay rare in the AI's own
+# repertoire. A companion test refuses to let the book ever play a move the trap
+# book records as losing.
+#
+# Traps nest: some are only reachable by first playing a move another trap says
+# loses. Those have no line here, because a book that steers into the position
+# has already made the mistake -- the trap book still records them, so the AI
+# knows what not to play if a game arrives there anyway.
+# Blackburne Shilling Trap in Italian Game - Kostic Gambit
+e2e4 e7e5 g1f3 b8c6 f1c4 c6d4 f3d4 | w=2
+# Fishing Pole Trap in Ruy Lopez / Berlin Defence / Open Games
+e2e4 e7e5 g1f3 b8c6 f1b5 g8f6 e1g1 f6g4 c2c3 | w=2
+# Fried Liver / Fegatello Trap in Italian Game - Two Knights Defence
+e2e4 e7e5 g1f3 b8c6 f1c4 g8f6 f3g5 d7d5 e4d5 c6a5 | w=2
+# Légal Trap in Italian Game / Bishop's Opening
+e2e4 e7e5 g1f3 d7d6 f1c4 b8c6 b1c3 c8g4 h2h3 g4h5 f3e5 c6e5 | w=2
+# Mortimer Trap in Ruy Lopez - Mortimer Defense
+e2e4 e7e5 g1f3 b8c6 f1b5 g8f6 d2d3 c6e7 b1c3 | w=2
+# Noah's Ark Trap in Ruy Lopez - Modern Steinitz Defence
+e2e4 e7e5 g1f3 b8c6 f1b5 a7a6 b5a4 d7d6 d2d4 b7b5 a4b3 c6d4 f3d4 e5d4 c2c3 | w=2
+# Rigel Trap in Petroff Defence - Kostic Trap Line
+e2e4 e7e5 g1f3 g8f6 f3e5 b8c6 e5c6 d7c6 | w=2
+# Tarrasch Trap in Ruy Lopez - Open Variation
+e2e4 e7e5 g1f3 b8c6 f1b5 a7a6 b5a4 g8f6 e1g1 f6e4 d2d4 b7b5 a4b3 d7d5 d4e5 c8e6 c2c3 f8e7 f1e1 e8g8 b1d2 | w=2
+# Traxler Counterattack Trap in Italian Game - Two Knights Defence (Traxler)
+e2e4 e7e5 g1f3 b8c6 f1c4 g8f6 f3g5 f8c5 c4f7 | w=2
+# Würzburger Trap in Vienna Game - Vienna Gambit
+e2e4 e7e5 b1c3 g8f6 f2f4 d7d5 f4e5 f6e4 d1f3 | w=2
+# Budapest Kieninger Trap in Budapest Gambit
+d2d4 g8f6 c2c4 e7e5 d4e5 f6g4 c1f4 b8c6 g1f3 f8b4 b1d2 d8e7 e2e3 | w=2
+# Elephant Trap in Queen's Gambit Declined - Rubinstein Line
+d2d4 d7d5 c2c4 e7e6 b1c3 g8f6 c1g5 b8d7 c4d5 e6d5 e2e3 | w=2
+# Englund Gambit Trap in Englund Gambit - Mainline Trap
+d2d4 e7e5 d4e5 b8c6 g1f3 d8e7 c1f4 e7b4 f4d2 b4b2 b1c3 | w=2
+# Lasker Trap in Albin Countergambit
+d2d4 d7d5 c2c4 e7e5 d4e5 d5d4 g1f3 | w=2
+# Monticelli Trap in Bogo-Indian Defense
+d2d4 g8f6 c2c4 e7e6 g1f3 f8b4 c1d2 b4d2 d1d2 b7b6 g2g3 c8b7 f1g2 e8g8 b1c3 d7d5 | w=2
+# Najdorf Poisoned Pawn Trap in Sicilian Defense
+e2e4 c7c5 g1f3 d7d6 d2d4 c5d4 f3d4 g8f6 b1c3 a7a6 c1g5 e7e6 f2f4 d8b6 d1d2 b6b2 a1b1 | w=2
+# Siberian Trap in Smith-Morra Gambit Accepted
+e2e4 c7c5 d2d4 c5d4 c2c3 d4c3 b1c3 b8c6 g1f3 e7e6 f1c4 g8f6 e1g1 d8c7 d1e2 f6g4 f1d1 | w=2
+# Alapin Trap in Sicilian Defence - Alapin Variation
+e2e4 c7c5 c2c3 d7d5 e4d5 d8d5 d2d4 b8c6 g1f3 c8g4 f1e2 c5d4 c3d4 g4f3 e2f3 e7e6 | w=2
+# Magnus Smith Trap in Sicilian Defence - Classical Variation
+e2e4 c7c5 g1f3 d7d6 d2d4 c5d4 f3d4 g8f6 b1c3 b8c6 f1c4 g7g6 d4c6 b7c6 e4e5 f6g4 | w=2
+# Najdorf Poisoned Pawn Trap in Sicilian Najdorf - Na4 Queen Trap
+e2e4 c7c5 g1f3 d7d6 d2d4 c5d4 f3d4 g8f6 b1c3 a7a6 c1g5 e7e6 f2f4 d8b6 a2a3 b8c6 | w=2
