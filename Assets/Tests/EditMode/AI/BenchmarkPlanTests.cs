@@ -88,6 +88,65 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 "stalls short of its own total.");
         }
 
+        /// <summary>
+        /// The cells that actually run and the denominator the progress line counts against come
+        /// from two different pieces of code, and a run whose progress stops short of its own total
+        /// (or reaches it early) reads as a broken run. Checked on both plans, since only one of
+        /// them asks for a main-thread control on every position.
+        /// </summary>
+        [Test]
+        public void Cells_YieldExactlyAsManyCellsAsTheProgressDenominatorPromises(
+            [Values("tester", "exhaustive")] string planName)
+        {
+            BenchmarkPlan plan = planName == "tester" ? BenchmarkPlan.Tester() : BenchmarkPlan.Exhaustive();
+
+            int yielded = 0;
+            foreach (BenchmarkCell _ in plan.Cells()) yielded++;
+
+            Assert.That(yielded, Is.EqualTo(plan.TotalCells));
+        }
+
+        [Test]
+        public void Cells_FinishTheWholeWorkerPassBeforeStartingTheMainThreadControl()
+        {
+            var plan = BenchmarkPlan.Tester();
+
+            bool seenControlCell = false;
+            foreach (BenchmarkCell cell in plan.Cells())
+            {
+                if (!cell.OnWorkerThread) seenControlCell = true;
+                else
+                    Assert.That(seenControlCell, Is.False,
+                        "A worker cell after the control has started means an interrupted run gets " +
+                        "an arbitrary mix of the two rather than a complete worker pass.");
+            }
+
+            Assert.That(seenControlCell, "The control pass must actually run — it is the only thing " +
+                "that shows whether a device schedules a worker differently from the frame thread.");
+        }
+
+        [Test]
+        public void Cells_SweepEveryTierOnEveryPositionTheyCover()
+        {
+            var plan = BenchmarkPlan.Tester();
+
+            foreach (int positionIndex in plan.PositionIndices)
+            {
+                foreach (AIProfile profile in AIProfileTable.BuiltIn)
+                {
+                    int matches = 0;
+                    foreach (BenchmarkCell cell in plan.Cells())
+                    {
+                        if (cell.OnWorkerThread && cell.PositionIndex == positionIndex && cell.ProfileId == profile.Id)
+                            matches++;
+                    }
+
+                    Assert.That(matches, Is.EqualTo(plan.RepeatCount),
+                        $"Position {positionIndex} should be searched by '{profile.Id}' once per repeat.");
+                }
+            }
+        }
+
         [Test]
         public void ExhaustivePlan_IsFarLongerThanTheTesterPlan_AndIsNotSomethingToHandToATester()
         {

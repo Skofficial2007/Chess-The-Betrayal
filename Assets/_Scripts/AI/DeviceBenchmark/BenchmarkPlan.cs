@@ -77,7 +77,37 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         /// <summary>Worker-thread cells plus main-thread control cells.</summary>
         public int TotalCells =>
             (PositionIndices.Count * AIProfileTable.BuiltIn.Count * RepeatCount)
-            + (MainThreadControlPositions * AIProfileTable.BuiltIn.Count * MainThreadControlRepeats);
+            + (ControlPositionCount * AIProfileTable.BuiltIn.Count * MainThreadControlRepeats);
+
+        /// <summary>
+        /// Every cell this run covers, in the order it runs them: the whole worker-thread pass
+        /// first, then the smaller main-thread control. Position outermost, tier next, repeat
+        /// innermost, so a run interrupted partway through still has complete cross-tier coverage
+        /// on however many positions finished rather than one tier finishing everything.
+        ///
+        /// Exists so the on-device screen and the desktop recording harness cannot describe a run
+        /// differently — they walk this, rather than each writing out the same three nested loops.
+        /// Yields the profile's id rather than the profile itself because the caller is the one
+        /// that resolves it through the provider a real match uses.
+        /// </summary>
+        public IEnumerable<BenchmarkCell> Cells()
+        {
+            foreach (int positionIndex in PositionIndices)
+                foreach (AIProfile profile in AIProfileTable.BuiltIn)
+                    for (int repeatIndex = 0; repeatIndex < RepeatCount; repeatIndex++)
+                        yield return new BenchmarkCell(positionIndex, profile.Id, repeatIndex, onWorkerThread: true);
+
+            for (int i = 0; i < ControlPositionCount; i++)
+                foreach (AIProfile profile in AIProfileTable.BuiltIn)
+                    for (int repeatIndex = 0; repeatIndex < MainThreadControlRepeats; repeatIndex++)
+                        yield return new BenchmarkCell(PositionIndices[i], profile.Id, repeatIndex, onWorkerThread: false);
+        }
+
+        // Asking for more control positions than the run actually covers would count cells that
+        // can never happen, so the requested number is capped at what is there. Both the cell
+        // count and the duration estimate read this rather than the raw field, so neither can
+        // disagree with the cells that actually run.
+        private int ControlPositionCount => Math.Min(MainThreadControlPositions, PositionIndices.Count);
 
         /// <summary>
         /// The longest this run can take on any device — every search burning its whole budget and
@@ -96,7 +126,7 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
                 int searchesPerCell = IncludePlayForward ? 1 + MobileSearchBenchmarkRunner.DefaultPlyCount : 1;
 
                 long workerMs = (long)PositionIndices.Count * RepeatCount * budgetSumMs * searchesPerCell;
-                long controlMs = (long)MainThreadControlPositions * MainThreadControlRepeats * budgetSumMs * searchesPerCell;
+                long controlMs = (long)ControlPositionCount * MainThreadControlRepeats * budgetSumMs * searchesPerCell;
 
                 return TimeSpan.FromMilliseconds(workerMs + controlMs);
             }

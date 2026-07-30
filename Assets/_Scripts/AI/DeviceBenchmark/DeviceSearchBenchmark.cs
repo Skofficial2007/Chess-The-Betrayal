@@ -9,63 +9,123 @@ using Debug = UnityEngine.Debug;
 namespace ChessTheBetrayal.AI.DeviceBenchmark
 {
     /// <summary>
-    /// TEMPORARY diagnostic tool, not shipped gameplay code. Drop this on any GameObject in an
-    /// empty scene and press Play (or build to a device) to time every built-in AIProfile tier
-    /// against the EditMode search benchmarks' desktop numbers. Purely a presentation shell around
-    /// MobileSearchBenchmarkRunner (all actual benchmark logic lives there, Unity-free) — this
-    /// class owns the coroutine pacing, every read of a Unity-only API (device info, battery,
-    /// build config, keeping the screen awake), and assembling those into the one BenchmarkReport
-    /// that the screen, Debug.Log/adb logcat, and eventually the clipboard and an exported file
-    /// all render identically. Delete this whole folder once real device throughput has been
-    /// measured across enough devices and a mobile-tier perf plan exists.
+    /// TEMPORARY diagnostic tool, not shipped gameplay code. Runs every built-in AIProfile tier
+    /// against a fixed set of positions and reports how long each search took and how deep it got,
+    /// so the per-move promise can be checked on real hardware instead of only on a desktop.
+    ///
+    /// Owns the run and nothing else: the pacing, every read of a Unity-only API (device info,
+    /// battery, build config, keeping the screen awake), and assembling those into the one
+    /// BenchmarkReport that the screen, Debug.Log/adb logcat and an exported file all render
+    /// identically. It draws nothing itself — whatever displays the run reads the state below and
+    /// asks for a rendered report. The benchmark logic proper lives in MobileSearchBenchmarkRunner,
+    /// which has no engine dependency at all.
+    ///
+    /// Nothing starts on its own. A run begins when something calls StartRun, because a benchmark
+    /// that starts the instant the scene loads measures a phone that is still settling after the
+    /// app launched, and cannot be repeated without relaunching.
+    ///
+    /// Delete this whole folder once real device throughput has been measured across enough devices
+    /// and a mobile-tier perf plan exists.
     /// </summary>
     public class DeviceSearchBenchmark : MonoBehaviour
     {
-        // A worker-thread cell can call EmitOwnLine (via HandleLine) while OnGUI reads the same
-        // report on the main thread every frame -- BenchmarkReport keeps no lock of its own (so it
-        // stays trivially testable), so every mutation and every render of it goes through this.
+        // A worker-thread cell can call EmitOwnLine (via HandleLine) while a display renders the
+        // same report on the main thread -- BenchmarkReport keeps no lock of its own (so it stays
+        // trivially testable), so every mutation and every render of it goes through this.
         private readonly object _reportLock = new object();
         private readonly Stopwatch _stopwatch = new Stopwatch();
-        private readonly MobileSearchBenchmarkRunner _runner = new MobileSearchBenchmarkRunner();
         private readonly IAIProfileProvider _profileProvider = new AIProfileTableProvider();
+
+        // Both are rebuilt for every run rather than created once. The runner accumulates the
+        // per-tier samples its summary is built from, so a second run against the one that already
+        // ran would average two runs together and report the blend as though it were one reading.
+        private MobileSearchBenchmarkRunner _runner;
         private BenchmarkReport _report;
-        private Vector2 _scrollPosition;
 
-        private void OnEnable() => _runner.OnLine += HandleLine;
-        private void OnDisable() => _runner.OnLine -= HandleLine;
+        /// <summary>True from the moment a run is accepted until its last cell has finished.</summary>
+        public bool IsRunning { get; private set; }
 
-        private void Start()
+        /// <summary>True once a run has finished every planned cell. Stays true until the next run
+        /// starts, so whatever offers the finished report can keep offering it.</summary>
+        public bool IsComplete { get; private set; }
+
+        /// <summary>How long the current (or most recent) run has been going.</summary>
+        public TimeSpan Elapsed => _stopwatch.Elapsed;
+
+        /// <summary>The longest a run can take, answerable before one starts — worth showing to
+        /// whoever is about to sit through it.</summary>
+        public TimeSpan EstimatedWorstCase => BuildPlan().EstimatedWorstCase;
+
+        /// <summary>Changes whenever the report does. Cheap to poll; a display can compare it
+        /// against the last value it drew and skip re-rendering when nothing has happened.</summary>
+        public int ReportRevision
         {
-            // A full pass over the matrix can run for many minutes; without this the phone would
-            // lock its screen partway through and the run would keep going against a sleeping
-            // display, invisible to whoever is watching it.
-            Screen.sleepTimeout = SleepTimeout.NeverSleep;
-            StartCoroutine(RunAll());
+            get { lock (_reportLock) { return _report?.Revision ?? 0; } }
         }
 
         /// <summary>
-        /// A coroutine (not a synchronous call from Start) purely so the report actually renders as
-        /// results arrive, instead of the app looking hung for the full duration of the run — the
-        /// slower tiers (extreme/impossible) can plausibly take several seconds each on real mobile
-        /// hardware, and a silent frozen screen is indistinguishable from a crash.
+        /// The report as text, or null before the first run has produced one. maxDetailLines caps
+        /// how much of the scrolling log comes back — leave it at the default for a file or a
+        /// clipboard copy, and pass a bound for a screen, which has a limit on how much text it can
+        /// actually draw.
+        /// </summary>
+        public string RenderReport(ReportStyle style = ReportStyle.Plain, int maxDetailLines = int.MaxValue)
+        {
+            lock (_reportLock)
+            {
+                return _report?.Render(_stopwatch.Elapsed, style, maxDetailLines);
+            }
+        }
+
+        /// <summary>
+        /// Begins a run, or returns false if one is already going. Every press starts genuinely
+        /// fresh — new runner, new report, new run id — so two readings from the same device never
+        /// get blended into one.
+        /// </summary>
+        public bool StartRun()
+        {
+            if (IsRunning) return false;
+
+            IsRunning = true;
+            IsComplete = false;
+
+            // A full pass runs for minutes; without this the phone would lock its screen partway
+            // through and the run would keep going against a sleeping display.
+            Screen.sleepTimeout = SleepTimeout.NeverSleep;
+
+            StartCoroutine(RunAll());
+            return true;
+        }
+
+        private void OnDisable()
+        {
+            // The coroutine dies with the component, so a run interrupted this way stops here.
+            if (_runner != null) _runner.OnLine -= HandleLine;
+            IsRunning = false;
+            Screen.sleepTimeout = SleepTimeout.SystemSetting;
+        }
+
+        private static BenchmarkPlan BuildPlan() => BenchmarkPlan.Tester();
+
+        /// <summary>
+        /// A coroutine (not a straight synchronous call) purely so the report actually renders as
+        /// results arrive, instead of the app looking hung for the full duration of the run — a
+        /// silent frozen screen is indistinguishable from a crash.
         ///
-        /// Every cell runs twice: once dispatched onto a thread-pool worker the same way
-        /// AsyncAIAgent actually searches, and once directly on this coroutine's own thread (the
-        /// main thread) as a control, so a difference in scheduling/priority/contention on a given
-        /// device's cores shows up as a number instead of staying an assumption. The worker-thread
-        /// pass is awaited by polling Task.IsCompleted across yields rather than blocking, so the
-        /// main thread keeps rendering while it runs.
-        ///
-        /// Position outermost, tier next, repeat innermost: if the run is interrupted partway
-        /// through, whatever positions finished have complete coverage across every tier and both
-        /// thread contexts, rather than one combination finishing everything while the rest never
-        /// started.
+        /// Most cells are dispatched onto a thread-pool worker the same way AsyncAIAgent actually
+        /// searches; a few run directly on this coroutine's own thread as a control, so a
+        /// difference in scheduling, priority or contention across a given device's cores shows up
+        /// as a number instead of staying an assumption. The worker cells are awaited by polling
+        /// Task.IsCompleted across yields rather than blocking, so the main thread keeps rendering
+        /// while they run.
         /// </summary>
         private IEnumerator RunAll()
         {
-            BenchmarkPlan plan = BenchmarkPlan.Tester();
-            string runId = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+            BenchmarkPlan plan = BuildPlan();
+            _runner = new MobileSearchBenchmarkRunner();
+            _runner.OnLine += HandleLine;
 
+            string runId = DateTime.Now.ToString("yyyyMMdd-HHmmss");
             lock (_reportLock)
             {
                 _report = new BenchmarkReport(runId, plan.TotalCells);
@@ -77,47 +137,28 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             EmitOwnLine("Device search benchmark starting...");
             yield return null;
 
-            // The worker pass is the real measurement: production always searches on a thread-pool
-            // worker, never on the thread driving the frame.
-            foreach (int positionIndex in plan.PositionIndices)
+            foreach (BenchmarkCell cell in plan.Cells())
             {
-                foreach (AIProfile row in AIProfileTable.BuiltIn)
+                // Resolved through the same provider a real match uses, rather than the raw table
+                // row, so a future guardrail clamp applies here exactly as it would in a real game
+                // instead of silently measuring an unclamped profile.
+                AIProfile profile = _profileProvider.Resolve(cell.ProfileId);
+
+                if (cell.OnWorkerThread)
                 {
-                    // Resolved through the same provider a real match uses, rather than the raw
-                    // table row, so a future guardrail clamp applies here exactly as it would in a
-                    // real game instead of silently measuring an unclamped profile.
-                    AIProfile profile = _profileProvider.Resolve(row.Id);
-
-                    for (int repeatIndex = 0; repeatIndex < plan.RepeatCount; repeatIndex++)
-                    {
-                        Task workerCell = _runner.RunCellOnWorkerThread(
-                            positionIndex, profile, repeatIndex, plan.IncludePlayForward);
-                        while (!workerCell.IsCompleted) yield return null;
-                        if (workerCell.IsFaulted)
-                            Debug.LogException(workerCell.Exception);
-
-                        lock (_reportLock) { _report.RecordCellCompleted(); }
-                        yield return null;
-                    }
+                    Task workerCell = _runner.RunCellOnWorkerThread(
+                        cell.PositionIndex, profile, cell.RepeatIndex, plan.IncludePlayForward);
+                    while (!workerCell.IsCompleted) yield return null;
+                    if (workerCell.IsFaulted)
+                        Debug.LogException(workerCell.Exception);
                 }
-            }
-
-            // A small control on the calling thread, purely to show whether this device's scheduler
-            // treats a worker differently from the frame thread.
-            for (int i = 0; i < plan.MainThreadControlPositions && i < plan.PositionIndices.Count; i++)
-            {
-                foreach (AIProfile row in AIProfileTable.BuiltIn)
+                else
                 {
-                    AIProfile profile = _profileProvider.Resolve(row.Id);
-
-                    for (int repeatIndex = 0; repeatIndex < plan.MainThreadControlRepeats; repeatIndex++)
-                    {
-                        _runner.RunCell(plan.PositionIndices[i], profile, repeatIndex, plan.IncludePlayForward);
-
-                        lock (_reportLock) { _report.RecordCellCompleted(); }
-                        yield return null;
-                    }
+                    _runner.RunCell(cell.PositionIndex, profile, cell.RepeatIndex, plan.IncludePlayForward);
                 }
+
+                lock (_reportLock) { _report.RecordCellCompleted(); }
+                yield return null;
             }
 
             IReadOnlyList<string> summaryLines = _runner.EmitTierSummaries();
@@ -129,10 +170,15 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             }
 
             EmitOwnLine(MobileSearchBenchmarkRunner.CompletionMarker);
+
+            _runner.OnLine -= HandleLine;
+            Screen.sleepTimeout = SleepTimeout.SystemSetting;
+            IsComplete = true;
+            IsRunning = false;
         }
 
-        // May run on a thread-pool worker (the worker-thread pass) or the main thread (the control
-        // pass and every self-emitted line below) -- Debug.Log itself tolerates either, but the
+        // May run on a thread-pool worker (the worker-thread cells) or the main thread (the control
+        // cells and every self-emitted line below) -- Debug.Log itself tolerates either, but the
         // report does not, hence the lock.
         private void HandleLine(string line) => EmitOwnLine(line);
 
@@ -140,28 +186,6 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         {
             lock (_reportLock) { _report.AppendDetailLine(line); }
             Debug.Log($"[DeviceSearchBenchmark] {line}");
-        }
-
-        private void OnGUI()
-        {
-            GUI.skin.label.fontSize = Mathf.Max(24, Screen.width / 40);
-
-            GUILayout.BeginArea(new Rect(20, 20, Screen.width - 40, Screen.height - 40));
-
-            string reportText;
-            lock (_reportLock)
-            {
-                reportText = _report != null ? _report.Render(_stopwatch.Elapsed) : "Waiting to start...";
-            }
-
-            // Scrollable so the full report stays reachable by finger-drag even once it runs past
-            // one screen — a screenshot alone can't capture output that has scrolled off, but a
-            // scroll view at least lets a human read (or a screen-recording capture) all of it.
-            _scrollPosition = GUILayout.BeginScrollView(_scrollPosition, GUILayout.ExpandHeight(true));
-            GUILayout.Label(reportText, GUI.skin.label);
-            GUILayout.EndScrollView();
-
-            GUILayout.EndArea();
         }
 
         /// <summary>
@@ -175,7 +199,6 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         /// </summary>
         private static List<string> BuildDeviceInfoLines() => new List<string>
         {
-            "--- Device info ---",
             $"Device model: {SystemInfo.deviceModel}",
             $"Device name: {SystemInfo.deviceName}",
             $"Device unique ID: {SystemInfo.deviceUniqueIdentifier}",
@@ -207,5 +230,10 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
 
         private static string BuildBatteryLine(string when) =>
             $"Battery ({when}): {SystemInfo.batteryLevel * 100f:F0}% ({SystemInfo.batteryStatus})";
+
+        /// <summary>The device model, for anything that needs to name this device outside the
+        /// report — a filename, say. Kept here because this is the one place in the feature that
+        /// legitimately touches Unity APIs.</summary>
+        public static string DeviceModel => SystemInfo.deviceModel;
     }
 }

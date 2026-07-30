@@ -1,4 +1,5 @@
 using System;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
 using ChessTheBetrayal.AI.DeviceBenchmark;
 
@@ -115,6 +116,129 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
 
             Assert.That(first, Is.LessThan(second));
             Assert.That(second, Is.LessThan(third));
+        }
+
+        /// <summary>
+        /// The whole reason styling is a parameter rather than a second render method: a report
+        /// drawn on screen and the same report saved to a file must be the same report. Strip the
+        /// markup back off the styled one and it has to match the plain one character for
+        /// character — if it doesn't, the two sinks have started disagreeing about content.
+        /// </summary>
+        [Test]
+        public void Render_InRichText_IsTheSameReportAsPlain_OnceTheMarkupIsStripped()
+        {
+            BenchmarkReport report = BuildPopulatedReport();
+
+            string plain = report.Render(TimeSpan.FromSeconds(90));
+            string rich = report.Render(TimeSpan.FromSeconds(90), ReportStyle.RichText);
+
+            Assert.That(Regex.Replace(rich, "<[^>]+>", ""), Is.EqualTo(plain));
+        }
+
+        [Test]
+        public void Render_InRichText_BoldsTheSectionTitles_AndLeavesResultRowsAlone()
+        {
+            BenchmarkReport report = BuildPopulatedReport();
+
+            string rich = report.Render(TimeSpan.Zero, ReportStyle.RichText);
+
+            Assert.That(rich, Does.Contain("<b>--- Summary ---</b>"));
+            Assert.That(rich, Does.Contain("<b>--- Detail ---</b>"));
+            Assert.That(rich, Does.Contain("[easy worker-thread] cell one"),
+                "A result row carries no markup of its own.");
+        }
+
+        [Test]
+        public void Render_ByDefault_ShowsEveryDetailLineWithNoTrimNote()
+        {
+            var report = new BenchmarkReport("run", totalCells: 1);
+            report.AppendDetailLine("oldest");
+            report.AppendDetailLine("newest");
+
+            string text = report.Render(TimeSpan.Zero);
+
+            Assert.That(text, Does.Contain("oldest"));
+            Assert.That(text, Does.Contain("newest"));
+            Assert.That(text, Does.Not.Contain("showing the last"));
+        }
+
+        /// <summary>
+        /// A screen can only draw so much text before it silently stops, so the on-screen copy is
+        /// capped. It must drop the OLDEST lines (the newest are what someone watching a run cares
+        /// about) and it must say on the page that it did, otherwise a trimmed log is
+        /// indistinguishable from a run that never produced those lines.
+        /// </summary>
+        [Test]
+        public void Render_WithADetailCap_KeepsTheNewestLines_AndSaysHowManyItHid()
+        {
+            var report = new BenchmarkReport("run", totalCells: 1);
+            report.AppendDetailLine("oldest");
+            report.AppendDetailLine("middle");
+            report.AppendDetailLine("newest");
+
+            string text = report.Render(TimeSpan.Zero, ReportStyle.Plain, maxDetailLines: 2);
+
+            Assert.That(text, Does.Not.Contain("oldest"));
+            Assert.That(text, Does.Contain("middle"));
+            Assert.That(text, Does.Contain("newest"));
+            Assert.That(text, Does.Contain("showing the last 2 of 3 lines"));
+        }
+
+        [Test]
+        public void Render_WithADetailCap_StillShowsTheHeaderStatusAndSummaryInFull()
+        {
+            var report = new BenchmarkReport("run", totalCells: 3);
+            report.AppendHeaderLine("Device model: TestPhone");
+            report.SetSummaryLines(new[] { "[easy main-thread] 3 samples: ...", "[easy worker-thread] 3 samples: ..." });
+            report.AppendDetailLine("dropped");
+            report.AppendDetailLine("kept");
+
+            string text = report.Render(TimeSpan.Zero, ReportStyle.Plain, maxDetailLines: 1);
+
+            Assert.That(text, Does.Contain("Device model: TestPhone"));
+            Assert.That(text, Does.Contain("STATUS:"));
+            Assert.That(text, Does.Contain("[easy main-thread] 3 samples"));
+            Assert.That(text, Does.Contain("[easy worker-thread] 3 samples"),
+                "Trimming must only ever touch the scrolling detail, never the summary someone is " +
+                "meant to read off the screen.");
+        }
+
+        [Test]
+        public void Revision_ChangesOnEveryKindOfUpdate_SoADisplayCanTellWhenThereIsSomethingNewToDraw()
+        {
+            var report = new BenchmarkReport("run", totalCells: 1);
+            int start = report.Revision;
+
+            report.AppendHeaderLine("Device model: TestPhone");
+            Assert.That(report.Revision, Is.GreaterThan(start), "A new header line is a change.");
+
+            int afterHeader = report.Revision;
+            report.AppendDetailLine("a result");
+            Assert.That(report.Revision, Is.GreaterThan(afterHeader), "A new detail line is a change.");
+
+            int afterDetail = report.Revision;
+            report.RecordCellCompleted();
+            Assert.That(report.Revision, Is.GreaterThan(afterDetail), "Progress moving is a change.");
+
+            int afterProgress = report.Revision;
+            report.SetSummaryLines(new[] { "[easy main-thread] 1 samples: ..." });
+            Assert.That(report.Revision, Is.GreaterThan(afterProgress), "A summary arriving is a change.");
+
+            int afterSummary = report.Revision;
+            report.MarkComplete();
+            Assert.That(report.Revision, Is.GreaterThan(afterSummary), "Finishing is a change.");
+        }
+
+        private static BenchmarkReport BuildPopulatedReport()
+        {
+            var report = new BenchmarkReport("20260730-120000", totalCells: 2);
+            report.AppendHeaderLine("Device model: TestPhone");
+            report.SetEstimatedWorstCase(TimeSpan.FromSeconds(140));
+            report.SetSummaryLines(new[] { "[easy main-thread] 2 samples: elapsed worst 0.20s" });
+            report.AppendDetailLine("[easy worker-thread] cell one");
+            report.AppendDetailLine("[easy main-thread] cell two");
+            report.RecordCellCompleted();
+            return report;
         }
     }
 }

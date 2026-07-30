@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
@@ -41,29 +40,22 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
 
             Debug.Log($"[capture] === {label} PLAN: {plan.TotalCells} cells, at most {plan.EstimatedWorstCase:mm\\:ss} ===");
 
-            foreach (int positionIndex in plan.PositionIndices)
+            // The same cells, in the same order, that a device runs — walked from the plan itself
+            // rather than re-derived here, so a desktop reference row can't quietly describe a
+            // different run from the one it is supposed to be the reference for.
+            foreach (BenchmarkCell cell in plan.Cells())
             {
-                foreach (AIProfile row in AIProfileTable.BuiltIn)
-                {
-                    AIProfile profile = profileProvider.Resolve(row.Id);
+                AIProfile profile = profileProvider.Resolve(cell.ProfileId);
 
-                    for (int repeatIndex = 0; repeatIndex < plan.RepeatCount; repeatIndex++)
-                    {
-                        Task workerCell = runner.RunCellOnWorkerThread(
-                            positionIndex, profile, repeatIndex, plan.IncludePlayForward);
-                        workerCell.Wait();
-                    }
+                if (cell.OnWorkerThread)
+                {
+                    Task workerCell = runner.RunCellOnWorkerThread(
+                        cell.PositionIndex, profile, cell.RepeatIndex, plan.IncludePlayForward);
+                    workerCell.Wait();
                 }
-            }
-
-            for (int i = 0; i < plan.MainThreadControlPositions && i < plan.PositionIndices.Count; i++)
-            {
-                foreach (AIProfile row in AIProfileTable.BuiltIn)
+                else
                 {
-                    AIProfile profile = profileProvider.Resolve(row.Id);
-
-                    for (int repeatIndex = 0; repeatIndex < plan.MainThreadControlRepeats; repeatIndex++)
-                        runner.RunCell(plan.PositionIndices[i], profile, repeatIndex, plan.IncludePlayForward);
+                    runner.RunCell(cell.PositionIndex, profile, cell.RepeatIndex, plan.IncludePlayForward);
                 }
             }
 
