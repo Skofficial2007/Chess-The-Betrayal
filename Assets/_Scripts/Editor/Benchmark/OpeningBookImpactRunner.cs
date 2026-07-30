@@ -189,32 +189,12 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
         }
 
         /// <summary>
-        /// The standard chess opening position with a consistent Zobrist hash and Betrayal
-        /// available — built here rather than borrowed from the book compiler so this runner does
-        /// not depend on the import tooling just to place thirty-two pieces.
+        /// The standard chess opening position with a consistent Zobrist hash and Betrayal available.
+        /// Shared rather than rebuilt: this runner compares play with and without the book, and the
+        /// book is looked up by position hash, so a private copy of the starting board that drifted by
+        /// even one flag would report the book as having no effect at all.
         /// </summary>
-        private static BoardState StandardStartingPosition()
-        {
-            var board = new BoardState(8, 8);
-            board.Clear();
-
-            ChessPieceType[] backRank =
-            {
-                ChessPieceType.Rook, ChessPieceType.Knight, ChessPieceType.Bishop, ChessPieceType.Queen,
-                ChessPieceType.King, ChessPieceType.Bishop, ChessPieceType.Knight, ChessPieceType.Rook
-            };
-
-            for (int x = 0; x < 8; x++)
-            {
-                board.SetPiece(new PieceData(Team.White, backRank[x], 1, 0), x, 0);
-                board.SetPiece(new PieceData(Team.White, ChessPieceType.Pawn, 1, 1), x, 1);
-                board.SetPiece(new PieceData(Team.Black, ChessPieceType.Pawn, -1, 6), x, 6);
-                board.SetPiece(new PieceData(Team.Black, backRank[x], -1, 7), x, 7);
-            }
-
-            board.BetrayalRightAvailable = true;
-            board.ComputeFullZobristHash();
-            return board;
-        }
+        private static BoardState StandardStartingPosition() =>
+            StandardChessPosition.Create(betrayalRightAvailable: true);
     }
 }

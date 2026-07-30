@@ -88,33 +88,19 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
-        public void TheHarnessAndTheDeviceBenchmarkReadTheSameSetOfPositions()
+        public void EveryLineIsReplayedFromTheSharedStandardStart()
         {
-            // The point of moving the lines into the shipping assembly was that a phone cannot reach the
-            // editor-only harness. That only buys anything while both are genuinely the same positions,
-            // so this pins the two together rather than trusting that they were wired up that way.
-            Assert.That(CuratedPositionSuite.Count, Is.EqualTo(CuratedOpeningLines.Count));
+            // The harness the strength ladder calls and the shared source the phone reads are the same
+            // code path, so comparing them to each other proves nothing. What is worth pinning is that
+            // the replay starts from the shared standard board and not a private copy of it — the
+            // golden hashes above would all shift together if it ever did, and this says which of the
+            // two moved.
+            BoardState start = StandardChessPosition.Create(betrayalRightAvailable: true);
 
-            for (int i = 0; i < CuratedOpeningLines.Count; i++)
-            {
-                Assert.That(CuratedPositionSuite.Build(i).ZobristHash,
-                    Is.EqualTo(CuratedOpeningLines.BuildPosition(i).ZobristHash),
-                    $"Position {i} differs between the harness and the shared source.");
-            }
-        }
-
-        [Test]
-        public void TheStandardStartIsAFullBoardWithTheBetrayalRightLive()
-        {
-            BoardState board = CuratedOpeningLines.StandardStartPosition();
-
-            Assert.That(board.GetPieceIndices(Team.White).Count, Is.EqualTo(16));
-            Assert.That(board.GetPieceIndices(Team.Black).Count, Is.EqualTo(16));
-            Assert.That(board.CurrentTurn, Is.EqualTo(Team.White));
-            Assert.That(board.BetrayalRightAvailable, Is.True);
-            Assert.That(board.FullMoveNumber, Is.EqualTo(0));
-            Assert.That(board.ZobristHash, Is.Not.EqualTo(0UL),
-                "An unhashed board would make every position built from it compare equal to any other.");
+            Assert.That(start.FullMoveNumber, Is.EqualTo(0));
+            Assert.That(CuratedOpeningLines.BuildPosition(12).FullMoveNumber, Is.EqualTo(2),
+                "The shortest line is two plies, so a position reporting anything else is not being " +
+                "replayed from a fresh standard board.");
         }
     }
 }

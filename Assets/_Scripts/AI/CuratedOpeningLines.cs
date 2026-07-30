@@ -73,7 +73,7 @@ namespace ChessTheBetrayal.AI
         {
             string[] tokens = Lines[index].Split(' ');
 
-            BoardState board = StandardStartPosition();
+            BoardState board = StandardChessPosition.Create(betrayalRightAvailable: true);
             var engine = new ChessEngineAdapter();
             var resolver = new TurnResolver();
             var legalMoves = new List<MoveCommand>(64);
@@ -109,41 +109,6 @@ namespace ChessTheBetrayal.AI
                 resolver.Advance(board, match.Value);
             }
 
-            return board;
-        }
-
-        /// <summary>
-        /// The standard chess starting position with the Betrayal right live, which is the state every
-        /// line above is replayed from.
-        ///
-        /// Built here rather than borrowed because the only other copies live in an editor-only test
-        /// utility and in the editor's book tooling, neither of which exists in a player build.
-        /// </summary>
-        public static BoardState StandardStartPosition()
-        {
-            var board = new BoardState(8, 8);
-            board.Clear(); // also resets turn to White, castling to all rights, en passant to none
-
-            ChessPieceType[] backRank =
-            {
-                ChessPieceType.Rook,   ChessPieceType.Knight, ChessPieceType.Bishop,
-                ChessPieceType.Queen,  ChessPieceType.King,   ChessPieceType.Bishop,
-                ChessPieceType.Knight, ChessPieceType.Rook
-            };
-
-            for (int x = 0; x < 8; x++)
-            {
-                board.SetPiece(new PieceData(Team.White, backRank[x], 1, 0), x, 0);
-                board.SetPiece(new PieceData(Team.White, ChessPieceType.Pawn, 1, 1), x, 1);
-                board.SetPiece(new PieceData(Team.Black, ChessPieceType.Pawn, -1, 6), x, 6);
-                board.SetPiece(new PieceData(Team.Black, backRank[x], -1, 7), x, 7);
-            }
-
-            // Set before hashing rather than after, because the hash is built from scratch and the
-            // Betrayal flag is one of its inputs — hashing twice around the assignment would land on
-            // the same value but only by accident of doing the work twice.
-            board.BetrayalRightAvailable = true;
-            board.ComputeFullZobristHash();
             return board;
         }
 
