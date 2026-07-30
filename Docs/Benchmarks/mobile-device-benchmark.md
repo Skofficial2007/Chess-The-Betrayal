@@ -26,6 +26,37 @@ position, every repeat, play-forward included, on both thread contexts is roughl
 a worst case near **three hours** — an early attempt at it was still running, unfinished, after 71
 minutes on the desktop above. It exists for a machine you own and can leave alone.
 
+## Running it, and getting the report back
+
+The app opens on a Start button and does nothing until it is pressed. That is deliberate: a run
+that began on scene load would be timing a phone still settling from launch, and could not be
+repeated without relaunching. Pressing Start again after a run finishes starts a genuinely fresh
+one — new runner, new report, new run id — so two readings from the same phone are never blended.
+
+Results appear as they arrive. The screen keeps the header, the status line and the per-tier summary
+complete at all times, but shows only the newest stretch of the scrolling detail log and says on the
+page how many lines it is not showing. That cap exists because TextMeshPro stops drawing a text
+object past 16,383 characters without warning, and a tester run's report already runs to roughly
+13,000 — an uncapped log would quietly start losing the newest lines, which are the ones being
+watched. A saved copy has everything.
+
+**Download** stays greyed out and unpressable until a run completes. Pressing it writes the whole
+report, unstyled and untrimmed, as a `.txt` under `Application.persistentDataPath`, named for the
+device and the moment it ran (`chess-ai-benchmark_<device>_<yyyyMMdd-HHmmss>.txt`) so a folder full
+of reports from several testers stays attributable and nothing overwrites anything. The full path is
+appended to the on-screen log and to the player log.
+
+On Android that folder is somewhere a phone's file manager will not go, so the save is followed by a
+share sheet carrying the report as text — the tester picks whatever they already use to send things.
+It carries text rather than an attached file specifically so it needs no storage permission and no
+extra manifest entries. It is best effort: if a device refuses the intent, the file is already
+written and its path is already on screen.
+
+**One caveat worth stating plainly.** The write is one ordinary file write and runs identically in
+the editor and on a phone, so an editor run genuinely exercises it. The share sheet is Android-only
+code that never executes in the editor, so a working editor run says nothing about whether it works
+on a device — that part is only proven by a real build.
+
 ## What it measures
 
 Every search, in either plan, is built the same way a real match builds one — the production
@@ -124,8 +155,8 @@ is a mobile concern; a desktop showing no difference is the expected result, not
 
 ## Per-device results
 
-The user builds; testers/devices run the app with `DeviceBenchmark.unity` as the boot scene and send
-back the on-screen report. One row per device once a full run completes on it.
+The user builds; testers/devices run the app with `DeviceBenchmark.unity` as the boot scene, press
+Start, and send back the saved report. One row per device once a full run completes on it.
 
 | Device | Chipset (GPU proxy) | Worst-case overshoot | Tier that overshot | Deepest tier's depth reached (worst-case) | Verdict | Notes |
 |---|---|---:|---|---:|---|---|

@@ -1,3 +1,4 @@
+using System;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -50,6 +51,11 @@ namespace ChessTheBetrayal.UI
             if (_startButton != null)
             {
                 _startButton.onClick.AddListener(HandleStartClicked);
+            }
+
+            if (_downloadButton != null)
+            {
+                _downloadButton.onClick.AddListener(HandleDownloadClicked);
             }
 
             // Nothing to download until a run has produced a report.
@@ -116,6 +122,23 @@ namespace ChessTheBetrayal.UI
             // Force the next frame to redraw even if the new run has not emitted a line yet.
             _renderedRevision = -1;
             _renderedSecond = -1;
+        }
+
+        /// <summary>
+        /// Saves the finished report, unstyled and complete — not the trimmed, marked-up copy the
+        /// screen is showing. Where it went is appended to the log so the tester can read the path
+        /// off the same place they have been watching.
+        /// </summary>
+        private void HandleDownloadClicked()
+        {
+            if (_benchmark == null || !_benchmark.IsComplete) return;
+
+            string report = _benchmark.RenderReport();
+            if (string.IsNullOrEmpty(report)) return;
+
+            string fileName = BenchmarkReportFileName.Build(DeviceSearchBenchmark.DeviceModel, DateTime.Now);
+            ReportExportResult result = BenchmarkReportExporter.Save(fileName, report);
+            _benchmark.AppendNote(result.Message);
         }
 
         /// <summary>

@@ -172,9 +172,33 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             EmitOwnLine(MobileSearchBenchmarkRunner.CompletionMarker);
 
             _runner.OnLine -= HandleLine;
+
+            // Freezes the elapsed clock at the run's real duration. Leaving it going would also
+            // leave any display redrawing itself once a second forever, long after there is
+            // anything new to show.
+            _stopwatch.Stop();
+
             Screen.sleepTimeout = SleepTimeout.SystemSetting;
             IsComplete = true;
             IsRunning = false;
+        }
+
+        /// <summary>
+        /// Records something that happened around the run rather than during it — where the report
+        /// was saved, say. It lands at the end of the log like any other line, so it shows up on
+        /// screen and in any copy saved afterwards.
+        /// </summary>
+        public void AppendNote(string note)
+        {
+            if (string.IsNullOrEmpty(note)) return;
+
+            lock (_reportLock)
+            {
+                if (_report == null) return;
+                _report.AppendDetailLine(note);
+            }
+
+            Debug.Log($"[DeviceSearchBenchmark] {note}");
         }
 
         // May run on a thread-pool worker (the worker-thread cells) or the main thread (the control
