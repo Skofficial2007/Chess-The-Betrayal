@@ -19,6 +19,7 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
     {
         private readonly StringBuilder _log = new StringBuilder();
         private readonly MobileSearchBenchmarkRunner _runner = new MobileSearchBenchmarkRunner();
+        private readonly IAIProfileProvider _profileProvider = new AIProfileTableProvider();
         private bool _running;
         private bool _done;
         private Vector2 _scrollPosition;
@@ -33,13 +34,17 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
 
         /// <summary>
         /// A coroutine (not a synchronous call from Start) purely so the "Running..." OnGUI label
-        /// and each profile's result actually render as they complete, instead of the app looking
-        /// hung for the full duration of all twelve runs — the slower tiers (extreme/impossible)
-        /// can plausibly take several seconds each on real mobile hardware, and a silent frozen
-        /// screen is indistinguishable from a crash. Each yield return null lets one frame render
-        /// between profiles; the search call itself is still a single blocking main-thread call,
-        /// same as AsyncAIAgent's worker-thread search would be — this measures the same cost,
-        /// just without backgrounding it.
+        /// and each cell's result actually render as they complete, instead of the app looking hung
+        /// for the full duration of the run — the slower tiers (extreme/impossible) can plausibly
+        /// take several seconds each on real mobile hardware, and a silent frozen screen is
+        /// indistinguishable from a crash. Each yield return null lets one frame render between
+        /// cells; the search call itself is still a single blocking main-thread call, same as
+        /// AsyncAIAgent's worker-thread search would be — this measures the same cost, just without
+        /// backgrounding it.
+        ///
+        /// Position outermost, tier next, repeat innermost: if the run is interrupted partway
+        /// through, whatever positions finished have complete coverage across every tier, rather
+        /// than one tier finishing every position while the rest never started.
         /// </summary>
         private IEnumerator RunAll()
         {
@@ -47,10 +52,21 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             _runner.EmitStartBanner();
             yield return null;
 
-            foreach (AIProfile profile in AIProfileTable.BuiltIn)
+            for (int positionIndex = 0; positionIndex < MobileSearchBenchmarkRunner.PositionCount; positionIndex++)
             {
-                _runner.RunProfile(profile);
-                yield return null;
+                foreach (AIProfile row in AIProfileTable.BuiltIn)
+                {
+                    // Resolved through the same provider a real match uses, rather than the raw
+                    // table row, so a future guardrail clamp applies here exactly as it would in a
+                    // real game instead of silently measuring an unclamped profile.
+                    AIProfile profile = _profileProvider.Resolve(row.Id);
+
+                    for (int repeatIndex = 0; repeatIndex < MobileSearchBenchmarkRunner.DefaultRepeatCount; repeatIndex++)
+                    {
+                        _runner.RunCell(positionIndex, profile, repeatIndex);
+                        yield return null;
+                    }
+                }
             }
 
             _runner.EmitCompletionBanner();
