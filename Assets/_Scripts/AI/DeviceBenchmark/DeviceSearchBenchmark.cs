@@ -69,6 +69,7 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
                 }
             }
 
+            _runner.EmitTierSummaries();
             _runner.EmitCompletionBanner();
 
             _running = false;

@@ -30,9 +30,14 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
     /// </summary>
     public sealed class MobileSearchBenchmarkRunner
     {
-        private const double ThresholdSeconds = 6.0;
         private const int DefaultPlyCount = 4;
         public const int DefaultRepeatCount = 3;
+
+        // Keyed by profile id, populated as cells run. Kept alongside the results themselves
+        // (rather than requiring the caller to collect every emitted line) so a per-tier summary
+        // can be produced at any point in a run — complete or not — without re-parsing text.
+        private readonly Dictionary<string, List<SearchTiming>> _timingsByProfileId =
+            new Dictionary<string, List<SearchTiming>>();
 
         // Matches AsyncAIAgent's production sizing (~16 MB). AlphaBetaSearch's own default
         // (log2Size: 16, ~1 MB) exists for lightweight callers that don't care about move-ordering
@@ -153,8 +158,68 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             stopwatch.Stop();
 
             timing = new SearchTiming(stopwatch.Elapsed.TotalSeconds, cts.IsCancellationRequested,
-                search.LastCompletedDepth);
+                search.LastCompletedDepth, settings.TimeBudget.HardMs);
             return best;
+        }
+
+        internal void RecordTiming(string profileId, SearchTiming timing)
+        {
+            if (!_timingsByProfileId.TryGetValue(profileId, out List<SearchTiming> samples))
+            {
+                samples = new List<SearchTiming>();
+                _timingsByProfileId[profileId] = samples;
+            }
+
+            samples.Add(timing);
+        }
+
+        /// <summary>
+        /// Prints one line per built-in tier: how many samples it has, the worst/mean/min elapsed
+        /// time, the worst overshoot past its own budget, and the worst/mean depth reached. A tier
+        /// with zero samples still gets a line saying so, rather than being left out — an absent
+        /// line reads as "nothing to report" when it might just mean the run was interrupted before
+        /// reaching that tier, which is exactly the distinction this line exists to make clear.
+        /// Safe to call at any point, since it only ever reports on whatever has been recorded so
+        /// far; a run that stops early just produces a summary with fewer samples in it.
+        /// </summary>
+        public void EmitTierSummaries()
+        {
+            Emit("--- Per-tier summary ---");
+
+            foreach (AIProfile profile in AIProfileTable.BuiltIn)
+            {
+                if (!_timingsByProfileId.TryGetValue(profile.Id, out List<SearchTiming> samples) || samples.Count == 0)
+                {
+                    Emit($"[{profile.Id}] no samples recorded.");
+                    continue;
+                }
+
+                double worstSeconds = samples[0].Seconds;
+                double minSeconds = samples[0].Seconds;
+                double sumSeconds = 0;
+                int worstDepth = samples[0].DepthReached;
+                int sumDepth = 0;
+                double worstOvershootMs = samples[0].OvershootMs;
+
+                foreach (SearchTiming timing in samples)
+                {
+                    if (timing.Seconds > worstSeconds) worstSeconds = timing.Seconds;
+                    if (timing.Seconds < minSeconds) minSeconds = timing.Seconds;
+                    sumSeconds += timing.Seconds;
+
+                    if (timing.DepthReached < worstDepth) worstDepth = timing.DepthReached;
+                    sumDepth += timing.DepthReached;
+
+                    if (timing.OvershootMs > worstOvershootMs) worstOvershootMs = timing.OvershootMs;
+                }
+
+                double meanSeconds = sumSeconds / samples.Count;
+                double meanDepth = (double)sumDepth / samples.Count;
+                string overshootNote = worstOvershootMs > 0 ? $"+{worstOvershootMs:F0}ms" : "none";
+
+                Emit($"[{profile.Id}] {samples.Count} samples: elapsed worst {worstSeconds:F2}s mean {meanSeconds:F2}s min {minSeconds:F2}s "
+                    + $"(budget {profile.TimeBudget.HardMs}ms, worst overshoot {overshootNote}); depth worst {worstDepth} mean {meanDepth:F1}");
+            }
         }
 
         private void RunSingleMove(AIProfile profile, string positionName, BoardState board, int repeatIndex)
@@ -165,8 +230,9 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             int rescoreMargin = Math.Max(profile.BlunderMarginCp, profile.TieBreakWindowCp);
 
             MoveCommand best = TimedSearch(search, board, settings, rescoreMargin, out SearchTiming timing);
+            RecordTiming(profile.Id, timing);
 
-            Emit($"[{profile.Id}] {positionName} single-move rep{repeatIndex + 1} depth {profile.MaxDepth}: {FormatTiming(timing)}, best={best} — {Verdict(timing.Seconds)}");
+            Emit($"[{profile.Id}] {positionName} single-move rep{repeatIndex + 1} depth {profile.MaxDepth}: {FormatTiming(timing)}, best={best} — {Verdict(timing)}");
         }
 
         private void RunMultiMove(AIProfile profile, string positionName, BoardState board, int repeatIndex,
@@ -194,8 +260,9 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
                 }
 
                 MoveCommand best = TimedSearch(search, board, settings, rescoreMargin, out SearchTiming timing);
+                RecordTiming(profile.Id, timing);
 
-                Emit($"[{profile.Id}] {positionName} multi-move rep{repeatIndex + 1} ply {ply + 1}/{plyCount}: {FormatTiming(timing)} — {Verdict(timing.Seconds)}");
+                Emit($"[{profile.Id}] {positionName} multi-move rep{repeatIndex + 1} ply {ply + 1}/{plyCount}: {FormatTiming(timing)} — {Verdict(timing)}");
 
                 // DefendOnly means the search never hands us an Act at the root, so this simple
                 // apply-and-flip loop can't wander into a Retribution sub-sequence it doesn't
@@ -221,8 +288,16 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             return $"{timing.Seconds:F2}s{cappedNote}{depthNote}";
         }
 
-        private static string Verdict(double seconds) =>
-            seconds < ThresholdSeconds ? "PASS (<6s)" : "FAIL (>=6s)";
+        /// <summary>
+        /// A move must always arrive within its own tier's budget, not some fixed number — a
+        /// six-second ceiling means nothing when every tier is already cut off at three seconds or
+        /// less. Reports the actual overshoot rather than a bare pass/fail so a device that misses
+        /// its budget by 10ms and one that misses it by 2 seconds don't read the same.
+        /// </summary>
+        internal static string Verdict(SearchTiming timing) =>
+            timing.OvershootMs > 0
+                ? $"OVER BUDGET by {timing.OvershootMs:F0}ms (budget {timing.HardMs}ms)"
+                : $"within budget ({timing.HardMs}ms)";
 
         private void Emit(string line) => OnLine?.Invoke(line);
 
@@ -250,22 +325,31 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         }
 
         /// <summary>One search's outcome: elapsed wall-clock time, whether the soft time budget cut
-        /// it off before MaxDepth, and the deepest iterative-deepening depth it fully completed —
-        /// the only field that still distinguishes two runs which both hit the same budget cap
-        /// (their elapsed seconds are then identical by construction, but the depth reached is
-        /// not).</summary>
-        private readonly struct SearchTiming
+        /// it off before MaxDepth, the deepest iterative-deepening depth it fully completed — the
+        /// only field that still distinguishes two runs which both hit the same budget cap (their
+        /// elapsed seconds are then identical by construction, but the depth reached is not) — and
+        /// the tier's own hard budget in milliseconds, which is what OvershootMs measures against.
+        /// </summary>
+        internal readonly struct SearchTiming
         {
             public readonly double Seconds;
             public readonly bool BudgetCapped;
             public readonly int DepthReached;
+            public readonly int HardMs;
 
-            public SearchTiming(double seconds, bool budgetCapped, int depthReached)
+            public SearchTiming(double seconds, bool budgetCapped, int depthReached, int hardMs)
             {
                 Seconds = seconds;
                 BudgetCapped = budgetCapped;
                 DepthReached = depthReached;
+                HardMs = hardMs;
             }
+
+            /// <summary>How far past this search's own budget the elapsed time actually landed.
+            /// Zero or negative means it finished inside the budget; the search only checks for
+            /// cancellation at node boundaries, so a positive value is how late that check came,
+            /// not a sign the cancellation itself was late to fire.</summary>
+            public double OvershootMs => (Seconds * 1000.0) - HardMs;
         }
     }
 }

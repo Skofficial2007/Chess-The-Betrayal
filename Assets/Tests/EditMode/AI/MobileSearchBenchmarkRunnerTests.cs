@@ -132,5 +132,94 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             Assert.That(lines.Any(l => l.Contains("quiet-midgame")), Is.True,
                 "Expected at least one line naming quiet-midgame, got:\n" + string.Join("\n", lines));
         }
+
+        [Test]
+        public void Verdict_WithinItsOwnBudget_ReportsNoOvershoot()
+        {
+            var timing = new MobileSearchBenchmarkRunner.SearchTiming(seconds: 2.5, budgetCapped: false, depthReached: 7, hardMs: 3000);
+
+            string verdict = MobileSearchBenchmarkRunner.Verdict(timing);
+
+            Assert.That(verdict, Does.Contain("within budget"));
+            Assert.That(verdict, Does.Not.Contain("OVER BUDGET"));
+        }
+
+        [Test]
+        public void Verdict_PastItsOwnBudget_ReportsTheOvershootInMilliseconds()
+        {
+            var timing = new MobileSearchBenchmarkRunner.SearchTiming(seconds: 3.2, budgetCapped: true, depthReached: 4, hardMs: 3000);
+
+            string verdict = MobileSearchBenchmarkRunner.Verdict(timing);
+
+            Assert.That(verdict, Does.Contain("OVER BUDGET by 200ms"));
+        }
+
+        [Test]
+        public void Verdict_JudgesAgainstTheTiersOwnBudget_NotAFixedSixSeconds()
+        {
+            // easy's real budget is 1300ms. Two seconds is a genuine, serious overshoot for this
+            // tier — the fixed 6-second threshold this replaced would have called it a pass.
+            var timing = new MobileSearchBenchmarkRunner.SearchTiming(seconds: 2.0, budgetCapped: true, depthReached: 3, hardMs: 1300);
+
+            string verdict = MobileSearchBenchmarkRunner.Verdict(timing);
+
+            Assert.That(verdict, Does.Contain("OVER BUDGET"));
+        }
+
+        [Test]
+        public void EmitTierSummaries_ReportsWorstMeanMinElapsedAndWorstOvershoot()
+        {
+            var runner = new MobileSearchBenchmarkRunner();
+            runner.RecordTiming("easy", new MobileSearchBenchmarkRunner.SearchTiming(seconds: 1.0, budgetCapped: false, depthReached: 5, hardMs: 1300));
+            runner.RecordTiming("easy", new MobileSearchBenchmarkRunner.SearchTiming(seconds: 1.5, budgetCapped: true, depthReached: 4, hardMs: 1300));
+            runner.RecordTiming("easy", new MobileSearchBenchmarkRunner.SearchTiming(seconds: 1.2, budgetCapped: false, depthReached: 6, hardMs: 1300));
+
+            var lines = new List<string>();
+            runner.OnLine += lines.Add;
+            runner.EmitTierSummaries();
+
+            string line = lines.Single(l => l.StartsWith("[easy]"));
+            Assert.That(line, Does.Contain("3 samples"));
+            Assert.That(line, Does.Contain("worst 1.50s"));
+            Assert.That(line, Does.Contain("min 1.00s"));
+            Assert.That(line, Does.Contain("mean 1.23s"));
+            Assert.That(line, Does.Contain("+200ms"),
+                "The worst sample (1500ms) is 200ms past easy's 1300ms budget.");
+            Assert.That(line, Does.Contain("depth worst 4"));
+            Assert.That(line, Does.Contain("mean 5.0"));
+        }
+
+        [Test]
+        public void EmitTierSummaries_ATierWithNoSamples_StillGetsALineSayingSo()
+        {
+            var runner = new MobileSearchBenchmarkRunner();
+            runner.RecordTiming("easy", new MobileSearchBenchmarkRunner.SearchTiming(seconds: 1.0, budgetCapped: false, depthReached: 5, hardMs: 1300));
+
+            var lines = new List<string>();
+            runner.OnLine += lines.Add;
+            runner.EmitTierSummaries();
+
+            // "impossible" never got a RecordTiming call. An absent line would read as "nothing to
+            // report" when it could just mean the run never reached this tier -- exactly the gap
+            // this method exists to close.
+            Assert.That(lines.Any(l => l.StartsWith("[impossible]") && l.Contains("no samples")), Is.True,
+                "Expected an explicit no-samples line for a tier that never ran, got:\n" + string.Join("\n", lines));
+        }
+
+        [Test]
+        public void EmitTierSummaries_AllSixBuiltInTiersAlwaysGetALine()
+        {
+            var runner = new MobileSearchBenchmarkRunner();
+            var lines = new List<string>();
+            runner.OnLine += lines.Add;
+
+            runner.EmitTierSummaries();
+
+            foreach (AIProfile profile in AIProfileTable.BuiltIn)
+            {
+                Assert.That(lines.Any(l => l.StartsWith($"[{profile.Id}]")), Is.True,
+                    $"Expected a summary line for '{profile.Id}' even with zero samples recorded.");
+            }
+        }
     }
 }
