@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
+using System.Threading.Tasks;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 
@@ -33,11 +34,22 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         private const int DefaultPlyCount = 4;
         public const int DefaultRepeatCount = 3;
 
-        // Keyed by profile id, populated as cells run. Kept alongside the results themselves
-        // (rather than requiring the caller to collect every emitted line) so a per-tier summary
-        // can be produced at any point in a run — complete or not — without re-parsing text.
-        private readonly Dictionary<string, List<SearchTiming>> _timingsByProfileId =
-            new Dictionary<string, List<SearchTiming>>();
+        // Production always searches on a thread-pool worker (AsyncAIAgent's Task.Run) while the
+        // main thread renders; a benchmark that only ever measures the main thread never actually
+        // learns whether that hop costs anything on a given device's scheduler. Both a real cell
+        // and a summary line carry one of these two labels so the two thread contexts are never
+        // silently averaged together.
+        internal const string MainThreadLabel = "main-thread";
+        internal const string WorkerThreadLabel = "worker-thread";
+
+        // Keyed by (profile id, thread label), populated as cells run. Kept alongside the results
+        // themselves (rather than requiring the caller to collect every emitted line) so a
+        // per-tier summary can be produced at any point in a run — complete or not — without
+        // re-parsing text. RunCell and RunCellOnWorkerThread are always awaited/sequenced by the
+        // caller rather than run concurrently (see RunCellOnWorkerThread's doc comment), so this
+        // dictionary never needs its own lock.
+        private readonly Dictionary<(string ProfileId, string ThreadLabel), List<SearchTiming>> _timingsByKey =
+            new Dictionary<(string, string), List<SearchTiming>>();
 
         // Matches AsyncAIAgent's production sizing (~16 MB). AlphaBetaSearch's own default
         // (log2Size: 16, ~1 MB) exists for lightweight callers that don't care about move-ordering
@@ -68,17 +80,34 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         public const string CompletionMarker = "===BENCHMARK_RUN_COMPLETE===";
 
         /// <summary>
-        /// Runs one (position, tier, repeat) cell: a single cold search plus a short play-forward
-        /// from the same starting position, both freshly built. The caller supplies the already
+        /// Runs one (position, tier, repeat) cell on the calling thread: a single cold search plus
+        /// a short play-forward from the same starting position, both freshly built. This is the
+        /// main-thread control -- the same cell run through RunCellOnWorkerThread is the one that
+        /// matches how a real match actually dispatches a search. The caller supplies the already
         /// fully-resolved profile (guardrails applied) and is responsible for looping over
         /// positions/tiers/repeats and yielding between cells if it wants incremental UI updates
         /// (see DeviceSearchBenchmark.RunAll's coroutine wrapper).
         /// </summary>
-        public void RunCell(int positionIndex, AIProfile profile, int repeatIndex)
+        public void RunCell(int positionIndex, AIProfile profile, int repeatIndex) =>
+            RunCellCore(positionIndex, profile, repeatIndex, MainThreadLabel);
+
+        /// <summary>
+        /// Runs the same (position, tier, repeat) cell AsyncAIAgent's own way: dispatched onto a
+        /// thread-pool worker via Task.Run, never the calling thread. Returns the Task rather than
+        /// blocking so a coroutine caller can wait on it (poll IsCompleted across yields) without
+        /// stalling Unity's main thread while it runs. The caller must let this complete before
+        /// starting another cell against the same runner instance -- nothing here is guarded for
+        /// concurrent access, because a real match never runs two searches against the same
+        /// runner at once either.
+        /// </summary>
+        public Task RunCellOnWorkerThread(int positionIndex, AIProfile profile, int repeatIndex) =>
+            Task.Run(() => RunCellCore(positionIndex, profile, repeatIndex, WorkerThreadLabel));
+
+        private void RunCellCore(int positionIndex, AIProfile profile, int repeatIndex, string threadLabel)
         {
             string positionName = PositionName(positionIndex);
-            RunSingleMove(profile, positionName, BuildPosition(positionIndex), repeatIndex);
-            RunMultiMove(profile, positionName, BuildPosition(positionIndex), repeatIndex);
+            RunSingleMove(profile, positionName, BuildPosition(positionIndex), repeatIndex, threadLabel);
+            RunMultiMove(profile, positionName, BuildPosition(positionIndex), repeatIndex, threadLabel);
         }
 
         /// <summary>The label a cell's output lines use for this position: the curated opening's
@@ -162,25 +191,27 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             return best;
         }
 
-        internal void RecordTiming(string profileId, SearchTiming timing)
+        internal void RecordTiming(string profileId, string threadLabel, SearchTiming timing)
         {
-            if (!_timingsByProfileId.TryGetValue(profileId, out List<SearchTiming> samples))
+            var key = (profileId, threadLabel);
+            if (!_timingsByKey.TryGetValue(key, out List<SearchTiming> samples))
             {
                 samples = new List<SearchTiming>();
-                _timingsByProfileId[profileId] = samples;
+                _timingsByKey[key] = samples;
             }
 
             samples.Add(timing);
         }
 
         /// <summary>
-        /// Prints one line per built-in tier: how many samples it has, the worst/mean/min elapsed
-        /// time, the worst overshoot past its own budget, and the worst/mean depth reached. A tier
-        /// with zero samples still gets a line saying so, rather than being left out — an absent
-        /// line reads as "nothing to report" when it might just mean the run was interrupted before
-        /// reaching that tier, which is exactly the distinction this line exists to make clear.
-        /// Safe to call at any point, since it only ever reports on whatever has been recorded so
-        /// far; a run that stops early just produces a summary with fewer samples in it.
+        /// Prints two lines per built-in tier, one per thread context, so a main-thread run and a
+        /// worker-thread run on the same tier can be read side by side rather than blended into one
+        /// number: how many samples each has, the worst/mean/min elapsed time, the worst overshoot
+        /// past its own budget, and the worst/mean depth reached. A combination with zero samples
+        /// still gets a line saying so, rather than being left out — an absent line reads as
+        /// "nothing to report" when it might just mean the run was interrupted before reaching it,
+        /// which is exactly the distinction this line exists to make clear. Safe to call at any
+        /// point, since it only ever reports on whatever has been recorded so far.
         /// </summary>
         public void EmitTierSummaries()
         {
@@ -188,41 +219,48 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
 
             foreach (AIProfile profile in AIProfileTable.BuiltIn)
             {
-                if (!_timingsByProfileId.TryGetValue(profile.Id, out List<SearchTiming> samples) || samples.Count == 0)
-                {
-                    Emit($"[{profile.Id}] no samples recorded.");
-                    continue;
-                }
-
-                double worstSeconds = samples[0].Seconds;
-                double minSeconds = samples[0].Seconds;
-                double sumSeconds = 0;
-                int worstDepth = samples[0].DepthReached;
-                int sumDepth = 0;
-                double worstOvershootMs = samples[0].OvershootMs;
-
-                foreach (SearchTiming timing in samples)
-                {
-                    if (timing.Seconds > worstSeconds) worstSeconds = timing.Seconds;
-                    if (timing.Seconds < minSeconds) minSeconds = timing.Seconds;
-                    sumSeconds += timing.Seconds;
-
-                    if (timing.DepthReached < worstDepth) worstDepth = timing.DepthReached;
-                    sumDepth += timing.DepthReached;
-
-                    if (timing.OvershootMs > worstOvershootMs) worstOvershootMs = timing.OvershootMs;
-                }
-
-                double meanSeconds = sumSeconds / samples.Count;
-                double meanDepth = (double)sumDepth / samples.Count;
-                string overshootNote = worstOvershootMs > 0 ? $"+{worstOvershootMs:F0}ms" : "none";
-
-                Emit($"[{profile.Id}] {samples.Count} samples: elapsed worst {worstSeconds:F2}s mean {meanSeconds:F2}s min {minSeconds:F2}s "
-                    + $"(budget {profile.TimeBudget.HardMs}ms, worst overshoot {overshootNote}); depth worst {worstDepth} mean {meanDepth:F1}");
+                EmitTierSummaryLine(profile, MainThreadLabel);
+                EmitTierSummaryLine(profile, WorkerThreadLabel);
             }
         }
 
-        private void RunSingleMove(AIProfile profile, string positionName, BoardState board, int repeatIndex)
+        private void EmitTierSummaryLine(AIProfile profile, string threadLabel)
+        {
+            if (!_timingsByKey.TryGetValue((profile.Id, threadLabel), out List<SearchTiming> samples) || samples.Count == 0)
+            {
+                Emit($"[{profile.Id} {threadLabel}] no samples recorded.");
+                return;
+            }
+
+            double worstSeconds = samples[0].Seconds;
+            double minSeconds = samples[0].Seconds;
+            double sumSeconds = 0;
+            int worstDepth = samples[0].DepthReached;
+            int sumDepth = 0;
+            double worstOvershootMs = samples[0].OvershootMs;
+
+            foreach (SearchTiming timing in samples)
+            {
+                if (timing.Seconds > worstSeconds) worstSeconds = timing.Seconds;
+                if (timing.Seconds < minSeconds) minSeconds = timing.Seconds;
+                sumSeconds += timing.Seconds;
+
+                if (timing.DepthReached < worstDepth) worstDepth = timing.DepthReached;
+                sumDepth += timing.DepthReached;
+
+                if (timing.OvershootMs > worstOvershootMs) worstOvershootMs = timing.OvershootMs;
+            }
+
+            double meanSeconds = sumSeconds / samples.Count;
+            double meanDepth = (double)sumDepth / samples.Count;
+            string overshootNote = worstOvershootMs > 0 ? $"+{worstOvershootMs:F0}ms" : "none";
+
+            Emit($"[{profile.Id} {threadLabel}] {samples.Count} samples: elapsed worst {worstSeconds:F2}s mean {meanSeconds:F2}s min {minSeconds:F2}s "
+                + $"(budget {profile.TimeBudget.HardMs}ms, worst overshoot {overshootNote}); depth worst {worstDepth} mean {meanDepth:F1}");
+        }
+
+        private void RunSingleMove(AIProfile profile, string positionName, BoardState board, int repeatIndex,
+            string threadLabel)
         {
             var engine = new ChessEngineAdapter();
             var search = BuildSearch(engine, profile);
@@ -230,13 +268,13 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             int rescoreMargin = Math.Max(profile.BlunderMarginCp, profile.TieBreakWindowCp);
 
             MoveCommand best = TimedSearch(search, board, settings, rescoreMargin, out SearchTiming timing);
-            RecordTiming(profile.Id, timing);
+            RecordTiming(profile.Id, threadLabel, timing);
 
-            Emit($"[{profile.Id}] {positionName} single-move rep{repeatIndex + 1} depth {profile.MaxDepth}: {FormatTiming(timing)}, best={best} — {Verdict(timing)}");
+            Emit($"[{profile.Id} {threadLabel}] {positionName} single-move rep{repeatIndex + 1} depth {profile.MaxDepth}: {FormatTiming(timing)}, best={best} — {Verdict(timing)}");
         }
 
         private void RunMultiMove(AIProfile profile, string positionName, BoardState board, int repeatIndex,
-            int plyCount = DefaultPlyCount)
+            string threadLabel, int plyCount = DefaultPlyCount)
         {
             var engine = new ChessEngineAdapter();
             var search = BuildSearch(engine, profile);
@@ -255,14 +293,14 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
                 engine.GetAllLegalMovesIncludingBetrayal(board, board.CurrentTurn, legalMoves);
                 if (legalMoves.Count == 0)
                 {
-                    Emit($"[{profile.Id}] {positionName} multi-move rep{repeatIndex + 1} ply {ply + 1}/{plyCount}: game ended (checkmate/stalemate) — stopping early.");
+                    Emit($"[{profile.Id} {threadLabel}] {positionName} multi-move rep{repeatIndex + 1} ply {ply + 1}/{plyCount}: game ended (checkmate/stalemate) — stopping early.");
                     break;
                 }
 
                 MoveCommand best = TimedSearch(search, board, settings, rescoreMargin, out SearchTiming timing);
-                RecordTiming(profile.Id, timing);
+                RecordTiming(profile.Id, threadLabel, timing);
 
-                Emit($"[{profile.Id}] {positionName} multi-move rep{repeatIndex + 1} ply {ply + 1}/{plyCount}: {FormatTiming(timing)} — {Verdict(timing)}");
+                Emit($"[{profile.Id} {threadLabel}] {positionName} multi-move rep{repeatIndex + 1} ply {ply + 1}/{plyCount}: {FormatTiming(timing)} — {Verdict(timing)}");
 
                 // DefendOnly means the search never hands us an Act at the root, so this simple
                 // apply-and-flip loop can't wander into a Retribution sub-sequence it doesn't
@@ -270,7 +308,7 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
                 // surfacing loudly rather than silently corrupting the rest of the run.
                 if (best.Stage != BetrayalStage.None)
                 {
-                    Emit($"[{profile.Id}] {positionName} multi-move rep{repeatIndex + 1} ply {ply + 1}/{plyCount}: UNEXPECTED staged move ({best.Stage}) under DefendOnly — aborting this cell.");
+                    Emit($"[{profile.Id} {threadLabel}] {positionName} multi-move rep{repeatIndex + 1} ply {ply + 1}/{plyCount}: UNEXPECTED staged move ({best.Stage}) under DefendOnly — aborting this cell.");
                     break;
                 }
 

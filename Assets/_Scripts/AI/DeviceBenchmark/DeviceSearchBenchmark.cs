@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Text;
+using System.Threading.Tasks;
 using UnityEngine;
 using Debug = UnityEngine.Debug;
 
@@ -17,6 +18,10 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
     /// </summary>
     public class DeviceSearchBenchmark : MonoBehaviour
     {
+        // Once the worker-thread pass landed, HandleLine can run on a thread-pool thread while
+        // OnGUI reads _log on the main thread every frame -- a plain StringBuilder isn't safe
+        // against that, so both sides take this lock rather than only the writer.
+        private readonly object _logLock = new object();
         private readonly StringBuilder _log = new StringBuilder();
         private readonly MobileSearchBenchmarkRunner _runner = new MobileSearchBenchmarkRunner();
         private readonly IAIProfileProvider _profileProvider = new AIProfileTableProvider();
@@ -37,14 +42,19 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         /// and each cell's result actually render as they complete, instead of the app looking hung
         /// for the full duration of the run — the slower tiers (extreme/impossible) can plausibly
         /// take several seconds each on real mobile hardware, and a silent frozen screen is
-        /// indistinguishable from a crash. Each yield return null lets one frame render between
-        /// cells; the search call itself is still a single blocking main-thread call, same as
-        /// AsyncAIAgent's worker-thread search would be — this measures the same cost, just without
-        /// backgrounding it.
+        /// indistinguishable from a crash.
+        ///
+        /// Every cell runs twice: once dispatched onto a thread-pool worker the same way
+        /// AsyncAIAgent actually searches, and once directly on this coroutine's own thread (the
+        /// main thread) as a control, so a difference in scheduling/priority/contention on a given
+        /// device's cores shows up as a number instead of staying an assumption. The worker-thread
+        /// pass is awaited by polling Task.IsCompleted across yields rather than blocking, so the
+        /// main thread keeps rendering while it runs.
         ///
         /// Position outermost, tier next, repeat innermost: if the run is interrupted partway
-        /// through, whatever positions finished have complete coverage across every tier, rather
-        /// than one tier finishing every position while the rest never started.
+        /// through, whatever positions finished have complete coverage across every tier and both
+        /// thread contexts, rather than one combination finishing everything while the rest never
+        /// started.
         /// </summary>
         private IEnumerator RunAll()
         {
@@ -63,6 +73,11 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
 
                     for (int repeatIndex = 0; repeatIndex < MobileSearchBenchmarkRunner.DefaultRepeatCount; repeatIndex++)
                     {
+                        Task workerCell = _runner.RunCellOnWorkerThread(positionIndex, profile, repeatIndex);
+                        while (!workerCell.IsCompleted) yield return null;
+                        if (workerCell.IsFaulted)
+                            Debug.LogException(workerCell.Exception);
+
                         _runner.RunCell(positionIndex, profile, repeatIndex);
                         yield return null;
                     }
@@ -76,9 +91,12 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             _done = true;
         }
 
+        // May run on a thread-pool worker (the worker-thread pass) or the main thread (the control
+        // pass and every other emitted line) -- Debug.Log itself tolerates either, but _log does
+        // not, hence the lock.
         private void HandleLine(string line)
         {
-            _log.AppendLine(line);
+            lock (_logLock) { _log.AppendLine(line); }
             Debug.Log($"[DeviceSearchBenchmark] {line}");
         }
 
@@ -92,11 +110,14 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             GUILayout.Label(header, GUI.skin.label);
             GUILayout.Space(10);
 
+            string logText;
+            lock (_logLock) { logText = _log.ToString(); }
+
             // Scrollable so the full log stays reachable by finger-drag even once it runs past
             // one screen — a screenshot alone can't capture output that has scrolled off, but a
             // scroll view at least lets a human read (or a screen-recording capture) all of it.
             _scrollPosition = GUILayout.BeginScrollView(_scrollPosition, GUILayout.ExpandHeight(true));
-            GUILayout.Label(_log.ToString(), GUI.skin.label);
+            GUILayout.Label(logText, GUI.skin.label);
             GUILayout.EndScrollView();
 
             GUILayout.EndArea();

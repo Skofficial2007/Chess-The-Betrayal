@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using NUnit.Framework;
 using ChessTheBetrayal.AI;
 using ChessTheBetrayal.AI.DeviceBenchmark;
@@ -117,6 +118,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 "Expected a single-move line naming this position at rep3, got:\n" + string.Join("\n", lines));
             Assert.That(lines.Any(l => l.Contains(expectedPositionName) && l.Contains("multi-move rep3")), Is.True,
                 "Expected at least one multi-move line naming this position at rep3, got:\n" + string.Join("\n", lines));
+            Assert.That(lines.All(l => l.Contains(MobileSearchBenchmarkRunner.MainThreadLabel)), Is.True,
+                "RunCell runs on the calling thread and must always label its lines main-thread.");
         }
 
         [Test]
@@ -131,6 +134,24 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
 
             Assert.That(lines.Any(l => l.Contains("quiet-midgame")), Is.True,
                 "Expected at least one line naming quiet-midgame, got:\n" + string.Join("\n", lines));
+        }
+
+        [Test]
+        public void RunCellOnWorkerThread_CompletesSuccessfully_AndLabelsItsLinesWorkerThread()
+        {
+            var runner = new MobileSearchBenchmarkRunner();
+            var lines = new List<string>();
+            runner.OnLine += lines.Add;
+
+            Task cellTask = runner.RunCellOnWorkerThread(positionIndex: 0, AIProfile.None, repeatIndex: 0);
+            cellTask.Wait();
+
+            Assert.That(cellTask.IsFaulted, Is.False,
+                cellTask.Exception != null ? cellTask.Exception.ToString() : "no exception recorded");
+            Assert.That(lines.Any(l => l.Contains(MobileSearchBenchmarkRunner.WorkerThreadLabel) && l.Contains("single-move rep1")), Is.True,
+                "Expected a worker-thread single-move line, got:\n" + string.Join("\n", lines));
+            Assert.That(lines.Any(l => l.Contains(MobileSearchBenchmarkRunner.MainThreadLabel)), Is.False,
+                "A worker-thread cell must never label a line main-thread.");
         }
 
         [Test]
@@ -170,15 +191,16 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         public void EmitTierSummaries_ReportsWorstMeanMinElapsedAndWorstOvershoot()
         {
             var runner = new MobileSearchBenchmarkRunner();
-            runner.RecordTiming("easy", new MobileSearchBenchmarkRunner.SearchTiming(seconds: 1.0, budgetCapped: false, depthReached: 5, hardMs: 1300));
-            runner.RecordTiming("easy", new MobileSearchBenchmarkRunner.SearchTiming(seconds: 1.5, budgetCapped: true, depthReached: 4, hardMs: 1300));
-            runner.RecordTiming("easy", new MobileSearchBenchmarkRunner.SearchTiming(seconds: 1.2, budgetCapped: false, depthReached: 6, hardMs: 1300));
+            string mainThread = MobileSearchBenchmarkRunner.MainThreadLabel;
+            runner.RecordTiming("easy", mainThread, new MobileSearchBenchmarkRunner.SearchTiming(seconds: 1.0, budgetCapped: false, depthReached: 5, hardMs: 1300));
+            runner.RecordTiming("easy", mainThread, new MobileSearchBenchmarkRunner.SearchTiming(seconds: 1.5, budgetCapped: true, depthReached: 4, hardMs: 1300));
+            runner.RecordTiming("easy", mainThread, new MobileSearchBenchmarkRunner.SearchTiming(seconds: 1.2, budgetCapped: false, depthReached: 6, hardMs: 1300));
 
             var lines = new List<string>();
             runner.OnLine += lines.Add;
             runner.EmitTierSummaries();
 
-            string line = lines.Single(l => l.StartsWith("[easy]"));
+            string line = lines.Single(l => l.StartsWith($"[easy {mainThread}]"));
             Assert.That(line, Does.Contain("3 samples"));
             Assert.That(line, Does.Contain("worst 1.50s"));
             Assert.That(line, Does.Contain("min 1.00s"));
@@ -190,24 +212,48 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
-        public void EmitTierSummaries_ATierWithNoSamples_StillGetsALineSayingSo()
+        public void EmitTierSummaries_ReportsMainThreadAndWorkerThreadAsSeparateSamplesForTheSameTier()
         {
             var runner = new MobileSearchBenchmarkRunner();
-            runner.RecordTiming("easy", new MobileSearchBenchmarkRunner.SearchTiming(seconds: 1.0, budgetCapped: false, depthReached: 5, hardMs: 1300));
+            string mainThread = MobileSearchBenchmarkRunner.MainThreadLabel;
+            string workerThread = MobileSearchBenchmarkRunner.WorkerThreadLabel;
+            runner.RecordTiming("easy", mainThread, new MobileSearchBenchmarkRunner.SearchTiming(seconds: 1.0, budgetCapped: false, depthReached: 5, hardMs: 1300));
+            runner.RecordTiming("easy", workerThread, new MobileSearchBenchmarkRunner.SearchTiming(seconds: 2.0, budgetCapped: true, depthReached: 2, hardMs: 1300));
 
             var lines = new List<string>();
             runner.OnLine += lines.Add;
             runner.EmitTierSummaries();
 
-            // "impossible" never got a RecordTiming call. An absent line would read as "nothing to
-            // report" when it could just mean the run never reached this tier -- exactly the gap
-            // this method exists to close.
-            Assert.That(lines.Any(l => l.StartsWith("[impossible]") && l.Contains("no samples")), Is.True,
-                "Expected an explicit no-samples line for a tier that never ran, got:\n" + string.Join("\n", lines));
+            string mainLine = lines.Single(l => l.StartsWith($"[easy {mainThread}]"));
+            string workerLine = lines.Single(l => l.StartsWith($"[easy {workerThread}]"));
+
+            Assert.That(mainLine, Does.Contain("worst 1.00s"));
+            Assert.That(workerLine, Does.Contain("worst 2.00s"),
+                "The two thread contexts must stay separate samples, not blended into one aggregate.");
         }
 
         [Test]
-        public void EmitTierSummaries_AllSixBuiltInTiersAlwaysGetALine()
+        public void EmitTierSummaries_ATierWithNoSamples_StillGetsALineSayingSoForBothThreadContexts()
+        {
+            var runner = new MobileSearchBenchmarkRunner();
+            runner.RecordTiming("easy", MobileSearchBenchmarkRunner.MainThreadLabel,
+                new MobileSearchBenchmarkRunner.SearchTiming(seconds: 1.0, budgetCapped: false, depthReached: 5, hardMs: 1300));
+
+            var lines = new List<string>();
+            runner.OnLine += lines.Add;
+            runner.EmitTierSummaries();
+
+            // "impossible" never got a RecordTiming call on either thread. An absent line would
+            // read as "nothing to report" when it could just mean the run never reached this tier
+            // -- exactly the gap this method exists to close.
+            Assert.That(lines.Any(l => l.StartsWith($"[impossible {MobileSearchBenchmarkRunner.MainThreadLabel}]") && l.Contains("no samples")), Is.True,
+                "Expected an explicit no-samples main-thread line, got:\n" + string.Join("\n", lines));
+            Assert.That(lines.Any(l => l.StartsWith($"[impossible {MobileSearchBenchmarkRunner.WorkerThreadLabel}]") && l.Contains("no samples")), Is.True,
+                "Expected an explicit no-samples worker-thread line, got:\n" + string.Join("\n", lines));
+        }
+
+        [Test]
+        public void EmitTierSummaries_AllSixBuiltInTiersAlwaysGetALineForEachThreadContext()
         {
             var runner = new MobileSearchBenchmarkRunner();
             var lines = new List<string>();
@@ -217,8 +263,10 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
 
             foreach (AIProfile profile in AIProfileTable.BuiltIn)
             {
-                Assert.That(lines.Any(l => l.StartsWith($"[{profile.Id}]")), Is.True,
-                    $"Expected a summary line for '{profile.Id}' even with zero samples recorded.");
+                Assert.That(lines.Any(l => l.StartsWith($"[{profile.Id} {MobileSearchBenchmarkRunner.MainThreadLabel}]")), Is.True,
+                    $"Expected a main-thread summary line for '{profile.Id}' even with zero samples recorded.");
+                Assert.That(lines.Any(l => l.StartsWith($"[{profile.Id} {MobileSearchBenchmarkRunner.WorkerThreadLabel}]")), Is.True,
+                    $"Expected a worker-thread summary line for '{profile.Id}' even with zero samples recorded.");
             }
         }
     }
