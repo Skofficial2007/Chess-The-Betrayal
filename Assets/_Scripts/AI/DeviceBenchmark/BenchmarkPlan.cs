@@ -1,0 +1,127 @@
+using System;
+using System.Collections.Generic;
+
+namespace ChessTheBetrayal.AI.DeviceBenchmark
+{
+    /// <summary>
+    /// Which cells a run covers, and how long it can take at worst.
+    ///
+    /// The worst case is knowable in advance and is the same on every device, which is the whole
+    /// reason this type exists. Each search is stopped by a wall-clock timer rather than by
+    /// finishing its work, so a slower phone does not spend longer on a search — it reaches a
+    /// shallower depth in the same milliseconds. Adding up every search's own hard budget therefore
+    /// gives a ceiling that holds on the fastest desktop and the slowest phone alike, and a run can
+    /// honestly promise its duration before it starts. A weak device trends toward that ceiling
+    /// (fewer of its searches finish early enough to stop on their own) but never past it.
+    /// </summary>
+    public sealed class BenchmarkPlan
+    {
+        /// <summary>
+        /// The default a tester's build runs. Small enough to actually get finished on a phone
+        /// someone is holding, which matters more than breadth: a thorough run nobody completes
+        /// measures nothing at all.
+        ///
+        /// Cold single searches only, no play-forward. A search from a cold start — empty
+        /// transposition table, no move ordering carried in from a previous ply — is the slowest,
+        /// least favourable case, and the per-move promise is exactly about that case. Playing
+        /// several moves forward reuses a warm table and so runs easier; it belongs in the
+        /// exhaustive run, not in the one measuring whether the promise holds.
+        /// </summary>
+        public static BenchmarkPlan Tester() => new BenchmarkPlan(
+            positionIndices: TesterPositionIndices(),
+            repeatCount: 2,
+            includePlayForward: false,
+            mainThreadControlPositions: 1,
+            mainThreadControlRepeats: 1);
+
+        /// <summary>
+        /// Every position, every repeat, both a cold search and a play-forward, on both thread
+        /// contexts. Hours long — for a machine you own and can leave running, never for a build
+        /// handed to someone else.
+        /// </summary>
+        public static BenchmarkPlan Exhaustive() => new BenchmarkPlan(
+            positionIndices: AllPositionIndices(),
+            repeatCount: MobileSearchBenchmarkRunner.DefaultRepeatCount,
+            includePlayForward: true,
+            mainThreadControlPositions: MobileSearchBenchmarkRunner.PositionCount,
+            mainThreadControlRepeats: MobileSearchBenchmarkRunner.DefaultRepeatCount);
+
+        private BenchmarkPlan(IReadOnlyList<int> positionIndices, int repeatCount, bool includePlayForward,
+            int mainThreadControlPositions, int mainThreadControlRepeats)
+        {
+            PositionIndices = positionIndices;
+            RepeatCount = repeatCount;
+            IncludePlayForward = includePlayForward;
+            MainThreadControlPositions = mainThreadControlPositions;
+            MainThreadControlRepeats = mainThreadControlRepeats;
+        }
+
+        /// <summary>Positions this run covers, by the index MobileSearchBenchmarkRunner uses.</summary>
+        public IReadOnlyList<int> PositionIndices { get; }
+
+        public int RepeatCount { get; }
+
+        /// <summary>Whether each cell also plays several moves forward after its cold search.</summary>
+        public bool IncludePlayForward { get; }
+
+        /// <summary>
+        /// How many positions also get run on the calling thread as a control. Production always
+        /// searches on a worker, so the worker pass is the real measurement; the main-thread pass
+        /// exists only to show whether a given device's scheduler treats the two differently, and a
+        /// couple of cells answer that as well as a full second matrix would.
+        /// </summary>
+        public int MainThreadControlPositions { get; }
+
+        public int MainThreadControlRepeats { get; }
+
+        /// <summary>Worker-thread cells plus main-thread control cells.</summary>
+        public int TotalCells =>
+            (PositionIndices.Count * AIProfileTable.BuiltIn.Count * RepeatCount)
+            + (MainThreadControlPositions * AIProfileTable.BuiltIn.Count * MainThreadControlRepeats);
+
+        /// <summary>
+        /// The longest this run can take on any device — every search burning its whole budget and
+        /// none of them stopping early. Safe to quote to whoever is about to sit through it.
+        /// </summary>
+        public TimeSpan EstimatedWorstCase
+        {
+            get
+            {
+                long budgetSumMs = 0;
+                foreach (AIProfile profile in AIProfileTable.BuiltIn)
+                    budgetSumMs += profile.TimeBudget.HardMs;
+
+                // A cell is one cold search, plus one search per played-forward ply when the plan
+                // asks for them.
+                int searchesPerCell = IncludePlayForward ? 1 + MobileSearchBenchmarkRunner.DefaultPlyCount : 1;
+
+                long workerMs = (long)PositionIndices.Count * RepeatCount * budgetSumMs * searchesPerCell;
+                long controlMs = (long)MainThreadControlPositions * MainThreadControlRepeats * budgetSumMs * searchesPerCell;
+
+                return TimeSpan.FromMilliseconds(workerMs + controlMs);
+            }
+        }
+
+        /// <summary>
+        /// Both hand-placed depth probes, plus two curated openings taken from opposite ends of the
+        /// set. The hand-placed pair is built to grow expensive with depth; the openings are drawn
+        /// from the positions a real game's budget was actually measured running short on, and
+        /// taking one from each end avoids reading four neighbouring lines of the same opening as
+        /// though they were four independent samples.
+        /// </summary>
+        private static IReadOnlyList<int> TesterPositionIndices() => new[]
+        {
+            0,
+            CuratedOpeningLines.Count / 2,
+            CuratedOpeningLines.Count,
+            CuratedOpeningLines.Count + 1,
+        };
+
+        private static IReadOnlyList<int> AllPositionIndices()
+        {
+            var indices = new int[MobileSearchBenchmarkRunner.PositionCount];
+            for (int i = 0; i < indices.Length; i++) indices[i] = i;
+            return indices;
+        }
+    }
+}

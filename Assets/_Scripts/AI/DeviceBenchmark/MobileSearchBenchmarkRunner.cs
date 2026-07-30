@@ -31,7 +31,7 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
     /// </summary>
     public sealed class MobileSearchBenchmarkRunner
     {
-        private const int DefaultPlyCount = 4;
+        internal const int DefaultPlyCount = 4;
         public const int DefaultRepeatCount = 3;
 
         // Production always searches on a thread-pool worker (AsyncAIAgent's Task.Run) while the
@@ -82,8 +82,8 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         /// positions/tiers/repeats and yielding between cells if it wants incremental UI updates
         /// (see DeviceSearchBenchmark.RunAll's coroutine wrapper).
         /// </summary>
-        public void RunCell(int positionIndex, AIProfile profile, int repeatIndex) =>
-            RunCellCore(positionIndex, profile, repeatIndex, MainThreadLabel);
+        public void RunCell(int positionIndex, AIProfile profile, int repeatIndex, bool includePlayForward = true) =>
+            RunCellCore(positionIndex, profile, repeatIndex, MainThreadLabel, includePlayForward);
 
         /// <summary>
         /// Runs the same (position, tier, repeat) cell AsyncAIAgent's own way: dispatched onto a
@@ -94,14 +94,18 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         /// concurrent access, because a real match never runs two searches against the same
         /// runner at once either.
         /// </summary>
-        public Task RunCellOnWorkerThread(int positionIndex, AIProfile profile, int repeatIndex) =>
-            Task.Run(() => RunCellCore(positionIndex, profile, repeatIndex, WorkerThreadLabel));
+        public Task RunCellOnWorkerThread(int positionIndex, AIProfile profile, int repeatIndex,
+            bool includePlayForward = true) =>
+            Task.Run(() => RunCellCore(positionIndex, profile, repeatIndex, WorkerThreadLabel, includePlayForward));
 
-        private void RunCellCore(int positionIndex, AIProfile profile, int repeatIndex, string threadLabel)
+        private void RunCellCore(int positionIndex, AIProfile profile, int repeatIndex, string threadLabel,
+            bool includePlayForward)
         {
             string positionName = PositionName(positionIndex);
             RunSingleMove(profile, positionName, BuildPosition(positionIndex), repeatIndex, threadLabel);
-            RunMultiMove(profile, positionName, BuildPosition(positionIndex), repeatIndex, threadLabel);
+
+            if (includePlayForward)
+                RunMultiMove(profile, positionName, BuildPosition(positionIndex), repeatIndex, threadLabel);
         }
 
         /// <summary>The label a cell's output lines use for this position: the curated opening's

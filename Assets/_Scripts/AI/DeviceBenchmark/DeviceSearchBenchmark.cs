@@ -63,21 +63,23 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         /// </summary>
         private IEnumerator RunAll()
         {
-            int totalCells = MobileSearchBenchmarkRunner.PositionCount * AIProfileTable.BuiltIn.Count
-                * MobileSearchBenchmarkRunner.DefaultRepeatCount;
+            BenchmarkPlan plan = BenchmarkPlan.Tester();
             string runId = DateTime.Now.ToString("yyyyMMdd-HHmmss");
 
             lock (_reportLock)
             {
-                _report = new BenchmarkReport(runId, totalCells);
+                _report = new BenchmarkReport(runId, plan.TotalCells);
                 foreach (string line in BuildDeviceInfoLines()) _report.AppendHeaderLine(line);
                 _report.AppendHeaderLine(BuildBatteryLine("start"));
+                _report.SetEstimatedWorstCase(plan.EstimatedWorstCase);
             }
             _stopwatch.Restart();
             EmitOwnLine("Device search benchmark starting...");
             yield return null;
 
-            for (int positionIndex = 0; positionIndex < MobileSearchBenchmarkRunner.PositionCount; positionIndex++)
+            // The worker pass is the real measurement: production always searches on a thread-pool
+            // worker, never on the thread driving the frame.
+            foreach (int positionIndex in plan.PositionIndices)
             {
                 foreach (AIProfile row in AIProfileTable.BuiltIn)
                 {
@@ -86,14 +88,31 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
                     // real game instead of silently measuring an unclamped profile.
                     AIProfile profile = _profileProvider.Resolve(row.Id);
 
-                    for (int repeatIndex = 0; repeatIndex < MobileSearchBenchmarkRunner.DefaultRepeatCount; repeatIndex++)
+                    for (int repeatIndex = 0; repeatIndex < plan.RepeatCount; repeatIndex++)
                     {
-                        Task workerCell = _runner.RunCellOnWorkerThread(positionIndex, profile, repeatIndex);
+                        Task workerCell = _runner.RunCellOnWorkerThread(
+                            positionIndex, profile, repeatIndex, plan.IncludePlayForward);
                         while (!workerCell.IsCompleted) yield return null;
                         if (workerCell.IsFaulted)
                             Debug.LogException(workerCell.Exception);
 
-                        _runner.RunCell(positionIndex, profile, repeatIndex);
+                        lock (_reportLock) { _report.RecordCellCompleted(); }
+                        yield return null;
+                    }
+                }
+            }
+
+            // A small control on the calling thread, purely to show whether this device's scheduler
+            // treats a worker differently from the frame thread.
+            for (int i = 0; i < plan.MainThreadControlPositions && i < plan.PositionIndices.Count; i++)
+            {
+                foreach (AIProfile row in AIProfileTable.BuiltIn)
+                {
+                    AIProfile profile = _profileProvider.Resolve(row.Id);
+
+                    for (int repeatIndex = 0; repeatIndex < plan.MainThreadControlRepeats; repeatIndex++)
+                    {
+                        _runner.RunCell(plan.PositionIndices[i], profile, repeatIndex, plan.IncludePlayForward);
 
                         lock (_reportLock) { _report.RecordCellCompleted(); }
                         yield return null;

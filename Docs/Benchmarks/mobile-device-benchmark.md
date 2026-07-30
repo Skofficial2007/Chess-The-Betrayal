@@ -1,0 +1,139 @@
+# Mobile / on-device search benchmark
+
+Everything in `Docs/Benchmarks/baseline.md` was measured on one 16-core desktop. The game ships to
+Android across a wide device range, and the 3-second per-move budget is what protects a player on
+the slowest phone that still runs the game — not the desktop mean. This page is the record of what
+the on-device instrument (`Assets/_Scripts/AI/DeviceBenchmark/`) actually measures, what it
+deliberately does not, and the numbers gathered so far.
+
+## How long it takes, and why that number is trustworthy
+
+**The tester run is bounded at 2m 20s on any device**, and the app shows that bound on screen before
+it starts.
+
+That bound is exact rather than optimistic, because each search is stopped by a wall-clock timer
+rather than by finishing its work. A slower phone does not spend longer on a search — it reaches a
+shallower depth inside the same milliseconds. Adding up every search's own hard budget therefore
+gives a ceiling that holds on the fastest desktop and the slowest phone alike. A weak device trends
+toward that ceiling, because fewer of its searches finish early enough to stop on their own, but it
+cannot go past it.
+
+Measured on a desktop (i5-13500HX): **2m 13s wall clock**, of which roughly 1m 35s was search and the
+rest Unity starting up. A phone will land nearer the 2m 20s ceiling.
+
+**The exhaustive run is a different thing entirely and must never be handed to a tester.** Every
+position, every repeat, play-forward included, on both thread contexts is roughly 3,960 searches and
+a worst case near **three hours** — an early attempt at it was still running, unfinished, after 71
+minutes on the desktop above. It exists for a machine you own and can leave alone.
+
+## What it measures
+
+Every search, in either plan, is built the same way a real match builds one — the production
+transposition table size, the profile's real evaluator weighting, the profile's real rescore
+margin — so a number here means the same thing a real move would have cost on that device.
+
+**The tester plan** (what a build runs by default, 54 cells): for all six tiers, a **cold single
+search** on four positions — both hand-placed depth probes plus two curated openings from opposite
+ends of the set — twice each, dispatched on a thread-pool worker exactly as `AsyncAIAgent` does. Plus
+a small main-thread control on one position, to show whether a device's scheduler treats background
+work differently. The two thread contexts are reported separately and never averaged together, since
+averaging would hide precisely the difference the control exists to find.
+
+A cold search is deliberately the only thing measured here: an empty transposition table and no move
+ordering carried in from a previous ply is the least favourable case, and the per-move promise is
+about exactly that case. Playing several moves forward reuses a warm table and so runs easier.
+
+**The exhaustive plan** (opt-in, for a machine you own): every position, every repeat, play-forward
+included, on both thread contexts.
+
+Because every tier's hard budget is already at or under three seconds, the number worth reading is
+never the raw mean time — it's **overshoot past that tier's own budget**, and **depth reached**.
+A tier that stays inside its budget while reaching a shallower depth than the desktop is a real,
+player-visible weakness even though it never technically misses a deadline; a tier that goes even a
+little past its own budget on some device is the exact failure this instrument exists to catch.
+
+## What it does not measure
+
+- **Win rate or strength.** This instrument answers "how fast and how deep," never "who wins." For
+  strength, see `Docs/Benchmarks/baseline.md` — a completely different instrument (`MatchSimulator`,
+  real self-played games) measuring a completely different question. Never compare a number from one
+  page against the other; they aren't measuring the same thing even where their wiring matches.
+- **The opening book.** The runner builds `AlphaBetaSearch` directly and never consults
+  `OpeningBookPolicy` — no figure here can move when the book changes, and a change to the book has
+  nothing to say about anything measured on this page.
+- **How often a player actually reaches a slow position.** The position set is deliberately the
+  positions already known to be expensive (the curated openings a real game's own budget was
+  measured running out on, plus two hand-placed positions built to grow expensive at depth) — not a
+  random sample of ordinary play. It answers "how bad does the worst case get," not "how often does
+  the worst case happen."
+- **The multi-move line's search tree under normal play.** The play-forward loop always runs under
+  `BetrayalUsage.DefendOnly`, because it has no model for a Betrayal Retribution sequence and would
+  misread the game as over the moment one appeared at the root. Only the single cold search measures
+  `BetrayalUsage.Full` — the setting a player actually gets unless they turn Betrayal off for the AI.
+- **Anything beyond raw search wall-clock.** No animation pacing, no UI thread cost, no rendering —
+  purely how long `AlphaBetaSearch.FindBestMove` takes to return.
+- **A definitive "this run was interrupted" flag.** Repeats past the first are not independent
+  measurements of a different outcome — the search is deterministic given identical inputs, so a
+  repeat exists only to catch OS scheduling and thermal noise, not a different move being found. And
+  since nothing can guarantee cleanup code runs after a crash or a forced quit, a partial run is
+  recognizable only by its own last line: a `STATUS: RUNNING n/N` with no later `STATUS: COMPLETE`
+  already means it didn't finish, honestly, without needing an explicit flag that a hard kill
+  couldn't set anyway.
+
+## The gate
+
+A move must never cross its own tier's hard budget — every tier is 3000 ms or less
+(`AIProfileTable.cs`: easy 1300 ms, normal 2250 ms, hard/aggressive/extreme/impossible all 3000 ms).
+Any recorded overshoot on any device is a real finding, not noise, and gets a profile-row fix with
+the failing and corrected numbers both recorded — never a loosened gate.
+
+## Desktop reference
+
+Captured with `MobileBenchmarkDesktopCaptureTests` (`[Explicit]` — run it deliberately, read the
+summary from the log), the same plan a phone runs, so this row is the only valid comparison point for
+a device number. Never compare a device row against `baseline.md`.
+
+Machine: i5-13500HX, Editor, Mono. Captured `2026-07-30`. Worker-thread figures (the production
+path); 8 samples per tier.
+
+| Tier | Budget | Worst elapsed | Worst overshoot | Depth worst / mean |
+|---|---:|---:|---:|---:|
+| easy | 1300 ms | 0.22 s | none | 3 / 3.0 |
+| normal | 2250 ms | 2.12 s | none | 5 / 5.0 |
+| hard | 3000 ms | 3.01 s | +14 ms | 7 / 7.8 |
+| aggressive | 3000 ms | 3.01 s | +10 ms | 7 / 7.0 |
+| extreme | 3000 ms | 3.01 s | +15 ms | 7 / 7.8 |
+| impossible | 3000 ms | 3.01 s | +14 ms | 7 / 7.8 |
+
+**Reading this row.** The two shallow tiers finish well inside their budgets and reach their
+configured depth ceiling, so their timings say more about how little work they were asked to do than
+about the machine. The four deeper tiers are all budget-bound — pinned at their 3-second cap by
+construction — so for them the only number carrying information is the depth reached. That is the
+column a device gets ranked on.
+
+Overshoot is 10–15 ms across every deep tier. That is the cancellation check landing at the next node
+boundary rather than mid-node, not the budget being missed in any sense a player could perceive, and
+it is the figure a device result should be compared against: a phone showing a few tens of
+milliseconds is behaving normally, one showing hundreds is a real finding.
+
+The main-thread control matched the worker pass on time (also 3.01 s, +2 to +12 ms) with no
+meaningful difference on this machine. Its depth column is not directly comparable — the control runs
+a single sample per tier against the worker pass's eight, so its "worst" is drawn from a much smaller
+pool. The control exists to catch a device whose scheduler treats background work differently, which
+is a mobile concern; a desktop showing no difference is the expected result, not a finding.
+
+## Per-device results
+
+The user builds; testers/devices run the app with `DeviceBenchmark.unity` as the boot scene and send
+back the on-screen report. One row per device once a full run completes on it.
+
+| Device | Chipset (GPU proxy) | Worst-case overshoot | Tier that overshot | Deepest tier's depth reached (worst-case) | Verdict | Notes |
+|---|---|---:|---|---:|---|---|
+| _(none yet)_ | | | | | | |
+
+## Build config this was measured under
+
+Pinned in `ProjectSettings/ProjectSettings.asset`, not left on template defaults: IL2CPP, ARM64 only,
+IL2CPP configuration Release, code generation "faster runtime," managed stripping Low, target API 36,
+min API 26. Never compare device numbers captured under different settings than these — a timing
+difference would measure the configuration change, not the phone.

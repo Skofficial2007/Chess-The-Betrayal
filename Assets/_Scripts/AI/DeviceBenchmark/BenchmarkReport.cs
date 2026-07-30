@@ -24,6 +24,7 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         private IReadOnlyList<string> _summaryLines = Array.Empty<string>();
         private int _completedCells;
         private bool _isComplete;
+        private TimeSpan? _estimatedWorstCase;
 
         public BenchmarkReport(string runId, int totalCells)
         {
@@ -43,6 +44,13 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         /// <summary>The per-tier summary table, replacing whatever was set before. Call once the
         /// run has produced it — an empty report before that point is expected, not an error.</summary>
         public void SetSummaryLines(IReadOnlyList<string> lines) => _summaryLines = lines;
+
+        /// <summary>
+        /// The longest this run can take, known before it starts because every search is stopped by
+        /// a wall-clock timer. Shown up front so whoever is holding the phone knows what they have
+        /// agreed to sit through, rather than watching an open-ended progress count.
+        /// </summary>
+        public void SetEstimatedWorstCase(TimeSpan estimate) => _estimatedWorstCase = estimate;
 
         /// <summary>Advances the n in "n/N cells done" by one.</summary>
         public void RecordCellCompleted() => _completedCells++;
@@ -64,9 +72,13 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             foreach (string line in _headerLines) text.AppendLine(line);
             text.AppendLine();
 
+            string estimateNote = _estimatedWorstCase.HasValue
+                ? $" of at most {FormatElapsed(_estimatedWorstCase.Value)}"
+                : "";
+
             text.AppendLine(_isComplete
                 ? $"STATUS: COMPLETE — {_completedCells}/{_totalCells} cells, elapsed {FormatElapsed(elapsed)}"
-                : $"STATUS: RUNNING — {_completedCells}/{_totalCells} cells, elapsed {FormatElapsed(elapsed)} "
+                : $"STATUS: RUNNING — {_completedCells}/{_totalCells} cells, elapsed {FormatElapsed(elapsed)}{estimateNote} "
                     + "(if this is the last line you see, the run did not finish)");
             text.AppendLine();
 
