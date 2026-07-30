@@ -230,29 +230,88 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
-        public void FindBestMove_CancelledDuringTheFinalDepth_ReportsBudgetNotCeiling()
+        public void ASearchStoppedShortOfItsCeiling_ReportsBudgetNotCeiling()
         {
-            // The one case that does not go through any of the loop's own exits: cancellation lands
-            // while the LAST configured depth is still being searched, so that depth is abandoned
-            // without committing and the loop then ends on its own counter — never reaching the
-            // cancellation check at the top. Reporting a ceiling stop there would claim the search
-            // finished what it was asked to do when the clock actually cut it short, which is
-            // exactly backwards for deciding whether a deeper ceiling would ever be used. Any run
-            // that stopped short of its configured depth was stopped by something other than the
-            // ceiling, and this pins that.
-            BoardState board = QuietPosition();
-            var settings = new AISearchSettings(maxDepth: 9, new AITimeBudget(1200, 1200), BetrayalUsage.Full);
+            // Reporting a ceiling stop for a search the clock cut short would claim it finished what
+            // it was asked to do, which points a depth-ceiling decision in exactly the wrong
+            // direction: only a search that ran out of time stands to gain from a deeper ceiling.
+            // The hardest version of that to get right is cancellation landing while the LAST
+            // configured depth is still in flight, because that depth is abandoned without
+            // committing and the loop then ends on its own counter rather than through any of its
+            // exits — leaving the reason to be worked out afterwards from how far it actually got.
+            //
+            // The budget is MEASURED here rather than written down. An earlier version of this test
+            // hard-coded one and guarded the case with an assumption, and the search has since become
+            // fast enough to finish every configured depth inside that budget — so the case stopped
+            // occurring, the assumption stopped holding, and the test went from proving something to
+            // reporting inconclusive, which no failure count notices. Timing the position first puts
+            // the interruption in the right place however fast the machine or the search becomes.
+            //
+            // The interruption has to land inside the FINAL depth specifically. Cancelled any earlier
+            // and the loop comes back around to its own cancellation check, which labels the stop
+            // itself and never consults the after-the-loop reasoning this test is for — so a budget
+            // picked as a rough fraction of the whole search proves nothing here, however short it is.
+            // The window to aim at is therefore between the time the second-to-last depth finishes and
+            // the time the last one would have, both of which the search records as it goes.
+            //
+            // Time management is on, as a real match has it, but the generous soft/hard pair keeps its
+            // two exits out of reach — both need sixty seconds on the clock. So the only things that
+            // can stop this search are the token and the ceiling.
+            const int maxDepth = 9;
+            var settings = new AISearchSettings(maxDepth, TestTimeBudgets.Generous, BetrayalUsage.Full);
 
+            // Warmed before anything is timed, so the measurement reflects the search running at
+            // speed rather than paying first-call costs it will not pay again.
+            NewSearch().FindBestMove(QuietPosition(),
+                new AISearchSettings(maxDepth: 4, TestTimeBudgets.Generous, BetrayalUsage.Full),
+                CancellationToken.None, enableInstabilityTimeManagement: true);
+
+            AlphaBetaSearch control = NewSearch();
+            control.FindBestMove(QuietPosition(), settings, CancellationToken.None,
+                enableInstabilityTimeManagement: true);
+
+            // Half the pin, and the half that gives the other half its meaning: given all the time it
+            // wants, this search does reach its ceiling. Without it, an interrupted run that stopped
+            // short for some entirely unrelated reason would read as a pass.
+            Assert.That(control.LastCompletedDepth, Is.EqualTo(maxDepth),
+                "The control run has to reach the ceiling for the interrupted run below to be " +
+                "measuring an interruption rather than a position that never gets there anyway.");
+            Assert.That(control.StopReason, Is.EqualTo(SearchStopReason.Ceiling));
+
+            long throughPenultimate = control.Stats.ElapsedMsAfterDepth(maxDepth - 1);
+            long throughFinal = control.Stats.ElapsedMsAfterDepth(maxDepth);
+            TestContext.Out.WriteLine(
+                $"depth {maxDepth - 1} completed at {throughPenultimate}ms, depth {maxDepth} at {throughFinal}ms");
+
+            // The last depth on a quiet position is where the tree stops being cheap, so this gap is
+            // normally the widest one in the whole curve — which is what leaves room to aim into it.
+            // If it ever closes, the aim below becomes a coin flip and the test says so here rather
+            // than failing intermittently later.
+            Assert.That(throughFinal - throughPenultimate, Is.GreaterThan(8L),
+                $"The final depth only costs {throughFinal - throughPenultimate}ms on this position, " +
+                "which is too narrow a window to reliably interrupt. This test needs a position where " +
+                "the last depth is expensive.");
+
+            int budgetMs = (int)((throughPenultimate + throughFinal) / 2);
+
+            AlphaBetaSearch interrupted = NewSearch();
             using (var cts = new CancellationTokenSource())
             {
-                cts.CancelAfter(1200);
-                _search.FindBestMove(board, settings, cts.Token, enableInstabilityTimeManagement: true);
+                cts.CancelAfter(budgetMs);
+                interrupted.FindBestMove(QuietPosition(), settings, cts.Token,
+                    enableInstabilityTimeManagement: true);
             }
 
-            Assume.That(_search.Stats.LastCompletedDepth, Is.LessThan(9),
-                "This fixture only exercises the intended case when the budget genuinely stops the " +
-                "search short of its configured depth.");
-            Assert.That(_search.Stats.StopReason, Is.EqualTo(SearchStopReason.Budget),
+            // Exactly one short of the ceiling is what proves the interruption landed in the final
+            // depth: the depth before it committed, the final one did not, and the loop then ran out
+            // of depths rather than noticing the cancellation itself. Anything shallower means the
+            // budget landed too early and the loop's own check did the labelling, which some other
+            // test in this fixture already covers.
+            Assert.That(interrupted.LastCompletedDepth, Is.EqualTo(maxDepth - 1),
+                $"A {budgetMs}ms budget was aimed between {throughPenultimate}ms and {throughFinal}ms " +
+                "so the search would be cut off during its last depth. Landing anywhere else means " +
+                "this run is not exercising the case, whatever stop reason it reports.");
+            Assert.That(interrupted.StopReason, Is.EqualTo(SearchStopReason.Budget),
                 "A search that stopped short of its configured depth was stopped by the clock, not " +
                 "by reaching its ceiling.");
         }

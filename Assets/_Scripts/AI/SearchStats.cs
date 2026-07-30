@@ -308,6 +308,30 @@ namespace ChessTheBetrayal.AI
             }
         }
 
+        /// <summary>The cumulative wall-clock milliseconds recorded when the given depth completed, or
+        /// 0 for a depth outside 1..12 or one the search never reached. The companion to
+        /// <see cref="NodesAfterDepth"/>, so a caller can walk the curve by depth rather than naming
+        /// one of the twelve fields and having to keep that name in step with the depth it means.</summary>
+        public long ElapsedMsAfterDepth(int depth)
+        {
+            switch (depth)
+            {
+                case 1: return ElapsedMsAfterDepth1;
+                case 2: return ElapsedMsAfterDepth2;
+                case 3: return ElapsedMsAfterDepth3;
+                case 4: return ElapsedMsAfterDepth4;
+                case 5: return ElapsedMsAfterDepth5;
+                case 6: return ElapsedMsAfterDepth6;
+                case 7: return ElapsedMsAfterDepth7;
+                case 8: return ElapsedMsAfterDepth8;
+                case 9: return ElapsedMsAfterDepth9;
+                case 10: return ElapsedMsAfterDepth10;
+                case 11: return ElapsedMsAfterDepth11;
+                case 12: return ElapsedMsAfterDepth12;
+                default: return 0;
+            }
+        }
+
         public override string ToString() =>
             $"depth={LastCompletedDepth} stopReason={StopReason} nodes={NodesVisited} tt(probe={TTProbes} hit={TTHits} emptyMiss={TTEmptyMisses} verifyMiss={TTVerificationMisses} store={TTStores} replace={TTReplacements}) " +
             $"null(try={NullMoveAttempts} cut={NullMoveCutoffs} skip(depth={NullMoveSkippedByDepth} guard={NullMoveSkippedByGuard} parentNull={NullMoveSkippedByParentNull} material={NullMoveSkippedByMaterial} beta={NullMoveSkippedByBeta})) lmr(reduce={LmrReductions} research={LmrReSearches}) pvs(scout={PvsScouts} research={PvsReSearches}) " +
