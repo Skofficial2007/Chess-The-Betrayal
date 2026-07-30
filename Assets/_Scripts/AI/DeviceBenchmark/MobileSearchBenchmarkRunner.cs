@@ -65,18 +65,12 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         /// a test, a console app) decides where it goes (Debug.Log, a scrolling label, stdout).</summary>
         public event Action<string> OnLine;
 
-        public void EmitStartBanner() => Emit("Device search benchmark starting...");
-
-        public void EmitCompletionBanner()
-        {
-            EmitDeviceInfo();
-
-            // A single, unmistakable, greppable line — `adb logcat | grep BENCHMARK_RUN_COMPLETE`
-            // (or eyeballing the on-screen log) tells you unambiguously that every cell ran to
-            // completion, as opposed to the app having merely gone idle/frozen/crashed silently.
-            Emit(CompletionMarker);
-        }
-
+        /// <summary>A single, unmistakable, greppable line — `adb logcat | grep
+        /// BENCHMARK_RUN_COMPLETE` (or eyeballing the on-screen log) tells you unambiguously that
+        /// every cell ran to completion, as opposed to the app having merely gone idle, frozen or
+        /// crashed silently. Just a string: device info and the start/completion narration around
+        /// it are DeviceSearchBenchmark's job, the one place in this feature that legitimately
+        /// touches Unity APIs.</summary>
         public const string CompletionMarker = "===BENCHMARK_RUN_COMPLETE===";
 
         /// <summary>
@@ -204,32 +198,38 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         }
 
         /// <summary>
-        /// Prints two lines per built-in tier, one per thread context, so a main-thread run and a
+        /// Builds two lines per built-in tier, one per thread context, so a main-thread run and a
         /// worker-thread run on the same tier can be read side by side rather than blended into one
         /// number: how many samples each has, the worst/mean/min elapsed time, the worst overshoot
         /// past its own budget, and the worst/mean depth reached. A combination with zero samples
         /// still gets a line saying so, rather than being left out — an absent line reads as
         /// "nothing to report" when it might just mean the run was interrupted before reaching it,
         /// which is exactly the distinction this line exists to make clear. Safe to call at any
-        /// point, since it only ever reports on whatever has been recorded so far.
+        /// point, since it only ever reports on whatever has been recorded so far. Also emits each
+        /// line the usual way (for adb logcat / a plain console listener); returning them too lets
+        /// a caller assembling a structured report (see BenchmarkReport) place the summary as its
+        /// own section rather than re-parsing the general line stream for it.
         /// </summary>
-        public void EmitTierSummaries()
+        public IReadOnlyList<string> EmitTierSummaries()
         {
-            Emit("--- Per-tier summary ---");
+            var lines = new List<string>();
 
             foreach (AIProfile profile in AIProfileTable.BuiltIn)
             {
-                EmitTierSummaryLine(profile, MainThreadLabel);
-                EmitTierSummaryLine(profile, WorkerThreadLabel);
+                lines.Add(EmitTierSummaryLine(profile, MainThreadLabel));
+                lines.Add(EmitTierSummaryLine(profile, WorkerThreadLabel));
             }
+
+            return lines;
         }
 
-        private void EmitTierSummaryLine(AIProfile profile, string threadLabel)
+        private string EmitTierSummaryLine(AIProfile profile, string threadLabel)
         {
             if (!_timingsByKey.TryGetValue((profile.Id, threadLabel), out List<SearchTiming> samples) || samples.Count == 0)
             {
-                Emit($"[{profile.Id} {threadLabel}] no samples recorded.");
-                return;
+                string noSamplesLine = $"[{profile.Id} {threadLabel}] no samples recorded.";
+                Emit(noSamplesLine);
+                return noSamplesLine;
             }
 
             double worstSeconds = samples[0].Seconds;
@@ -255,8 +255,10 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             double meanDepth = (double)sumDepth / samples.Count;
             string overshootNote = worstOvershootMs > 0 ? $"+{worstOvershootMs:F0}ms" : "none";
 
-            Emit($"[{profile.Id} {threadLabel}] {samples.Count} samples: elapsed worst {worstSeconds:F2}s mean {meanSeconds:F2}s min {minSeconds:F2}s "
-                + $"(budget {profile.TimeBudget.HardMs}ms, worst overshoot {overshootNote}); depth worst {worstDepth} mean {meanDepth:F1}");
+            string line = $"[{profile.Id} {threadLabel}] {samples.Count} samples: elapsed worst {worstSeconds:F2}s mean {meanSeconds:F2}s min {minSeconds:F2}s "
+                + $"(budget {profile.TimeBudget.HardMs}ms, worst overshoot {overshootNote}); depth worst {worstDepth} mean {meanDepth:F1}";
+            Emit(line);
+            return line;
         }
 
         private void RunSingleMove(AIProfile profile, string positionName, BoardState board, int repeatIndex,
@@ -338,29 +340,6 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
                 : $"within budget ({timing.HardMs}ms)";
 
         private void Emit(string line) => OnLine?.Invoke(line);
-
-        /// <summary>
-        /// Dumps every SystemInfo field useful for correlating a timing result with the actual
-        /// hardware it ran on. Unity has no direct "chipset name" API — graphicsDeviceName is the
-        /// closest honest proxy (a Mali GPU implies MediaTek/Exynos/Unisoc, an Adreno GPU implies
-        /// Snapdragon), so it's included alongside deviceModel/processorType rather than guessed.
-        /// Reads UnityEngine.SystemInfo/Screen directly (the one place this "Unity-free" class
-        /// isn't) since there is no non-Unity way to learn this — kept isolated to this single
-        /// method so the rest of the class stays trivially testable outside Play mode.
-        /// </summary>
-        private void EmitDeviceInfo()
-        {
-            Emit("--- Device info ---");
-            Emit($"Device model: {UnityEngine.SystemInfo.deviceModel}");
-            Emit($"Device name: {UnityEngine.SystemInfo.deviceName}");
-            Emit($"Device unique ID: {UnityEngine.SystemInfo.deviceUniqueIdentifier}");
-            Emit($"OS: {UnityEngine.SystemInfo.operatingSystem}");
-            Emit($"CPU: {UnityEngine.SystemInfo.processorType} ({UnityEngine.SystemInfo.processorCount} cores, {UnityEngine.SystemInfo.processorFrequency}MHz)");
-            Emit($"GPU (chipset proxy): {UnityEngine.SystemInfo.graphicsDeviceName} [{UnityEngine.SystemInfo.graphicsDeviceVendor}], API {UnityEngine.SystemInfo.graphicsDeviceType}");
-            Emit($"RAM: {UnityEngine.SystemInfo.systemMemorySize}MB system, {UnityEngine.SystemInfo.graphicsMemorySize}MB graphics");
-            Emit($"Battery: {UnityEngine.SystemInfo.batteryLevel * 100f:F0}% ({UnityEngine.SystemInfo.batteryStatus})");
-            Emit($"Screen: {UnityEngine.Screen.width}x{UnityEngine.Screen.height} @ {UnityEngine.Screen.dpi}dpi");
-        }
 
         /// <summary>One search's outcome: elapsed wall-clock time, whether the soft time budget cut
         /// it off before MaxDepth, the deepest iterative-deepening depth it fully completed — the

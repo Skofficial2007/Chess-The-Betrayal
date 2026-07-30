@@ -9,11 +9,11 @@ using ChessTheBetrayal.Core.Engine;
 namespace ChessTheBetrayal.Tests.EditMode.AI
 {
     /// <summary>
-    /// This runner had no test coverage before now, even though it's genuinely Unity-free (bar the
-    /// single device-info method) and never needed a scene or Play mode to exercise. Covers the
-    /// transposition-table sizing, each cell's evaluator/settings wiring, and the position-index
-    /// mapping across the boundary between the replayed curated openings and the two hand-placed
-    /// positions.
+    /// This runner had no test coverage before now, even though it's genuinely Unity-free and never
+    /// needed a scene or Play mode to exercise. Covers the transposition-table sizing, each cell's
+    /// evaluator/settings wiring, the position-index mapping across the boundary between the
+    /// replayed curated openings and the two hand-placed positions, and the worker-thread/
+    /// main-thread labeling that keeps the two thread contexts from being blended together.
     /// </summary>
     [TestFixture]
     public class MobileSearchBenchmarkRunnerTests
@@ -268,6 +268,24 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 Assert.That(lines.Any(l => l.StartsWith($"[{profile.Id} {MobileSearchBenchmarkRunner.WorkerThreadLabel}]")), Is.True,
                     $"Expected a worker-thread summary line for '{profile.Id}' even with zero samples recorded.");
             }
+        }
+
+        [Test]
+        public void EmitTierSummaries_ReturnsExactlyTheLinesItEmitted()
+        {
+            var runner = new MobileSearchBenchmarkRunner();
+            runner.RecordTiming("easy", MobileSearchBenchmarkRunner.MainThreadLabel,
+                new MobileSearchBenchmarkRunner.SearchTiming(seconds: 1.0, budgetCapped: false, depthReached: 5, hardMs: 1300));
+
+            var emittedLines = new List<string>();
+            runner.OnLine += emittedLines.Add;
+
+            IReadOnlyList<string> returnedLines = runner.EmitTierSummaries();
+
+            // A caller assembling a structured report (BenchmarkReport) reads the summary from the
+            // return value rather than re-parsing the general OnLine stream for it -- the two must
+            // never disagree about what the summary actually said.
+            Assert.That(returnedLines, Is.EqualTo(emittedLines));
         }
     }
 }
