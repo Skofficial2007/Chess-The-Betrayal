@@ -40,22 +40,27 @@ object past 16,383 characters without warning, and a tester run's report already
 13,000 — an uncapped log would quietly start losing the newest lines, which are the ones being
 watched. A saved copy has everything.
 
-**Download** stays greyed out and unpressable until a run completes. Pressing it writes the whole
-report, unstyled and untrimmed, as a `.txt` under `Application.persistentDataPath`, named for the
-device and the moment it ran (`chess-ai-benchmark_<device>_<yyyyMMdd-HHmmss>.txt`) so a folder full
-of reports from several testers stays attributable and nothing overwrites anything. The full path is
-appended to the on-screen log and to the player log.
+**Share Report** stays greyed out and unpressable until a run completes. Pressing it always does two
+things first, on every platform: copies the whole report to the clipboard, and writes it, unstyled
+and untrimmed, as a `.txt` under `Application.persistentDataPath`, named for the device and the
+moment it ran (`chess-ai-benchmark_<device>_<yyyyMMdd-HHmmss>.txt`) so a folder full of reports from
+several testers stays attributable and nothing overwrites anything. The full path is appended to the
+on-screen log and to the player log — that pair is the safety net nothing else here depends on.
 
-On Android that folder is somewhere a phone's file manager will not go, so the save is followed by a
-share sheet carrying the report as text — the tester picks whatever they already use to send things.
-It carries text rather than an attached file specifically so it needs no storage permission and no
-extra manifest entries. It is best effort: if a device refuses the intent, the file is already
-written and its path is already on screen.
+On Android, what happens next depends on the API level. Android 10 (API 29) and newer write a second
+copy straight into the phone's public Downloads folder through MediaStore and raise a share sheet
+with that file attached, so the tester can open it from a chat app, mail or a file manager without
+ever leaving the share sheet. Android 8-9 (API 26-28), or any device where the Downloads write or the
+attached share fails for any reason, fall back to the same text-only share sheet this always used —
+no file attached, just the report as the message body — which needs no storage permission and no
+manifest entry. Whichever layer actually fired, the on-screen note says so, so a fallback is never a
+silent one.
 
-**One caveat worth stating plainly.** The write is one ordinary file write and runs identically in
-the editor and on a phone, so an editor run genuinely exercises it. The share sheet is Android-only
-code that never executes in the editor, so a working editor run says nothing about whether it works
-on a device — that part is only proven by a real build.
+**One caveat worth stating plainly.** The file write and the clipboard copy are one ordinary write
+and one line of UI code, and both run identically in the editor and on a phone, so an editor run
+genuinely exercises them. Everything past that — the Downloads write, either share sheet — is
+Android-only code that never executes in the editor, so a working editor run says nothing about
+whether any of it works on a device — that part is only proven by a real build.
 
 ## What it measures
 
