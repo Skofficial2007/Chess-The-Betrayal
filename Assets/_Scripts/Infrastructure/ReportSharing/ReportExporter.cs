@@ -5,7 +5,7 @@ using UnityEngine;
 
 [assembly: InternalsVisibleTo("ChessTheBetrayal.Tests.EditMode")]
 
-namespace ChessTheBetrayal.UI
+namespace ChessTheBetrayal.Infrastructure
 {
     /// <summary>What came of trying to get a report to the tester, in terms a person can be shown.</summary>
     public readonly struct ReportExportResult
@@ -27,16 +27,18 @@ namespace ChessTheBetrayal.UI
     }
 
     /// <summary>
-    /// Gets a finished benchmark report to the tester through whichever of three layers the
-    /// platform and API level allow, falling back rather than stopping at the first failure so a
-    /// device that refuses one layer still leaves the tester with something.
+    /// Gets a finished text report to the tester through whichever of three layers the platform
+    /// and API level allow, falling back rather than stopping at the first failure so a device
+    /// that refuses one layer still leaves the tester with something. Used by both the device
+    /// benchmark screen and in-match AI telemetry — platform I/O like this belongs here rather
+    /// than inside either feature's own UI folder.
     ///
     /// The file write and the clipboard copy happen unconditionally, on every platform, before any
     /// platform-specific sharing is attempted — the same write the Editor performs when this class
     /// is exercised there, so an Editor run genuinely proves that half of the path. Everything
     /// Android-specific lives in AndroidReportShare, which only compiles into a device build.
     /// </summary>
-    public static class BenchmarkReportExporter
+    public static class ReportExporter
     {
         public static ReportExportResult Save(string fileName, string contents)
         {
@@ -49,11 +51,11 @@ namespace ChessTheBetrayal.UI
             }
             catch (Exception e)
             {
-                Debug.LogError($"[BenchmarkReportExporter] Could not write {path}: {e}");
+                Debug.LogError($"[ReportExporter] Could not write {path}: {e}");
                 return new ReportExportResult(false, path, $"Could not save the report: {e.Message}");
             }
 
-            Debug.Log($"[BenchmarkReportExporter] Saved report to {path}");
+            Debug.Log($"[ReportExporter] Saved report to {path}");
             return new ReportExportResult(true, path, BuildMessage(fileName, contents, path));
         }
 

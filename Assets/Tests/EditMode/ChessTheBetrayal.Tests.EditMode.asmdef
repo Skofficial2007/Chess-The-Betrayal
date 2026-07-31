@@ -9,7 +9,7 @@
     "ChessTheBetrayal.Tests.Utilities",
     "ChessTheBetrayal.EditorTools",
     "ChessTheBetrayal.UI.SafeArea",
-    "ChessTheBetrayal.UI"
+    "ChessTheBetrayal.Infrastructure"
   ],
   "includePlatforms": ["Editor"],
   "excludePlatforms": [],

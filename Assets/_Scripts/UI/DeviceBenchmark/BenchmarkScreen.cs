@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using ChessTheBetrayal.AI.DeviceBenchmark;
 using ChessTheBetrayal.Core.Diagnostics;
+using ChessTheBetrayal.Infrastructure;
 
 namespace ChessTheBetrayal.UI
 {
@@ -135,7 +136,7 @@ namespace ChessTheBetrayal.UI
             if (string.IsNullOrEmpty(report)) return;
 
             string fileName = BenchmarkReportFileName.Build(DeviceSearchBenchmark.DeviceModel, DateTime.Now);
-            ReportExportResult result = BenchmarkReportExporter.Save(fileName, report);
+            ReportExportResult result = ReportExporter.Save(fileName, report);
             _benchmark.AppendNote(result.Message);
         }
 

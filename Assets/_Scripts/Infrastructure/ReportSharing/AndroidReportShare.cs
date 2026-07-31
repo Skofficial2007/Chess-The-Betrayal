@@ -3,14 +3,14 @@ using System;
 using System.Text;
 using UnityEngine;
 
-namespace ChessTheBetrayal.UI
+namespace ChessTheBetrayal.Infrastructure
 {
     /// <summary>
     /// The Android-only half of exporting a report: everything that talks to the platform through
-    /// JNI. Kept out of BenchmarkReportExporter so that class stays readable as "write the file,
-    /// then hand it off" instead of a few hundred lines of AndroidJavaObject calls. Only compiled
-    /// into an Android device build, so none of this can be exercised from an Editor test — the
-    /// selection logic in ReportShareLayerSelector is what stays testable.
+    /// JNI. Kept out of ReportExporter so that class stays readable as "write the file, then hand
+    /// it off" instead of a few hundred lines of AndroidJavaObject calls. Only compiled into an
+    /// Android device build, so none of this can be exercised from an Editor test — the selection
+    /// logic in ReportShareLayerSelector is what stays testable.
     /// </summary>
     internal static class AndroidReportShare
     {
@@ -41,14 +41,14 @@ namespace ChessTheBetrayal.UI
                 CallAndRelease(intent, "addFlags", intentClass.GetStatic<int>("FLAG_GRANT_READ_URI_PERMISSION"));
 
                 using var chooser = intentClass.CallStatic<AndroidJavaObject>(
-                    "createChooser", intent, "Send benchmark report");
+                    "createChooser", intent, "Send report");
                 using var activity = CurrentActivity();
                 activity.Call("startActivity", chooser);
                 return true;
             }
             catch (Exception e)
             {
-                Debug.LogWarning($"[BenchmarkReportExporter] Could not share via Downloads " +
+                Debug.LogWarning($"[ReportExporter] Could not share via Downloads " +
                     $"({e.Message}); falling back to a text share.");
                 return false;
             }
@@ -72,14 +72,14 @@ namespace ChessTheBetrayal.UI
                 CallAndRelease(intent, "putExtra", intentClass.GetStatic<string>("EXTRA_TEXT"), contents);
 
                 using var chooser = intentClass.CallStatic<AndroidJavaObject>(
-                    "createChooser", intent, "Send benchmark report");
+                    "createChooser", intent, "Send report");
                 using var activity = CurrentActivity();
                 activity.Call("startActivity", chooser);
                 return true;
             }
             catch (Exception e)
             {
-                Debug.LogWarning($"[BenchmarkReportExporter] Could not offer the report for sharing " +
+                Debug.LogWarning($"[ReportExporter] Could not offer the report for sharing " +
                     $"({e.Message}).");
                 return false;
             }

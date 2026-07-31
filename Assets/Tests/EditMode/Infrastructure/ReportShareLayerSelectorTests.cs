@@ -1,7 +1,7 @@
 using NUnit.Framework;
-using ChessTheBetrayal.UI;
+using ChessTheBetrayal.Infrastructure;
 
-namespace ChessTheBetrayal.Tests.EditMode.UI
+namespace ChessTheBetrayal.Tests.EditMode.Infrastructure
 {
     /// <summary>
     /// The Android JNI itself can only be proven on a device, but which layer it starts from is
@@ -43,7 +43,7 @@ namespace ChessTheBetrayal.Tests.EditMode.UI
         public void Choose_AtTheMinSupportedApiLevel_PicksTextIntent()
         {
             // The app's own AndroidMinSdkVersion floor, pinned in ProjectSettings — the oldest
-            // device this benchmark can actually be asked to run on.
+            // device this project can actually be asked to run on.
             ReportShareLayer layer = ReportShareLayerSelector.Choose(isAndroidRuntime: true, androidApiLevel: 26);
 
             Assert.That(layer, Is.EqualTo(ReportShareLayer.TextIntent));
