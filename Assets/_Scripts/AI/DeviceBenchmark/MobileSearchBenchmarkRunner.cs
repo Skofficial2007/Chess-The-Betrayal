@@ -11,7 +11,7 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
     /// <summary>
     /// Unity-free benchmark logic: for one (position, tier, repeat) cell, times a single cold search
     /// and a several-ply play-forward from the same position. Deliberately has no dependency on
-    /// MonoBehaviour/UnityEngine.Debug/OnGUI — those are presentation concerns owned by
+    /// MonoBehaviour or UnityEngine.Debug — those are presentation concerns owned by
     /// DeviceSearchBenchmark, which drives this class from a coroutine so results can render as
     /// they complete and iterates positions/tiers/repeats so an interrupted run still yields
     /// complete cross-tier coverage on however many positions finished. Keeping the two separate
@@ -22,12 +22,11 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
     /// transposition table, the profile's real evaluator weighting, the profile's rescore margin)
     /// so a device number means the same thing a match would have cost on that device.
     ///
-    /// TEMPORARY diagnostic tool, not shipped gameplay code — delete this whole folder once real
-    /// device throughput has been measured across enough devices and a mobile-tier perf plan
-    /// exists. Because of that, this class allocates freely (StringBuilder-free plain strings, a
-    /// List&lt;MoveCommand&gt; per run) rather than avoiding allocation the way the actual
-    /// gameplay/search hot path (AlphaBetaSearch, TranspositionTable) has to — a benchmark run
-    /// happens once per device visit, not sixty times a second, so it is not that hot path.
+    /// A diagnostic tool, not shipped gameplay code, so it allocates freely (plain string
+    /// concatenation, a List&lt;MoveCommand&gt; per run) rather than avoiding allocation the way
+    /// AlphaBetaSearch and the transposition table have to. A benchmark cell runs once every few
+    /// seconds at most, never inside the search loop itself, so an allocation here was never on a
+    /// path anyone could feel.
     /// </summary>
     public sealed class MobileSearchBenchmarkRunner
     {

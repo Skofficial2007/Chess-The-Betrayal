@@ -36,8 +36,6 @@ namespace ChessTheBetrayal.UI
     /// rather than as an attached file, so it needs no storage permission and no extra manifest
     /// entries. If it fails for any reason the file is already written and its path is already
     /// reported, so nothing is lost.
-    ///
-    /// TEMPORARY diagnostic support code — delete alongside the benchmark itself.
     /// </summary>
     public static class BenchmarkReportExporter
     {

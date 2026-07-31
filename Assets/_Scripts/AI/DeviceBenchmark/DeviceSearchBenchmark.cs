@@ -9,9 +9,10 @@ using Debug = UnityEngine.Debug;
 namespace ChessTheBetrayal.AI.DeviceBenchmark
 {
     /// <summary>
-    /// TEMPORARY diagnostic tool, not shipped gameplay code. Runs every built-in AIProfile tier
-    /// against a fixed set of positions and reports how long each search took and how deep it got,
-    /// so the per-move promise can be checked on real hardware instead of only on a desktop.
+    /// A diagnostic tool kept in the project on purpose, not shipped gameplay code. Runs every
+    /// built-in AIProfile tier against a fixed set of positions and reports how long each search
+    /// took and how deep it got, so the per-move promise can be checked on real hardware instead of
+    /// only on a desktop — the same check anyone who forks the AI or the rules will need to re-run.
     ///
     /// Owns the run and nothing else: the pacing, every read of a Unity-only API (device info,
     /// battery, build config, keeping the screen awake), and assembling those into the one
@@ -23,9 +24,6 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
     /// Nothing starts on its own. A run begins when something calls StartRun, because a benchmark
     /// that starts the instant the scene loads measures a phone that is still settling after the
     /// app launched, and cannot be repeated without relaunching.
-    ///
-    /// Delete this whole folder once real device throughput has been measured across enough devices
-    /// and a mobile-tier perf plan exists.
     /// </summary>
     public class DeviceSearchBenchmark : MonoBehaviour
     {

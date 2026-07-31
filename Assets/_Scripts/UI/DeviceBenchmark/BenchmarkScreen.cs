@@ -8,16 +8,14 @@ using ChessTheBetrayal.Core.Diagnostics;
 namespace ChessTheBetrayal.UI
 {
     /// <summary>
-    /// The on-screen face of the device benchmark: a Start button, a scrolling text view of the
-    /// run, and a Download button that only lights up once there is a finished report to save.
+    /// The on-screen face of the device benchmark: a button that starts a run, a scrolling text
+    /// view of its progress, and a button that only lights up once there is a finished report to
+    /// share.
     ///
     /// Deliberately holds no benchmark logic at all — it starts a run, reads state, and draws the
     /// report DeviceSearchBenchmark hands it. Everything worth asserting about a report (what it
     /// contains and in what order) is therefore testable without a scene, and this class stays
     /// small enough to be checked by looking at it.
-    ///
-    /// TEMPORARY diagnostic screen, not shipped gameplay UI — delete this folder alongside the
-    /// benchmark itself once enough devices have been measured.
     /// </summary>
     public class BenchmarkScreen : MonoBehaviour
     {

@@ -168,3 +168,40 @@ Pinned in `ProjectSettings/ProjectSettings.asset`, not left on template defaults
 IL2CPP configuration Release, code generation "faster runtime," managed stripping Low, target API 36,
 min API 26. Never compare device numbers captured under different settings than these — a timing
 difference would measure the configuration change, not the phone.
+
+## Using this on your own project
+
+If you've forked this project and changed the AI or the rules, this instrument is built to be
+re-run rather than rebuilt.
+
+`DeviceBenchmark.unity` ships in the project but is disabled in Build Settings
+(`enabled: 0` in `ProjectSettings/EditorBuildSettings.asset`), so a normal player build never runs
+it. To get a device number of your own, either open the scene and press Play in the Editor, or
+enable it in Build Settings and move it to index 0 for a dedicated benchmark build — never enable it
+in a build you intend to ship to players.
+
+Capture your own desktop reference first, with `MobileBenchmarkDesktopCaptureTests`
+(`[Explicit]` — run it deliberately). A device row only means something next to a desktop row taken
+with this same harness; the numbers on this page are this project's own and are not a baseline for
+a fork that has changed the AI or the rules.
+
+If you changed evaluation weights, search parameters, or added/removed a difficulty tier: those all
+live in `AIProfileTable`, and the benchmark resolves every tier through the same
+`AIProfileTableProvider.Resolve` a real match uses — a profile-row change is picked up with no
+benchmark code edit at all.
+
+If you changed the rules themselves — a new piece, a new legal move, a different board size — the
+positions the benchmark searches will not update on their own. They come from hard-coded piece
+placements in `CuratedOpeningLines` and `DepthWallPositions`, both written for this game's rules;
+you'll want to replace them with positions of your own before trusting a number from a changed
+ruleset.
+
+The tester plan (`BenchmarkPlan.Tester()`) is the only one safe to hand to someone else — its 2m20s
+worst case is provable from `AIProfileTable`'s own budgets before a single search runs. The
+exhaustive plan (`BenchmarkPlan.Exhaustive()`) can run for hours and is for a machine you own;
+switching which one a build runs is the one line in `DeviceSearchBenchmark.BuildPlan()`. Whichever
+you use, work out its worst case the same way before handing it to anyone — a run nobody finishes
+measures nothing.
+
+Record your fork's own results in a copy of this page, not by editing the table above — that table
+is this project's baseline, not a template.
