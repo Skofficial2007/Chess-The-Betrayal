@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Threading;
 using NUnit.Framework;
 using ChessTheBetrayal.AI;
@@ -204,6 +205,41 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         }
 
         [Test]
+        public void TryRequestMove_ThenDelivery_MoveDecidedMessageNamesTheDepthAndStopReason()
+        {
+            var logger = new CapturingLogger();
+            var coordinator = new AIMatchCoordinator(_engine, _board, move => _lastPlayedMove = move, ShallowSettings, ProfileProvider, logger);
+            _board.CurrentTurn = Team.Black;
+
+            try
+            {
+                coordinator.SetAIMode(Team.Black, BetrayalUsage.Full, "normal");
+                coordinator.TryRequestMove(isGameActive: true);
+
+                var stopwatch = Stopwatch.StartNew();
+                while (!_lastPlayedMove.HasValue && stopwatch.ElapsedMilliseconds < PollTimeoutMs)
+                {
+                    coordinator.Tick();
+                    Thread.Sleep(PollIntervalMs);
+                }
+
+                Assert.That(_lastPlayedMove, Is.Not.Null);
+                DomainLogEvent moveDecided = logger.Events.First(e => e.Code == DomainEventCode.AI_MoveDecided);
+
+                // ShallowSettings caps MaxDepth at 1, so a search that completed normally must
+                // report exactly that depth back through the log line.
+                Assert.That(moveDecided.Message, Does.Contain("depth 1,"),
+                    "AI_MoveDecided must name the depth the search actually completed, not just that a move was played.");
+                Assert.That(moveDecided.Message, Does.Not.Contain("Unset"),
+                    "A real search always sets a concrete stop reason; Unset would mean the depth/reason wiring never ran.");
+            }
+            finally
+            {
+                coordinator.Dispose();
+            }
+        }
+
+        [Test]
         public void CancelInFlightSearch_WhileSearching_EmitsSearchCancelled()
         {
             var logger = new CapturingLogger();
@@ -271,16 +307,23 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         private sealed class CapturingLogger : IDomainLogger
         {
             private readonly object _lock = new object();
-            private readonly List<DomainEventCode> _codes = new List<DomainEventCode>();
+            private readonly List<DomainLogEvent> _events = new List<DomainLogEvent>();
 
             public bool IsVerbose => true;
 
             public IReadOnlyList<DomainEventCode> Codes
             {
-                get { lock (_lock) { return new List<DomainEventCode>(_codes); } }
+                get { lock (_lock) { return _events.Select(e => e.Code).ToList(); } }
             }
 
-            private void Add(DomainLogEvent evt) { lock (_lock) { _codes.Add(evt.Code); } }
+            /// <summary>The full events, message and AuxInt included — Codes above only carries
+            /// enough to assert an event fired at all, not what it said.</summary>
+            public IReadOnlyList<DomainLogEvent> Events
+            {
+                get { lock (_lock) { return new List<DomainLogEvent>(_events); } }
+            }
+
+            private void Add(DomainLogEvent evt) { lock (_lock) { _events.Add(evt); } }
 
             public void LogInfo(DomainLogEvent evt) => Add(evt);
             public void LogWarning(DomainLogEvent evt) => Add(evt);

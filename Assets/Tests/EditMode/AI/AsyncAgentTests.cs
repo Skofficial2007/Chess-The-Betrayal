@@ -59,6 +59,22 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
+        public void RequestBestMove_AfterDelivery_ExposesTheCompletedSearchsDepthAndStopReason()
+        {
+            BoardState board = TestBoardSetupUtility.CreateStandard();
+            bool delivered = false;
+            _agent.OnMoveDecided += _ => delivered = true;
+
+            _agent.RequestBestMove(board, Team.White);
+            PumpTickUntil(() => delivered);
+
+            Assert.That(_agent.LastCompletedDepth, Is.GreaterThan(0),
+                "A depth-1 search that completed normally must report at least depth 1, not the zero default.");
+            Assert.That(_agent.StopReason, Is.Not.EqualTo(SearchStopReason.Unset),
+                "Every real search sets a concrete stop reason before returning.");
+        }
+
+        [Test]
         public void IsSearching_FalseAfterTickDeliversTheResult()
         {
             // IsSearching's own doc comment promises it goes false "once a result is consumed via
@@ -352,6 +368,39 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 PumpUntil(agent, () => decided == 2);
 
                 Assert.That(leftBookCount, Is.EqualTo(1), "Leaving the book must be announced once, not on every searched move.");
+            }
+            finally
+            {
+                agent.Dispose();
+                Object.DestroyImmediate(book);
+            }
+        }
+
+        /// <summary>
+        /// Pins the contract that a book move reports depth 0 / StopReason.Unset. Worth stating: on
+        /// a freshly constructed agent this is also plain C# default-field behavior, so this test
+        /// alone cannot tell "the book branch resets these on purpose" apart from "nobody ever wrote
+        /// to them" — RequestBestMove_AfterDelivery... above is what proves a real search's values
+        /// actually get published at all.
+        /// </summary>
+        [Test]
+        public void OnBookMovePlayed_NeverRanASearch_SoDepthAndStopReasonStayAtTheirZeroDefault()
+        {
+            OpeningBookAsset book = TwoPlyBook();
+            AsyncAIAgent agent = BookAgent(book);
+            BoardState board = OpeningBookCompiler.CreateStandardStartingPosition();
+
+            bool bookMovePlayed = false;
+            agent.OnBookMovePlayed += _ => bookMovePlayed = true;
+
+            try
+            {
+                agent.RequestBestMove(board, Team.White);
+                PumpUntil(agent, () => bookMovePlayed);
+
+                Assert.That(agent.LastCompletedDepth, Is.Zero,
+                    "A book hit never ran a search, so there is no completed depth to report.");
+                Assert.That(agent.StopReason, Is.EqualTo(SearchStopReason.Unset));
             }
             finally
             {

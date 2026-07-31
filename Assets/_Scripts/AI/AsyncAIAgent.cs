@@ -59,6 +59,8 @@ namespace ChessTheBetrayal.AI
         private volatile bool _hasResult;
         private volatile bool _pendingResultFromBook;
         private MoveCommand _pendingResult;
+        private int _lastCompletedDepth;
+        private SearchStopReason _lastStopReason;
         private CancellationTokenSource _cts;
 
         // Whether this agent has played a book move yet, and whether it has already announced
@@ -74,6 +76,19 @@ namespace ChessTheBetrayal.AI
         /// whether an Undo needs to cancel an in-flight AI reply before popping the board.
         /// </summary>
         public bool IsSearching => _cts != null;
+
+        /// <summary>
+        /// The deepest depth and the reason iterative deepening stopped there, for whichever search
+        /// most recently delivered a move via OnMoveDecided. Captured on the worker thread the
+        /// instant FindBestMove returns and published by the same volatile _hasResult write that
+        /// publishes the move itself, so reading these is only meaningful after OnMoveDecided has
+        /// fired for the move they describe — not while a new search is still in flight. A book move
+        /// never runs a search (see OnBookMovePlayed), so both reset to their zero value rather than
+        /// holding a stale reading from whatever was last actually searched.
+        /// </summary>
+        public int LastCompletedDepth => _lastCompletedDepth;
+
+        public SearchStopReason StopReason => _lastStopReason;
 
         /// <summary>
         /// Cancels any in-flight search without disposing the agent — distinct from Dispose(),
@@ -157,6 +172,8 @@ namespace ChessTheBetrayal.AI
                 {
                     _pendingResult = bookMove.Value;
                     _pendingResultFromBook = true;
+                    _lastCompletedDepth = 0;
+                    _lastStopReason = SearchStopReason.Unset;
                     _hasResult = true;
                     return;
                 }
@@ -225,7 +242,10 @@ namespace ChessTheBetrayal.AI
                     if (!ReferenceEquals(_cts, ctsForThisSearch)) return;
 
                     _pendingResult = best;
-                    _hasResult = true; // volatile write publishes _pendingResult to the main thread
+                    _lastCompletedDepth = _search.LastCompletedDepth;
+                    _lastStopReason = _search.StopReason;
+                    _hasResult = true; // volatile write publishes _pendingResult, _lastCompletedDepth
+                                        // and _lastStopReason to the main thread
                 }
                 catch (OperationCanceledException) { /* expected on reset/scene change */ }
                 catch (Exception ex)

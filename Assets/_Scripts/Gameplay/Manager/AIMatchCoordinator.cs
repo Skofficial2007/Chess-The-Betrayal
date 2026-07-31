@@ -189,7 +189,15 @@ namespace ChessTheBetrayal.Gameplay.Manager
                 // somehow ran >24 days to overflow int is a bug worth seeing pinned at int.MaxValue.
                 long elapsedMs = _searchStopwatch.ElapsedMilliseconds;
                 int auxMs = elapsedMs > int.MaxValue ? int.MaxValue : (int)elapsedMs;
-                _logger.LogInfo(new DomainLogEvent(DomainEventCode.AI_MoveDecided, message: $"{_aiTeam} plays {move}", auxInt: auxMs));
+
+                // _aiAgent is typed as the narrow IAIAgent interface, but depth/stop-reason are an
+                // AsyncAIAgent-specific reading of its own last completed search, not something every
+                // IAIAgent implementation has to carry — same reasoning Tick() already applies below
+                // for ConsumeLastSearchException.
+                string message = _aiAgent is AsyncAIAgent asyncAgent
+                    ? $"{_aiTeam} plays {move} (depth {asyncAgent.LastCompletedDepth}, {asyncAgent.StopReason})"
+                    : $"{_aiTeam} plays {move}";
+                _logger.LogInfo(new DomainLogEvent(DomainEventCode.AI_MoveDecided, message: message, auxInt: auxMs));
             }
 
             _playMove(move);
