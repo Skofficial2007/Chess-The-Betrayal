@@ -251,11 +251,14 @@ difference would measure the configuration change, not the phone.
 If you've forked this project and changed the AI or the rules, this instrument is built to be
 re-run rather than rebuilt.
 
-`DeviceBenchmark.unity` ships in the project but is disabled in Build Settings
-(`enabled: 0` in `ProjectSettings/EditorBuildSettings.asset`), so a normal player build never runs
-it. To get a device number of your own, either open the scene and press Play in the Editor, or
-enable it in Build Settings and move it to index 0 for a dedicated benchmark build — never enable it
-in a build you intend to ship to players.
+`DeviceBenchmark.unity` ships enabled in Build Settings alongside Game Scene, reachable from a QA
+button on the main menu — hidden by default behind `GameManager`'s `enableQAButton` toggle (off),
+so a normal player build never shows a way to reach it even though the scene is present in the
+binary. One tester build this way covers both this page's benchmark and the in-match AI telemetry
+below, rather than needing a separate dedicated benchmark build. A Back button in the scene abandons
+whatever run is in progress and returns to Game Scene the same way. If your fork wants a build with
+neither the QA button nor the scene present at all, remove the toggle and disable the scene in Build
+Settings — the two are independent, this is simply the shape this project settled on.
 
 Capture your own desktop reference first, with `MobileBenchmarkDesktopCaptureTests`
 (`[Explicit]` — run it deliberately). A device row only means something next to a desktop row taken

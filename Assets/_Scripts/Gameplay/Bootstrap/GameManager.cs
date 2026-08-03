@@ -54,6 +54,11 @@ namespace ChessTheBetrayal.App
         [Header("Debug")]
         [SerializeField] private bool logMoves = true;
 
+        // Off by default. The QA button on MainMenuUI navigates to DeviceBenchmark.unity, which
+        // ships in every build now that this exists — a tester never sees the button unless this is
+        // turned on for their build.
+        [SerializeField] private bool enableQAButton = false;
+
         [Header("AI")]
         [SerializeField] private ChessTheBetrayal.AI.OpeningBook.OpeningBookAsset _openingBook;
 
@@ -182,6 +187,18 @@ namespace ChessTheBetrayal.App
 
         private void Awake()
         {
+            // This scene is landscape-only; DeviceBenchmark.unity is portrait-only. Locking it here
+            // rather than leaving it to Player Settings' global default means SceneManager.LoadScene
+            // switching between the two doesn't leave the device caught on whichever orientation the
+            // previous scene left it in. AutoRotation (not a single fixed LandscapeLeft/Right) keeps
+            // both landscape flips available, matching what Player Settings already allowed — this
+            // only takes portrait out of the mix while this scene is active.
+            Screen.orientation = ScreenOrientation.AutoRotation;
+            Screen.autorotateToPortrait = false;
+            Screen.autorotateToPortraitUpsideDown = false;
+            Screen.autorotateToLandscapeLeft = true;
+            Screen.autorotateToLandscapeRight = true;
+
             ServiceLocator.Instance.Register(this);
 
             // Register under the Core-owned seams the presentation layer resolves. The locator keys
@@ -267,6 +284,17 @@ namespace ChessTheBetrayal.App
             _turnChangedChannel?.Register(OnTurnChangedForAI);
         }
 
+        // DeviceBenchmark.unity — the QA button's whole destination — only means anything on
+        // Android: its portrait lock, its MediaStore/share-sheet code, and the whole per-move
+        // budget it measures are all Android concerns. A runtime check rather than #if UNITY_ANDROID
+        // so this stays a config toggle, not a recompile, and Application.isEditor keeps the button
+        // testable in the Editor before an Android build exists to test it on — the same "verify in
+        // the Editor first" approach this feature's own benchmark reports are built around. A real
+        // non-Android build (iOS, Windows/Mac/Linux standalone) never shows it regardless of
+        // enableQAButton.
+        private static bool QAButtonPlatformAllowed =>
+            Application.isEditor || Application.platform == RuntimePlatform.Android;
+
         private void Start()
         {
             if (!ServiceLocator.Instance.TryResolve(out _uiManager))
@@ -283,6 +311,8 @@ namespace ChessTheBetrayal.App
             _uiManager.OnPracticeMatchSettingsConfirmed += HandlePracticeMatchSettingsConfirmed;
             _uiManager.OnRetributionSkipRequested += RequestRetributionSkip;
             _uiManager.OnUndoRequested += HandleUndoRequested;
+
+            _uiManager.SetQAButtonVisible(enableQAButton && QAButtonPlatformAllowed);
 
             if (logMoves)
             {

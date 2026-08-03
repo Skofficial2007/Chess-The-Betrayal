@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Diagnostics;
 using ChessTheBetrayal.Core.Match;
@@ -145,6 +146,7 @@ namespace ChessTheBetrayal.UI
                 mainMenuUI.OnPlay += HandlePlayGame;
                 mainMenuUI.OnPracticeMatch += HandlePracticeMatchRequested;
                 mainMenuUI.OnExit += HandleExitGame;
+                mainMenuUI.OnQARequested += HandleQARequested;
             }
 
             if (gameHUD != null)
@@ -189,6 +191,7 @@ namespace ChessTheBetrayal.UI
                 mainMenuUI.OnPlay -= HandlePlayGame;
                 mainMenuUI.OnPracticeMatch -= HandlePracticeMatchRequested;
                 mainMenuUI.OnExit -= HandleExitGame;
+                mainMenuUI.OnQARequested -= HandleQARequested;
             }
 
             if (gameHUD != null)
@@ -460,6 +463,9 @@ namespace ChessTheBetrayal.UI
         /// <summary>Passthrough to GameHUD — drives the Undo button's interactable state and color. GameManager calls this whenever UndoService.CanUndo changes.</summary>
         public void SetUndoInteractable(bool interactable) => gameHUD?.SetUndoInteractable(interactable);
 
+        /// <summary>Passthrough to MainMenuUI — shows/hides the QA button. GameManager calls this once at startup from its own enableQAButton toggle.</summary>
+        public void SetQAButtonVisible(bool visible) => mainMenuUI?.SetQAButtonVisible(visible);
+
         /// <summary>Passthrough to GameHUD — governs whether the Retribution Skip button is ever shown this match.</summary>
         public void SetRetributionSkipAllowed(bool allowed) => gameHUD?.SetSkipAllowed(allowed);
 
@@ -506,6 +512,10 @@ namespace ChessTheBetrayal.UI
             UnityEditor.EditorApplication.isPlaying = false;
 #endif
         }
+
+        // Unconditional: Back in DeviceBenchmark.unity always returns here the same way, so there is
+        // no decision to make on this end beyond which scene that is.
+        private void HandleQARequested() => SceneManager.LoadScene(SceneNames.DeviceBenchmark);
 
         private void HandleGameModeSelected(GameModeConfig config)
         {

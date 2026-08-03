@@ -1,6 +1,7 @@
 using System;
 using TMPro;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.Serialization;
 using UnityEngine.UI;
 using ChessTheBetrayal.AI.DeviceBenchmark;
@@ -10,9 +11,10 @@ using ChessTheBetrayal.Infrastructure;
 namespace ChessTheBetrayal.UI
 {
     /// <summary>
-    /// The on-screen face of the device benchmark: a button that starts a run, a scrolling text
-    /// view of its progress, and a button that only lights up once there is a finished report to
-    /// share.
+    /// The on-screen face of the device benchmark: two buttons that each start a different run, a
+    /// scrolling text view of the run's progress, a button that only lights up once there is a
+    /// finished report to share, and a Back button that abandons a run in progress and returns to
+    /// the game.
     ///
     /// Deliberately holds no benchmark logic at all — it starts a run, reads state, and draws the
     /// report DeviceSearchBenchmark hands it. Everything worth asserting about a report (what it
@@ -32,6 +34,7 @@ namespace ChessTheBetrayal.UI
         [SerializeField] private Button _shareButton;
         [FormerlySerializedAs("_downloadButtonGraphic")]
         [SerializeField] private Image _shareButtonGraphic;
+        [SerializeField] private Button _backButton;
 
         [Header("Share Button Colors")]
         [FormerlySerializedAs("_downloadActiveColor")]
@@ -68,6 +71,11 @@ namespace ChessTheBetrayal.UI
                 _shareButton.onClick.AddListener(HandleShareClicked);
             }
 
+            if (_backButton != null)
+            {
+                _backButton.onClick.AddListener(HandleBackClicked);
+            }
+
             // Nothing to share until a run has produced a report.
             SetShareEnabled(false);
             ShowIdleText();
@@ -81,6 +89,7 @@ namespace ChessTheBetrayal.UI
             InspectorGuard.Require(_longRunButton, nameof(_longRunButton), this);
             InspectorGuard.Require(_shareButton, nameof(_shareButton), this);
             InspectorGuard.Require(_shareButtonGraphic, nameof(_shareButtonGraphic), this);
+            InspectorGuard.Require(_backButton, nameof(_backButton), this);
         }
 
         private void Update()
@@ -145,6 +154,16 @@ namespace ChessTheBetrayal.UI
             _renderedRevision = -1;
             _renderedSecond = -1;
         }
+
+        /// <summary>
+        /// Unconditional — a run in progress is simply abandoned, not confirmed. Loading Game Scene
+        /// unloads this one, which destroys DeviceSearchBenchmark and fires its own OnDisable
+        /// (unsubscribes the runner, resets the sleep timeout, stops the coroutine dead). A search
+        /// already in flight on the worker thread keeps computing until its own budget expires (at
+        /// most 3 seconds) and its result is then simply never read — a bounded cost, not a leak,
+        /// and not worth a CancellationToken threaded in just for this.
+        /// </summary>
+        private void HandleBackClicked() => SceneManager.LoadScene(SceneNames.Game);
 
         /// <summary>
         /// Saves and shares the finished report, unstyled and complete — not the trimmed, marked-up

@@ -15,7 +15,8 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
     /// only on a desktop — the same check anyone who forks the AI or the rules will need to re-run.
     ///
     /// Owns the run and nothing else: the pacing, every read of a Unity-only API (device info,
-    /// battery, build config, keeping the screen awake), and assembling those into the one
+    /// battery, build config, keeping the screen awake, locking this scene to portrait), and
+    /// assembling those into the one
     /// BenchmarkReport that the screen, Debug.Log/adb logcat and an exported file all render
     /// identically. It draws nothing itself — whatever displays the run reads the state below and
     /// asks for a rendered report. The benchmark logic proper lives in MobileSearchBenchmarkRunner,
@@ -94,6 +95,15 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         /// into Start, because a ten-minute default is a run nobody finishes.
         /// </summary>
         public bool StartThermalRun() => StartRun(BenchmarkPlan.Thermal());
+
+        private void Awake()
+        {
+            // This scene is portrait-only; Game Scene is landscape-only. Locking it here rather
+            // than leaving it to Player Settings' global default means SceneManager.LoadScene
+            // switching between the two doesn't leave the device caught on whichever orientation
+            // the previous scene left it in.
+            Screen.orientation = ScreenOrientation.Portrait;
+        }
 
         private bool StartRun(BenchmarkPlan plan)
         {
