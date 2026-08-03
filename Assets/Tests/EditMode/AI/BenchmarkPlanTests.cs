@@ -96,9 +96,14 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         /// </summary>
         [Test]
         public void Cells_YieldExactlyAsManyCellsAsTheProgressDenominatorPromises(
-            [Values("tester", "exhaustive")] string planName)
+            [Values("tester", "exhaustive", "thermal")] string planName)
         {
-            BenchmarkPlan plan = planName == "tester" ? BenchmarkPlan.Tester() : BenchmarkPlan.Exhaustive();
+            BenchmarkPlan plan = planName switch
+            {
+                "tester" => BenchmarkPlan.Tester(),
+                "exhaustive" => BenchmarkPlan.Exhaustive(),
+                _ => BenchmarkPlan.Thermal(),
+            };
 
             int yielded = 0;
             foreach (BenchmarkCell _ in plan.Cells()) yielded++;
@@ -164,6 +169,42 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         {
             Assert.That(BenchmarkPlan.Exhaustive().PositionIndices.Count,
                 Is.EqualTo(MobileSearchBenchmarkRunner.PositionCount));
+        }
+
+        [Test]
+        public void ThermalPlan_OnlySweepsTheImpossibleTier()
+        {
+            var plan = BenchmarkPlan.Thermal();
+
+            Assert.That(plan.Profiles.Count, Is.EqualTo(1),
+                "Sweeping any other tier would dilute the sustained-load signal this run exists to isolate.");
+            Assert.That(plan.Profiles[0].Id, Is.EqualTo("impossible"));
+        }
+
+        [Test]
+        public void ThermalPlan_RunsTwoHundredSearches_WithATenMinuteWorstCase()
+        {
+            var plan = BenchmarkPlan.Thermal();
+
+            Assert.That(plan.TotalCells, Is.EqualTo(BenchmarkPlan.ThermalSearchCount));
+            Assert.That(plan.EstimatedWorstCase.TotalMilliseconds,
+                Is.EqualTo(BenchmarkPlan.ThermalSearchCount * (double)plan.Profiles[0].TimeBudget.HardMs));
+        }
+
+        [Test]
+        public void ThermalPlan_SkipsPlayForwardAndTheMainThreadControl()
+        {
+            var plan = BenchmarkPlan.Thermal();
+
+            Assert.That(plan.IncludePlayForward, Is.False,
+                "A play-forward cell would run five searches instead of one, breaking the 200-search arithmetic.");
+
+            foreach (BenchmarkCell cell in plan.Cells())
+            {
+                Assert.That(cell.OnWorkerThread, Is.True,
+                    "Production always dispatches a search onto a worker, so a main-thread control cell " +
+                    "would measure a context sustained load never actually runs in.");
+            }
         }
     }
 }

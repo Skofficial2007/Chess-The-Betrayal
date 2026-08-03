@@ -91,6 +91,38 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
+        public void Render_WithNoThermalLinesSet_OmitsTheThermalSectionEntirely()
+        {
+            var report = new BenchmarkReport("run", totalCells: 1);
+            report.SetSummaryLines(new[] { "[easy main-thread] 3 samples: ..." });
+
+            string text = report.Render(TimeSpan.Zero);
+
+            Assert.That(text, Does.Not.Contain("Thermal curve"),
+                "A Tester run never calls SetThermalLines with anything worth showing, and the " +
+                "report's shape must stay exactly as it read before the thermal section existed.");
+        }
+
+        [Test]
+        public void Render_WithThermalLinesSet_ShowsThemBetweenSummaryAndDetail()
+        {
+            var report = new BenchmarkReport("run", totalCells: 1);
+            report.SetSummaryLines(new[] { "[impossible worker-thread] 200 samples: ..." });
+            report.SetThermalLines(new[] { "[impossible worker-thread] minute 0: 20 samples, depth worst 7 mean 7.0" });
+            report.AppendDetailLine("[impossible] some result");
+
+            string text = report.Render(TimeSpan.Zero);
+
+            int summaryIndex = text.IndexOf("--- Summary ---", StringComparison.Ordinal);
+            int thermalIndex = text.IndexOf("minute 0: 20 samples", StringComparison.Ordinal);
+            int detailIndex = text.IndexOf("--- Detail ---", StringComparison.Ordinal);
+
+            Assert.That(text, Does.Contain("Thermal curve"));
+            Assert.That(summaryIndex, Is.LessThan(thermalIndex));
+            Assert.That(thermalIndex, Is.LessThan(detailIndex));
+        }
+
+        [Test]
         public void Render_BeforeAnySummaryIsSet_SaysSoRatherThanShowingAnEmptySection()
         {
             var report = new BenchmarkReport("run", totalCells: 1);
@@ -225,8 +257,12 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             Assert.That(report.Revision, Is.GreaterThan(afterProgress), "A summary arriving is a change.");
 
             int afterSummary = report.Revision;
+            report.SetThermalLines(new[] { "[easy main-thread] minute 0: 1 samples, depth worst 5 mean 5.0" });
+            Assert.That(report.Revision, Is.GreaterThan(afterSummary), "A thermal curve arriving is a change.");
+
+            int afterThermal = report.Revision;
             report.MarkComplete();
-            Assert.That(report.Revision, Is.GreaterThan(afterSummary), "Finishing is a change.");
+            Assert.That(report.Revision, Is.GreaterThan(afterThermal), "Finishing is a change.");
         }
 
         private static BenchmarkReport BuildPopulatedReport()

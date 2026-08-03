@@ -287,5 +287,67 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             // never disagree about what the summary actually said.
             Assert.That(returnedLines, Is.EqualTo(emittedLines));
         }
+
+        [Test]
+        public void EmitThermalBuckets_GroupsSamplesByMinuteSinceRunStart()
+        {
+            var runner = new MobileSearchBenchmarkRunner();
+            string workerThread = MobileSearchBenchmarkRunner.WorkerThreadLabel;
+            runner.RecordTiming("impossible", workerThread,
+                new MobileSearchBenchmarkRunner.SearchTiming(seconds: 2.8, budgetCapped: true, depthReached: 7, hardMs: 3000, elapsedSinceRunStartMs: 5_000));
+            runner.RecordTiming("impossible", workerThread,
+                new MobileSearchBenchmarkRunner.SearchTiming(seconds: 2.9, budgetCapped: true, depthReached: 6, hardMs: 3000, elapsedSinceRunStartMs: 65_000));
+            runner.RecordTiming("impossible", workerThread,
+                new MobileSearchBenchmarkRunner.SearchTiming(seconds: 2.9, budgetCapped: true, depthReached: 5, hardMs: 3000, elapsedSinceRunStartMs: 90_000));
+
+            var lines = new List<string>();
+            runner.OnLine += lines.Add;
+            runner.EmitThermalBuckets();
+
+            string minuteZero = lines.Single(l => l.StartsWith($"[impossible {workerThread}] minute 0:"));
+            string minuteOne = lines.Single(l => l.StartsWith($"[impossible {workerThread}] minute 1:"));
+
+            Assert.That(minuteZero, Does.Contain("1 samples"));
+            Assert.That(minuteZero, Does.Contain("depth worst 7"));
+            Assert.That(minuteOne, Does.Contain("2 samples"),
+                "65s and 90s both fall in minute 1 (60s-119s), so they must be grouped together.");
+            Assert.That(minuteOne, Does.Contain("depth worst 5"));
+            Assert.That(minuteOne, Does.Contain("mean 5.5"));
+        }
+
+        [Test]
+        public void EmitThermalBuckets_SkipsCombinationsWithNoSamplesRecorded_UnlikeEmitTierSummaries()
+        {
+            var runner = new MobileSearchBenchmarkRunner();
+            runner.RecordTiming("impossible", MobileSearchBenchmarkRunner.WorkerThreadLabel,
+                new MobileSearchBenchmarkRunner.SearchTiming(seconds: 2.9, budgetCapped: true, depthReached: 7, hardMs: 3000));
+
+            var lines = new List<string>();
+            runner.OnLine += lines.Add;
+            runner.EmitThermalBuckets();
+
+            // The other five built-in tiers never had RecordTiming called at all. Unlike
+            // EmitTierSummaries (which reports a fixed universe of six tiers), there is no fixed set
+            // of minute buckets to enumerate against, so an untouched tier gets no line rather than
+            // a placeholder one.
+            Assert.That(lines, Has.Count.EqualTo(1));
+            Assert.That(lines.Any(l => l.Contains("no samples")), Is.False);
+        }
+
+        [Test]
+        public void EmitThermalBuckets_ReturnsExactlyTheLinesItEmitted()
+        {
+            var runner = new MobileSearchBenchmarkRunner();
+            runner.RecordTiming("impossible", MobileSearchBenchmarkRunner.WorkerThreadLabel,
+                new MobileSearchBenchmarkRunner.SearchTiming(seconds: 2.9, budgetCapped: true, depthReached: 7, hardMs: 3000));
+
+            var emittedLines = new List<string>();
+            runner.OnLine += emittedLines.Add;
+
+            IReadOnlyList<string> returnedLines = runner.EmitThermalBuckets();
+
+            Assert.That(returnedLines, Is.EqualTo(emittedLines));
+        }
+
     }
 }

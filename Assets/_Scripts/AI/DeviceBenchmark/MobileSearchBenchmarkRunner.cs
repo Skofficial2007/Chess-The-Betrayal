@@ -50,6 +50,13 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         private readonly Dictionary<(string ProfileId, string ThreadLabel), List<SearchTiming>> _timingsByKey =
             new Dictionary<(string, string), List<SearchTiming>>();
 
+        // Started when the runner is built, which happens once per run (see
+        // DeviceSearchBenchmark.RunAll) — so "elapsed since this started" means the same thing as
+        // "elapsed since the run started" without the runner needing to be told when the run began.
+        // Stamping every timing against it is what lets EmitThermalBuckets group samples by which
+        // minute of the run they landed in.
+        private readonly Stopwatch _runElapsed = Stopwatch.StartNew();
+
         // Matches AsyncAIAgent's production sizing (~16 MB). AlphaBetaSearch's own default
         // (log2Size: 16, ~1 MB) exists for lightweight callers that don't care about move-ordering
         // quality — a real match never uses it, so measuring against it understates how deep a
@@ -172,7 +179,7 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         /// this tool did) under-measures wall time on exactly the stop reason that dominates once
         /// the search settles well before its ceiling.
         /// </summary>
-        private static MoveCommand TimedSearch(AlphaBetaSearch search, BoardState board,
+        private MoveCommand TimedSearch(AlphaBetaSearch search, BoardState board,
             AISearchSettings settings, int candidateRescoreMarginCp, out SearchTiming timing)
         {
             using var cts = new CancellationTokenSource();
@@ -184,7 +191,7 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             stopwatch.Stop();
 
             timing = new SearchTiming(stopwatch.Elapsed.TotalSeconds, cts.IsCancellationRequested,
-                search.LastCompletedDepth, settings.TimeBudget.HardMs);
+                search.LastCompletedDepth, settings.TimeBudget.HardMs, _runElapsed.Elapsed.TotalMilliseconds);
             return best;
         }
 
@@ -260,6 +267,76 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
 
             string line = $"[{profile.Id} {threadLabel}] {samples.Count} samples: elapsed worst {worstSeconds:F2}s mean {meanSeconds:F2}s min {minSeconds:F2}s "
                 + $"(budget {profile.TimeBudget.HardMs}ms, worst overshoot {overshootNote}); depth worst {worstDepth} mean {meanDepth:F1}";
+            Emit(line);
+            return line;
+        }
+
+        private const int ThermalBucketMs = 60_000;
+
+        /// <summary>
+        /// One line per minute of wall-clock elapsed since this runner started, for every
+        /// (tier, thread) combination that actually recorded a sample — how many searches landed
+        /// in that minute and how deep they reached. EmitTierSummaries answers "how deep does this
+        /// tier get" as a single worst/mean number for the whole run; that cannot show a depth that
+        /// holds for the first few minutes and then quietly drops as a device heats up, only a value
+        /// grouped by when each sample happened can. Unlike EmitTierSummaries there is no fixed
+        /// universe of buckets to report absence against, so a combination with no samples at all is
+        /// skipped rather than getting a placeholder line — a run that never reached minute 4 simply
+        /// has no minute-4 line, which already reads as "nothing happened then."
+        /// </summary>
+        public IReadOnlyList<string> EmitThermalBuckets()
+        {
+            var lines = new List<string>();
+
+            var keys = new List<(string ProfileId, string ThreadLabel)>(_timingsByKey.Keys);
+            keys.Sort((a, b) =>
+            {
+                int byProfile = string.Compare(a.ProfileId, b.ProfileId, StringComparison.Ordinal);
+                return byProfile != 0 ? byProfile : string.Compare(a.ThreadLabel, b.ThreadLabel, StringComparison.Ordinal);
+            });
+
+            foreach ((string profileId, string threadLabel) in keys)
+            {
+                List<SearchTiming> samples = _timingsByKey[(profileId, threadLabel)];
+
+                var byMinute = new SortedDictionary<int, List<SearchTiming>>();
+                foreach (SearchTiming timing in samples)
+                {
+                    int minute = (int)(timing.ElapsedSinceRunStartMs / ThermalBucketMs);
+                    if (!byMinute.TryGetValue(minute, out List<SearchTiming> bucket))
+                    {
+                        bucket = new List<SearchTiming>();
+                        byMinute[minute] = bucket;
+                    }
+
+                    bucket.Add(timing);
+                }
+
+                foreach (KeyValuePair<int, List<SearchTiming>> entry in byMinute)
+                    lines.Add(EmitThermalBucketLine(profileId, threadLabel, entry.Key, entry.Value));
+            }
+
+            return lines;
+        }
+
+        private string EmitThermalBucketLine(string profileId, string threadLabel, int minute, List<SearchTiming> samples)
+        {
+            double sumSeconds = 0;
+            int worstDepth = samples[0].DepthReached;
+            int sumDepth = 0;
+
+            foreach (SearchTiming timing in samples)
+            {
+                sumSeconds += timing.Seconds;
+                if (timing.DepthReached < worstDepth) worstDepth = timing.DepthReached;
+                sumDepth += timing.DepthReached;
+            }
+
+            double meanSeconds = sumSeconds / samples.Count;
+            double meanDepth = (double)sumDepth / samples.Count;
+
+            string line = $"[{profileId} {threadLabel}] minute {minute}: {samples.Count} samples, elapsed mean {meanSeconds:F2}s; "
+                + $"depth worst {worstDepth} mean {meanDepth:F1}";
             Emit(line);
             return line;
         }
@@ -349,6 +426,9 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         /// only field that still distinguishes two runs which both hit the same budget cap (their
         /// elapsed seconds are then identical by construction, but the depth reached is not) — and
         /// the tier's own hard budget in milliseconds, which is what OvershootMs measures against.
+        /// ElapsedSinceRunStartMs defaults to zero because most callers (every existing test) have no
+        /// stake in when during a run a sample landed; only EmitThermalBuckets reads it, and it is
+        /// only ever non-zero when a real run stamps it via TimedSearch.
         /// </summary>
         internal readonly struct SearchTiming
         {
@@ -356,13 +436,16 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             public readonly bool BudgetCapped;
             public readonly int DepthReached;
             public readonly int HardMs;
+            public readonly double ElapsedSinceRunStartMs;
 
-            public SearchTiming(double seconds, bool budgetCapped, int depthReached, int hardMs)
+            public SearchTiming(double seconds, bool budgetCapped, int depthReached, int hardMs,
+                double elapsedSinceRunStartMs = 0)
             {
                 Seconds = seconds;
                 BudgetCapped = budgetCapped;
                 DepthReached = depthReached;
                 HardMs = hardMs;
+                ElapsedSinceRunStartMs = elapsedSinceRunStartMs;
             }
 
             /// <summary>How far past this search's own budget the elapsed time actually landed.

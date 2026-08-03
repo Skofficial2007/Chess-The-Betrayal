@@ -26,6 +26,7 @@ namespace ChessTheBetrayal.UI
         [Header("UI References")]
         [SerializeField] private TMP_Text _resultText;
         [SerializeField] private Button _startButton;
+        [SerializeField] private Button _longRunButton;
         [SerializeField] private Button _downloadButton;
         [SerializeField] private Image _downloadButtonGraphic;
 
@@ -52,6 +53,11 @@ namespace ChessTheBetrayal.UI
                 _startButton.onClick.AddListener(HandleStartClicked);
             }
 
+            if (_longRunButton != null)
+            {
+                _longRunButton.onClick.AddListener(HandleLongRunClicked);
+            }
+
             if (_downloadButton != null)
             {
                 _downloadButton.onClick.AddListener(HandleDownloadClicked);
@@ -67,6 +73,7 @@ namespace ChessTheBetrayal.UI
             InspectorGuard.Require(_benchmark, nameof(_benchmark), this);
             InspectorGuard.Require(_resultText, nameof(_resultText), this);
             InspectorGuard.Require(_startButton, nameof(_startButton), this);
+            InspectorGuard.Require(_longRunButton, nameof(_longRunButton), this);
             InspectorGuard.Require(_downloadButton, nameof(_downloadButton), this);
             InspectorGuard.Require(_downloadButtonGraphic, nameof(_downloadButtonGraphic), this);
         }
@@ -107,13 +114,24 @@ namespace ChessTheBetrayal.UI
             _wasRunning = running;
 
             if (_startButton != null) _startButton.interactable = !running;
+            if (_longRunButton != null) _longRunButton.interactable = !running;
             SetDownloadEnabled(_benchmark.IsComplete);
         }
 
         private void HandleStartClicked()
         {
             if (_benchmark == null || !_benchmark.StartRun()) return;
+            OnRunStarted();
+        }
 
+        private void HandleLongRunClicked()
+        {
+            if (_benchmark == null || !_benchmark.StartThermalRun()) return;
+            OnRunStarted();
+        }
+
+        private void OnRunStarted()
+        {
             // A finished report from the previous run is no longer the one on screen, so the
             // Download button must not keep offering it.
             SetDownloadEnabled(false);
@@ -166,7 +184,9 @@ namespace ChessTheBetrayal.UI
                 "<b>Ready.</b>\n\n"
                 + $"Press Start to time this device's AI search. It takes at most {_benchmark.EstimatedWorstCase:mm\\:ss}, "
                 + "and cannot be paused once it begins.\n\n"
-                + "Leave the app in the foreground while it runs — the screen is kept awake for you.";
+                + "Press Long Run to check whether the impossible tier's search depth holds steady over "
+                + $"sustained play. It takes at most {_benchmark.ThermalEstimatedWorstCase:mm\\:ss}.\n\n"
+                + "Leave the app in the foreground while either run is going — the screen is kept awake for you.";
         }
     }
 }

@@ -32,7 +32,8 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             repeatCount: 2,
             includePlayForward: false,
             mainThreadControlPositions: 1,
-            mainThreadControlRepeats: 1);
+            mainThreadControlRepeats: 1,
+            profiles: AIProfileTable.BuiltIn);
 
         /// <summary>
         /// Every position, every repeat, both a cold search and a play-forward, on both thread
@@ -44,20 +45,58 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             repeatCount: MobileSearchBenchmarkRunner.DefaultRepeatCount,
             includePlayForward: true,
             mainThreadControlPositions: MobileSearchBenchmarkRunner.PositionCount,
-            mainThreadControlRepeats: MobileSearchBenchmarkRunner.DefaultRepeatCount);
+            mainThreadControlRepeats: MobileSearchBenchmarkRunner.DefaultRepeatCount,
+            profiles: AIProfileTable.BuiltIn);
+
+        /// <summary>
+        /// How many cold searches this run repeats at the impossible tier. Public so a test can pin
+        /// the arithmetic behind <see cref="EstimatedWorstCase"/> rather than re-deriving it.
+        /// </summary>
+        public const int ThermalSearchCount = 200;
+
+        /// <summary>
+        /// A sustained-load probe, not a breadth probe: the same stable midgame position searched
+        /// cold 200 times in a row, at the impossible tier alone, worker-thread only. Real thermal
+        /// throttling shows up as depth quietly dropping ten minutes into a run, and nothing about
+        /// varying the position or sweeping every tier would make that easier to see — it would only
+        /// blend the one signal this run exists to isolate across unrelated tiers and openings.
+        /// Skips the main-thread control for the same reason: production always dispatches a search
+        /// onto a worker, so that is the only context whose sustained behaviour matters here.
+        /// </summary>
+        public static BenchmarkPlan Thermal() => new BenchmarkPlan(
+            positionIndices: new[] { CuratedOpeningLines.Count },
+            repeatCount: ThermalSearchCount,
+            includePlayForward: false,
+            mainThreadControlPositions: 0,
+            mainThreadControlRepeats: 0,
+            profiles: new[] { ImpossibleProfile() });
+
+        private static AIProfile ImpossibleProfile()
+        {
+            foreach (AIProfile profile in AIProfileTable.BuiltIn)
+                if (profile.Id == "impossible") return profile;
+
+            throw new InvalidOperationException("AIProfileTable.BuiltIn has no 'impossible' tier.");
+        }
 
         private BenchmarkPlan(IReadOnlyList<int> positionIndices, int repeatCount, bool includePlayForward,
-            int mainThreadControlPositions, int mainThreadControlRepeats)
+            int mainThreadControlPositions, int mainThreadControlRepeats, IReadOnlyList<AIProfile> profiles)
         {
             PositionIndices = positionIndices;
             RepeatCount = repeatCount;
             IncludePlayForward = includePlayForward;
             MainThreadControlPositions = mainThreadControlPositions;
             MainThreadControlRepeats = mainThreadControlRepeats;
+            Profiles = profiles;
         }
 
         /// <summary>Positions this run covers, by the index MobileSearchBenchmarkRunner uses.</summary>
         public IReadOnlyList<int> PositionIndices { get; }
+
+        /// <summary>The tiers this run sweeps. <see cref="Tester"/> and <see cref="Exhaustive"/>
+        /// cover every built-in tier; <see cref="Thermal"/> narrows this to one, since sweeping the
+        /// rest would only dilute the sustained-load signal it exists to isolate.</summary>
+        public IReadOnlyList<AIProfile> Profiles { get; }
 
         public int RepeatCount { get; }
 
@@ -76,8 +115,8 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
 
         /// <summary>Worker-thread cells plus main-thread control cells.</summary>
         public int TotalCells =>
-            (PositionIndices.Count * AIProfileTable.BuiltIn.Count * RepeatCount)
-            + (ControlPositionCount * AIProfileTable.BuiltIn.Count * MainThreadControlRepeats);
+            (PositionIndices.Count * Profiles.Count * RepeatCount)
+            + (ControlPositionCount * Profiles.Count * MainThreadControlRepeats);
 
         /// <summary>
         /// Every cell this run covers, in the order it runs them: the whole worker-thread pass
@@ -93,12 +132,12 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         public IEnumerable<BenchmarkCell> Cells()
         {
             foreach (int positionIndex in PositionIndices)
-                foreach (AIProfile profile in AIProfileTable.BuiltIn)
+                foreach (AIProfile profile in Profiles)
                     for (int repeatIndex = 0; repeatIndex < RepeatCount; repeatIndex++)
                         yield return new BenchmarkCell(positionIndex, profile.Id, repeatIndex, onWorkerThread: true);
 
             for (int i = 0; i < ControlPositionCount; i++)
-                foreach (AIProfile profile in AIProfileTable.BuiltIn)
+                foreach (AIProfile profile in Profiles)
                     for (int repeatIndex = 0; repeatIndex < MainThreadControlRepeats; repeatIndex++)
                         yield return new BenchmarkCell(PositionIndices[i], profile.Id, repeatIndex, onWorkerThread: false);
         }
@@ -118,7 +157,7 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             get
             {
                 long budgetSumMs = 0;
-                foreach (AIProfile profile in AIProfileTable.BuiltIn)
+                foreach (AIProfile profile in Profiles)
                     budgetSumMs += profile.TimeBudget.HardMs;
 
                 // A cell is one cold search, plus one search per played-forward ply when the plan

@@ -50,9 +50,15 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         /// <summary>How long the current (or most recent) run has been going.</summary>
         public TimeSpan Elapsed => _stopwatch.Elapsed;
 
-        /// <summary>The longest a run can take, answerable before one starts — worth showing to
-        /// whoever is about to sit through it.</summary>
-        public TimeSpan EstimatedWorstCase => BuildPlan().EstimatedWorstCase;
+        /// <summary>The longest the default (Tester) run can take, answerable before one starts —
+        /// worth showing to whoever is about to sit through it.</summary>
+        public TimeSpan EstimatedWorstCase => BenchmarkPlan.Tester().EstimatedWorstCase;
+
+        /// <summary>The longest the long-run thermal probe can take. A separate figure from
+        /// <see cref="EstimatedWorstCase"/> because the two plans are an order of magnitude apart in
+        /// duration, and quoting the wrong one would badly mislead whoever is about to press either
+        /// button.</summary>
+        public TimeSpan ThermalEstimatedWorstCase => BenchmarkPlan.Thermal().EstimatedWorstCase;
 
         /// <summary>Changes whenever the report does. Cheap to poll; a display can compare it
         /// against the last value it drew and skip re-rendering when nothing has happened.</summary>
@@ -76,11 +82,20 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         }
 
         /// <summary>
-        /// Begins a run, or returns false if one is already going. Every press starts genuinely
-        /// fresh — new runner, new report, new run id — so two readings from the same device never
-        /// get blended into one.
+        /// Begins the default (Tester) run, or returns false if one is already going. Every press
+        /// starts genuinely fresh — new runner, new report, new run id — so two readings from the
+        /// same device never get blended into one.
         /// </summary>
-        public bool StartRun()
+        public bool StartRun() => StartRun(BenchmarkPlan.Tester());
+
+        /// <summary>
+        /// Begins the long-run thermal probe instead of the default plan — the same fresh-start
+        /// guarantee as StartRun, just against BenchmarkPlan.Thermal(). Its own button, never folded
+        /// into Start, because a ten-minute default is a run nobody finishes.
+        /// </summary>
+        public bool StartThermalRun() => StartRun(BenchmarkPlan.Thermal());
+
+        private bool StartRun(BenchmarkPlan plan)
         {
             if (IsRunning) return false;
 
@@ -91,7 +106,7 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             // through and the run would keep going against a sleeping display.
             Screen.sleepTimeout = SleepTimeout.NeverSleep;
 
-            StartCoroutine(RunAll());
+            StartCoroutine(RunAll(plan));
             return true;
         }
 
@@ -102,8 +117,6 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             IsRunning = false;
             Screen.sleepTimeout = SleepTimeout.SystemSetting;
         }
-
-        private static BenchmarkPlan BuildPlan() => BenchmarkPlan.Tester();
 
         /// <summary>
         /// A coroutine (not a straight synchronous call) purely so the report actually renders as
@@ -117,9 +130,8 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         /// Task.IsCompleted across yields rather than blocking, so the main thread keeps rendering
         /// while they run.
         /// </summary>
-        private IEnumerator RunAll()
+        private IEnumerator RunAll(BenchmarkPlan plan)
         {
-            BenchmarkPlan plan = BuildPlan();
             _runner = new MobileSearchBenchmarkRunner();
             _runner.OnLine += HandleLine;
 
@@ -160,9 +172,11 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             }
 
             IReadOnlyList<string> summaryLines = _runner.EmitTierSummaries();
+            IReadOnlyList<string> thermalLines = _runner.EmitThermalBuckets();
             lock (_reportLock)
             {
                 _report.SetSummaryLines(summaryLines);
+                _report.SetThermalLines(thermalLines);
                 _report.AppendHeaderLine(BuildBatteryLine("end"));
                 _report.MarkComplete();
             }

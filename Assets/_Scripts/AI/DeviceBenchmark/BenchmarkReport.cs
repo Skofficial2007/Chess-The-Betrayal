@@ -36,6 +36,7 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         private readonly List<string> _detailLines = new List<string>();
         private readonly int _totalCells;
         private IReadOnlyList<string> _summaryLines = Array.Empty<string>();
+        private IReadOnlyList<string> _thermalLines = Array.Empty<string>();
         private int _completedCells;
         private bool _isComplete;
         private TimeSpan? _estimatedWorstCase;
@@ -76,6 +77,16 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         public void SetSummaryLines(IReadOnlyList<string> lines)
         {
             _summaryLines = lines;
+            Revision++;
+        }
+
+        /// <summary>The per-minute depth trend (see MobileSearchBenchmarkRunner.EmitThermalBuckets).
+        /// Left empty for a run too short to say anything about a trend — the section is omitted
+        /// from Render entirely rather than printed empty, so a short run's report reads exactly as
+        /// it did before this existed.</summary>
+        public void SetThermalLines(IReadOnlyList<string> lines)
+        {
+            _thermalLines = lines;
             Revision++;
         }
 
@@ -147,6 +158,13 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             else
                 foreach (string line in _summaryLines) text.AppendLine(line);
             text.AppendLine();
+
+            if (_thermalLines.Count > 0)
+            {
+                text.AppendLine(SectionTitle("--- Thermal curve ---", style));
+                foreach (string line in _thermalLines) text.AppendLine(line);
+                text.AppendLine();
+            }
 
             text.AppendLine(SectionTitle("--- Detail ---", style));
             int shown = Math.Max(0, Math.Min(maxDetailLines, _detailLines.Count));
