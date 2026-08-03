@@ -174,6 +174,29 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         }
 
         [Test]
+        public void ClearAIMode_TearsDownTheAgentAndClearsTelemetry()
+        {
+            _board.CurrentTurn = Team.Black;
+            _coordinator.SetAIMode(Team.Black, BetrayalUsage.Full, "normal");
+            Assert.That(_coordinator.Telemetry, Is.Not.Null, "Sanity check.");
+            Assert.That(_coordinator.IsAiMode, Is.True, "Sanity check.");
+
+            _coordinator.ClearAIMode();
+
+            Assert.That(_coordinator.Telemetry, Is.Null,
+                "A coordinator configured for no AI at all must not still be holding a previous " +
+                "match's recorded moves — that's what let a plain match offer to share the wrong report.");
+            Assert.That(_coordinator.IsAiMode, Is.False);
+        }
+
+        [Test]
+        public void ClearAIMode_OnACoordinatorThatNeverConfiguredAI_IsASafeNoOp()
+        {
+            Assert.DoesNotThrow(() => _coordinator.ClearAIMode());
+            Assert.That(_coordinator.Telemetry, Is.Null);
+        }
+
+        [Test]
         public void SetAIMode_AlwaysConstructsAFreshTelemetry_SoAReplayNeverBlendsWithThePriorMatch()
         {
             _board.CurrentTurn = Team.Black;

@@ -233,6 +233,17 @@ namespace ChessTheBetrayal.Gameplay.Manager
             else
             {
                 RetributionSkipAllowed = true;
+
+                // IsAiMode/the coordinator's agent and telemetry only ever get set going into an
+                // AI match (the branch above); nothing else clears them on the way out. Replay
+                // after an AI match currently always loops back into another one (see
+                // BackToAIMatchSettingsAction), so this path is unreachable today — but a plain
+                // match started right after an AI one, even via the ordinary Exit-then-Play route,
+                // would otherwise still read as AI mode and could still offer to share the
+                // previous match's report. Reset explicitly rather than rely on that being true by
+                // accident.
+                IsAiMode = false;
+                _aiCoordinator.ClearAIMode();
             }
 
             // The clock has to exist before TransitionToPhase runs — the phase transition

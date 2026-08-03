@@ -447,11 +447,16 @@ namespace ChessTheBetrayal.App
 
         #region IAiMatchTelemetryProvider
 
-        // MoveCount > 0 rules out both "no AI played this match" (Telemetry is null before the
-        // first SetAIMode call) and "the AI never got a turn before the game ended" — either way
-        // there is nothing worth offering to share.
+        // Three independent reasons there might be nothing to share, checked explicitly rather
+        // than trusting any one of them to already imply the others: the composition root never
+        // turned sharing on at all; the match that just ended genuinely wasn't an AI match (normal
+        // play, and in the future a multiplayer match — MatchFlowCoordinator.IsAiMode is the one
+        // place that already knows this reliably); or telemetry was on but the AI never actually
+        // got a turn (Telemetry is null before the first SetAIMode call, and MoveCount is 0 for a
+        // game that ended before the AI moved).
         string IAiMatchTelemetryProvider.GetLastAiMatchReport() =>
-            _aiCoordinator.Telemetry != null && _aiCoordinator.Telemetry.MoveCount > 0
+            enableAiTelemetrySharing && _matchFlow.IsAiMode
+                && _aiCoordinator.Telemetry != null && _aiCoordinator.Telemetry.MoveCount > 0
                 ? _aiCoordinator.Telemetry.Render()
                 : null;
 

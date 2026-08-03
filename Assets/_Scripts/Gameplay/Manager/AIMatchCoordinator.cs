@@ -269,6 +269,21 @@ namespace ChessTheBetrayal.Gameplay.Manager
             }
         }
 
+        /// <summary>
+        /// Configures the session for a match with no AI team at all — a plain match today, and a
+        /// future multiplayer one. Tears down any agent left over from a previous AI match and
+        /// clears its telemetry, so neither can leak into a match the AI was never part of: without
+        /// this, a plain match played right after an AI one would still carry the old match's
+        /// recorded moves, and a caller reading Telemetry would have no way to tell they belong to
+        /// a different game. Idempotent — safe to call even when no AI match has run yet this
+        /// session, which is exactly the state a fresh coordinator is already in.
+        /// </summary>
+        public void ClearAIMode()
+        {
+            TearDownAgent();
+            Telemetry = null;
+        }
+
         private void TearDownAgent()
         {
             if (_aiAgent is AsyncAIAgent asyncAgent)
