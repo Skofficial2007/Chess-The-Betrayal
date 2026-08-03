@@ -1,6 +1,7 @@
 using System;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Serialization;
 using UnityEngine.UI;
 using ChessTheBetrayal.AI.DeviceBenchmark;
 using ChessTheBetrayal.Core.Diagnostics;
@@ -27,12 +28,16 @@ namespace ChessTheBetrayal.UI
         [SerializeField] private TMP_Text _resultText;
         [SerializeField] private Button _startButton;
         [SerializeField] private Button _longRunButton;
-        [SerializeField] private Button _downloadButton;
-        [SerializeField] private Image _downloadButtonGraphic;
+        [FormerlySerializedAs("_downloadButton")]
+        [SerializeField] private Button _shareButton;
+        [FormerlySerializedAs("_downloadButtonGraphic")]
+        [SerializeField] private Image _shareButtonGraphic;
 
-        [Header("Download Button Colors")]
-        [SerializeField] private Color _downloadActiveColor = new Color(1f, 253f / 255f, 178f / 255f); // #FFFDB2
-        [SerializeField] private Color _downloadInactiveColor = new Color(147f / 255f, 147f / 255f, 147f / 255f); // #939393
+        [Header("Share Button Colors")]
+        [FormerlySerializedAs("_downloadActiveColor")]
+        [SerializeField] private Color _shareActiveColor = new Color(1f, 253f / 255f, 178f / 255f); // #FFFDB2
+        [FormerlySerializedAs("_downloadInactiveColor")]
+        [SerializeField] private Color _shareInactiveColor = new Color(147f / 255f, 147f / 255f, 147f / 255f); // #939393
 
         [Header("On-screen Log")]
         // TextMeshPro silently stops drawing a text object past roughly sixteen thousand
@@ -58,13 +63,13 @@ namespace ChessTheBetrayal.UI
                 _longRunButton.onClick.AddListener(HandleLongRunClicked);
             }
 
-            if (_downloadButton != null)
+            if (_shareButton != null)
             {
-                _downloadButton.onClick.AddListener(HandleDownloadClicked);
+                _shareButton.onClick.AddListener(HandleShareClicked);
             }
 
-            // Nothing to download until a run has produced a report.
-            SetDownloadEnabled(false);
+            // Nothing to share until a run has produced a report.
+            SetShareEnabled(false);
             ShowIdleText();
         }
 
@@ -74,8 +79,8 @@ namespace ChessTheBetrayal.UI
             InspectorGuard.Require(_resultText, nameof(_resultText), this);
             InspectorGuard.Require(_startButton, nameof(_startButton), this);
             InspectorGuard.Require(_longRunButton, nameof(_longRunButton), this);
-            InspectorGuard.Require(_downloadButton, nameof(_downloadButton), this);
-            InspectorGuard.Require(_downloadButtonGraphic, nameof(_downloadButtonGraphic), this);
+            InspectorGuard.Require(_shareButton, nameof(_shareButton), this);
+            InspectorGuard.Require(_shareButtonGraphic, nameof(_shareButtonGraphic), this);
         }
 
         private void Update()
@@ -115,7 +120,7 @@ namespace ChessTheBetrayal.UI
 
             if (_startButton != null) _startButton.interactable = !running;
             if (_longRunButton != null) _longRunButton.interactable = !running;
-            SetDownloadEnabled(_benchmark.IsComplete);
+            SetShareEnabled(_benchmark.IsComplete);
         }
 
         private void HandleStartClicked()
@@ -133,8 +138,8 @@ namespace ChessTheBetrayal.UI
         private void OnRunStarted()
         {
             // A finished report from the previous run is no longer the one on screen, so the
-            // Download button must not keep offering it.
-            SetDownloadEnabled(false);
+            // Share button must not keep offering it.
+            SetShareEnabled(false);
 
             // Force the next frame to redraw even if the new run has not emitted a line yet.
             _renderedRevision = -1;
@@ -142,11 +147,11 @@ namespace ChessTheBetrayal.UI
         }
 
         /// <summary>
-        /// Saves the finished report, unstyled and complete — not the trimmed, marked-up copy the
-        /// screen is showing. Where it went is appended to the log so the tester can read the path
-        /// off the same place they have been watching.
+        /// Saves and shares the finished report, unstyled and complete — not the trimmed, marked-up
+        /// copy the screen is showing. Where it went is appended to the log so the tester can read
+        /// the path off the same place they have been watching.
         /// </summary>
-        private void HandleDownloadClicked()
+        private void HandleShareClicked()
         {
             if (_benchmark == null || !_benchmark.IsComplete) return;
 
@@ -163,16 +168,16 @@ namespace ChessTheBetrayal.UI
         /// rest of the project's buttons use, so a disabled button here looks disabled everywhere
         /// else it appears.
         /// </summary>
-        private void SetDownloadEnabled(bool enabled)
+        private void SetShareEnabled(bool enabled)
         {
-            if (_downloadButton != null)
+            if (_shareButton != null)
             {
-                _downloadButton.interactable = enabled;
+                _shareButton.interactable = enabled;
             }
 
-            if (_downloadButtonGraphic != null)
+            if (_shareButtonGraphic != null)
             {
-                _downloadButtonGraphic.color = enabled ? _downloadActiveColor : _downloadInactiveColor;
+                _shareButtonGraphic.color = enabled ? _shareActiveColor : _shareInactiveColor;
             }
         }
 
