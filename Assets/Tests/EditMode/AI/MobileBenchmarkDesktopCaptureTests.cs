@@ -25,6 +25,19 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         public void CaptureTesterPlanReference() => Capture(BenchmarkPlan.Tester(), "TESTER");
 
         /// <summary>
+        /// Impossible tier only, 200 cold searches in a row — the sustained-load probe, not a
+        /// breadth probe. Ten minutes worst case, notably longer than the tester plan's, so it gets
+        /// its own explicit note the same way the exhaustive run does. Needs its own Timeout: NUnit's
+        /// default per-test watchdog is 180,000 ms, well under this plan's own ceiling, and it fires
+        /// even though the run itself completes and logs everything correctly — a real desktop
+        /// capture tripped exactly this the first time this test existed.
+        /// </summary>
+        [Test]
+        [Explicit("Ten-minute sustained-load run — start it deliberately.")]
+        [Timeout(700_000)]
+        public void CaptureThermalPlanReference() => Capture(BenchmarkPlan.Thermal(), "THERMAL");
+
+        /// <summary>
         /// Every position, every repeat, play-forward included, both thread contexts. Hours long —
         /// only worth starting on a machine you can leave alone.
         /// </summary>
@@ -62,6 +75,10 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             Debug.Log($"[capture] === {label} SUMMARY ===");
             foreach (string line in runner.EmitTierSummaries())
                 Debug.Log($"[capture-summary] {line}");
+
+            Debug.Log($"[capture] === {label} THERMAL CURVE ===");
+            foreach (string line in runner.EmitThermalBuckets())
+                Debug.Log($"[capture-thermal] {line}");
         }
     }
 }
