@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using NUnit.Framework;
 using ChessTheBetrayal.AI;
+using ChessTheBetrayal.AI.MatchTelemetry;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Diagnostics;
 using ChessTheBetrayal.Core.Engine;
@@ -170,6 +171,89 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
 
             Assert.That(_coordinator.IsSearchInFlight, Is.False,
                 "Reconfiguring via SetAIMode must cancel/replace the prior agent, not run both.");
+        }
+
+        [Test]
+        public void SetAIMode_AlwaysConstructsAFreshTelemetry_SoAReplayNeverBlendsWithThePriorMatch()
+        {
+            _board.CurrentTurn = Team.Black;
+            _coordinator.SetAIMode(Team.Black, BetrayalUsage.Full, "normal");
+            AiMatchTelemetry first = _coordinator.Telemetry;
+
+            _coordinator.SetAIMode(Team.Black, BetrayalUsage.Full, "normal");
+            AiMatchTelemetry second = _coordinator.Telemetry;
+
+            Assert.That(first, Is.Not.Null);
+            Assert.That(second, Is.Not.Null);
+            Assert.That(second, Is.Not.SameAs(first),
+                "A second match (e.g. Replay) must get its own telemetry object, not keep recording into the first one's.");
+        }
+
+        [Test]
+        public void RecordTelemetry_OffByDefault_NeverRecordsAMove_EvenAfterDelivery()
+        {
+            _board.CurrentTurn = Team.Black;
+            _coordinator.SetAIMode(Team.Black, BetrayalUsage.Full, "normal");
+            // RecordTelemetry is left at its default (false) — this is the composition root's
+            // opt-in feature flag, off unless something explicitly turns it on.
+
+            _coordinator.TryRequestMove(isGameActive: true);
+            PumpTickUntil(() => _lastPlayedMove.HasValue);
+
+            Assert.That(_coordinator.Telemetry.MoveCount, Is.Zero,
+                "Nothing must be recorded unless RecordTelemetry was explicitly turned on.");
+        }
+
+        [Test]
+        public void RecordTelemetry_On_RecordsTheSearchedMovesDepthAndElapsed()
+        {
+            _board.CurrentTurn = Team.Black;
+            _coordinator.SetAIMode(Team.Black, BetrayalUsage.Full, "normal");
+            _coordinator.RecordTelemetry = true;
+
+            _coordinator.TryRequestMove(isGameActive: true);
+            PumpTickUntil(() => _lastPlayedMove.HasValue);
+
+            Assert.That(_coordinator.Telemetry.MoveCount, Is.EqualTo(1));
+
+            string report = _coordinator.Telemetry.Render();
+            Assert.That(report, Does.Contain("1 moves total (0 from the opening book, 1 searched)"));
+            Assert.That(report, Does.Contain("depth 1,"));
+            Assert.That(report, Does.Not.Contain("(book)"));
+        }
+
+        [Test]
+        public void RecordTelemetry_On_ReadsThePlyNumberFromTheBoardOnceTheMoveIsActuallyApplied()
+        {
+            // The shared fixture's playMove stub above only records the move for assertions and
+            // never touches the board, so BoardState.FullMoveNumber would never move off zero
+            // there. This test uses a playMove that actually applies the move, the way MatchDriver
+            // does in production, so the recorded ply number reflects something real.
+            var engine = new ChessEngineAdapter();
+            var board = TestBoardSetupUtility.CreateStandard();
+            board.CurrentTurn = Team.Black;
+            var coordinator = new AIMatchCoordinator(
+                engine, board, move => new TurnResolver().Advance(board, move), ShallowSettings, ProfileProvider);
+
+            try
+            {
+                coordinator.SetAIMode(Team.Black, BetrayalUsage.Full, "normal");
+                coordinator.RecordTelemetry = true;
+                coordinator.TryRequestMove(isGameActive: true);
+
+                var stopwatch = Stopwatch.StartNew();
+                while (coordinator.Telemetry.MoveCount == 0 && stopwatch.ElapsedMilliseconds < PollTimeoutMs)
+                {
+                    coordinator.Tick();
+                    Thread.Sleep(PollIntervalMs);
+                }
+
+                Assert.That(coordinator.Telemetry.Render(), Does.Contain("ply 1:"));
+            }
+            finally
+            {
+                coordinator.Dispose();
+            }
         }
 
         [Test]

@@ -43,7 +43,7 @@ namespace ChessTheBetrayal.App
     /// Normal/ForcedSave (result.DidDefect) | DefectionOccurred
     /// ForcedSave            | ForcedSaveActive
     /// </summary>
-    public class GameManager : MonoBehaviour, IMatchFlow, IBoardQuery
+    public class GameManager : MonoBehaviour, IMatchFlow, IBoardQuery, IAiMatchTelemetryProvider
     {
         #region Inspector Fields
 
@@ -56,6 +56,12 @@ namespace ChessTheBetrayal.App
 
         [Header("AI")]
         [SerializeField] private ChessTheBetrayal.AI.OpeningBook.OpeningBookAsset _openingBook;
+
+        // Off by default. When on, AIMatchCoordinator records what the AI did over the course of a
+        // real match (depth/elapsed/stop-reason per move) so GameOverUI can offer to share it —
+        // real-match numbers a synthetic benchmark can't produce, since it never renders a board or
+        // reuses a table across a whole game the way a real one does.
+        [SerializeField] private bool enableAiTelemetrySharing = false;
 
         [Header("Betrayal Time Bounty (milliseconds)")]
         [SerializeField] private long _betrayalBountyBulletMs = 3_000L;   // Bullet 1|0
@@ -184,6 +190,7 @@ namespace ChessTheBetrayal.App
             // the concrete GameManager (which would recreate the assembly cycle this rework removed).
             ServiceLocator.Instance.Register<IBoardQuery>(this);
             ServiceLocator.Instance.Register<IMatchFlow>(this);
+            ServiceLocator.Instance.Register<IAiMatchTelemetryProvider>(this);
 
             ValidateRequiredFields();
 
@@ -228,6 +235,7 @@ namespace ChessTheBetrayal.App
             _moveVisualPacingGate = new MoveVisualPacingGate(_matchDriver.PlayMove, ChessTheBetrayal.Core.Match.MoveVisualDurationEstimator.EstimateSeconds);
 
             _aiCoordinator = new AIMatchCoordinator(_engine, LiveBoard, _moveVisualPacingGate.Enqueue, _domainLogger);
+            _aiCoordinator.RecordTelemetry = enableAiTelemetrySharing;
             _aiCoordinator.OnSearchException += HandleAISearchException;
 
             // Continue the AI through its own forced Betrayal sub-sequence (Act -> Retribution, or
@@ -434,6 +442,18 @@ namespace ChessTheBetrayal.App
         void IMatchFlow.ReturnToModeSelect() => _matchFlow.ReturnToModeSelect();
 
         void IMatchFlow.ReturnToAIMatchSettings() => _matchFlow.ReturnToAIMatchSettings();
+
+        #endregion
+
+        #region IAiMatchTelemetryProvider
+
+        // MoveCount > 0 rules out both "no AI played this match" (Telemetry is null before the
+        // first SetAIMode call) and "the AI never got a turn before the game ended" — either way
+        // there is nothing worth offering to share.
+        string IAiMatchTelemetryProvider.GetLastAiMatchReport() =>
+            _aiCoordinator.Telemetry != null && _aiCoordinator.Telemetry.MoveCount > 0
+                ? _aiCoordinator.Telemetry.Render()
+                : null;
 
         #endregion
 
