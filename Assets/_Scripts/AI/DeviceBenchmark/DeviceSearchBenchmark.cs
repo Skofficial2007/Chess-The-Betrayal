@@ -149,7 +149,7 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             lock (_reportLock)
             {
                 _report = new BenchmarkReport(runId, plan.TotalCells);
-                foreach (string line in BuildDeviceInfoLines()) _report.AppendHeaderLine(line);
+                foreach (string line in DescribeDevice().ToReportLines()) _report.AppendHeaderLine(line);
                 _report.AppendHeaderLine(BuildBatteryLine("start"));
                 _report.SetEstimatedWorstCase(plan.EstimatedWorstCase);
             }
@@ -235,31 +235,15 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         }
 
         /// <summary>
-        /// Dumps every SystemInfo field useful for correlating a timing result with the actual
-        /// hardware it ran on. Unity has no direct "chipset name" API — graphicsDeviceName is the
-        /// closest honest proxy (a Mali GPU implies MediaTek/Exynos/Unisoc, an Adreno GPU implies
-        /// Snapdragon), so it's included alongside deviceModel/processorType rather than guessed.
-        /// Battery isn't in here — it's sampled separately at both the start and the end of a run
-        /// (see BuildBatteryLine), since it's the one fact that actually changes while the
-        /// benchmark runs.
+        /// Reads the platform for everything worth knowing when correlating a timing result with
+        /// the hardware it came off. What is deliberately left out, and why, is DeviceDescription's
+        /// own business — this is only the one place that can ask Unity for any of it.
+        ///
+        /// Development Build and the scripting backend are the exception to that: both are baked in
+        /// at build time rather than queryable from a running app, so the preprocessor symbols are
+        /// the only honest way to report which one this build actually is.
         /// </summary>
-        private static List<string> BuildDeviceInfoLines() => new List<string>
-        {
-            $"Device model: {SystemInfo.deviceModel}",
-            $"Device name: {SystemInfo.deviceName}",
-            $"Device unique ID: {SystemInfo.deviceUniqueIdentifier}",
-            $"OS: {SystemInfo.operatingSystem}",
-            $"CPU: {SystemInfo.processorType} ({SystemInfo.processorCount} cores, {SystemInfo.processorFrequency}MHz)",
-            $"GPU (chipset proxy): {SystemInfo.graphicsDeviceName} [{SystemInfo.graphicsDeviceVendor}], API {SystemInfo.graphicsDeviceType}",
-            $"RAM: {SystemInfo.systemMemorySize}MB system, {SystemInfo.graphicsMemorySize}MB graphics",
-            $"Screen: {Screen.width}x{Screen.height} @ {Screen.dpi}dpi",
-            BuildConfigLine(),
-        };
-
-        // Development Build and the scripting backend are both baked in at build time, not
-        // queryable from a running app the way device hardware is -- the preprocessor symbols are
-        // the only honest way to report which one this build actually is.
-        private static string BuildConfigLine()
+        private static DeviceDescription DescribeDevice()
         {
 #if DEVELOPMENT_BUILD
             const string buildType = "Development Build";
@@ -271,7 +255,25 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
 #else
             const string scriptingBackend = "Mono";
 #endif
-            return $"Build: {buildType}, {scriptingBackend}, platform {Application.platform}";
+            return new DeviceDescription
+            {
+                Model = SystemInfo.deviceModel,
+                OperatingSystem = SystemInfo.operatingSystem,
+                Processor = SystemInfo.processorType,
+                ProcessorCount = SystemInfo.processorCount,
+                ProcessorFrequencyMhz = SystemInfo.processorFrequency,
+                GraphicsDeviceName = SystemInfo.graphicsDeviceName,
+                GraphicsDeviceVendor = SystemInfo.graphicsDeviceVendor,
+                GraphicsApi = SystemInfo.graphicsDeviceType.ToString(),
+                SystemMemoryMb = SystemInfo.systemMemorySize,
+                GraphicsMemoryMb = SystemInfo.graphicsMemorySize,
+                ScreenWidth = Screen.width,
+                ScreenHeight = Screen.height,
+                ScreenDpi = Screen.dpi,
+                BuildType = buildType,
+                ScriptingBackend = scriptingBackend,
+                Platform = Application.platform.ToString(),
+            };
         }
 
         private static string BuildBatteryLine(string when) =>
