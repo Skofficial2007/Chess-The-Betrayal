@@ -8,18 +8,28 @@ deliberately does not, and the numbers gathered so far.
 
 ## How long it takes, and why that number is trustworthy
 
-**The tester run is bounded at 2m 20s on any device**, and the app shows that bound on screen before
-it starts.
+**The tester run's searching is bounded at 2m 20s on any device**, and the app shows that bound on
+screen before it starts.
 
 That bound is exact rather than optimistic, because each search is stopped by a wall-clock timer
 rather than by finishing its work. A slower phone does not spend longer on a search — it reaches a
 shallower depth inside the same milliseconds. Adding up every search's own hard budget therefore
 gives a ceiling that holds on the fastest desktop and the slowest phone alike. A weak device trends
-toward that ceiling, because fewer of its searches finish early enough to stop on their own, but it
-cannot go past it.
+toward that ceiling, because fewer of its searches finish early enough to stop on their own, but its
+searching cannot go past it.
+
+**What that ceiling does not cover is the gaps between searches**, and it is worth being exact about
+this because both plans have now been seen to finish late. A run yields a frame between cells so
+results appear as they arrive, and a frame costs whatever that device's Update loop costs at the
+time — so real wall clock is the ceiling plus a per-cell overhead that says nothing about the search
+and everything about what else is on screen. A phone drawing the live report measured about 75 ms a
+cell: a few seconds onto the 54-cell tester run, about fifteen onto the 200-cell thermal one. In the
+Editor it is far larger and depends on window focus — a hand-driven Play-mode tester run took closer
+to three minutes — which is worth knowing before reading one as a slow device. Quote the ceiling for
+what it bounds, which is the searching, because that is the part that measures the phone.
 
 Measured on a desktop (i5-13500HX), in batchmode via `MobileBenchmarkDesktopCaptureTests` (net of
-Unity's own startup, since that harness's clock starts once the plan itself begins): **1m 59.6s**,
+Unity's own startup, since that harness's clock starts once the plan itself begins): **2m 00.6s**,
 against a provable 2m 20s ceiling — almost no slack left, because four of the six tiers are pinned at
 their own 3-second budget by construction. A phone will land nearer the 2m 20s ceiling.
 
@@ -33,11 +43,20 @@ see "Sustained-load (thermal) run" below.**
 
 ## Running it, and getting the report back
 
-The app opens on a Start button and does nothing until it is pressed. That is deliberate: a run
-that began on scene load would be timing a phone still settling from launch, and could not be
-repeated without relaunching. Pressing Start again after a run finishes starts a genuinely fresh
-one — new runner, new report, new run id — so two readings from the same phone are never blended.
-A second button, **Long Run**, starts the sustained-load (thermal) plan instead — see below.
+The app opens on a **Quick Run** button and does nothing until it is pressed. That is deliberate: a
+run that began on scene load would be timing a phone still settling from launch, and could not be
+repeated without relaunching. Pressing it again after a run finishes starts a genuinely fresh one —
+new runner, new report, new run id — so two readings from the same phone are never blended. A second
+button, **Long Run**, starts the sustained-load (thermal) plan instead — see below.
+
+The other half of that guarantee is that starting a run discards the previous one's report outright.
+There is only ever one report and no history behind it, so **share a finished run before starting
+another**. The first device to run both plans back to back lost its tester numbers exactly that way,
+and only found out when the file arrived with a single tier in it. Starting a run while a finished
+report has not been shared now costs two presses: the first replaces the report on screen with a
+warning naming what is about to be lost, and the second goes ahead. Sharing takes the warning back
+down — unless the write itself failed, in which case the next start is warned about all over again,
+because nothing actually reached disk.
 
 Results appear as they arrive. The screen keeps the header, the status line and the per-tier summary
 complete at all times, but shows only the newest stretch of the scrolling detail log and says on the
@@ -59,8 +78,22 @@ with that file attached, so the tester can open it from a chat app, mail or a fi
 ever leaving the share sheet. Android 8-9 (API 26-28), or any device where the Downloads write or the
 attached share fails for any reason, fall back to the same text-only share sheet this always used —
 no file attached, just the report as the message body — which needs no storage permission and no
-manifest entry. Whichever layer actually fired, the on-screen note says so, so a fallback is never a
-silent one.
+manifest entry.
+
+Which layer fired is written to the on-screen log and the player log, but not into the report itself,
+and it cannot be: the text has to be finished before it can be written, and which layer succeeded is
+only known afterwards. Whoever receives it can tell anyway, without being told — a `.txt` arriving as
+an attachment is the Downloads layer, and the report pasted into a message body is the text
+fallback. What the on-screen note adds is telling the *tester* which one they just used.
+
+### What a report deliberately does not say
+
+Hardware, OS and build facts only — no serial number, no install or advertising id, no owner-chosen
+device name. These files are written to be sent onward, often through a chat app to someone the
+tester has never met, and anything identifying in one travels with every copy of it from then on. A
+timing number needs to know which chip it ran on and never whose phone that was. Two reports from the
+same model stay tellable apart by their run id and the timestamp in their filename. `DeviceDescription`
+holds that list, and a test pins it, so adding a field is a deliberate act rather than an easy one.
 
 **One caveat worth stating plainly.** The file write and the clipboard copy are one ordinary write
 and one line of UI code, and both run identically in the editor and on a phone, so an editor run
@@ -153,8 +186,9 @@ Captured with `MobileBenchmarkDesktopCaptureTests` (`[Explicit]` — run it deli
 summary from the log), the same plan a phone runs, so this row is the only valid comparison point for
 a device number. Never compare a device row against `baseline.md`.
 
-Machine: i5-13500HX, batchmode (headless, no Editor window), Mono. Captured `2026-08-03`.
-Worker-thread figures (the production path); 8 samples per tier.
+Machine: i5-13500HX, batchmode (headless, no Editor window), Mono. Captured `2026-08-03`, re-run on
+`2026-08-04` with every row unchanged within noise. Worker-thread figures (the production path);
+8 samples per tier.
 
 | Tier | Budget | Worst elapsed | Worst overshoot | Depth worst / mean |
 |---|---:|---:|---:|---:|
@@ -171,10 +205,15 @@ about the machine. The four deeper tiers are all budget-bound — pinned at thei
 construction — so for them the only number carrying information is the depth reached. That is the
 column a device gets ranked on.
 
-Overshoot is 11–14 ms across every deep tier. That is the cancellation check landing at the next node
-boundary rather than mid-node, not the budget being missed in any sense a player could perceive, and
-it is the figure a device result should be compared against: a phone showing a few tens of
-milliseconds is behaving normally, one showing hundreds is a real finding.
+Overshoot is 11–14 ms across every deep tier — not the budget being missed in any sense a player
+could perceive. It is worth knowing what that figure is actually made of, because it is a property
+of the measuring machine as much as of the thing measured. The search is not slow to notice it has
+been cancelled: `AlphaBetaSearch` tests the token on entry to every node, so the delay one slow node
+can add is microseconds. What is coarse is the timer behind `CancelAfter` — on Windows it fires on a
+15.6 ms tick, which is where a tight cluster of 11–14 ms readings comes from. A platform with a
+finer timer lands much closer to its budget on far slower hardware: the first real Android device
+measured a worst overshoot of **+1 ms** across 200 searches. So read this column for order of
+magnitude only. Tens of milliseconds is normal on either platform; hundreds is a real finding.
 
 The main-thread control matched the worker pass on time (also 3.00–3.01 s, +3 to +12 ms) with no
 meaningful difference on this machine. Its depth column is not directly comparable — the control runs
@@ -233,11 +272,40 @@ device or in the Editor alike, exactly as the on-screen text already asks.
 ## Per-device results
 
 The user builds; testers/devices run the app with `DeviceBenchmark.unity` as the boot scene, press
-Start, and send back the saved report. One row per device once a full run completes on it.
+Quick Run, and send back the shared report. One row per device once a full run completes on it.
 
 | Device | Chipset (GPU proxy) | Worst-case overshoot | Tier that overshot | Deepest tier's depth reached (worst-case) | Verdict | Notes |
 |---|---|---:|---|---:|---|---|
-| _(none yet)_ | | | | | | |
+| TrebleDroid GSI, Android 14 / API 34 (model not reported) | Mali-G68 MC4 [ARM], 8 cores @ 2400 MHz, 7.6 GB | +1 ms | impossible | 7 (impossible) | Pass | Thermal run only — the tester run was lost, see below |
+
+### What the first real device showed
+
+One phone ran the tester plan to completion and then the thermal plan straight after, without
+sharing in between, so only the thermal run survived to be read — 200 samples at the impossible
+tier, nothing from the other five. That is the loss described under "Running it" above, and it is
+why this row's overshoot and depth columns speak for one tier rather than six. A phone that shares
+after each run will fill the rest.
+
+**Depth held perfectly flat.** Every one of the 200 searches reached depth 7, in minute 0 and in
+minute 10 alike — not a mean of 7 with variation underneath it, but 7 exactly, 200 times. There is
+no throttling here to measure, on a chip with none of the desktop's thermal headroom, across a
+sustained ten minutes at the heaviest tier the game ships. That is the answer the whole plan exists
+to produce, and it is the good one: the depth a player sees on move 5 is the depth they see on move
+80. Battery went 48% to 44% over the same ten minutes.
+
+The device sits exactly one ply below the desktop reference, which reached a mean depth of 8 on this
+same position. The gap is real but it is also the whole of the gap — and it is worth noting that the
+desktop's 8 was marginal, dipping to 7 in two separate minutes, while the phone's 7 never wavered
+once. A tier that is comfortably short of the next ply is steadier than one sitting right on the
+boundary, which is the shape a player would rather have.
+
+**The 10-minute ceiling holds for search, not for wall clock.** The run took 10m 15s. All 200
+searches together account for exactly 10m 00s of that, so the extra 15 s is entirely the coroutine's
+between-cell pacing — about 75 ms a cell, against roughly 15 ms a cell on the desktop's headless
+batchmode. That difference is a phone redrawing a live report at a phone's frame rate, not the phone
+being slow at chess, and it scales with cell count rather than duration: the same overhead adds
+around 4 s to the 54-cell tester plan. The ceiling remains provable and honest about what it bounds,
+which is search work; budget for a few seconds past it on a device with a screen to draw.
 
 ## Build config this was measured under
 
@@ -276,7 +344,7 @@ placements in `CuratedOpeningLines` and `DepthWallPositions`, both written for t
 you'll want to replace them with positions of your own before trusting a number from a changed
 ruleset.
 
-The tester plan (`BenchmarkPlan.Tester()`, wired to the Start button via
+The tester plan (`BenchmarkPlan.Tester()`, wired to the Quick Run button via
 `DeviceSearchBenchmark.StartRun()`) is the only one safe to hand to someone else — its 2m20s worst
 case is provable from `AIProfileTable`'s own budgets before a single search runs. The Long Run button
 (`DeviceSearchBenchmark.StartThermalRun()`) opts into the 10-minute thermal plan instead — still
