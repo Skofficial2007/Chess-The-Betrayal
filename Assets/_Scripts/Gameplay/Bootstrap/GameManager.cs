@@ -187,18 +187,6 @@ namespace ChessTheBetrayal.App
 
         private void Awake()
         {
-            // This scene is landscape-only; DeviceBenchmark.unity is portrait-only. Locking it here
-            // rather than leaving it to Player Settings' global default means SceneManager.LoadScene
-            // switching between the two doesn't leave the device caught on whichever orientation the
-            // previous scene left it in. AutoRotation (not a single fixed LandscapeLeft/Right) keeps
-            // both landscape flips available, matching what Player Settings already allowed — this
-            // only takes portrait out of the mix while this scene is active.
-            Screen.orientation = ScreenOrientation.AutoRotation;
-            Screen.autorotateToPortrait = false;
-            Screen.autorotateToPortraitUpsideDown = false;
-            Screen.autorotateToLandscapeLeft = true;
-            Screen.autorotateToLandscapeRight = true;
-
             ServiceLocator.Instance.Register(this);
 
             // Register under the Core-owned seams the presentation layer resolves. The locator keys
