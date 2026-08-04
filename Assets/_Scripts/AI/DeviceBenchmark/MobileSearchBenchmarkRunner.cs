@@ -208,23 +208,31 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         }
 
         /// <summary>
-        /// Builds two lines per built-in tier, one per thread context, so a main-thread run and a
+        /// Builds two lines per tier, one per thread context, so a main-thread run and a
         /// worker-thread run on the same tier can be read side by side rather than blended into one
         /// number: how many samples each has, the worst/mean/min elapsed time, the worst overshoot
         /// past its own budget, and the worst/mean depth reached. A combination with zero samples
         /// still gets a line saying so, rather than being left out — an absent line reads as
         /// "nothing to report" when it might just mean the run was interrupted before reaching it,
-        /// which is exactly the distinction this line exists to make clear. Safe to call at any
-        /// point, since it only ever reports on whatever has been recorded so far. Also emits each
-        /// line the usual way (for adb logcat / a plain console listener); returning them too lets
-        /// a caller assembling a structured report (see BenchmarkReport) place the summary as its
-        /// own section rather than re-parsing the general line stream for it.
+        /// which is exactly the distinction this line exists to make clear.
+        ///
+        /// Which tiers to account for has to be passed in, because reporting absence only says
+        /// something against the tiers a run was actually meant to cover. Enumerating every built-in
+        /// tier regardless put eleven "no samples recorded" lines above the single real one on the
+        /// first single-tier run that reached a device, which reads at a glance like a run that
+        /// failed rather than one that was never asked to sweep. A plan already knows its own tiers;
+        /// this takes them rather than assuming.
+        ///
+        /// Safe to call at any point, since it only ever reports on whatever has been recorded so
+        /// far. Also emits each line the usual way (for adb logcat / a plain console listener);
+        /// returning them too lets a caller assembling a structured report (see BenchmarkReport)
+        /// place the summary as its own section rather than re-parsing the general line stream.
         /// </summary>
-        public IReadOnlyList<string> EmitTierSummaries()
+        public IReadOnlyList<string> EmitTierSummaries(IReadOnlyList<AIProfile> profiles)
         {
             var lines = new List<string>();
 
-            foreach (AIProfile profile in AIProfileTable.BuiltIn)
+            foreach (AIProfile profile in profiles)
             {
                 lines.Add(EmitTierSummaryLine(profile, MainThreadLabel));
                 lines.Add(EmitTierSummaryLine(profile, WorkerThreadLabel));

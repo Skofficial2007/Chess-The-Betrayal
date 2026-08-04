@@ -73,7 +73,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             }
 
             Debug.Log($"[capture] === {label} SUMMARY ===");
-            foreach (string line in runner.EmitTierSummaries())
+            foreach (string line in runner.EmitTierSummaries(plan.Profiles))
                 Debug.Log($"[capture-summary] {line}");
 
             Debug.Log($"[capture] === {label} THERMAL CURVE ===");

@@ -181,7 +181,7 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
                 yield return null;
             }
 
-            IReadOnlyList<string> summaryLines = _runner.EmitTierSummaries();
+            IReadOnlyList<string> summaryLines = _runner.EmitTierSummaries(plan.Profiles);
             IReadOnlyList<string> thermalLines = _runner.EmitThermalBuckets();
             lock (_reportLock)
             {

@@ -198,7 +198,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
 
             var lines = new List<string>();
             runner.OnLine += lines.Add;
-            runner.EmitTierSummaries();
+            runner.EmitTierSummaries(AIProfileTable.BuiltIn);
 
             string line = lines.Single(l => l.StartsWith($"[easy {mainThread}]"));
             Assert.That(line, Does.Contain("3 samples"));
@@ -222,7 +222,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
 
             var lines = new List<string>();
             runner.OnLine += lines.Add;
-            runner.EmitTierSummaries();
+            runner.EmitTierSummaries(AIProfileTable.BuiltIn);
 
             string mainLine = lines.Single(l => l.StartsWith($"[easy {mainThread}]"));
             string workerLine = lines.Single(l => l.StartsWith($"[easy {workerThread}]"));
@@ -241,7 +241,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
 
             var lines = new List<string>();
             runner.OnLine += lines.Add;
-            runner.EmitTierSummaries();
+            runner.EmitTierSummaries(AIProfileTable.BuiltIn);
 
             // "impossible" never got a RecordTiming call on either thread. An absent line would
             // read as "nothing to report" when it could just mean the run never reached this tier
@@ -259,7 +259,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             var lines = new List<string>();
             runner.OnLine += lines.Add;
 
-            runner.EmitTierSummaries();
+            runner.EmitTierSummaries(AIProfileTable.BuiltIn);
 
             foreach (AIProfile profile in AIProfileTable.BuiltIn)
             {
@@ -268,6 +268,30 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 Assert.That(lines.Any(l => l.StartsWith($"[{profile.Id} {MobileSearchBenchmarkRunner.WorkerThreadLabel}]")), Is.True,
                     $"Expected a worker-thread summary line for '{profile.Id}' even with zero samples recorded.");
             }
+        }
+
+        /// <summary>
+        /// The thermal plan sweeps one tier, so a summary listing all six put eleven "no samples
+        /// recorded" lines above the single real one on the first device report anyone read. Absence
+        /// is only worth reporting against the tiers a run was actually meant to cover.
+        /// </summary>
+        [Test]
+        public void EmitTierSummaries_ForASingleTierPlan_SaysNothingAboutTheTiersThatPlanNeverSweeps()
+        {
+            var runner = new MobileSearchBenchmarkRunner();
+            AIProfile impossible = AIProfileTable.BuiltIn.Single(p => p.Id == "impossible");
+            runner.RecordTiming(impossible.Id, MobileSearchBenchmarkRunner.WorkerThreadLabel,
+                new MobileSearchBenchmarkRunner.SearchTiming(seconds: 3.0, budgetCapped: true, depthReached: 7, hardMs: 3000));
+
+            IReadOnlyList<string> lines = runner.EmitTierSummaries(BenchmarkPlan.Thermal().Profiles);
+
+            Assert.That(lines, Has.Count.EqualTo(2),
+                "One tier, two thread contexts — and nothing at all about the five tiers this plan " +
+                "never asked for. Got:\n" + string.Join("\n", lines));
+            Assert.That(lines.Any(l => l.StartsWith($"[{impossible.Id} {MobileSearchBenchmarkRunner.WorkerThreadLabel}]")
+                && l.Contains("1 samples")), Is.True);
+            Assert.That(lines.Any(l => l.Contains("[easy ") || l.Contains("[normal ") || l.Contains("[hard ")), Is.False,
+                "A tier outside the plan must not appear at all, not even to say it has no samples.");
         }
 
         [Test]
@@ -280,7 +304,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             var emittedLines = new List<string>();
             runner.OnLine += emittedLines.Add;
 
-            IReadOnlyList<string> returnedLines = runner.EmitTierSummaries();
+            IReadOnlyList<string> returnedLines = runner.EmitTierSummaries(AIProfileTable.BuiltIn);
 
             // A caller assembling a structured report (BenchmarkReport) reads the summary from the
             // return value rather than re-parsing the general OnLine stream for it -- the two must
