@@ -4827,11 +4827,9 @@ MonoBehaviour:
   pieceScaleMultiplier: 0.9
   deathSize: 0.5
   deathSpacing: 1.25
-  moveIndicatorRadiusRatio: 0.48
-  moveIndicatorYOffset: 0.01
-  moveIndicatorSegments: 24
-  checkFrameSizeRatio: 0.9
-  checkFrameThicknessRatio: 0.1
+  highlightPalette: {fileID: 11400000, guid: a4c1e9b73d5f4e2a8b6c0d1f2e3a4b5c, type: 2}
+  tintYOffset: 0.01
+  markerYOffset: 0.02
   tilesParent: {fileID: 608628692}
   whitePiecesParent: {fileID: 224791463}
   blackPiecesParent: {fileID: 1194650739}
@@ -9419,7 +9417,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ChessTheBetrayal.Gameplay.PointerSelectionInput
   raycastMask:
     serializedVersion: 2
-    m_Bits: 1984
+    m_Bits: 64
   minTimeBetweenActivations: 0.15
   showDebugRays: 1
 --- !u!1 &1093037577

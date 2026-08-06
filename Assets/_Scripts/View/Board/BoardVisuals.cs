@@ -41,16 +41,13 @@ namespace ChessTheBetrayal.View
         [SerializeField] private float deathSize = 0.45f;
         [SerializeField] private float deathSpacing = 0.35f;
 
-        [Header("Move Indicator (Circle)")]
-        [SerializeField, Range(0.05f, 0.5f)] private float moveIndicatorRadiusRatio = 0.45f;
-        [SerializeField] private float moveIndicatorYOffset = 0.01f;
-        [SerializeField, Range(8, 64)] private int moveIndicatorSegments = 24;
-
-        [Header("Check Indicator (Frame)")]
-        [Tooltip("Outer size of the check-warning frame as a fraction of the tile (1 = full tile). Slightly under 1 insets the frame so the king reads as sitting INSIDE it.")]
-        [SerializeField, Range(0.5f, 1f)] private float checkFrameSizeRatio = 0.9f;
-        [Tooltip("Border thickness of the check frame as a fraction of its outer size (0.1 = a border 10% of the frame's width on each edge).")]
-        [SerializeField, Range(0.02f, 0.3f)] private float checkFrameThicknessRatio = 0.1f;
+        [Header("Board Highlights")]
+        [Tooltip("Every colour and dimension the square markers use. Retune the board's look by editing that asset — nothing on this component decides it.")]
+        [SerializeField] private BoardHighlightPalette highlightPalette;
+        [Tooltip("Height of a square's tint above the tile surface.")]
+        [SerializeField] private float tintYOffset = 0.01f;
+        [Tooltip("Height of a square's marker above the tile surface. Keep this above tintYOffset — two transparent shapes at the same height flicker against each other as the camera moves.")]
+        [SerializeField] private float markerYOffset = 0.02f;
 
         [Header("Hierarchy Containers")]
         [SerializeField] private Transform tilesParent;
@@ -112,39 +109,48 @@ namespace ChessTheBetrayal.View
         private GameObject[,] _tiles;
         private Dictionary<Transform, Vector2Int> _tileByTransform = new Dictionary<Transform, Vector2Int>();
 
-        // Circular move-indicator child object per tile (hidden until a move highlight targets it)
-        private MeshRenderer[,] _moveIndicatorRenderers;
+        // Two overlay children per tile: a full-square tint underneath, and a marker shape on top.
+        // Two rather than one because a square often needs both at once — a capture standing on the
+        // square the last move landed on shows a ring over a faint tint — and a single renderer
+        // could only ever say one of those two things.
+        private MeshRenderer[,] _tintRenderers;
+        private MeshRenderer[,] _markerRenderers;
+        private MeshFilter[,] _markerFilters;
 
-        // Square check-warning child object per tile (hidden until a king is in check on that
-        // square). Kept as its own renderer/mesh rather than reusing the tile's own MeshRenderer so
-        // the tile itself (base/hover layer) and the check warning (MoveHighlightCapture layer,
-        // red material) can be toggled completely independently — the same separation of concerns
-        // _moveIndicatorRenderers already uses for legal-move dots.
-        private MeshRenderer[,] _checkIndicatorRenderers;
+        // One mesh per shape, shared by all 64 squares, built once when the board is generated.
+        private Mesh _tintMesh;
+        private Mesh _dotMesh;
+        private Mesh _captureRingMesh;
+        private Mesh _betrayalMesh;
+        private Mesh _checkFrameMesh;
+        private Mesh _cornerTicksMesh;
 
-        // The square currently showing the check-warning highlight, so a later move that resolves
-        // (or shifts) check can find and clear the old one before showing a new one. Invalid when
-        // no king is currently in check.
-        private Vector2Int _checkHighlightSquare = Vector2Int.Invalid;
+        // One material per state, built from the palette at startup and shared across squares. These
+        // are created at runtime, so OnDestroy has to clean them up.
+        private Material[] _markerMaterials;
+        private Material[] _tintMaterials;
+
+        // Where every square's highlight is decided. This component only draws what it answers.
+        private readonly BoardHighlightMap _highlights = new BoardHighlightMap();
+
+        // The squares drawn on the last redraw, so the next one can clear exactly those instead of
+        // walking all 64.
+        private readonly List<Vector2Int> _drawnSquares = new List<Vector2Int>(48);
+        private readonly List<Vector2Int> _squaresToDraw = new List<Vector2Int>(48);
+
+        // Which marker each square is currently showing, so a redraw can tell a genuinely new marker
+        // (which should animate in) from one that was already there (which should not restart).
+        private SquareMarker[,] _shownMarkers;
 
         // Death piles, one per side. Ordered by when each piece was taken — see GraveyardStack.
         private readonly GraveyardStack<ChessPiece> _graveyard = new GraveyardStack<ChessPiece>();
 
-        // Highlighting state
-        private Vector2Int _hoverIndex = Vector2Int.Invalid;
-        private readonly List<Vector2Int> _highlightedSquares = new List<Vector2Int>(32);
-
-        // Mirror of the list above, used for fast "is this square highlighted?" checks.
-        private readonly HashSet<Vector2Int> _highlightedSquaresLookup = new HashSet<Vector2Int>(32);
         private readonly List<ChessPiece> _destroyQueue = new List<ChessPiece>(32);
 
         // Cached values
         private Vector3 _boardOrigin;
         private int _tileCountX, _tileCountY;
-        private int _tileLayer, _highlightLayer, _moveHighlightLayer, _moveHighlightCaptureLayer, _checkHighlightLayer;
-
-        // Squares among _highlightedSquares that currently hold a capturable piece
-        private readonly HashSet<Vector2Int> _captureSquaresLookup = new HashSet<Vector2Int>(32);
+        private int _tileLayer;
 
         // Defensive Override threat-pulse: two quick red flashes on the player's own king when a
         // Forced Save activates, so the sudden forced move reads as "your king is in danger" rather
@@ -152,6 +158,14 @@ namespace ChessTheBetrayal.View
         private const float KingThreatFlashIntensity = 2.5f;
         private const float KingThreatFlashDuration = 0.15f;
         private const int KingThreatFlashCycles = 2;
+
+        // Resolved once rather than hashing the same two strings on every material write.
+        private static readonly int BaseColourProperty = Shader.PropertyToID("_BaseColor");
+        private static readonly int GlowProperty = Shader.PropertyToID("_Glow");
+
+        // How far a marker overshoots its final size on the way in. Matches the arrival overshoot
+        // the pieces themselves use, so the board has one motion vocabulary rather than two.
+        private const float MarkerAppearOvershoot = 1.7f;
 
         #endregion
 
@@ -183,6 +197,7 @@ namespace ChessTheBetrayal.View
         {
             InspectorGuard.Require(tileMaterial, nameof(tileMaterial), this);
             InspectorGuard.Require(selectionOutlineMaterial, nameof(selectionOutlineMaterial), this);
+            InspectorGuard.Require(highlightPalette, nameof(highlightPalette), this);
             InspectorGuard.Require(_sharedBoardState, nameof(_sharedBoardState), this);
             InspectorGuard.Require(_gameStartedChannel, nameof(_gameStartedChannel), this);
             InspectorGuard.Require(_gameResetChannel, nameof(_gameResetChannel), this);
@@ -296,9 +311,14 @@ namespace ChessTheBetrayal.View
         private void GenerateTileMeshes()
         {
             _tiles = new GameObject[_tileCountX, _tileCountY];
-            _moveIndicatorRenderers = new MeshRenderer[_tileCountX, _tileCountY];
-            _checkIndicatorRenderers = new MeshRenderer[_tileCountX, _tileCountY];
+            _tintRenderers = new MeshRenderer[_tileCountX, _tileCountY];
+            _markerRenderers = new MeshRenderer[_tileCountX, _tileCountY];
+            _markerFilters = new MeshFilter[_tileCountX, _tileCountY];
+            _shownMarkers = new SquareMarker[_tileCountX, _tileCountY];
             _tileByTransform.Clear();
+
+            BuildHighlightMeshes();
+            BuildHighlightMaterials();
 
             for (int x = 0; x < _tileCountX; x++)
             {
@@ -339,46 +359,307 @@ namespace ChessTheBetrayal.View
                     // Set layer
                     tileGO.layer = _tileLayer;
 
-                    // Create the circular move-indicator child, hidden until a legal-move highlight targets it
-                    GameObject indicatorGO = new GameObject($"MoveIndicator_{x}_{y}");
-                    indicatorGO.transform.SetParent(tileGO.transform, false);
-                    indicatorGO.transform.localPosition = new Vector3(0f, moveIndicatorYOffset, 0f);
-
-                    Mesh circleMesh = GenerateCircleMesh(tileSize * moveIndicatorRadiusRatio, moveIndicatorSegments);
-                    indicatorGO.AddComponent<MeshFilter>().sharedMesh = circleMesh;
-                    MeshRenderer indicatorRenderer = indicatorGO.AddComponent<MeshRenderer>();
-                    indicatorRenderer.sharedMaterial = tileMaterial;
-                    indicatorRenderer.enabled = false;
-                    indicatorGO.layer = _tileLayer;
-
-                    // Create the check-warning FRAME child, hidden until a king in check occupies
-                    // this tile. A hollow square ring (not a filled square, and not the move dot's
-                    // circle) inset slightly inside the tile, so the king reads as sitting FRAMED
-                    // inside a red border with the tile still visible through the middle — see the
-                    // class doc on SetKingInCheckHighlight for why this is its own mesh/material/layer.
-                    GameObject checkGO = new GameObject($"CheckIndicator_{x}_{y}");
-                    checkGO.transform.SetParent(tileGO.transform, false);
-                    checkGO.transform.localPosition = new Vector3(0f, moveIndicatorYOffset, 0f);
-
-                    float frameOuter = tileSize * checkFrameSizeRatio;
-                    Mesh checkFrameMesh = GenerateFrameMesh(frameOuter, frameOuter * checkFrameThicknessRatio);
-                    checkGO.AddComponent<MeshFilter>().sharedMesh = checkFrameMesh;
-                    MeshRenderer checkRenderer = checkGO.AddComponent<MeshRenderer>();
-                    checkRenderer.sharedMaterial = tileMaterial;
-                    checkRenderer.enabled = false;
-                    checkGO.layer = _tileLayer;
+                    // The square's tint sits lowest, so a marker always reads as being on top of it.
+                    _tintRenderers[x, y] = CreateOverlay(tileGO.transform, $"Tint_{x}_{y}", tintYOffset, _tintMesh, out _);
+                    _markerRenderers[x, y] = CreateOverlay(tileGO.transform, $"Marker_{x}_{y}", markerYOffset, null, out MeshFilter markerFilter);
+                    _markerFilters[x, y] = markerFilter;
 
                     // Store references
                     _tiles[x, y] = tileGO;
-                    _moveIndicatorRenderers[x, y] = indicatorRenderer;
-                    _checkIndicatorRenderers[x, y] = checkRenderer;
                     _tileByTransform[tileGO.transform] = new Vector2Int(x, y);
                 }
             }
         }
 
         /// <summary>
-        /// Builds a flat triangle-fan circle mesh, used for the move-highlight indicator.
+        /// Adds one flat overlay child to a tile, hidden until something asks for it. A null mesh
+        /// means the caller will assign one per state (which is what the marker slot does).
+        /// </summary>
+        private MeshRenderer CreateOverlay(Transform tile, string overlayName, float yOffset, Mesh mesh, out MeshFilter filter)
+        {
+            GameObject overlay = new GameObject(overlayName);
+            overlay.transform.SetParent(tile, false);
+            overlay.transform.localPosition = new Vector3(0f, yOffset, 0f);
+            overlay.layer = _tileLayer;
+
+            filter = overlay.AddComponent<MeshFilter>();
+            filter.sharedMesh = mesh;
+
+            MeshRenderer renderer = overlay.AddComponent<MeshRenderer>();
+            renderer.enabled = false;
+
+            // These are flat decals lying on the board. Letting them cast or receive shadows would
+            // make an unlit affordance pick up the scene's lighting through the back door.
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            renderer.receiveShadows = false;
+
+            return renderer;
+        }
+
+        /// <summary>
+        /// Builds the one mesh per marker shape that every square shares. Sizes come from the
+        /// palette, so retuning a shape is an Inspector edit rather than a code change.
+        /// </summary>
+        private void BuildHighlightMeshes()
+        {
+            int segments = highlightPalette.CircleSegments;
+
+            _tintMesh = GenerateQuadMesh(tileSize * highlightPalette.TintSizeRatio);
+            _dotMesh = GenerateCircleMesh(tileSize * highlightPalette.DotRadiusRatio, segments);
+            _captureRingMesh = GenerateRingMesh(
+                tileSize * highlightPalette.CaptureRingRadiusRatio,
+                tileSize * highlightPalette.CaptureRingThicknessRatio,
+                segments);
+            _betrayalMesh = GenerateBetrayalMarkerMesh(
+                tileSize * highlightPalette.BetrayalRingRadiusRatio,
+                tileSize * highlightPalette.CaptureRingThicknessRatio,
+                tileSize * highlightPalette.BetrayalDiamondRatio,
+                segments);
+
+            float frameOuter = tileSize * highlightPalette.CheckFrameSizeRatio;
+            _checkFrameMesh = GenerateFrameMesh(frameOuter, frameOuter * highlightPalette.CheckFrameThicknessRatio);
+
+            _cornerTicksMesh = GenerateCornerTicksMesh(
+                tileSize * highlightPalette.TintSizeRatio,
+                tileSize * highlightPalette.CornerTickLengthRatio,
+                tileSize * highlightPalette.CornerTickThicknessRatio);
+        }
+
+        /// <summary>
+        /// Builds one material per highlight state from the palette. All of them share a single
+        /// unlit shader, which is what lets 64 squares of markers still batch together.
+        ///
+        /// Palette colours are picked in the Inspector's ordinary sRGB picker, so they are converted
+        /// to linear on the way in — the project renders in linear space, and handing a shader raw
+        /// sRGB numbers is the classic way to end up with colours that look washed out for no
+        /// visible reason.
+        /// </summary>
+        private void BuildHighlightMaterials()
+        {
+            Shader shader = Shader.Find("Chess/BoardHighlight");
+            if (shader == null)
+            {
+                Debug.LogError($"[{nameof(BoardVisuals)}] The board highlight shader is missing, so no square markers can be drawn.", this);
+                return;
+            }
+
+            DestroyHighlightMaterials();
+
+            _markerMaterials = new Material[System.Enum.GetValues(typeof(SquareMarker)).Length];
+            _tintMaterials = new Material[System.Enum.GetValues(typeof(SquareTint)).Length];
+
+            foreach (SquareMarker marker in System.Enum.GetValues(typeof(SquareMarker)))
+            {
+                if (marker == SquareMarker.None) continue;
+                _markerMaterials[(int)marker] = CreateHighlightMaterial(shader, $"Marker_{marker}", highlightPalette.LookFor(marker));
+            }
+
+            foreach (SquareTint tint in System.Enum.GetValues(typeof(SquareTint)))
+            {
+                if (tint == SquareTint.None) continue;
+                _tintMaterials[(int)tint] = CreateHighlightMaterial(shader, $"Tint_{tint}", highlightPalette.LookFor(tint));
+            }
+        }
+
+        private static Material CreateHighlightMaterial(Shader shader, string materialName, BoardHighlightPalette.Look look)
+        {
+            Material material = new Material(shader) { name = materialName };
+            material.SetColor(BaseColourProperty, look.Colour.linear);
+            material.SetFloat(GlowProperty, look.Glow);
+            return material;
+        }
+
+        private void DestroyHighlightMaterials()
+        {
+            DestroyMaterials(_markerMaterials);
+            DestroyMaterials(_tintMaterials);
+            _markerMaterials = null;
+            _tintMaterials = null;
+        }
+
+        private static void DestroyMaterials(Material[] materials)
+        {
+            if (materials == null) return;
+
+            for (int i = 0; i < materials.Length; i++)
+            {
+                if (materials[i] != null) Destroy(materials[i]);
+            }
+        }
+
+        /// <summary>
+        /// Builds a flat square centred on the tile, used for a square's tint.
+        /// </summary>
+        private static Mesh GenerateQuadMesh(float size)
+        {
+            Mesh mesh = new Mesh { name = "SquareTintMesh" };
+
+            float half = size * 0.5f;
+            mesh.vertices = new Vector3[]
+            {
+                new Vector3(-half, 0f, -half),
+                new Vector3(-half, 0f,  half),
+                new Vector3( half, 0f, -half),
+                new Vector3( half, 0f,  half)
+            };
+            mesh.triangles = new int[] { 0, 1, 2, 1, 3, 2 };
+            mesh.RecalculateNormals();
+            return mesh;
+        }
+
+        /// <summary>
+        /// Builds a flat annulus — the capture marker. A ring rather than a filled circle because a
+        /// capture square always has a piece standing on it, and a disc would simply hide the thing
+        /// the player is deciding whether to take.
+        /// </summary>
+        private static Mesh GenerateRingMesh(float outerRadius, float thickness, int segments)
+        {
+            Mesh mesh = new Mesh { name = "CaptureRingMesh" };
+
+            float innerRadius = Mathf.Max(0f, outerRadius - thickness);
+            var vertices = new Vector3[segments * 2];
+            var triangles = new int[segments * 6];
+
+            for (int i = 0; i < segments; i++)
+            {
+                float angle = i * Mathf.PI * 2f / segments;
+                float cos = Mathf.Cos(angle);
+                float sin = Mathf.Sin(angle);
+
+                vertices[i * 2] = new Vector3(cos * outerRadius, 0f, sin * outerRadius);
+                vertices[i * 2 + 1] = new Vector3(cos * innerRadius, 0f, sin * innerRadius);
+            }
+
+            for (int i = 0; i < segments; i++)
+            {
+                int outerA = i * 2;
+                int innerA = i * 2 + 1;
+                int outerB = (i + 1) % segments * 2;
+                int innerB = (i + 1) % segments * 2 + 1;
+
+                int t = i * 6;
+                triangles[t] = outerA;
+                triangles[t + 1] = outerB;
+                triangles[t + 2] = innerA;
+                triangles[t + 3] = innerA;
+                triangles[t + 4] = outerB;
+                triangles[t + 5] = innerB;
+            }
+
+            mesh.vertices = vertices;
+            mesh.triangles = triangles;
+            mesh.RecalculateNormals();
+            return mesh;
+        }
+
+        /// <summary>
+        /// Builds the Betrayal marker: the capture ring with a diamond floating at its centre, as one
+        /// mesh. A Betrayal is not an ordinary capture and must not look like one — so it gets a
+        /// silhouette of its own rather than only a different colour, which keeps it distinguishable
+        /// for a player who cannot separate the two hues.
+        /// </summary>
+        private static Mesh GenerateBetrayalMarkerMesh(float ringRadius, float ringThickness, float diamondRadius, int segments)
+        {
+            Mesh ring = GenerateRingMesh(ringRadius, ringThickness, segments);
+
+            Vector3[] ringVertices = ring.vertices;
+            int[] ringTriangles = ring.triangles;
+
+            var vertices = new Vector3[ringVertices.Length + 4];
+            var triangles = new int[ringTriangles.Length + 6];
+
+            ringVertices.CopyTo(vertices, 0);
+            ringTriangles.CopyTo(triangles, 0);
+
+            int baseIndex = ringVertices.Length;
+            vertices[baseIndex] = new Vector3(0f, 0f, diamondRadius);      // north
+            vertices[baseIndex + 1] = new Vector3(diamondRadius, 0f, 0f);   // east
+            vertices[baseIndex + 2] = new Vector3(0f, 0f, -diamondRadius);  // south
+            vertices[baseIndex + 3] = new Vector3(-diamondRadius, 0f, 0f);  // west
+
+            int triangleIndex = ringTriangles.Length;
+            triangles[triangleIndex] = baseIndex;
+            triangles[triangleIndex + 1] = baseIndex + 1;
+            triangles[triangleIndex + 2] = baseIndex + 2;
+            triangles[triangleIndex + 3] = baseIndex;
+            triangles[triangleIndex + 4] = baseIndex + 2;
+            triangles[triangleIndex + 5] = baseIndex + 3;
+
+            var mesh = new Mesh { name = "BetrayalMarkerMesh" };
+            mesh.vertices = vertices;
+            mesh.triangles = triangles;
+            mesh.RecalculateNormals();
+            return mesh;
+        }
+
+        /// <summary>
+        /// Builds four L-shaped ticks, one hugging each corner of the square — the marker for the
+        /// square whose piece is currently picked up. Corners rather than a full outline so it reads
+        /// as "this one is in your hand" without competing with the move markers it points at.
+        /// </summary>
+        private static Mesh GenerateCornerTicksMesh(float size, float tickLength, float tickThickness)
+        {
+            float half = size * 0.5f;
+            float length = Mathf.Min(tickLength, half);
+
+            var vertices = new Vector3[16 * 2];
+            var triangles = new int[8 * 6];
+            int vertexCount = 0;
+            int triangleCount = 0;
+
+            // Each corner contributes two bars, one running along each edge away from it.
+            for (int corner = 0; corner < 4; corner++)
+            {
+                float signX = (corner == 0 || corner == 3) ? -1f : 1f;
+                float signZ = (corner == 0 || corner == 1) ? -1f : 1f;
+
+                float cornerX = signX * half;
+                float cornerZ = signZ * half;
+
+                // Bar running along the X edge.
+                AddBar(vertices, triangles, ref vertexCount, ref triangleCount,
+                    cornerX, cornerZ, cornerX - signX * length, cornerZ - signZ * tickThickness);
+
+                // Bar running along the Z edge.
+                AddBar(vertices, triangles, ref vertexCount, ref triangleCount,
+                    cornerX, cornerZ - signZ * tickThickness, cornerX - signX * tickThickness, cornerZ - signZ * length);
+            }
+
+            var mesh = new Mesh { name = "SelectionCornerTicksMesh" };
+            mesh.vertices = vertices;
+            mesh.triangles = triangles;
+            mesh.RecalculateNormals();
+            return mesh;
+        }
+
+        /// <summary>
+        /// Appends one axis-aligned flat rectangle spanning the two opposite corners given, winding
+        /// it so it faces up whichever way round those corners were supplied.
+        /// </summary>
+        private static void AddBar(Vector3[] vertices, int[] triangles, ref int vertexCount, ref int triangleCount,
+            float x0, float z0, float x1, float z1)
+        {
+            float minX = Mathf.Min(x0, x1);
+            float maxX = Mathf.Max(x0, x1);
+            float minZ = Mathf.Min(z0, z1);
+            float maxZ = Mathf.Max(z0, z1);
+
+            int start = vertexCount;
+            vertices[vertexCount++] = new Vector3(minX, 0f, minZ);
+            vertices[vertexCount++] = new Vector3(minX, 0f, maxZ);
+            vertices[vertexCount++] = new Vector3(maxX, 0f, minZ);
+            vertices[vertexCount++] = new Vector3(maxX, 0f, maxZ);
+
+            triangles[triangleCount++] = start;
+            triangles[triangleCount++] = start + 1;
+            triangles[triangleCount++] = start + 2;
+            triangles[triangleCount++] = start + 1;
+            triangles[triangleCount++] = start + 3;
+            triangles[triangleCount++] = start + 2;
+        }
+
+        /// <summary>
+        /// Builds a flat triangle-fan circle mesh, used for the quiet-move dot.
         /// </summary>
         private static Mesh GenerateCircleMesh(float radius, int segments)
         {
@@ -606,9 +887,17 @@ namespace ChessTheBetrayal.View
             _destroyQueue.Clear();
 
             // Clear highlights
-            ClearLegalMoveHighlights();
-            ClearHoverHighlight();
-            ClearCheckHighlight();
+            _highlights.Clear();
+            RedrawHighlights();
+        }
+
+        /// <summary>
+        /// The highlight materials are built at runtime from the palette, so they belong to this
+        /// component rather than to the project, and nothing else will collect them.
+        /// </summary>
+        private void OnDestroy()
+        {
+            DestroyHighlightMaterials();
         }
 
         #endregion
@@ -627,6 +916,13 @@ namespace ChessTheBetrayal.View
 
             // Safety check for invalid commands
             if (move.PieceType == ChessPieceType.None) return;
+
+            // A Defection stays on one square, so tinting "from" and "to" would mark a single square
+            // twice and say nothing. The Act that provoked it is the move worth still showing.
+            if (move.Stage != BetrayalStage.Defection)
+            {
+                SetLastMove(move.StartPosition, move.EndPosition);
+            }
 
             // 1. Handle Captures. A direct capture (attacker lands ON the victim's tile) plays the
             // full cartoon "stamp": the attacker lunges in and stomps, the victim gets crushed flat
@@ -861,6 +1157,7 @@ namespace ChessTheBetrayal.View
             // Whatever was highlighted described the position being left behind.
             ClearLegalMoveHighlights();
             ClearCheckHighlight();
+            ClearLastMove();
 
             // Castling is two pieces; the rook goes home alongside the king, trailing it by the same
             // beat it followed on the way out.
@@ -1161,6 +1458,11 @@ namespace ChessTheBetrayal.View
             {
                 piece.LiftSelect();
             }
+
+            // The square a piece was lifted from is also where the move markers ripple out from, so
+            // it has to be recorded whether or not a piece was actually found to animate.
+            _highlights.Selected = gridPos;
+            RedrawHighlights();
         }
 
         /// <summary>
@@ -1173,6 +1475,14 @@ namespace ChessTheBetrayal.View
             if (_piecesByPosition.TryGetValue(gridPos, out ChessPiece piece))
             {
                 piece.LowerDeselect();
+            }
+
+            // Only forget the selection if this is the square that was actually selected — a stale
+            // deselect for a square the player has already moved on from must not clear the new one.
+            if (_highlights.Selected == gridPos)
+            {
+                _highlights.Selected = Vector2Int.Invalid;
+                RedrawHighlights();
             }
         }
 
@@ -1444,28 +1754,18 @@ namespace ChessTheBetrayal.View
         #region Highlighting
 
         /// <summary>
-        /// Updates the hover highlight on a tile.
+        /// Moves the pointer's tint to a new square.
         /// </summary>
         public void UpdateHoverHighlight(Vector2Int idx)
         {
-            if (_hoverIndex == idx) return;
+            if (_highlights.Hover == idx) return;
 
-            // Clear old hover
-            if (_hoverIndex != Vector2Int.Invalid)
-            {
-                SetTileLayer(_hoverIndex, isHover: false);
-            }
-
-            // Set new hover
-            _hoverIndex = idx;
-            if (_hoverIndex != Vector2Int.Invalid)
-            {
-                SetTileLayer(_hoverIndex, isHover: true);
-            }
+            _highlights.Hover = idx;
+            RedrawHighlights();
         }
 
         /// <summary>
-        /// Clears the hover highlight.
+        /// Takes the pointer tint off the board.
         /// </summary>
         public void ClearHoverHighlight()
         {
@@ -1473,128 +1773,226 @@ namespace ChessTheBetrayal.View
         }
 
         /// <summary>
-        /// Highlights all legal move destinations.
+        /// Marks every square the picked-up piece may move to, sorting each destination into the kind
+        /// of thing it would do.
         /// </summary>
         public void HighlightLegalMoves(IReadOnlyList<MoveCommand> moves)
         {
-            ClearLegalMoveHighlights();
+            _highlights.ClearDestinations();
+
             for (int i = 0; i < moves.Count; i++)
             {
-                Vector2Int pos = moves[i].EndPosition;
+                MoveCommand move = moves[i];
 
-                _highlightedSquares.Add(pos);
-                _highlightedSquaresLookup.Add(pos);
-
-                // A move that captures gets the capture-colored indicator instead. Checking
-                // move.IsCapture (rather than whether the destination square holds a piece) is
-                // required for en passant, whose destination is empty — the captured pawn sits on
-                // a different square (MoveCommand.EnPassantCapturePosition).
-                if (moves[i].IsCapture)
-                {
-                    _captureSquaresLookup.Add(pos);
-                }
-
-                SetTileLayer(pos, isHover: false);
+                // Asking the move whether it captures, rather than whether the destination square
+                // holds a piece, is what makes en passant mark correctly — its destination is empty,
+                // because the pawn being taken stands on a different square.
+                _highlights.AddDestination(
+                    move.EndPosition,
+                    isCapture: move.IsCapture,
+                    isBetrayal: move.Stage == BetrayalStage.Act);
             }
+
+            RedrawHighlights();
         }
 
         /// <summary>
-        /// Clears all legal move highlights.
+        /// Forgets the destinations shown for the piece that was picked up. Selection, check and the
+        /// last move played all survive this — putting a piece back down changes none of them.
         /// </summary>
         public void ClearLegalMoveHighlights()
         {
-            for (int i = 0; i < _highlightedSquares.Count; i++)
-            {
-                Vector2Int pos = _highlightedSquares[i];
-                if (pos.x >= 0 && pos.x < _tileCountX && pos.y >= 0 && pos.y < _tileCountY && _tiles[pos.x, pos.y] != null)
-                {
-                    _tiles[pos.x, pos.y].layer = _tileLayer;
-
-                    MeshRenderer indicator = _moveIndicatorRenderers[pos.x, pos.y];
-                    if (indicator != null) indicator.enabled = false;
-                }
-            }
-            _highlightedSquares.Clear();
-            _highlightedSquaresLookup.Clear();
-            _captureSquaresLookup.Clear();
-
-            // Restore hover if active
-            if (_hoverIndex != Vector2Int.Invalid)
-            {
-                SetTileLayer(_hoverIndex, isHover: true);
-            }
+            _highlights.ClearDestinations();
+            RedrawHighlights();
         }
 
         /// <summary>
-        /// Sets the appropriate layer for a tile based on its state. The square tile itself only
-        /// ever shows the base or hover look; a legal-move destination is instead signalled by
-        /// enabling the tile's circular MoveIndicator child on the move/capture layer, so hover
-        /// and move-highlight can never fight over the same renderer's layer.
-        /// </summary>
-        private void SetTileLayer(Vector2Int pos, bool isHover)
-        {
-            if (pos.x < 0 || pos.x >= _tileCountX || pos.y < 0 || pos.y >= _tileCountY) return;
-
-            GameObject tile = _tiles[pos.x, pos.y];
-            if (tile == null) return;
-
-            tile.layer = isHover ? _highlightLayer : _tileLayer;
-
-            MeshRenderer indicator = _moveIndicatorRenderers[pos.x, pos.y];
-            if (indicator == null) return;
-
-            // Check the lookup set, not the list — it's much faster for this kind of check
-            if (_highlightedSquaresLookup.Contains(pos))
-            {
-                indicator.enabled = true;
-                indicator.gameObject.layer = _captureSquaresLookup.Contains(pos)
-                    ? _moveHighlightCaptureLayer
-                    : _moveHighlightLayer;
-            }
-            else
-            {
-                indicator.enabled = false;
-            }
-        }
-
-        /// <summary>
-        /// Shows the red check-warning frame under the king's tile at kingPos and clears any
-        /// previous one (a check can shift squares between moves — e.g. king moves out of check on
-        /// one turn, a discovered check lands on a different king the next). Uses the dedicated
-        /// CheckHighlight URP layer/material (its own bright red frame look, separate from the
-        /// capturing-move dot's red) on the hollow frame mesh, so "your king is in danger" reads as
-        /// a red border framing the king rather than a colored dot or a filled tile.
+        /// Frames the king standing at kingPos as being in check, clearing any previous frame — a
+        /// check can move between squares from one turn to the next, when a king steps out of one
+        /// and a discovered check lands on the other side's king instead.
         /// </summary>
         public void SetKingInCheckHighlight(Vector2Int kingPos)
         {
-            ClearCheckHighlight();
-
-            if (kingPos.x < 0 || kingPos.x >= _tileCountX || kingPos.y < 0 || kingPos.y >= _tileCountY) return;
-
-            MeshRenderer indicator = _checkIndicatorRenderers[kingPos.x, kingPos.y];
-            if (indicator == null) return;
-
-            indicator.enabled = true;
-            indicator.gameObject.layer = _checkHighlightLayer;
-            _checkHighlightSquare = kingPos;
+            _highlights.CheckSquare = kingPos;
+            RedrawHighlights();
         }
 
         /// <summary>
-        /// Hides the check-warning square, if one is currently showing. Safe to call unconditionally
-        /// (e.g. every move) — a no-op when no king is in check.
+        /// Takes the check frame off the board. Safe to call whether or not one is showing.
         /// </summary>
         public void ClearCheckHighlight()
         {
-            if (_checkHighlightSquare == Vector2Int.Invalid) return;
+            if (_highlights.CheckSquare == Vector2Int.Invalid) return;
 
-            if (_checkHighlightSquare.x >= 0 && _checkHighlightSquare.x < _tileCountX &&
-                _checkHighlightSquare.y >= 0 && _checkHighlightSquare.y < _tileCountY)
+            _highlights.CheckSquare = Vector2Int.Invalid;
+            RedrawHighlights();
+        }
+
+        /// <summary>
+        /// Records the move just played, so both its squares stay faintly tinted. This is the cheapest
+        /// clarity win on the board: it answers "what just happened?" for a player who looked away
+        /// during the animation, or who is picking the game back up after a pause.
+        /// </summary>
+        private void SetLastMove(Vector2Int from, Vector2Int to)
+        {
+            _highlights.LastMoveFrom = from;
+            _highlights.LastMoveTo = to;
+            RedrawHighlights();
+        }
+
+        /// <summary>
+        /// Drops the last-move tint. Used when a takeback rewinds a ply: the move before it is the
+        /// one that would now be "last", and the view has no record of what that was, so showing
+        /// nothing is honest where showing the retracted move would be a lie.
+        /// </summary>
+        private void ClearLastMove()
+        {
+            _highlights.LastMoveFrom = Vector2Int.Invalid;
+            _highlights.LastMoveTo = Vector2Int.Invalid;
+            RedrawHighlights();
+        }
+
+        /// <summary>
+        /// Brings every square in line with what the highlight map now says. The only method here
+        /// that touches a renderer — everything else states a fact and calls this.
+        ///
+        /// Squares drawn last time are cleared first, so a square that has just stopped being
+        /// highlighted goes dark without walking the whole board.
+        /// </summary>
+        private void RedrawHighlights()
+        {
+            if (_tiles == null || _markerRenderers == null) return;
+
+            _highlights.CollectActiveSquares(_squaresToDraw);
+
+            for (int i = 0; i < _drawnSquares.Count; i++)
             {
-                MeshRenderer indicator = _checkIndicatorRenderers[_checkHighlightSquare.x, _checkHighlightSquare.y];
-                if (indicator != null) indicator.enabled = false;
+                if (!_squaresToDraw.Contains(_drawnSquares[i]))
+                {
+                    ApplyHighlight(_drawnSquares[i], default);
+                }
             }
 
-            _checkHighlightSquare = Vector2Int.Invalid;
+            for (int i = 0; i < _squaresToDraw.Count; i++)
+            {
+                Vector2Int square = _squaresToDraw[i];
+                ApplyHighlight(square, _highlights.Resolve(square));
+            }
+
+            _drawnSquares.Clear();
+            _drawnSquares.AddRange(_squaresToDraw);
+        }
+
+        /// <summary>
+        /// Shows one square's tint and marker, animating a marker in only when it wasn't already
+        /// there — a redraw triggered by the pointer moving somewhere else must not make every
+        /// move dot on the board pop again.
+        /// </summary>
+        private void ApplyHighlight(Vector2Int square, SquareHighlight highlight)
+        {
+            if (!IsOnBoard(square)) return;
+
+            MeshRenderer tint = _tintRenderers[square.x, square.y];
+            if (tint != null)
+            {
+                bool showTint = highlight.Tint != SquareTint.None && _tintMaterials != null;
+                tint.enabled = showTint;
+                if (showTint)
+                {
+                    tint.sharedMaterial = _tintMaterials[(int)highlight.Tint];
+                }
+            }
+
+            MeshRenderer marker = _markerRenderers[square.x, square.y];
+            MeshFilter filter = _markerFilters[square.x, square.y];
+            if (marker == null || filter == null) return;
+
+            SquareMarker previous = _shownMarkers[square.x, square.y];
+            _shownMarkers[square.x, square.y] = highlight.Marker;
+
+            if (highlight.Marker == SquareMarker.None || _markerMaterials == null)
+            {
+                marker.enabled = false;
+                return;
+            }
+
+            filter.sharedMesh = MeshFor(highlight.Marker);
+            marker.sharedMaterial = _markerMaterials[(int)highlight.Marker];
+            marker.enabled = true;
+
+            if (previous != highlight.Marker)
+            {
+                PlayMarkerAppear(marker.transform, square);
+            }
+        }
+
+        /// <summary>
+        /// Scales a marker up as it appears, delayed by how far its square is from the piece that was
+        /// picked up, so the destinations ripple outward from the piece rather than all arriving at
+        /// once. The overshoot on arrival is the same vocabulary the pieces themselves land with.
+        /// </summary>
+        private void PlayMarkerAppear(Transform markerTransform, Vector2Int square)
+        {
+            float duration = highlightPalette.AppearDuration;
+            if (duration <= 0f)
+            {
+                markerTransform.localScale = Vector3.one;
+                return;
+            }
+
+            float delay = 0f;
+            Vector2Int origin = _highlights.Selected;
+            if (origin != Vector2Int.Invalid && highlightPalette.AppearStaggerPerSquare > 0f)
+            {
+                int distance = Mathf.Max(Mathf.Abs(square.x - origin.x), Mathf.Abs(square.y - origin.y));
+                delay = distance * highlightPalette.AppearStaggerPerSquare;
+            }
+
+            markerTransform.localScale = Vector3.zero;
+            Tween.Scale(markerTransform, Vector3.one, duration, Easing.Overshoot(MarkerAppearOvershoot),
+                startDelay: delay, useUnscaledTime: true);
+        }
+
+        private Mesh MeshFor(SquareMarker marker)
+        {
+            switch (marker)
+            {
+                case SquareMarker.QuietMove: return _dotMesh;
+                case SquareMarker.Capture: return _captureRingMesh;
+                case SquareMarker.BetrayalTarget: return _betrayalMesh;
+                case SquareMarker.Check: return _checkFrameMesh;
+                case SquareMarker.Selected: return _cornerTicksMesh;
+                default: return null;
+            }
+        }
+
+        private bool IsOnBoard(Vector2Int square) =>
+            square.x >= 0 && square.x < _tileCountX && square.y >= 0 && square.y < _tileCountY;
+
+        /// <summary>
+        /// Breathes the check frame's glow in and out. A king in check is the one thing on the board
+        /// that must not be possible to overlook, and motion catches the eye where a brighter static
+        /// colour would just blend into the grade.
+        /// </summary>
+        private void Update()
+        {
+            if (_markerMaterials == null) return;
+
+            Material checkMaterial = _markerMaterials[(int)SquareMarker.Check];
+            if (checkMaterial == null) return;
+
+            bool inCheck = _highlights.CheckSquare != Vector2Int.Invalid;
+            if (!inCheck)
+            {
+                checkMaterial.SetFloat(GlowProperty, highlightPalette.Check.Glow);
+                return;
+            }
+
+            float period = Mathf.Max(0.05f, highlightPalette.CheckPulsePeriod);
+            // Unscaled time, because the warning has to keep pulsing while the game is paused.
+            float phase = Mathf.Sin(Time.unscaledTime * Mathf.PI * 2f / period) * 0.5f + 0.5f;
+            checkMaterial.SetFloat(GlowProperty,
+                highlightPalette.Check.Glow + phase * highlightPalette.CheckPulseGlowAmount);
         }
 
         #endregion
@@ -1602,24 +2000,14 @@ namespace ChessTheBetrayal.View
         #region Initialization Helpers
 
         /// <summary>
-        /// Looks up the layer IDs by name once at startup so we're not doing string lookups every frame.
+        /// Resolves the Tile layer once, rather than looking the name up every time a square is built.
+        /// Tiles and their overlays all sit on it, and the pointer's raycast mask is what needs them
+        /// there — nothing about how a square looks depends on its layer any more.
         /// </summary>
         private void CacheLayers()
         {
             _tileLayer = LayerMask.NameToLayer("Tile");
-            _highlightLayer = LayerMask.NameToLayer("Highlight");
-            _moveHighlightLayer = LayerMask.NameToLayer("MoveHighlight");
-            _moveHighlightCaptureLayer = LayerMask.NameToLayer("MoveHighlightCapture");
-            _checkHighlightLayer = LayerMask.NameToLayer("CheckHighlight");
-
             if (_tileLayer == -1) _tileLayer = 0;
-            if (_highlightLayer == -1) _highlightLayer = 0;
-            if (_moveHighlightLayer == -1) _moveHighlightLayer = 0;
-            if (_moveHighlightCaptureLayer == -1) _moveHighlightCaptureLayer = 0;
-            // Falls back to the capture layer if the CheckHighlight layer hasn't been created yet,
-            // so the check warning still shows (as the capture red) rather than silently landing on
-            // the Default layer and rendering as an untinted frame.
-            if (_checkHighlightLayer == -1) _checkHighlightLayer = _moveHighlightCaptureLayer;
         }
 
         /// <summary>
