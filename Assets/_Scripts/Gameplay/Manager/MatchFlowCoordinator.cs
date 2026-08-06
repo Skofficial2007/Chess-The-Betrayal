@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using ChessTheBetrayal.AI;
 using ChessTheBetrayal.Core.Data;
@@ -60,6 +61,14 @@ namespace ChessTheBetrayal.Gameplay.Manager
         // whole of what it needs to say to whatever is doing the pacing.
         private readonly Action _abandonQueuedMoves;
 
+        // Shows a takeback ply by ply. Optional: without one, an undo falls back to rebuilding the
+        // position instead of playing it backwards.
+        private readonly UndoPlaybackSequencer _undoPlayback;
+
+        // Reused across presses to hold the plies an undo just removed, newest first. Only ever
+        // read straight back out by RequestUndo before the next press can touch it.
+        private readonly List<MoveCommand> _unmadePlies = new List<MoveCommand>(8);
+
         private IMoveExecutor _moveExecutor;
 
         // One-shot: set by GameManager (via SetPracticeMatchSettings) after the player confirms the
@@ -101,6 +110,9 @@ namespace ChessTheBetrayal.Gameplay.Manager
         /// <summary>How many recorded turns remain on the undo stack (debug logging only; 2 turns = 1 undo press).</summary>
         public int UndoTurnCount => _undoService?.TurnCount ?? 0;
 
+        /// <summary>True while a takeback is still playing out on the board, during which the position on screen is behind the real one.</summary>
+        public bool IsShowingUndo => _undoPlayback != null && _undoPlayback.IsPlayingBack;
+
         public MatchFlowCoordinator(
             BoardState board, GameSetup setup, MatchDriver matchDriver, Action<MoveCommand> playMove, IChessEngine engine,
             UndoService undoService, AIMatchCoordinator aiCoordinator, ClockCoordinator clockCoordinator,
@@ -111,7 +123,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
             Action<Vector2Int, Vector2Int, bool> onExecutorPromotionRequired,
             Action<GameModeConfig> raiseGameModeConfigured, Action raiseGameStarted, Action raiseBoardResyncRequired,
             Action<BoardState> setSharedBoardState, Action clearSharedBoardState, Action raiseGameReset,
-            Action abandonQueuedMoves = null)
+            Action abandonQueuedMoves = null, UndoPlaybackSequencer undoPlayback = null)
         {
             _board = board;
             _setup = setup;
@@ -140,6 +152,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
             _clearSharedBoardState = clearSharedBoardState;
             _raiseGameReset = raiseGameReset;
             _abandonQueuedMoves = abandonQueuedMoves;
+            _undoPlayback = undoPlayback;
         }
 
         public void HandleGameModeReceived(GameModeConfig config) => SelectedMode = config;
@@ -205,6 +218,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
             _matchDriver.MoveLog.Clear();
             _matchDriver.ResetTurnAccumulator();
             _undoService?.Clear();
+            _undoPlayback?.Clear();
 
             // Tear down the previous executor if one exists (e.g. the player hit Replay).
             if (_moveExecutor != null)
@@ -317,6 +331,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
 
             _board.Clear();
             _aiCoordinator.Dispose();
+            _undoPlayback?.Clear();
 
             if (_moveExecutor != null)
             {
@@ -365,7 +380,8 @@ namespace ChessTheBetrayal.Gameplay.Manager
         public void RequestMove(Vector2Int from, Vector2Int to)
         {
             // Allow inputs during standard play, Retribution, and Forced Save phases.
-            if ((CurrentPhase != TurnPhase.Normal && CurrentPhase != TurnPhase.RetributionPending && CurrentPhase != TurnPhase.ForcedSave) || _board.IsGameOver)
+            if ((CurrentPhase != TurnPhase.Normal && CurrentPhase != TurnPhase.RetributionPending && CurrentPhase != TurnPhase.ForcedSave) || _board.IsGameOver
+                || IsShowingUndo)
             {
                 _onExecutorMoveRejected(from, to);
                 return;
@@ -385,6 +401,11 @@ namespace ChessTheBetrayal.Gameplay.Manager
         /// </summary>
         public bool CanSelectPiece(Vector2Int position)
         {
+            // The board is showing a takeback in progress, so what is on screen is behind where the
+            // pieces actually are. Selecting anything here would be selecting a square by what used
+            // to be on it.
+            if (IsShowingUndo) return false;
+
             if (!_matchDriver.CanSelectPiece(position)) return false;
             if (!IsAiMode) return true;
 
@@ -399,10 +420,14 @@ namespace ChessTheBetrayal.Gameplay.Manager
         {
             if (_undoService == null) return;
 
-            // Read CanUndo BEFORE popping so we only re-broadcast the board (an expensive full View
-            // rebuild) when an undo actually happened — a press with nothing to undo is a no-op both
-            // in UndoService and here.
+            // Read CanUndo BEFORE popping so we only re-broadcast the board when an undo actually
+            // happened — a press with nothing to undo is a no-op both in UndoService and here.
             if (!CanUndo) return;
+
+            // A takeback already being shown owns the board until it finishes. Starting a second
+            // one on top would interleave two rewinds, and captured pieces come back in the order
+            // they were taken — so the presses have to stay one at a time.
+            if (_undoPlayback != null && _undoPlayback.IsPlayingBack) return;
 
             // Both halves matter, and both must happen before the board moves. Cancelling stops a
             // search (or an already-decided reply) from being delivered; abandoning the queue drops
@@ -411,17 +436,25 @@ namespace ChessTheBetrayal.Gameplay.Manager
             _aiCoordinator.CancelInFlightSearch();
             _abandonQueuedMoves?.Invoke();
 
-            _undoService.RequestUndo(IsAiMode, CurrentPhase, PlayerTeam, AiMovesFirst);
+            _undoService.RequestUndo(IsAiMode, CurrentPhase, PlayerTeam, AiMovesFirst, _unmadePlies);
 
             // The undo mutated only the domain board (pieces unmade, captures restored).
             // BoardVisuals is an incremental animator driven by per-move events, so without being
             // told something it would keep showing the post-move position. Re-point the shared board
-            // bridge at the reverted board and ask for a rebuild.
-            //
-            // A rebuild is a blunt way to say "the position changed underneath you" — the player
-            // sees the result of the takeback rather than the takeback itself. That is the next
-            // thing to replace here.
+            // bridge at the reverted board first, so anything reading it sees the real position.
             _setSharedBoardState(_board);
+
+            if (_undoPlayback != null && _unmadePlies.Count > 0)
+            {
+                // Whether the position lands in check has to be read here, from the board, while
+                // the view is still several plies behind it.
+                _undoPlayback.Begin(_unmadePlies, _engine.IsKingInCheck(_board, _board.CurrentTurn));
+                return;
+            }
+
+            // Nothing to play the takeback with, so fall back to rebuilding the position. The
+            // player sees the result rather than the move coming back, which is worse to watch but
+            // never wrong.
             _raiseBoardResyncRequired();
         }
 
