@@ -78,6 +78,15 @@ namespace ChessTheBetrayal.AI
         public bool IsSearching => _cts != null;
 
         /// <summary>
+        /// True when a decided move is sitting here waiting for the next Tick() to hand it over.
+        /// Distinct from IsSearching, and NOT implied by it: an opening-book reply is answered
+        /// synchronously inside RequestBestMove and never creates a cancellation source at all, so
+        /// it reaches exactly this state without IsSearching ever having been true. A caller that
+        /// wants to know "is the AI still going to reply?" has to ask both.
+        /// </summary>
+        public bool HasUndeliveredResult => _hasResult;
+
+        /// <summary>
         /// The deepest depth and the reason iterative deepening stopped there, for whichever search
         /// most recently delivered a move via OnMoveDecided. Captured on the worker thread the
         /// instant FindBestMove returns and published by the same volatile _hasResult write that

@@ -54,6 +54,12 @@ namespace ChessTheBetrayal.Gameplay.Manager
         private readonly Action _clearSharedBoardState;
         private readonly Action _raiseGameReset;
 
+        // Drops any move that has been decided but hasn't reached the board yet — see RequestUndo.
+        // A delegate rather than a MoveVisualPacingGate reference for the same reason playMove is
+        // one: this class orchestrates a match, and "forget what you were about to play" is the
+        // whole of what it needs to say to whatever is doing the pacing.
+        private readonly Action _abandonQueuedMoves;
+
         private IMoveExecutor _moveExecutor;
 
         // One-shot: set by GameManager (via SetPracticeMatchSettings) after the player confirms the
@@ -104,7 +110,8 @@ namespace ChessTheBetrayal.Gameplay.Manager
             Action<Vector2Int, Vector2Int> onExecutorMoveRejected,
             Action<Vector2Int, Vector2Int, bool> onExecutorPromotionRequired,
             Action<GameModeConfig> raiseGameModeConfigured, Action raiseGameStarted, Action raiseBoardResyncRequired,
-            Action<BoardState> setSharedBoardState, Action clearSharedBoardState, Action raiseGameReset)
+            Action<BoardState> setSharedBoardState, Action clearSharedBoardState, Action raiseGameReset,
+            Action abandonQueuedMoves = null)
         {
             _board = board;
             _setup = setup;
@@ -132,6 +139,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
             _setSharedBoardState = setSharedBoardState;
             _clearSharedBoardState = clearSharedBoardState;
             _raiseGameReset = raiseGameReset;
+            _abandonQueuedMoves = abandonQueuedMoves;
         }
 
         public void HandleGameModeReceived(GameModeConfig config) => SelectedMode = config;
@@ -393,17 +401,17 @@ namespace ChessTheBetrayal.Gameplay.Manager
 
             // Read CanUndo BEFORE popping so we only re-broadcast the board (an expensive full View
             // rebuild) when an undo actually happened — a press with nothing to undo is a no-op both
-            // in UndoService and here. Note the search-cancel below must NOT gate on this: it's fine
-            // to run either way, and CanUndo doesn't depend on whether a search is in flight.
+            // in UndoService and here.
             if (!CanUndo) return;
 
-            bool aiSearchInFlight = _aiCoordinator.IsSearchInFlight;
-            if (aiSearchInFlight)
-            {
-                _aiCoordinator.CancelInFlightSearch();
-            }
+            // Both halves matter, and both must happen before the board moves. Cancelling stops a
+            // search (or an already-decided reply) from being delivered; abandoning the queue drops
+            // a reply that was delivered but is still waiting out the previous move's animation.
+            // Either one left behind gets played against a position that no longer exists.
+            _aiCoordinator.CancelInFlightSearch();
+            _abandonQueuedMoves?.Invoke();
 
-            _undoService.RequestUndo(IsAiMode, CurrentPhase, aiSearchInFlight, AiMovesFirst);
+            _undoService.RequestUndo(IsAiMode, CurrentPhase, PlayerTeam, AiMovesFirst);
 
             // The undo mutated only the domain board (pieces unmade, captures restored). BoardVisuals
             // is a purely incremental animator driven by per-move events — it has no idea an undo

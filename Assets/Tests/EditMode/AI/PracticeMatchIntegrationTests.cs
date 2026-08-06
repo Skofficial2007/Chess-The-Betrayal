@@ -184,9 +184,9 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             RequestAiMoveAndWait(Team.Black);
             Assert.That(_board.CurrentTurn, Is.EqualTo(Team.White));
 
-            // Search already finished and delivered (RequestAiMoveAndWait waited for it) —
-            // this is the "AI search not in flight" Undo path: pop both plies.
-            _undoService.RequestUndo(isAIMode: true, currentPhase: _matchDriver.CurrentPhase, aiSearchInFlight: false, aiMovesFirst: false);
+            // Search already finished and delivered (RequestAiMoveAndWait waited for it), so the
+            // board is back on White and both plies come off.
+            _undoService.RequestUndo(isAIMode: true, currentPhase: _matchDriver.CurrentPhase, humanTeam: Team.White, aiMovesFirst: false);
 
             Assert.That(_board.CurrentTurn, Is.EqualTo(Team.White));
             Assert.DoesNotThrow(() => _board.AssertZobristConsistency());

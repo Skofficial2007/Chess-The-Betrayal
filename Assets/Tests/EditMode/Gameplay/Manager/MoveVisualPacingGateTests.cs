@@ -96,6 +96,36 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             Assert.That(_gate.IsPacing, Is.False);
         }
 
+        /// <summary>
+        /// Undo's half of the contract. A queued move was decided against a position that an undo
+        /// destroys, so it must be thrown away rather than played once the window elapses — and the
+        /// gate has to reopen immediately, or the player's own next move would sit behind the
+        /// remains of a pacing window belonging to a move that never happened.
+        /// </summary>
+        [Test]
+        public void Clear_DropsQueuedMovesAndReopensTheGate()
+        {
+            MoveCommand played = MakeMove(0);
+            MoveCommand abandoned = MakeMove(1);
+
+            _gate.Enqueue(played);
+            _gate.Enqueue(abandoned);
+            Assert.That(_playedMoves, Has.Count.EqualTo(1));
+
+            _gate.Clear();
+
+            Assert.That(_gate.IsPacing, Is.False, "Clearing must reopen the gate, not just empty the queue.");
+
+            _gate.Tick(5f);
+            Assert.That(_playedMoves, Is.EqualTo(new[] { played }),
+                "The queued move must never be played after a Clear.");
+
+            MoveCommand afterUndo = MakeMove(2);
+            _gate.Enqueue(afterUndo);
+            Assert.That(_playedMoves, Is.EqualTo(new[] { played, afterUndo }),
+                "The next move must play immediately — the cleared gate holds no leftover window.");
+        }
+
         [Test]
         public void Enqueue_UsesPerMoveEstimatedDuration()
         {

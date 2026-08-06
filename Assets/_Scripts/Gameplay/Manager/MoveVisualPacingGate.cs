@@ -49,8 +49,8 @@ namespace ChessTheBetrayal.Gameplay.Manager
         /// <summary>
         /// Accepts a move from any source (human, AI, future network). Plays it immediately if the
         /// gate is idle; otherwise holds it until every move ahead of it has finished pacing, then
-        /// plays it in the order it arrived. Never drops or rejects a move — see the class's own
-        /// enqueue-not-reject design note.
+        /// plays it in the order it arrived. A move is never dropped to make room for another one —
+        /// the queue only ever empties by playing, or by an explicit Clear().
         /// </summary>
         public void Enqueue(MoveCommand move)
         {
@@ -59,6 +59,21 @@ namespace ChessTheBetrayal.Gameplay.Manager
             {
                 PlayNext();
             }
+        }
+
+        /// <summary>
+        /// Throws away every queued move and reopens the gate immediately.
+        ///
+        /// Undo is the caller this exists for. A move waiting in here has been decided but has NOT
+        /// reached the board yet, so it was chosen against a position that an undo is about to
+        /// destroy — letting the timer expire afterwards would apply it to a board that has already
+        /// been rewound underneath it. Abandoning the queue is the only correct answer: there is no
+        /// position left for those moves to be legal in.
+        /// </summary>
+        public void Clear()
+        {
+            _pending.Clear();
+            _remainingPaceSeconds = 0f;
         }
 
         /// <summary>Advances the pacing timer. Call once per frame from a MonoBehaviour Update(), same as AIMatchCoordinator.Tick().</summary>

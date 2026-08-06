@@ -12,8 +12,8 @@ namespace ChessTheBetrayal.Gameplay.Manager
     ///
     /// One Undo always lands back at TurnPhase.Normal with board.CurrentTurn == the human's team:
     /// if the AI already replied, that means unwinding the AI's whole turn PLUS the player's whole
-    /// turn; if the AI's search is still in flight, only the player's turn needs unwinding (and the
-    /// in-flight search must be cancelled first — see RequestUndo's ordering).
+    /// turn; if it hasn't replied yet, only the player's turn needs unwinding (and the reply it
+    /// still owes must be discarded first — see RequestUndo's ordering).
     ///
     /// "One turn" is not a fixed ply count: a plain move is one MoveLogEntry, but a Betrayal that
     /// resolves via Retribution or Defection is two (Act, then the turn-ending ply) — see
@@ -28,6 +28,10 @@ namespace ChessTheBetrayal.Gameplay.Manager
     public sealed class UndoService
     {
         private const int MaxStackDepth = 256;
+
+        // One press takes back the player's own turn plus the AI's reply on top of it, and never
+        // more than that, however the walk-back loop below terminates.
+        private const int MaxTurnsPerUndo = 2;
 
         private readonly IChessEngine _engine;
         private readonly BoardState _board;
@@ -85,20 +89,22 @@ namespace ChessTheBetrayal.Gameplay.Manager
         /// <summary>
         /// Pops back to the last Normal position where it was the human's turn to move.
         ///
-        /// Ordering is load-bearing: if aiSearchInFlight is true, the caller MUST have already
-        /// cancelled that search and discarded its result slot before calling this — searching a
-        /// board that's about to be popped out from under the worker thread is a race, not merely
-        /// wasted work. Callers cancel via AsyncAIAgent.CancelSearch(), never Dispose().
+        /// How many turns come off is read off the board itself rather than being told: pop one,
+        /// and if that didn't land on the human, pop the one underneath it too. When the AI has
+        /// already replied that unwinds the pair; when it hasn't, the human's own turn was on top
+        /// and one pop is enough.
+        ///
+        /// This deliberately does NOT take "is the AI still thinking?" as an argument. That
+        /// question has more than one wrong answer available — a move can be decided but not yet
+        /// delivered, or delivered but still queued behind the previous move's animation — and each
+        /// of those made the count come out wrong in a way the board itself never gets confused
+        /// about. Callers must still discard the AI's owed reply BEFORE calling this
+        /// (AIMatchCoordinator.CancelInFlightSearch plus abandoning anything queued for playback),
+        /// or that stale move lands on a position it was never chosen for.
         /// </summary>
-        public void RequestUndo(bool isAIMode, TurnPhase currentPhase, bool aiSearchInFlight, bool aiMovesFirst)
+        public void RequestUndo(bool isAIMode, TurnPhase currentPhase, Team humanTeam, bool aiMovesFirst)
         {
             if (!CanUndo(isAIMode, currentPhase, aiMovesFirst)) return;
-
-            // AI's search was still running when Undo was pressed: it never got to reply, so only
-            // the player's own last turn needs unwinding (pop 1 turn's worth of plies).
-            // AI already replied: unwind the AI's turn, then the player's turn underneath it
-            // (pop 2 turns' worth of plies) so the player always lands back to their own turn.
-            int turnsToPop = aiSearchInFlight ? 1 : 2;
 
             // Never pop the AI's protected opening move (see CanUndo): when the AI moved first, the
             // bottom entry stays put, so the loop stops at a floor of 1 instead of emptying to 0.
@@ -106,10 +112,19 @@ namespace ChessTheBetrayal.Gameplay.Manager
             // into the AI's forced opening (which would leave the board on the AI's turn to move).
             int floor = aiMovesFirst ? 1 : 0;
 
-            for (int i = 0; i < turnsToPop && _turnStack.Count > floor; i++)
+            for (int i = 0; i < MaxTurnsPerUndo && _turnStack.Count > floor; i++)
             {
                 PopOneTurn();
+
+                if (_board.CurrentTurn == humanTeam) break;
             }
+
+            // The game was only over because of a position that no longer exists. Leaving these set
+            // would rewind the board into a state nobody can move in — both MatchDriver's
+            // CanSelectPiece and the coordinator's RequestMove refuse outright while IsGameOver is
+            // true, so every piece would sit there frozen after undoing a checkmate.
+            _board.IsGameOver = false;
+            _board.Winner = null;
 
             _matchDriver.TransitionToPhase(TurnPhase.Normal);
         }

@@ -1,9 +1,12 @@
 using System.Diagnostics;
 using System.Threading;
 using NUnit.Framework;
+using UnityEngine;
 using ChessTheBetrayal.AI;
+using ChessTheBetrayal.AI.OpeningBook;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
+using ChessTheBetrayal.EditorTools.OpeningBook;
 using ChessTheBetrayal.Gameplay.Manager;
 using ChessTheBetrayal.Tests.Utilities;
 
@@ -130,6 +133,59 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             finally
             {
                 slowCoordinator.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// The book path is the one that used to escape cancellation. A book reply is answered
+        /// synchronously inside RequestBestMove and never builds a cancellation source, so it sits
+        /// decided-but-undelivered while IsSearching reads false — and a cancel that only asked
+        /// IsSearching walked straight past it, leaving the move to be delivered on the next Tick()
+        /// and played against whatever position Undo had just rewound to.
+        /// </summary>
+        [Test]
+        public void CancelInFlightSearch_BookReplyDecidedButNotDelivered_DiscardsIt()
+        {
+            var (keys, packedMoves, weights, schemeVersion) = OpeningBookCompiler.Compile("e2e4 e7e5");
+            var book = ScriptableObject.CreateInstance<OpeningBookAsset>();
+            book.SetEntries(keys, packedMoves, weights, schemeVersion);
+
+            // A book is keyed by Zobrist hash, so this has to be the exact position the compiler
+            // keyed. The fixture's own standard board spends the Betrayal right and therefore
+            // hashes differently — using it turns this into an ordinary search that cancels fine,
+            // and the test passes while proving nothing.
+            BoardState bookBoard = OpeningBookCompiler.CreateStandardStartingPosition();
+
+            MoveCommand? playedFromBook = null;
+            var coordinator = new AIMatchCoordinator(
+                _engine, bookBoard, move => playedFromBook = move, SlowSettings, ProfileProvider);
+
+            try
+            {
+                Assert.That(OpeningBookLookup.TryGetBookMove(book, bookBoard, _engine, new SystemRandomSource()), Is.Not.Null,
+                    "Guard: the book must actually answer this position.");
+                Assert.That(OpeningBookPolicy.ShouldConsult(ProfileProvider.Resolve("normal"), bookBoard), Is.True,
+                    "Guard: this tier must actually be allowed to consult the book here.");
+
+                coordinator.SetAIMode(Team.White, BetrayalUsage.Full, "normal", book);
+                coordinator.TryRequestMove(isGameActive: true);
+
+                Assert.That(coordinator.IsSearchInFlight, Is.True,
+                    "The AI still owes a reply — it just answered from the book instead of searching for it.");
+
+                coordinator.CancelInFlightSearch();
+
+                Assert.That(coordinator.Activity, Is.EqualTo(AgentActivity.Idle));
+
+                coordinator.Tick();
+
+                Assert.That(playedFromBook, Is.Null,
+                    "A cancelled book reply must never reach the board — it was chosen for a position Undo is about to discard.");
+            }
+            finally
+            {
+                coordinator.Dispose();
+                Object.DestroyImmediate(book);
             }
         }
 

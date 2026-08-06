@@ -264,7 +264,8 @@ namespace ChessTheBetrayal.App
                 raiseBoardResyncRequired: () => _boardResyncRequiredChannel?.Raise(),
                 setSharedBoardState: board => _sharedBoardState?.Set(board),
                 clearSharedBoardState: () => _sharedBoardState?.Clear(),
-                raiseGameReset: () => _gameResetChannel?.Raise());
+                raiseGameReset: () => _gameResetChannel?.Raise(),
+                abandonQueuedMoves: _moveVisualPacingGate.Clear);
             _matchFlow.OpeningBook = _openingBook;
 
             _gameOverChannel?.Register(OnGameOverRaised);
