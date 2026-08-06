@@ -33,8 +33,11 @@ MonoBehaviour:
   hoverTint:
     Colour: {r: 1, g: 1, b: 1, a: 0.1}
     Glow: 0
-  lastMoveTint:
-    Colour: {r: 1, g: 0.85, b: 0.45, a: 0.14}
+  lastMoveFromTint:
+    Colour: {r: 0.4, g: 0.58, b: 0.62, a: 0.32}
+    Glow: 0
+  lastMoveToTint:
+    Colour: {r: 0.4, g: 0.58, b: 0.62, a: 0.16}
     Glow: 0
   dotRadiusRatio: 0.48
   captureRingRadiusRatio: 0.46
@@ -46,6 +49,7 @@ MonoBehaviour:
   cornerTickLengthRatio: 0.22
   cornerTickThicknessRatio: 0.055
   tintSizeRatio: 0.97
+  lastMoveFromOutlineThicknessRatio: 0.06
   circleSegments: 24
   appearDuration: 0.18
   appearStaggerPerSquare: 0.012

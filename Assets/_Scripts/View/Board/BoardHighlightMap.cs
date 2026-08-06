@@ -25,7 +25,8 @@ namespace ChessTheBetrayal.View
         None,
         Selected,
         Hover,
-        LastMove
+        LastMoveFrom,
+        LastMoveTo
     }
 
     /// <summary>
@@ -149,7 +150,8 @@ namespace ChessTheBetrayal.View
         {
             if (square == Selected) return SquareTint.Selected;
             if (square == Hover) return SquareTint.Hover;
-            if (square == LastMoveFrom || square == LastMoveTo) return SquareTint.LastMove;
+            if (square == LastMoveFrom) return SquareTint.LastMoveFrom;
+            if (square == LastMoveTo) return SquareTint.LastMoveTo;
             return SquareTint.None;
         }
 

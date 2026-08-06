@@ -92,13 +92,13 @@ namespace ChessTheBetrayal.Tests.EditMode.View
         }
 
         [Test]
-        public void TintRanksSelectionOverHoverAndHoverOverTheLastMove()
+        public void TintRanksSelectionOverHoverAndHoverOverTheLastMoveTo()
         {
             var map = new BoardHighlightMap();
             Vector2Int square = Sq(5, 5);
 
             map.LastMoveTo = square;
-            Assert.That(map.Resolve(square).Tint, Is.EqualTo(SquareTint.LastMove));
+            Assert.That(map.Resolve(square).Tint, Is.EqualTo(SquareTint.LastMoveTo));
 
             map.Hover = square;
             Assert.That(map.Resolve(square).Tint, Is.EqualTo(SquareTint.Hover));
@@ -108,15 +108,32 @@ namespace ChessTheBetrayal.Tests.EditMode.View
         }
 
         [Test]
-        public void BothSquaresOfTheLastMoveAreTinted()
+        public void TintRanksSelectionOverHoverAndHoverOverTheLastMoveFrom()
+        {
+            var map = new BoardHighlightMap();
+            Vector2Int square = Sq(2, 6);
+
+            map.LastMoveFrom = square;
+            Assert.That(map.Resolve(square).Tint, Is.EqualTo(SquareTint.LastMoveFrom));
+
+            map.Hover = square;
+            Assert.That(map.Resolve(square).Tint, Is.EqualTo(SquareTint.Hover));
+
+            map.Selected = square;
+            Assert.That(map.Resolve(square).Tint, Is.EqualTo(SquareTint.Selected));
+        }
+
+        [Test]
+        public void TheLastMoveFromAndToSquaresGetDistinctTints()
         {
             var map = new BoardHighlightMap();
 
             map.LastMoveFrom = Sq(4, 1);
             map.LastMoveTo = Sq(4, 3);
 
-            Assert.That(map.Resolve(Sq(4, 1)).Tint, Is.EqualTo(SquareTint.LastMove));
-            Assert.That(map.Resolve(Sq(4, 3)).Tint, Is.EqualTo(SquareTint.LastMove));
+            Assert.That(map.Resolve(Sq(4, 1)).Tint, Is.EqualTo(SquareTint.LastMoveFrom),
+                "The square a piece left draws a hollow outline, not the same fill as where it landed.");
+            Assert.That(map.Resolve(Sq(4, 3)).Tint, Is.EqualTo(SquareTint.LastMoveTo));
         }
 
         [Test]
@@ -130,7 +147,7 @@ namespace ChessTheBetrayal.Tests.EditMode.View
 
             SquareHighlight highlight = map.Resolve(square);
 
-            Assert.That(highlight.Tint, Is.EqualTo(SquareTint.LastMove));
+            Assert.That(highlight.Tint, Is.EqualTo(SquareTint.LastMoveTo));
             Assert.That(highlight.Marker, Is.EqualTo(SquareMarker.Capture),
                 "The tint and the marker are independent slots — a capture on a just-played square " +
                 "must show both.");
@@ -150,7 +167,7 @@ namespace ChessTheBetrayal.Tests.EditMode.View
             Assert.That(map.Resolve(Sq(2, 2)).IsEmpty, Is.True, "Destinations should be gone.");
             Assert.That(map.Resolve(Sq(4, 0)).Marker, Is.EqualTo(SquareMarker.Check),
                 "Putting a piece back down does not resolve a check.");
-            Assert.That(map.Resolve(Sq(4, 3)).Tint, Is.EqualTo(SquareTint.LastMove),
+            Assert.That(map.Resolve(Sq(4, 3)).Tint, Is.EqualTo(SquareTint.LastMoveTo),
                 "Putting a piece back down does not un-play the previous move.");
         }
 

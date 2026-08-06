@@ -114,11 +114,13 @@ namespace ChessTheBetrayal.View
         // square the last move landed on shows a ring over a faint tint — and a single renderer
         // could only ever say one of those two things.
         private MeshRenderer[,] _tintRenderers;
+        private MeshFilter[,] _tintFilters;
         private MeshRenderer[,] _markerRenderers;
         private MeshFilter[,] _markerFilters;
 
         // One mesh per shape, shared by all 64 squares, built once when the board is generated.
         private Mesh _tintMesh;
+        private Mesh _lastMoveFromOutlineMesh;
         private Mesh _dotMesh;
         private Mesh _captureRingMesh;
         private Mesh _betrayalMesh;
@@ -312,6 +314,7 @@ namespace ChessTheBetrayal.View
         {
             _tiles = new GameObject[_tileCountX, _tileCountY];
             _tintRenderers = new MeshRenderer[_tileCountX, _tileCountY];
+            _tintFilters = new MeshFilter[_tileCountX, _tileCountY];
             _markerRenderers = new MeshRenderer[_tileCountX, _tileCountY];
             _markerFilters = new MeshFilter[_tileCountX, _tileCountY];
             _shownMarkers = new SquareMarker[_tileCountX, _tileCountY];
@@ -360,7 +363,11 @@ namespace ChessTheBetrayal.View
                     tileGO.layer = _tileLayer;
 
                     // The square's tint sits lowest, so a marker always reads as being on top of it.
-                    _tintRenderers[x, y] = CreateOverlay(tileGO.transform, $"Tint_{x}_{y}", tintYOffset, _tintMesh, out _);
+                    // Its mesh is null here and assigned per state in ApplyHighlight, the same as the
+                    // marker slot, because the last-move origin now draws a hollow outline rather than
+                    // the same filled quad every other tint uses.
+                    _tintRenderers[x, y] = CreateOverlay(tileGO.transform, $"Tint_{x}_{y}", tintYOffset, null, out MeshFilter tintFilter);
+                    _tintFilters[x, y] = tintFilter;
                     _markerRenderers[x, y] = CreateOverlay(tileGO.transform, $"Marker_{x}_{y}", markerYOffset, null, out MeshFilter markerFilter);
                     _markerFilters[x, y] = markerFilter;
 
@@ -404,7 +411,9 @@ namespace ChessTheBetrayal.View
         {
             int segments = highlightPalette.CircleSegments;
 
-            _tintMesh = GenerateQuadMesh(tileSize * highlightPalette.TintSizeRatio);
+            float tintOuter = tileSize * highlightPalette.TintSizeRatio;
+            _tintMesh = GenerateQuadMesh(tintOuter);
+            _lastMoveFromOutlineMesh = GenerateFrameMesh(tintOuter, tintOuter * highlightPalette.LastMoveFromOutlineThicknessRatio);
             _dotMesh = GenerateCircleMesh(tileSize * highlightPalette.DotRadiusRatio, segments);
             _captureRingMesh = GenerateRingMesh(
                 tileSize * highlightPalette.CaptureRingRadiusRatio,
@@ -1893,12 +1902,14 @@ namespace ChessTheBetrayal.View
             if (!IsOnBoard(square)) return;
 
             MeshRenderer tint = _tintRenderers[square.x, square.y];
-            if (tint != null)
+            MeshFilter tintFilter = _tintFilters[square.x, square.y];
+            if (tint != null && tintFilter != null)
             {
                 bool showTint = highlight.Tint != SquareTint.None && _tintMaterials != null;
                 tint.enabled = showTint;
                 if (showTint)
                 {
+                    tintFilter.sharedMesh = TintMeshFor(highlight.Tint);
                     tint.sharedMaterial = _tintMaterials[(int)highlight.Tint];
                 }
             }
@@ -1963,6 +1974,21 @@ namespace ChessTheBetrayal.View
                 case SquareMarker.Check: return _checkFrameMesh;
                 case SquareMarker.Selected: return _cornerTicksMesh;
                 default: return null;
+            }
+        }
+
+        /// <summary>
+        /// Every tint shares one filled quad except the last move's origin square, which draws a
+        /// hollow outline instead — the destination gets the fill, the departure gets a trace of
+        /// where the piece used to stand.
+        /// </summary>
+        private Mesh TintMeshFor(SquareTint tint)
+        {
+            switch (tint)
+            {
+                case SquareTint.LastMoveFrom: return _lastMoveFromOutlineMesh;
+                case SquareTint.None: return null;
+                default: return _tintMesh;
             }
         }
 

@@ -60,8 +60,11 @@ namespace ChessTheBetrayal.View
         [Tooltip("Wash under the pointer. Kept very faint — it follows the cursor, so anything stronger reads as noise.")]
         [SerializeField] private Look hoverTint = new Look { Colour = new Color(1f, 1f, 1f, 0.1f), Glow = 0f };
 
-        [Tooltip("The two squares of the move just played. Easy to miss how much this helps until it is gone — it answers \"what just happened?\" without the player having to watch the animation.")]
-        [SerializeField] private Look lastMoveTint = new Look { Colour = new Color(1f, 0.85f, 0.45f, 0.14f), Glow = 0f };
+        [Tooltip("Hollow outline on the square the last-moved piece left. A cool, desaturated hue deliberately far from selection's amber — the two used to sit close enough to read as the same state failing to clear.")]
+        [SerializeField] private Look lastMoveFromTint = new Look { Colour = new Color(0.4f, 0.58f, 0.62f, 0.32f), Glow = 0f };
+
+        [Tooltip("Soft fill on the square the last-moved piece landed on. Same cool hue as the origin outline, so the pair reads as one story — where it came from, where it went — without needing an arrow.")]
+        [SerializeField] private Look lastMoveToTint = new Look { Colour = new Color(0.4f, 0.58f, 0.62f, 0.16f), Glow = 0f };
 
         [Header("Shape sizes — fractions of one square")]
         [Tooltip("Radius of the quiet-move dot. Kept large because a tall 3D piece standing on a neighbouring square can occlude most of a small one.")]
@@ -94,6 +97,9 @@ namespace ChessTheBetrayal.View
         [Tooltip("Size of a square tint. Slightly under 1 leaves a hairline of board showing, which stops neighbouring tinted squares merging into one block.")]
         [SerializeField, Range(0.5f, 1f)] private float tintSizeRatio = 0.97f;
 
+        [Tooltip("Border thickness of the last-move origin's hollow outline, as a fraction of the tint footprint.")]
+        [SerializeField, Range(0.02f, 0.2f)] private float lastMoveFromOutlineThicknessRatio = 0.06f;
+
         [Tooltip("Segments in the round shapes. 24 is smooth at any sane board size; lower it only if you are chasing vertices.")]
         [SerializeField, Range(8, 64)] private int circleSegments = 24;
 
@@ -117,7 +123,8 @@ namespace ChessTheBetrayal.View
         public Look SelectedMarker => selectedMarker;
         public Look SelectedTint => selectedTint;
         public Look HoverTint => hoverTint;
-        public Look LastMoveTint => lastMoveTint;
+        public Look LastMoveFromTint => lastMoveFromTint;
+        public Look LastMoveToTint => lastMoveToTint;
 
         public float DotRadiusRatio => dotRadiusRatio;
         public float CaptureRingRadiusRatio => captureRingRadiusRatio;
@@ -129,6 +136,7 @@ namespace ChessTheBetrayal.View
         public float CornerTickLengthRatio => cornerTickLengthRatio;
         public float CornerTickThicknessRatio => cornerTickThicknessRatio;
         public float TintSizeRatio => tintSizeRatio;
+        public float LastMoveFromOutlineThicknessRatio => lastMoveFromOutlineThicknessRatio;
         public int CircleSegments => circleSegments;
 
         public float AppearDuration => appearDuration;
@@ -161,7 +169,8 @@ namespace ChessTheBetrayal.View
             {
                 case SquareTint.Selected: return selectedTint;
                 case SquareTint.Hover: return hoverTint;
-                case SquareTint.LastMove: return lastMoveTint;
+                case SquareTint.LastMoveFrom: return lastMoveFromTint;
+                case SquareTint.LastMoveTo: return lastMoveToTint;
                 default: return default;
             }
         }
