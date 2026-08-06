@@ -926,12 +926,10 @@ namespace ChessTheBetrayal.View
             // Safety check for invalid commands
             if (move.PieceType == ChessPieceType.None) return;
 
-            // A Defection stays on one square, so tinting "from" and "to" would mark a single square
-            // twice and say nothing. The Act that provoked it is the move worth still showing.
-            if (move.Stage != BetrayalStage.Defection)
-            {
-                SetLastMove(move.StartPosition, move.EndPosition);
-            }
+            // A Defection ply never reaches here — MatchDriver resolves it through
+            // HandleBetrayalPhaseChanged instead, never raising MoveExecutedPayload for that
+            // stage — so every move seen by this method has a genuine "from" and "to".
+            SetLastMove(move.StartPosition, move.EndPosition);
 
             // 1. Handle Captures. A direct capture (attacker lands ON the victim's tile) plays the
             // full cartoon "stamp": the attacker lunges in and stomps, the victim gets crushed flat
@@ -1126,17 +1124,19 @@ namespace ChessTheBetrayal.View
                 }
             }
 
-            // 4. Check warning: payload.IsCheck reports whether the side about to move NEXT (i.e.
-            // the opponent of whoever just moved, move.PieceTeam) is now in check — see
-            // MatchDriver.CheckForGameEnd. Frame their king in red and give it a startle
-            // shake; clear any stale highlight otherwise (check can resolve, or the
+            // 4. Check warning: payload.IsCheck reports whether the side about to move NEXT is now
+            // in check — see MatchDriver.CheckForGameEnd. Frame their king in red and give it a
+            // startle shake; clear any stale highlight otherwise (check can resolve, or the
             // highlighted king can change between moves, e.g. a discovered check on a different
             // turn). Deferred to the end of AnimateMove so it never races the king's own move/
             // castle animation still being set up above.
+            //
+            // Read from _sharedBoardState.Value.CurrentTurn rather than flipping move.PieceTeam —
+            // the same key the domain itself uses to decide who owes the next move, so this can
+            // never drift from what MatchDriver actually meant by "the side about to move".
             if (payload.IsCheck)
             {
-                Team defendingTeam = move.PieceTeam == Team.White ? Team.Black : Team.White;
-                ShowKingInCheck(defendingTeam);
+                ShowKingInCheck(_sharedBoardState.Value.CurrentTurn);
             }
             else
             {
@@ -1598,8 +1598,16 @@ namespace ChessTheBetrayal.View
                     // (SwapPieceTeam's fresh-spawn piece never carries the Betrayer glow), but the
                     // race it describes — this phase firing synchronously back-to-back with
                     // DefectionOccurred, before SwapPieceTeam's transition-out callback has run —
-                    // still applies to the king lookup below, which is why it tolerates a miss.
+                    // still applies to the king lookups below, which is why they tolerate a miss.
                     ThreatPulseOwnKing(payload.InitiatingTeam);
+
+                    // A Defection that forces a Save never raises MoveExecutedPayload — MatchDriver
+                    // resolves straight into this phase instead of the normal move pipeline — so the
+                    // usual check-frame logic in AnimateMove never runs for it. Without this, the
+                    // startle flash above was the only warning a self-inflicted check ever got: no
+                    // persistent frame, nothing left once the flash finished. Framed on CurrentTurn,
+                    // the same key MatchDriver uses to decide who owes the forthcoming save.
+                    ShowKingInCheck(_sharedBoardState.Value.CurrentTurn);
                     break;
             }
         }
