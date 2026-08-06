@@ -413,14 +413,14 @@ namespace ChessTheBetrayal.Gameplay.Manager
 
             _undoService.RequestUndo(IsAiMode, CurrentPhase, PlayerTeam, AiMovesFirst);
 
-            // The undo mutated only the domain board (pieces unmade, captures restored). BoardVisuals
-            // is a purely incremental animator driven by per-move events — it has no idea an undo
-            // happened — so without this it keeps showing the post-move position. Re-point the shared
-            // board bridge at the reverted board and raise BoardResyncRequired, which drives
-            // BoardVisuals' full-rebuild path (ClearAllVisuals + SpawnAllPieces). Pieces snap to the
-            // reverted position; there's no reverse animation, which is acceptable for undo. A
-            // distinct signal from game-started so "game started" stays a true lifecycle fact a
-            // network reconnect can also rely on, instead of being overloaded to also mean "resync."
+            // The undo mutated only the domain board (pieces unmade, captures restored).
+            // BoardVisuals is an incremental animator driven by per-move events, so without being
+            // told something it would keep showing the post-move position. Re-point the shared board
+            // bridge at the reverted board and ask for a rebuild.
+            //
+            // A rebuild is a blunt way to say "the position changed underneath you" — the player
+            // sees the result of the takeback rather than the takeback itself. That is the next
+            // thing to replace here.
             _setSharedBoardState(_board);
             _raiseBoardResyncRequired();
         }

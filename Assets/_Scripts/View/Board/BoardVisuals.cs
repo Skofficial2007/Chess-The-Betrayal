@@ -220,7 +220,7 @@ namespace ChessTheBetrayal.View
         {
             _gameStartedChannel?.Register(HandleGameStarted);
             _gameResetChannel?.Register(ClearAllVisuals);
-            _boardResyncRequiredChannel?.Register(HandleGameStarted);
+            _boardResyncRequiredChannel?.Register(HandleBoardResync);
             _moveExecutedChannel?.Register(AnimateMove);
             _moveRejectedChannel?.Register(HandleMoveRejected);
             _selectionRejectedChannel?.Register(HandleSelectionRejected);
@@ -232,7 +232,7 @@ namespace ChessTheBetrayal.View
         {
             _gameStartedChannel?.Unregister(HandleGameStarted);
             _gameResetChannel?.Unregister(ClearAllVisuals);
-            _boardResyncRequiredChannel?.Unregister(HandleGameStarted);
+            _boardResyncRequiredChannel?.Unregister(HandleBoardResync);
             _moveExecutedChannel?.Unregister(AnimateMove);
             _moveRejectedChannel?.Unregister(HandleMoveRejected);
             _selectionRejectedChannel?.Unregister(HandleSelectionRejected);
@@ -245,9 +245,22 @@ namespace ChessTheBetrayal.View
         #region Setup & Mesh Generation
 
         /// <summary>
-        /// Called when a new game starts. Sets up the board and spawns pieces.
+        /// A new game is beginning: build the board and let the army materialize rank by rank.
         /// </summary>
-        public void HandleGameStarted()
+        public void HandleGameStarted() => RebuildBoard(playSetupWave: true);
+
+        /// <summary>
+        /// Rebuild the board to match whatever the shared state currently holds, with no fanfare —
+        /// pieces are simply there. This is the recovery path (a client reconnecting to a match
+        /// already in progress needs the position, not a performance), which is why it is a
+        /// separate signal from game-started rather than the same one reused.
+        ///
+        /// Kept distinct from HandleGameStarted specifically so the setup wave stays what it was
+        /// written to be: the opening of a fresh game, and nothing else.
+        /// </summary>
+        public void HandleBoardResync() => RebuildBoard(playSetupWave: false);
+
+        private void RebuildBoard(bool playSetupWave)
         {
             var initialBoard = _sharedBoardState?.Value;
             if (initialBoard == null) return;
@@ -268,8 +281,7 @@ namespace ChessTheBetrayal.View
                 GenerateTileMeshes();
             }
 
-            // Spawn all pieces based on board state
-            SpawnAllPieces(initialBoard);
+            SpawnAllPieces(initialBoard, playSetupWave);
         }
 
         /// <summary>
@@ -448,10 +460,12 @@ namespace ChessTheBetrayal.View
         private const float SetupInitialDelay = 0.25f;
 
         /// <summary>
-        /// Spawns visual piece GameObjects for all pieces in the board state, dissolving each one
-        /// in with a back-rank-first stagger (see SetupRowStagger) rather than popping in instantly.
+        /// Spawns visual piece GameObjects for every piece on the board. With playSetupWave the
+        /// pieces dissolve in with a back-rank-first stagger (see SetupRowStagger); without it they
+        /// appear immediately, which is what a mid-match rebuild wants — there is no opening to
+        /// announce, and replaying the reveal would read as the game restarting.
         /// </summary>
-        private void SpawnAllPieces(BoardState board)
+        private void SpawnAllPieces(BoardState board, bool playSetupWave)
         {
             for (int x = 0; x < board.TileCountX; x++)
             {
@@ -460,8 +474,14 @@ namespace ChessTheBetrayal.View
                     PieceData data = board.GetPiece(x, y);
                     if (!data.IsEmpty)
                     {
-                        int rankDistance = data.Team == Team.White ? y : (board.TileCountY - 1 - y);
-                        float delay = SetupInitialDelay + rankDistance * SetupRowStagger;
+                        // Negative means "no dissolve" — see SpawnSinglePiece.
+                        float delay = -1f;
+                        if (playSetupWave)
+                        {
+                            int rankDistance = data.Team == Team.White ? y : (board.TileCountY - 1 - y);
+                            delay = SetupInitialDelay + rankDistance * SetupRowStagger;
+                        }
+
                         SpawnSinglePiece(data, new Vector2Int(x, y), spawnDissolveDelay: delay);
                     }
                 }
