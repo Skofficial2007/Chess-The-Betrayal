@@ -64,8 +64,8 @@ namespace ChessTheBetrayal.View
         [SerializeField] private Look lastMoveTint = new Look { Colour = new Color(1f, 0.85f, 0.45f, 0.14f), Glow = 0f };
 
         [Header("Shape sizes — fractions of one square")]
-        [Tooltip("Radius of the quiet-move dot.")]
-        [SerializeField, Range(0.05f, 0.5f)] private float dotRadiusRatio = 0.17f;
+        [Tooltip("Radius of the quiet-move dot. Kept large because a tall 3D piece standing on a neighbouring square can occlude most of a small one.")]
+        [SerializeField, Range(0.05f, 0.5f)] private float dotRadiusRatio = 0.48f;
 
         [Tooltip("Outer radius of the capture ring. Large enough to frame a piece rather than sit under it.")]
         [SerializeField, Range(0.2f, 0.5f)] private float captureRingRadiusRatio = 0.46f;

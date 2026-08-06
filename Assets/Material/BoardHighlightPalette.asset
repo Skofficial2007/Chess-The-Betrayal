@@ -36,7 +36,7 @@ MonoBehaviour:
   lastMoveTint:
     Colour: {r: 1, g: 0.85, b: 0.45, a: 0.14}
     Glow: 0
-  dotRadiusRatio: 0.17
+  dotRadiusRatio: 0.48
   captureRingRadiusRatio: 0.46
   captureRingThicknessRatio: 0.07
   betrayalRingRadiusRatio: 0.46
