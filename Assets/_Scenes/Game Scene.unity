@@ -4840,6 +4840,7 @@ MonoBehaviour:
   _gameResetChannel: {fileID: 11400000, guid: ed78152f3286a5242ae689ab254de072, type: 2}
   _boardResyncRequiredChannel: {fileID: 11400000, guid: 6a344225862619e4f9339a4e9cd287a9, type: 2}
   _moveExecutedChannel: {fileID: 11400000, guid: 6208cd50b3355dd4e96e80b19dbb45c8, type: 2}
+  _moveUndoneChannel: {fileID: 11400000, guid: 7f3ac02d18b64d6ea9c5f1b47e2d8c3a, type: 2}
   _moveRejectedChannel: {fileID: 11400000, guid: 1d62eeb867403064d91fb6eaf1db9180, type: 2}
   _selectionRejectedChannel: {fileID: 11400000, guid: c0609eaec6f91d048932939dba02d3d9, type: 2}
   _promotionRequiredChannel: {fileID: 11400000, guid: 79c9467366ac5eb44acb92c5c3c1253e, type: 2}
@@ -18260,6 +18261,7 @@ MonoBehaviour:
   _gameOverChannel: {fileID: 11400000, guid: 5ff66779738245442b2d220c1a11b2f4, type: 2}
   _turnChangedChannel: {fileID: 11400000, guid: 91d0a40adba451c4e9c42eff45a49b0e, type: 2}
   _moveExecutedChannel: {fileID: 11400000, guid: 6208cd50b3355dd4e96e80b19dbb45c8, type: 2}
+  _moveUndoneChannel: {fileID: 11400000, guid: 7f3ac02d18b64d6ea9c5f1b47e2d8c3a, type: 2}
   _moveRejectedChannel: {fileID: 11400000, guid: 1d62eeb867403064d91fb6eaf1db9180, type: 2}
   _promotionRequiredChannel: {fileID: 11400000, guid: 79c9467366ac5eb44acb92c5c3c1253e, type: 2}
   _checkDetectedChannel: {fileID: 11400000, guid: fc2667c976636e841acfedf81916cd80, type: 2}

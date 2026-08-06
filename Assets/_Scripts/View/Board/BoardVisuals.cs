@@ -65,6 +65,8 @@ namespace ChessTheBetrayal.View
         [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _gameResetChannel;
         [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _boardResyncRequiredChannel;
         [SerializeField] private ChessTheBetrayal.Events.MoveExecutedEventChannel _moveExecutedChannel;
+        [Tooltip("Carries each ply of a takeback as it comes back off the board, so the move can be played in reverse. Must be the same asset GameManager raises on. Leave unassigned and undo falls back to rebuilding the position instead.")]
+        [SerializeField] private ChessTheBetrayal.Events.MoveUndoneEventChannel _moveUndoneChannel;
         [SerializeField] private ChessTheBetrayal.Events.MoveRejectedEventChannel _moveRejectedChannel;
         [SerializeField] private ChessTheBetrayal.Events.SelectionRejectedEventChannel _selectionRejectedChannel;
         [SerializeField] private ChessTheBetrayal.Events.PromotionRequiredEventChannel _promotionRequiredChannel;
@@ -221,6 +223,7 @@ namespace ChessTheBetrayal.View
             _gameResetChannel?.Register(ClearAllVisuals);
             _boardResyncRequiredChannel?.Register(HandleBoardResync);
             _moveExecutedChannel?.Register(AnimateMove);
+            _moveUndoneChannel?.Register(AnimateMoveUndone);
             _moveRejectedChannel?.Register(HandleMoveRejected);
             _selectionRejectedChannel?.Register(HandleSelectionRejected);
             _promotionRequiredChannel?.Register(HandlePromotionOptimisticGlide);
@@ -233,6 +236,7 @@ namespace ChessTheBetrayal.View
             _gameResetChannel?.Unregister(ClearAllVisuals);
             _boardResyncRequiredChannel?.Unregister(HandleBoardResync);
             _moveExecutedChannel?.Unregister(AnimateMove);
+            _moveUndoneChannel?.Unregister(AnimateMoveUndone);
             _moveRejectedChannel?.Unregister(HandleMoveRejected);
             _selectionRejectedChannel?.Unregister(HandleSelectionRejected);
             _promotionRequiredChannel?.Unregister(HandlePromotionOptimisticGlide);
@@ -516,26 +520,10 @@ namespace ChessTheBetrayal.View
                 return null;
             }
 
-            // Calculate world position
-            Vector3 worldPos = GetTileCenter(pos.x, pos.y);
-            worldPos.y += pieceYOffset;
+            GameObject go = Instantiate(prefabs[index], PieceWorldPosition(pos), Quaternion.identity, parent);
+            go.transform.localScale = PieceRestScale;
 
-            // Instantiate
-            GameObject go = Instantiate(prefabs[index], worldPos, Quaternion.identity, parent);
-            go.transform.localScale = Vector3.one * Mathf.Max(0.0001f, pieceScaleMultiplier);
-
-            // Rotate enemy pieces 180 degrees to face player, plus any per-mesh facing correction
-            // for a specific prefab whose source model wasn't authored facing the same default
-            // direction as the rest of its own team's set (see whiteMeshFacingCorrectionDegrees'
-            // doc comment — currently only the Black Knight needs one). The correction is baked
-            // into this same rotation assignment (not a separate child transform) so every
-            // downstream consumer of this piece's rotation — the defection Spin transition,
-            // castling, the check-shake — sees ONE correct "resting" rotation and never has to know
-            // a correction was ever needed.
-            float facingCorrection = GetMeshFacingCorrectionDegrees(data.Team, index);
-            go.transform.rotation = data.MoveDirection == -1
-                ? Quaternion.Euler(0f, 180f + facingCorrection, 0f)
-                : Quaternion.Euler(0f, facingCorrection, 0f);
+            ApplyRestingRotation(go.transform, data.Team, data.Type, data.MoveDirection);
 
             // Configure visual component
             ChessPiece visualPiece = go.GetComponent<ChessPiece>();
@@ -849,6 +837,167 @@ namespace ChessTheBetrayal.View
             {
                 ClearCheckHighlight();
             }
+        }
+
+        /// <summary>
+        /// Plays one ply of a takeback backwards: the piece returns to the square it came from, a
+        /// captured piece comes back to the square it was taken on, and a piece that was replaced
+        /// mid-move (a promoted pawn, a defector) becomes what it was again.
+        ///
+        /// The order below is the forward order in reverse, and it has to be. A piece captured by
+        /// being landed on shares its square with the attacker, so the attacker has to vacate before
+        /// the victim can be put back — do it the other way round and the square holds one piece
+        /// while the board thinks it holds another.
+        ///
+        /// Plies arrive one at a time and newest first (see UndoPlaybackSequencer), so each of these
+        /// runs against a board that already reflects every ply after it.
+        /// </summary>
+        public void AnimateMoveUndone(ChessTheBetrayal.Events.Payloads.MoveUndonePayload payload)
+        {
+            MoveCommand move = payload.Move;
+
+            if (move.PieceType == ChessPieceType.None) return;
+
+            // Whatever was highlighted described the position being left behind.
+            ClearLegalMoveHighlights();
+            ClearCheckHighlight();
+
+            // Castling is two pieces; the rook goes home alongside the king, trailing it by the same
+            // beat it followed on the way out.
+            if (move.IsCastling && move.RookStartPosition.HasValue && move.RookEndPosition.HasValue)
+            {
+                if (_piecesByPosition.TryGetValue(move.RookEndPosition.Value, out ChessPiece rook))
+                {
+                    _piecesByPosition.Remove(move.RookEndPosition.Value);
+                    _piecesByPosition[move.RookStartPosition.Value] = rook;
+                    rook.PlayCastleMove(PieceWorldPosition(move.RookStartPosition.Value), PrimeTweenPieceAnimator.CastleRookStartDelay);
+                }
+            }
+
+            if (move.Stage == BetrayalStage.Defection)
+            {
+                RestoreDefectedPiece(move);
+            }
+            else if (move.IsPromotion)
+            {
+                RestorePromotedPawn(move);
+            }
+            else if (_piecesByPosition.TryGetValue(move.EndPosition, out ChessPiece movingPiece))
+            {
+                _piecesByPosition.Remove(move.EndPosition);
+                _piecesByPosition[move.StartPosition] = movingPiece;
+
+                // An Act being taken back takes its Betrayer glow with it — there is no longer a
+                // betrayal pending for it to be marking.
+                movingPiece.SetBetrayerGlow(false);
+
+                movingPiece.SetPosition(PieceWorldPosition(move.StartPosition), ReverseMoveStyle(move));
+            }
+
+            if (move.IsCapture)
+            {
+                RestoreCapturedPiece(move);
+            }
+
+            // Only the ply that ends the takeback describes a position anyone arrives at.
+            if (payload.IsFinalPly && payload.LandsInCheck && _sharedBoardState?.Value != null)
+            {
+                ShowKingInCheck(_sharedBoardState.Value.CurrentTurn);
+            }
+        }
+
+        /// <summary>
+        /// How a piece travels back. The same feel it went out with, except that a capture returns
+        /// as a slide rather than the leaping stomp it arrived as — there is nothing underneath it
+        /// to land on any more, and stomping an empty square reads as a mistake.
+        /// </summary>
+        private static MoveStyle ReverseMoveStyle(MoveCommand move)
+        {
+            if (move.PieceType == ChessPieceType.Knight) return MoveStyle.Knight;
+            return move.IsCapture ? MoveStyle.Capture : MoveStyle.Quiet;
+        }
+
+        /// <summary>
+        /// Puts a captured piece back on the square it was taken on. The piece itself is still
+        /// around — a capture sends it to the death pile rather than destroying it — so this is the
+        /// same GameObject returning, not a replacement.
+        ///
+        /// It comes off the end of its side's pile, which is where the most recently captured piece
+        /// always is (see GraveyardStack). That holds because a takeback runs backwards through
+        /// history, so the capture being undone is always the newest one.
+        /// </summary>
+        private void RestoreCapturedPiece(MoveCommand move)
+        {
+            Vector2Int capturePos = move.IsEnPassant && move.EnPassantCapturePosition.HasValue
+                ? move.EnPassantCapturePosition.Value
+                : move.EndPosition;
+
+            PieceData captured = move.CapturedPieceFullState;
+
+            if (!_graveyard.TryPopLast(captured.Team, out ChessPiece victim) || victim == null)
+            {
+                // The pile has nothing to give back — a rebuild since the capture would empty it.
+                // The move still records exactly what was taken, so put that back instead of
+                // leaving a square the board believes is occupied looking empty.
+                SpawnSinglePiece(captured, capturePos);
+                return;
+            }
+
+            victim.EnableCollider();
+            victim.SetScale(PieceRestScale, force: true);
+            victim.SetPosition(PieceWorldPosition(capturePos), force: true);
+            ApplyRestingRotation(victim.transform, captured.Team, captured.Type, captured.MoveDirection);
+
+            _piecesByPosition[capturePos] = victim;
+        }
+
+        /// <summary>
+        /// Turns a promoted piece back into the pawn that earned it, standing on the square the pawn
+        /// pushed from. Promotion swapped one GameObject for another on the way out, so undoing it
+        /// swaps back rather than moving anything.
+        /// </summary>
+        private void RestorePromotedPawn(MoveCommand move)
+        {
+            DestroyPieceAt(move.EndPosition);
+
+            // PieceType is the piece that MOVED — the pawn — while PromotedTo is what it became.
+            SpawnSinglePiece(
+                new PieceData(move.PieceTeam, move.PieceType, move.PieceMoveDirection, startRow: 0, hasMoved: move.PieceHadMoved),
+                move.StartPosition);
+        }
+
+        /// <summary>
+        /// Returns a defector to the side it betrayed. A Defection neither moves nor captures — it
+        /// changes whose piece it is, on the spot — so its start and end squares are the same one,
+        /// and the move's own snapshot still describes the piece as it was before it turned.
+        /// </summary>
+        private void RestoreDefectedPiece(MoveCommand move)
+        {
+            DestroyPieceAt(move.StartPosition);
+
+            SpawnSinglePiece(
+                new PieceData(move.PieceTeam, move.PieceType, move.PieceMoveDirection, startRow: 0, hasMoved: true),
+                move.StartPosition);
+        }
+
+        /// <summary>
+        /// Removes and destroys whatever is standing on a square, first dropping any Betrayal
+        /// follow-up work queued against it — a piece that no longer exists can never deliver the
+        /// callback those are waiting on.
+        /// </summary>
+        private void DestroyPieceAt(Vector2Int gridPos)
+        {
+            if (!_piecesByPosition.TryGetValue(gridPos, out ChessPiece piece)) return;
+
+            _piecesByPosition.Remove(gridPos);
+
+            if (piece == null) return;
+
+            _pendingStampVictimByAttacker.Remove(piece);
+            _pendingDefectionByAttacker.Remove(piece);
+
+            piece.StopAllAnimations();
+            Destroy(piece.gameObject);
         }
 
         /// <summary>
@@ -1203,6 +1352,32 @@ namespace ChessTheBetrayal.View
                 tilesYOffset,
                 y * tileSize + tileSize * 0.5f
             );
+        }
+
+        /// <summary>Where a piece standing on the given square sits — the tile's centre, lifted clear of the board surface.</summary>
+        private Vector3 PieceWorldPosition(Vector2Int gridPos)
+        {
+            Vector3 worldPos = GetTileCenter(gridPos.x, gridPos.y);
+            worldPos.y += pieceYOffset;
+            return worldPos;
+        }
+
+        /// <summary>The size a piece stands at while it is on the board, as opposed to the smaller death-pile size.</summary>
+        private Vector3 PieceRestScale => Vector3.one * Mathf.Max(0.0001f, pieceScaleMultiplier);
+
+        /// <summary>
+        /// Turns a piece to the direction its side faces, including any per-mesh correction for a
+        /// model that wasn't authored facing the same way as the rest of its set (see
+        /// whiteMeshFacingCorrectionDegrees). Baked into one rotation so everything downstream —
+        /// the defection spin, castling, the check shake — sees a single correct resting rotation
+        /// and never has to know a correction was needed.
+        /// </summary>
+        private void ApplyRestingRotation(Transform pieceTransform, Team team, ChessPieceType type, int moveDirection)
+        {
+            float facingCorrection = GetMeshFacingCorrectionDegrees(team, (int)type - 1);
+            pieceTransform.rotation = moveDirection == -1
+                ? Quaternion.Euler(0f, 180f + facingCorrection, 0f)
+                : Quaternion.Euler(0f, facingCorrection, 0f);
         }
 
         #endregion

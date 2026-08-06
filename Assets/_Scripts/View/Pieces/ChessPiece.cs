@@ -173,6 +173,18 @@ namespace ChessTheBetrayal.View
         }
 
         /// <summary>
+        /// Turns the collider back on — for a piece returning to the board from the graveyard when
+        /// its capture is taken back. Without this it would stand on its square untouchable.
+        /// </summary>
+        public void EnableCollider()
+        {
+            if (_col != null)
+            {
+                _col.enabled = true;
+            }
+        }
+
+        /// <summary>
         /// Toggles the temporary "Betrayer" glow applied while this piece is mid-Betrayal (Act
         /// stage through Retribution/Defection resolution).
         /// </summary>
