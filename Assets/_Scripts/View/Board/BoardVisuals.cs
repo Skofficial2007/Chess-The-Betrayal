@@ -125,9 +125,8 @@ namespace ChessTheBetrayal.View
         // no king is currently in check.
         private Vector2Int _checkHighlightSquare = Vector2Int.Invalid;
 
-        // Death piles
-        private List<ChessPiece> _deadWhitePieces = new List<ChessPiece>();
-        private List<ChessPiece> _deadBlackPieces = new List<ChessPiece>();
+        // Death piles, one per side. Ordered by when each piece was taken — see GraveyardStack.
+        private readonly GraveyardStack<ChessPiece> _graveyard = new GraveyardStack<ChessPiece>();
 
         // Highlighting state
         private Vector2Int _hoverIndex = Vector2Int.Invalid;
@@ -280,6 +279,9 @@ namespace ChessTheBetrayal.View
             {
                 GenerateTileMeshes();
             }
+
+            _graveyard.SetLayout(new GraveyardLayout(
+                _boardOrigin, tileSize, _tileCountX, _tileCountY, tilesYOffset, pieceYOffset, deathSpacing));
 
             SpawnAllPieces(initialBoard, playSetupWave);
         }
@@ -601,28 +603,18 @@ namespace ChessTheBetrayal.View
                 }
             }
 
-            for (int i = 0; i < _deadWhitePieces.Count; i++)
+            foreach (ChessPiece dead in _graveyard.All)
             {
-                if (_deadWhitePieces[i] != null)
+                if (dead != null)
                 {
-                    _deadWhitePieces[i].StopAllAnimations();
-                    Destroy(_deadWhitePieces[i].gameObject);
-                }
-            }
-
-            for (int i = 0; i < _deadBlackPieces.Count; i++)
-            {
-                if (_deadBlackPieces[i] != null)
-                {
-                    _deadBlackPieces[i].StopAllAnimations();
-                    Destroy(_deadBlackPieces[i].gameObject);
+                    dead.StopAllAnimations();
+                    Destroy(dead.gameObject);
                 }
             }
 
             // Clear collections
             _piecesByPosition.Clear();
-            _deadWhitePieces.Clear();
-            _deadBlackPieces.Clear();
+            _graveyard.Clear();
             _destroyQueue.Clear();
 
             // Clear highlights
@@ -892,58 +884,25 @@ namespace ChessTheBetrayal.View
             victim.DisableCollider();
             victim.SetBetrayerGlow(false);
 
-            (Vector3 deathPos, Vector3 lookDir) = ReserveGraveyardSlot(victim);
+            GraveyardSlot slot = ReserveGraveyardSlot(victim);
 
-            victim.PlayEnPassantDeath(deathPos, onArrived: () =>
+            victim.PlayEnPassantDeath(slot.Position, onArrived: () =>
             {
                 if (victim == null) return;
                 victim.SetScale(Vector3.one * deathSize, force: true);
-                victim.FaceDirection(lookDir);
+                victim.FaceDirection(slot.LookDirection);
             });
         }
 
         /// <summary>
-        /// Claims the next open slot in victim's team's graveyard stack (adding it to the list, so
-        /// the slot is permanently reserved the instant this is called) and returns its world
-        /// position plus the look direction a piece should face once it's there. Pure bookkeeping —
-        /// no visual mutation — so callers can compute WHERE a piece is headed before it starts
-        /// animating toward the graveyard (PlayEnPassantDeath glides there) as well as after
-        /// (SendToGraveyard teleports there once a stomp has already finished on the board).
+        /// Claims the next open slot in the victim's own side's death pile and returns where it
+        /// stands. Pure bookkeeping — no visual mutation — so callers can find out where a piece is
+        /// headed before it starts animating toward the graveyard (PlayEnPassantDeath glides there)
+        /// as well as after (SendToGraveyard teleports there once a stomp has already finished on
+        /// the board). The slot is reserved the instant this is called, so nothing else can be sent
+        /// to the same place while a victim is still on its way.
         /// </summary>
-        private (Vector3 position, Vector3 lookDir) ReserveGraveyardSlot(ChessPiece victim)
-        {
-            List<ChessPiece> graveyard = victim.team == Team.White ? _deadWhitePieces : _deadBlackPieces;
-            graveyard.Add(victim);
-
-            // Determine which side of the board for this team's graveyard
-            int majorRowIndex = (victim.team == Team.White) ? 0 : _tileCountY - 1;
-            float rowCenterZ = _boardOrigin.z + majorRowIndex * tileSize + tileSize * 0.5f;
-
-            float stackSpacing = Mathf.Max(0.01f, deathSpacing);
-            int stackIndex = graveyard.Count - 1;
-
-            // Position off the side of the board
-            float xPos = (victim.team == Team.White)
-                ? _boardOrigin.x + _tileCountX * tileSize + (tileSize * 0.5f)
-                : _boardOrigin.x - (tileSize * 0.5f);
-
-            float zPos = (victim.team == Team.White)
-                ? (rowCenterZ - (stackIndex * 0.5f * stackSpacing)) + (stackIndex * stackSpacing)
-                : (rowCenterZ + (stackIndex * 0.5f * stackSpacing)) - (stackIndex * stackSpacing);
-
-            Vector3 deathPos = new Vector3(xPos, _boardOrigin.y + tilesYOffset + pieceYOffset, zPos);
-
-            // Calculate look direction toward board center
-            Vector3 boardCenterPos = _boardOrigin + new Vector3(
-                _tileCountX * tileSize * 0.5f,
-                0f,
-                _tileCountY * tileSize * 0.5f
-            );
-            Vector3 lookDir = (boardCenterPos - deathPos).normalized;
-            lookDir.y = 0;
-
-            return (deathPos, lookDir);
-        }
+        private GraveyardSlot ReserveGraveyardSlot(ChessPiece victim) => _graveyard.Push(victim.team, victim);
 
         /// <summary>
         /// Places an already-vanished victim at its team's death pile: turns off its
@@ -959,14 +918,14 @@ namespace ChessTheBetrayal.View
             victim.DisableCollider();
             victim.SetBetrayerGlow(false);
 
-            (Vector3 deathPos, Vector3 lookDir) = ReserveGraveyardSlot(victim);
+            GraveyardSlot slot = ReserveGraveyardSlot(victim);
 
             // The stomp already shrank the victim to VanishedScale on the board; restore its
             // death-pile size here so it reads as a normal (if small) captured piece in the
             // graveyard rather than staying pinned at the stamp's near-zero scale.
             victim.SetScale(Vector3.one * deathSize, force: true);
-            victim.SetPosition(deathPos, force: true);
-            victim.FaceDirection(lookDir);
+            victim.SetPosition(slot.Position, force: true);
+            victim.FaceDirection(slot.LookDirection);
         }
 
         /// <summary>

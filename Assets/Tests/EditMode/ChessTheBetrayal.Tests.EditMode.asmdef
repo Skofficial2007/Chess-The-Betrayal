@@ -10,6 +10,7 @@
     "ChessTheBetrayal.EditorTools",
     "ChessTheBetrayal.UI.SafeArea",
     "ChessTheBetrayal.UI",
+    "ChessTheBetrayal.View",
     "ChessTheBetrayal.Infrastructure"
   ],
   "includePlatforms": ["Editor"],
