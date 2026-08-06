@@ -48,6 +48,8 @@ namespace ChessTheBetrayal.View
         [SerializeField] private float tintYOffset = 0.01f;
         [Tooltip("Height of a square's marker above the tile surface. Keep this above tintYOffset — two transparent shapes at the same height flicker against each other as the camera moves.")]
         [SerializeField] private float markerYOffset = 0.02f;
+        [Tooltip("Height of the capture reticle's grounding shadow above the tile surface. Keep this below tintYOffset, same reason as markerYOffset.")]
+        [SerializeField] private float shadowYOffset = 0.005f;
 
         [Header("Hierarchy Containers")]
         [SerializeField] private Transform tilesParent;
@@ -118,11 +120,17 @@ namespace ChessTheBetrayal.View
         private MeshRenderer[,] _markerRenderers;
         private MeshFilter[,] _markerFilters;
 
+        // A third overlay, below the tint, that only ever shows the capture reticle's grounding
+        // shadow today. Independent of the tint slot because a capture square can already carry a
+        // last-move or selection tint at the same time.
+        private MeshRenderer[,] _shadowRenderers;
+
         // One mesh per shape, shared by all 64 squares, built once when the board is generated.
         private Mesh _tintMesh;
         private Mesh _lastMoveFromOutlineMesh;
         private Mesh _dotMesh;
-        private Mesh _captureRingMesh;
+        private Mesh _captureReticleMesh;
+        private Mesh _captureShadowMesh;
         private Mesh _betrayalMesh;
         private Mesh _checkFrameMesh;
         private Mesh _cornerTicksMesh;
@@ -131,6 +139,7 @@ namespace ChessTheBetrayal.View
         // are created at runtime, so OnDestroy has to clean them up.
         private Material[] _markerMaterials;
         private Material[] _tintMaterials;
+        private Material _captureShadowMaterial;
 
         // Where every square's highlight is decided. This component only draws what it answers.
         private readonly BoardHighlightMap _highlights = new BoardHighlightMap();
@@ -317,6 +326,7 @@ namespace ChessTheBetrayal.View
             _tintFilters = new MeshFilter[_tileCountX, _tileCountY];
             _markerRenderers = new MeshRenderer[_tileCountX, _tileCountY];
             _markerFilters = new MeshFilter[_tileCountX, _tileCountY];
+            _shadowRenderers = new MeshRenderer[_tileCountX, _tileCountY];
             _shownMarkers = new SquareMarker[_tileCountX, _tileCountY];
             _tileByTransform.Clear();
 
@@ -362,10 +372,15 @@ namespace ChessTheBetrayal.View
                     // Set layer
                     tileGO.layer = _tileLayer;
 
-                    // The square's tint sits lowest, so a marker always reads as being on top of it.
-                    // Its mesh is null here and assigned per state in ApplyHighlight, the same as the
-                    // marker slot, because the last-move origin now draws a hollow outline rather than
-                    // the same filled quad every other tint uses.
+                    // The shadow sits lowest of the three, then the tint, then the marker on top —
+                    // its mesh never varies (only the capture reticle ever uses it), so it can take a
+                    // fixed mesh here instead of one assigned per state.
+                    _shadowRenderers[x, y] = CreateOverlay(tileGO.transform, $"Shadow_{x}_{y}", shadowYOffset, _captureShadowMesh, out _);
+
+                    // The square's tint sits above the shadow, so a marker always reads as being on
+                    // top of both. Its mesh is null here and assigned per state in ApplyHighlight, the
+                    // same as the marker slot, because the last-move origin now draws a hollow outline
+                    // rather than the same filled quad every other tint uses.
                     _tintRenderers[x, y] = CreateOverlay(tileGO.transform, $"Tint_{x}_{y}", tintYOffset, null, out MeshFilter tintFilter);
                     _tintFilters[x, y] = tintFilter;
                     _markerRenderers[x, y] = CreateOverlay(tileGO.transform, $"Marker_{x}_{y}", markerYOffset, null, out MeshFilter markerFilter);
@@ -415,10 +430,13 @@ namespace ChessTheBetrayal.View
             _tintMesh = GenerateQuadMesh(tintOuter);
             _lastMoveFromOutlineMesh = GenerateFrameMesh(tintOuter, tintOuter * highlightPalette.LastMoveFromOutlineThicknessRatio);
             _dotMesh = GenerateCircleMesh(tileSize * highlightPalette.DotRadiusRatio, segments);
-            _captureRingMesh = GenerateRingMesh(
+            _captureReticleMesh = GenerateCaptureReticleMesh(
                 tileSize * highlightPalette.CaptureRingRadiusRatio,
                 tileSize * highlightPalette.CaptureRingThicknessRatio,
+                tileSize * highlightPalette.CaptureTickLengthRatio,
+                tileSize * highlightPalette.CaptureTickThicknessRatio,
                 segments);
+            _captureShadowMesh = GenerateCircleMesh(tileSize * highlightPalette.CaptureShadowRadiusRatio, segments);
             _betrayalMesh = GenerateBetrayalMarkerMesh(
                 tileSize * highlightPalette.BetrayalRingRadiusRatio,
                 tileSize * highlightPalette.CaptureRingThicknessRatio,
@@ -468,6 +486,8 @@ namespace ChessTheBetrayal.View
                 if (tint == SquareTint.None) continue;
                 _tintMaterials[(int)tint] = CreateHighlightMaterial(shader, $"Tint_{tint}", highlightPalette.LookFor(tint));
             }
+
+            _captureShadowMaterial = CreateHighlightMaterial(shader, "CaptureShadow", highlightPalette.CaptureShadow);
         }
 
         private static Material CreateHighlightMaterial(Shader shader, string materialName, BoardHighlightPalette.Look look)
@@ -484,6 +504,9 @@ namespace ChessTheBetrayal.View
             DestroyMaterials(_tintMaterials);
             _markerMaterials = null;
             _tintMaterials = null;
+
+            if (_captureShadowMaterial != null) Destroy(_captureShadowMaterial);
+            _captureShadowMaterial = null;
         }
 
         private static void DestroyMaterials(Material[] materials)
@@ -555,6 +578,49 @@ namespace ChessTheBetrayal.View
                 triangles[t + 5] = innerB;
             }
 
+            mesh.vertices = vertices;
+            mesh.triangles = triangles;
+            mesh.RecalculateNormals();
+            return mesh;
+        }
+
+        /// <summary>
+        /// Builds the capture marker: the capture ring plus four short ticks straddling its edge at
+        /// the cardinal points, as one mesh. The ring alone reads as a static outline; the ticks are
+        /// what let the whole thing spin slowly in place without the ring itself needing to look any
+        /// different — a circle is the same shape at every angle, so only the ticks carry the motion.
+        /// </summary>
+        private static Mesh GenerateCaptureReticleMesh(float ringOuterRadius, float ringThickness, float tickLength, float tickThickness, int segments)
+        {
+            Mesh ring = GenerateRingMesh(ringOuterRadius, ringThickness, segments);
+
+            Vector3[] ringVertices = ring.vertices;
+            int[] ringTriangles = ring.triangles;
+
+            var vertices = new Vector3[ringVertices.Length + 16];
+            var triangles = new int[ringTriangles.Length + 24];
+
+            ringVertices.CopyTo(vertices, 0);
+            ringTriangles.CopyTo(triangles, 0);
+
+            int vertexCount = ringVertices.Length;
+            int triangleCount = ringTriangles.Length;
+
+            float halfTick = tickLength * 0.5f;
+            float halfThickness = tickThickness * 0.5f;
+
+            // North and south straddle the ring along Z, east and west along X — each bar centred on
+            // the ring's own edge so it reads as marking the edge rather than sitting apart from it.
+            AddBar(vertices, triangles, ref vertexCount, ref triangleCount,
+                -halfThickness, ringOuterRadius - halfTick, halfThickness, ringOuterRadius + halfTick);
+            AddBar(vertices, triangles, ref vertexCount, ref triangleCount,
+                -halfThickness, -ringOuterRadius - halfTick, halfThickness, -ringOuterRadius + halfTick);
+            AddBar(vertices, triangles, ref vertexCount, ref triangleCount,
+                ringOuterRadius - halfTick, -halfThickness, ringOuterRadius + halfTick, halfThickness);
+            AddBar(vertices, triangles, ref vertexCount, ref triangleCount,
+                -ringOuterRadius - halfTick, -halfThickness, -ringOuterRadius + halfTick, halfThickness);
+
+            var mesh = new Mesh { name = "CaptureReticleMesh" };
             mesh.vertices = vertices;
             mesh.triangles = triangles;
             mesh.RecalculateNormals();
@@ -1922,6 +1988,12 @@ namespace ChessTheBetrayal.View
                 }
             }
 
+            MeshRenderer shadow = _shadowRenderers[square.x, square.y];
+            if (shadow != null)
+            {
+                shadow.enabled = highlight.Marker == SquareMarker.Capture && _captureShadowMaterial != null;
+            }
+
             MeshRenderer marker = _markerRenderers[square.x, square.y];
             MeshFilter filter = _markerFilters[square.x, square.y];
             if (marker == null || filter == null) return;
@@ -1938,6 +2010,14 @@ namespace ChessTheBetrayal.View
             filter.sharedMesh = MeshFor(highlight.Marker);
             marker.sharedMaterial = _markerMaterials[(int)highlight.Marker];
             marker.enabled = true;
+
+            // Every marker except the capture reticle stays axis-aligned. The reticle's own rotation
+            // is driven continuously in Update() while it's shown, so it must not be reset out from
+            // under that here — only snapped back once the square stops being a capture target.
+            if (highlight.Marker != SquareMarker.Capture)
+            {
+                marker.transform.localRotation = Quaternion.identity;
+            }
 
             if (previous != highlight.Marker)
             {
@@ -1977,7 +2057,7 @@ namespace ChessTheBetrayal.View
             switch (marker)
             {
                 case SquareMarker.QuietMove: return _dotMesh;
-                case SquareMarker.Capture: return _captureRingMesh;
+                case SquareMarker.Capture: return _captureReticleMesh;
                 case SquareMarker.BetrayalTarget: return _betrayalMesh;
                 case SquareMarker.Check: return _checkFrameMesh;
                 case SquareMarker.Selected: return _cornerTicksMesh;
@@ -2003,15 +2083,21 @@ namespace ChessTheBetrayal.View
         private bool IsOnBoard(Vector2Int square) =>
             square.x >= 0 && square.x < _tileCountX && square.y >= 0 && square.y < _tileCountY;
 
+        private void Update()
+        {
+            if (_markerMaterials == null) return;
+
+            UpdateCheckPulse();
+            UpdateCaptureReticle();
+        }
+
         /// <summary>
         /// Breathes the check frame's glow in and out. A king in check is the one thing on the board
         /// that must not be possible to overlook, and motion catches the eye where a brighter static
         /// colour would just blend into the grade.
         /// </summary>
-        private void Update()
+        private void UpdateCheckPulse()
         {
-            if (_markerMaterials == null) return;
-
             Material checkMaterial = _markerMaterials[(int)SquareMarker.Check];
             if (checkMaterial == null) return;
 
@@ -2027,6 +2113,33 @@ namespace ChessTheBetrayal.View
             float phase = Mathf.Sin(Time.unscaledTime * Mathf.PI * 2f / period) * 0.5f + 0.5f;
             checkMaterial.SetFloat(GlowProperty,
                 highlightPalette.Check.Glow + phase * highlightPalette.CheckPulseGlowAmount);
+        }
+
+        /// <summary>
+        /// Breathes the capture material's glow the same way the check frame does, only slower and
+        /// gentler — a capture is an option on the table, not a warning — and spins every currently
+        /// shown capture reticle's four ticks at a constant rate. The ring itself is unaffected by
+        /// the spin: a circle looks the same at any angle, so only the ticks carry the motion.
+        /// </summary>
+        private void UpdateCaptureReticle()
+        {
+            Material captureMaterial = _markerMaterials[(int)SquareMarker.Capture];
+            if (captureMaterial != null)
+            {
+                float period = Mathf.Max(0.05f, highlightPalette.CaptureBreathePeriod);
+                float phase = Mathf.Sin(Time.unscaledTime * Mathf.PI * 2f / period) * 0.5f + 0.5f;
+                captureMaterial.SetFloat(GlowProperty,
+                    highlightPalette.Capture.Glow + phase * highlightPalette.CaptureBreatheGlowAmount);
+            }
+
+            Quaternion spin = Quaternion.Euler(0f, Time.unscaledTime * highlightPalette.CaptureTickRotationSpeed, 0f);
+            for (int i = 0; i < _drawnSquares.Count; i++)
+            {
+                Vector2Int square = _drawnSquares[i];
+                if (_shownMarkers[square.x, square.y] != SquareMarker.Capture) continue;
+
+                _markerRenderers[square.x, square.y].transform.localRotation = spin;
+            }
         }
 
         #endregion

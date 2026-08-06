@@ -4830,6 +4830,7 @@ MonoBehaviour:
   highlightPalette: {fileID: 11400000, guid: a4c1e9b73d5f4e2a8b6c0d1f2e3a4b5c, type: 2}
   tintYOffset: 0.01
   markerYOffset: 0.02
+  shadowYOffset: 0.005
   tilesParent: {fileID: 608628692}
   whitePiecesParent: {fileID: 224791463}
   blackPiecesParent: {fileID: 1194650739}
