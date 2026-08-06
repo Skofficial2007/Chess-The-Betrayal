@@ -115,6 +115,9 @@ namespace ChessTheBetrayal.View
         [Tooltip("Thickness of a selection corner tick.")]
         [SerializeField, Range(0.02f, 0.15f)] private float cornerTickThicknessRatio = 0.055f;
 
+        [Tooltip("How far outside the tile a corner tick starts before clamping in, as a multiple of its resting distance from centre. 1 would start it already at rest; higher values start it further outside the square.")]
+        [SerializeField, Range(1f, 3f)] private float cornerTickClampStartRatio = 1.6f;
+
         [Tooltip("Size of a square tint. Slightly under 1 leaves a hairline of board showing, which stops neighbouring tinted squares merging into one block.")]
         [SerializeField, Range(0.5f, 1f)] private float tintSizeRatio = 0.97f;
 
@@ -130,6 +133,12 @@ namespace ChessTheBetrayal.View
 
         [Tooltip("Extra delay per square of distance from the selected piece, so the markers ripple outward instead of all snapping on together. 0 disables the ripple.")]
         [SerializeField, Range(0f, 0.05f)] private float appearStaggerPerSquare = 0.012f;
+
+        [Tooltip("Seconds for a selection corner tick to clamp in from outside the square to its resting corner.")]
+        [SerializeField, Range(0.05f, 0.4f)] private float cornerTickClampDuration = 0.14f;
+
+        [Tooltip("Overshoot on a corner tick's clamp-in. Kept gentler than the general marker appear — this is a grip settling into place, not a pop.")]
+        [SerializeField, Range(0f, 3f)] private float cornerTickClampOvershoot = 1.3f;
 
         [Tooltip("Seconds for one full pulse of the check frame's glow.")]
         [SerializeField, Range(0.2f, 3f)] private float checkPulsePeriod = 1.1f;
@@ -181,12 +190,15 @@ namespace ChessTheBetrayal.View
         public float CheckFrameThicknessRatio => checkFrameThicknessRatio;
         public float CornerTickLengthRatio => cornerTickLengthRatio;
         public float CornerTickThicknessRatio => cornerTickThicknessRatio;
+        public float CornerTickClampStartRatio => cornerTickClampStartRatio;
         public float TintSizeRatio => tintSizeRatio;
         public float LastMoveFromOutlineThicknessRatio => lastMoveFromOutlineThicknessRatio;
         public int CircleSegments => circleSegments;
 
         public float AppearDuration => appearDuration;
         public float AppearStaggerPerSquare => appearStaggerPerSquare;
+        public float CornerTickClampDuration => cornerTickClampDuration;
+        public float CornerTickClampOvershoot => cornerTickClampOvershoot;
         public float CheckPulsePeriod => checkPulsePeriod;
         public float CheckPulseGlowAmount => checkPulseGlowAmount;
         public float CaptureBreathePeriod => captureBreathePeriod;

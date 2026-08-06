@@ -125,6 +125,15 @@ namespace ChessTheBetrayal.View
         // last-move or selection tint at the same time.
         private MeshRenderer[,] _shadowRenderers;
 
+        // The selected square's four corner ticks are NOT drawn through the generic marker slot —
+        // each one needs to travel toward its own corner from its own direction, which one shared
+        // Transform can't do. Built once (only one square is ever selected at a time) and reparented
+        // to whichever tile currently needs them. See ShowSelectionCornerTicks.
+        private Transform _selectionTicksRoot;
+        private readonly Mesh[] _selectionTickMeshes = new Mesh[4];
+        private static readonly float[] SelectionTickSignX = { -1f, 1f, 1f, -1f };
+        private static readonly float[] SelectionTickSignZ = { -1f, -1f, 1f, 1f };
+
         // One mesh per shape, shared by all 64 squares, built once when the board is generated.
         private Mesh _tintMesh;
         private Mesh _lastMoveFromOutlineMesh;
@@ -134,7 +143,6 @@ namespace ChessTheBetrayal.View
         private Mesh _betrayalMesh;
         private Mesh _betrayerAtLargeMesh;
         private Mesh _checkFrameMesh;
-        private Mesh _cornerTicksMesh;
 
         // One material per state, built from the palette at startup and shared across squares. These
         // are created at runtime, so OnDestroy has to clean them up.
@@ -333,6 +341,7 @@ namespace ChessTheBetrayal.View
 
             BuildHighlightMeshes();
             BuildHighlightMaterials();
+            BuildSelectionCornerTicks();
 
             for (int x = 0; x < _tileCountX; x++)
             {
@@ -452,11 +461,6 @@ namespace ChessTheBetrayal.View
 
             float frameOuter = tileSize * highlightPalette.CheckFrameSizeRatio;
             _checkFrameMesh = GenerateFrameMesh(frameOuter, frameOuter * highlightPalette.CheckFrameThicknessRatio);
-
-            _cornerTicksMesh = GenerateCornerTicksMesh(
-                tileSize * highlightPalette.TintSizeRatio,
-                tileSize * highlightPalette.CornerTickLengthRatio,
-                tileSize * highlightPalette.CornerTickThicknessRatio);
         }
 
         /// <summary>
@@ -495,6 +499,45 @@ namespace ChessTheBetrayal.View
             }
 
             _captureShadowMaterial = CreateHighlightMaterial(shader, "CaptureShadow", highlightPalette.CaptureShadow);
+        }
+
+        /// <summary>
+        /// Builds the four corner-tick GameObjects the selected square uses, once — only one square
+        /// is ever selected at a time, so there is nothing to gain from a copy per tile. Starts
+        /// parented under tilesParent and hidden; ShowSelectionCornerTicks reparents the whole group
+        /// onto whichever tile is picked up.
+        /// </summary>
+        private void BuildSelectionCornerTicks()
+        {
+            Shader shader = Shader.Find("Chess/BoardHighlight");
+            if (shader == null) return;
+
+            GameObject root = new GameObject("SelectionCornerTicks");
+            root.transform.SetParent(tilesParent, false);
+            root.SetActive(false);
+            _selectionTicksRoot = root.transform;
+
+            float half = tileSize * highlightPalette.TintSizeRatio * 0.5f;
+            float length = tileSize * highlightPalette.CornerTickLengthRatio;
+            float thickness = tileSize * highlightPalette.CornerTickThicknessRatio;
+            Material material = _markerMaterials[(int)SquareMarker.Selected];
+
+            for (int i = 0; i < 4; i++)
+            {
+                _selectionTickMeshes[i] = GenerateSingleCornerTickMesh(
+                    SelectionTickSignX[i], SelectionTickSignZ[i], length, thickness, half);
+
+                GameObject tick = new GameObject($"Tick_{i}");
+                tick.transform.SetParent(_selectionTicksRoot, false);
+                tick.layer = _tileLayer;
+
+                tick.AddComponent<MeshFilter>().sharedMesh = _selectionTickMeshes[i];
+
+                MeshRenderer renderer = tick.AddComponent<MeshRenderer>();
+                renderer.sharedMaterial = material;
+                renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                renderer.receiveShadows = false;
+            }
         }
 
         private static Material CreateHighlightMaterial(Shader shader, string materialName, BoardHighlightPalette.Look look)
@@ -734,39 +777,35 @@ namespace ChessTheBetrayal.View
         }
 
         /// <summary>
-        /// Builds four L-shaped ticks, one hugging each corner of the square — the marker for the
-        /// square whose piece is currently picked up. Corners rather than a full outline so it reads
-        /// as "this one is in your hand" without competing with the move markers it points at.
+        /// Builds one L-shaped corner tick — the marker for the square whose piece is currently
+        /// picked up, one instance per corner rather than a full outline so it reads as "this one is
+        /// in your hand" without competing with the move markers it points at.
+        ///
+        /// Built local to the corner itself: the point where the two bars meet sits at local origin,
+        /// and both bars run inward from there. The four corners are four separate instances of this
+        /// mesh on their own Transforms rather than one shared mesh, because each one clamps in from
+        /// outside the square toward its own corner independently — a single Transform's uniform
+        /// scale can only make every point converge on one shared centre, which is what made the old
+        /// combined version read as a pop rather than a grip.
         /// </summary>
-        private static Mesh GenerateCornerTicksMesh(float size, float tickLength, float tickThickness)
+        private static Mesh GenerateSingleCornerTickMesh(float signX, float signZ, float tickLength, float tickThickness, float half)
         {
-            float half = size * 0.5f;
             float length = Mathf.Min(tickLength, half);
 
-            var vertices = new Vector3[16 * 2];
-            var triangles = new int[8 * 6];
+            var vertices = new Vector3[8];
+            var triangles = new int[12];
             int vertexCount = 0;
             int triangleCount = 0;
 
-            // Each corner contributes two bars, one running along each edge away from it.
-            for (int corner = 0; corner < 4; corner++)
-            {
-                float signX = (corner == 0 || corner == 3) ? -1f : 1f;
-                float signZ = (corner == 0 || corner == 1) ? -1f : 1f;
+            // Bar running along the X edge.
+            AddBar(vertices, triangles, ref vertexCount, ref triangleCount,
+                0f, 0f, -signX * length, -signZ * tickThickness);
 
-                float cornerX = signX * half;
-                float cornerZ = signZ * half;
+            // Bar running along the Z edge.
+            AddBar(vertices, triangles, ref vertexCount, ref triangleCount,
+                0f, -signZ * tickThickness, -signX * tickThickness, -signZ * length);
 
-                // Bar running along the X edge.
-                AddBar(vertices, triangles, ref vertexCount, ref triangleCount,
-                    cornerX, cornerZ, cornerX - signX * length, cornerZ - signZ * tickThickness);
-
-                // Bar running along the Z edge.
-                AddBar(vertices, triangles, ref vertexCount, ref triangleCount,
-                    cornerX, cornerZ - signZ * tickThickness, cornerX - signX * tickThickness, cornerZ - signZ * length);
-            }
-
-            var mesh = new Mesh { name = "SelectionCornerTicksMesh" };
+            var mesh = new Mesh { name = "SelectionCornerTickMesh" };
             mesh.vertices = vertices;
             mesh.triangles = triangles;
             mesh.RecalculateNormals();
@@ -2100,6 +2139,20 @@ namespace ChessTheBetrayal.View
             SquareMarker previous = _shownMarkers[square.x, square.y];
             _shownMarkers[square.x, square.y] = highlight.Marker;
 
+            // Selected never uses this generic slot — its four corner ticks travel toward their own
+            // corners independently, which needs four Transforms rather than the one this slot has.
+            if (highlight.Marker == SquareMarker.Selected)
+            {
+                marker.enabled = false;
+                ShowSelectionCornerTicks(square, isNewSelection: previous != SquareMarker.Selected);
+                return;
+            }
+
+            if (previous == SquareMarker.Selected)
+            {
+                HideSelectionCornerTicks();
+            }
+
             if (highlight.Marker == SquareMarker.None || _markerMaterials == null)
             {
                 marker.enabled = false;
@@ -2122,6 +2175,70 @@ namespace ChessTheBetrayal.View
             if (previous != highlight.Marker)
             {
                 PlayMarkerAppear(marker.transform, square);
+            }
+        }
+
+        /// <summary>
+        /// Moves the selection corner ticks onto the given square, playing the clamp-in only when
+        /// this square wasn't already showing them — a redraw triggered by something else on the
+        /// board must not make an already-picked-up piece's ticks clamp in a second time.
+        /// </summary>
+        private void ShowSelectionCornerTicks(Vector2Int square, bool isNewSelection)
+        {
+            if (_selectionTicksRoot == null || !IsOnBoard(square)) return;
+
+            Transform tile = _tiles[square.x, square.y].transform;
+            if (_selectionTicksRoot.parent != tile)
+            {
+                _selectionTicksRoot.SetParent(tile, false);
+                _selectionTicksRoot.localPosition = new Vector3(0f, markerYOffset, 0f);
+            }
+
+            _selectionTicksRoot.gameObject.SetActive(true);
+
+            if (isNewSelection)
+            {
+                PlaySelectionClampIn();
+            }
+        }
+
+        /// <summary>
+        /// Takes the selection corner ticks off the board. Safe to call whether or not they're
+        /// showing.
+        /// </summary>
+        private void HideSelectionCornerTicks()
+        {
+            if (_selectionTicksRoot == null) return;
+
+            _selectionTicksRoot.gameObject.SetActive(false);
+        }
+
+        /// <summary>
+        /// Slides each of the four corner ticks in from outside the square to its resting corner,
+        /// with a slight overshoot on arrival — a grip closing onto the square rather than a badge
+        /// popping out of its centre, which is what a uniform scale-up of the whole group used to
+        /// read as.
+        /// </summary>
+        private void PlaySelectionClampIn()
+        {
+            float half = tileSize * highlightPalette.TintSizeRatio * 0.5f;
+            float duration = highlightPalette.CornerTickClampDuration;
+            float startRatio = highlightPalette.CornerTickClampStartRatio;
+
+            for (int i = 0; i < 4; i++)
+            {
+                Transform tick = _selectionTicksRoot.GetChild(i);
+                Vector3 resting = new Vector3(SelectionTickSignX[i] * half, 0f, SelectionTickSignZ[i] * half);
+
+                if (duration <= 0f)
+                {
+                    tick.localPosition = resting;
+                    continue;
+                }
+
+                Vector3 start = resting * startRatio;
+                Tween.LocalPosition(tick, start, resting, duration,
+                    Easing.Overshoot(highlightPalette.CornerTickClampOvershoot), useUnscaledTime: true);
             }
         }
 
@@ -2152,6 +2269,10 @@ namespace ChessTheBetrayal.View
                 startDelay: delay, useUnscaledTime: true);
         }
 
+        /// <summary>
+        /// Selected has no case here — it never reaches this generic marker slot. See
+        /// ShowSelectionCornerTicks for why its four ticks are drawn a different way.
+        /// </summary>
         private Mesh MeshFor(SquareMarker marker)
         {
             switch (marker)
@@ -2161,7 +2282,6 @@ namespace ChessTheBetrayal.View
                 case SquareMarker.BetrayalTarget: return _betrayalMesh;
                 case SquareMarker.BetrayerAtLarge: return _betrayerAtLargeMesh;
                 case SquareMarker.Check: return _checkFrameMesh;
-                case SquareMarker.Selected: return _cornerTicksMesh;
                 default: return null;
             }
         }

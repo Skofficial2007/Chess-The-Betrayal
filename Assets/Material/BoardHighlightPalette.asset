@@ -59,11 +59,14 @@ MonoBehaviour:
   checkFrameThicknessRatio: 0.09
   cornerTickLengthRatio: 0.22
   cornerTickThicknessRatio: 0.055
+  cornerTickClampStartRatio: 1.6
   tintSizeRatio: 0.97
   lastMoveFromOutlineThicknessRatio: 0.06
   circleSegments: 24
   appearDuration: 0.18
   appearStaggerPerSquare: 0.012
+  cornerTickClampDuration: 0.14
+  cornerTickClampOvershoot: 1.3
   checkPulsePeriod: 1.1
   checkPulseGlowAmount: 1.2
   captureBreathePeriod: 2.2
