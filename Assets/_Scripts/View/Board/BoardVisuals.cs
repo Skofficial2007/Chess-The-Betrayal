@@ -967,12 +967,22 @@ namespace ChessTheBetrayal.View
         /// </summary>
         private void RestorePromotedPawn(MoveCommand move)
         {
-            DestroyPieceAt(move.EndPosition);
-
             // PieceType is the piece that MOVED — the pawn — while PromotedTo is what it became.
-            SpawnSinglePiece(
-                new PieceData(move.PieceTeam, move.PieceType, move.PieceMoveDirection, startRow: 0, hasMoved: move.PieceHadMoved),
-                move.StartPosition);
+            PieceData pawn = new PieceData(move.PieceTeam, move.PieceType, move.PieceMoveDirection, startRow: 0, hasMoved: move.PieceHadMoved);
+            Vector2Int promotionSquare = move.EndPosition;
+            Vector2Int pawnSquare = move.StartPosition;
+
+            // Keyed straight onto the square the pawn came from, even though it reforms on the
+            // promotion square and walks back afterwards. A promotion that also captured puts its
+            // victim back on the promotion square moments later, so leaving the pawn recorded there
+            // in the meantime would have the two fighting over it.
+            PlaySwapBack(promotionSquare, PieceTransitionStyle.PromotionMorph, pawn, pawnSquare, promotionSquare,
+                onRevealed: pawnAgain =>
+                {
+                    // Promotion undone first, then the move that earned it — in that order, so the
+                    // piece is visibly a pawn again before it steps back off the last rank.
+                    pawnAgain.SetPosition(PieceWorldPosition(pawnSquare), MoveStyle.Promotion);
+                });
         }
 
         /// <summary>
@@ -982,31 +992,71 @@ namespace ChessTheBetrayal.View
         /// </summary>
         private void RestoreDefectedPiece(MoveCommand move)
         {
-            DestroyPieceAt(move.StartPosition);
+            PieceData loyalAgain = new PieceData(move.PieceTeam, move.PieceType, move.PieceMoveDirection, startRow: 0, hasMoved: true);
 
-            SpawnSinglePiece(
-                new PieceData(move.PieceTeam, move.PieceType, move.PieceMoveDirection, startRow: 0, hasMoved: true),
-                move.StartPosition);
+            // The same spin the defection turned on, turning back — the piece rotates away as one
+            // side's and comes back round as the other's, which is how it changed sides to begin with.
+            PlaySwapBack(move.StartPosition, PieceTransitionStyle.Spin, loyalAgain, move.StartPosition, move.StartPosition, onRevealed: null);
         }
 
         /// <summary>
-        /// Removes and destroys whatever is standing on a square, first dropping any Betrayal
-        /// follow-up work queued against it — a piece that no longer exists can never deliver the
-        /// callback those are waiting on.
+        /// Replaces the piece standing on <paramref name="outgoingSquare"/> with a different one,
+        /// playing the swap out and back in the given style — the same vanish-then-reveal promotion
+        /// and defection use going forward, so undoing one looks like the thing it undoes.
+        ///
+        /// The board's own record is updated up front rather than when the swap completes: the
+        /// square is already claimed for the incoming piece as far as everything else is concerned,
+        /// and the transition can outlive the ply that started it.
         /// </summary>
-        private void DestroyPieceAt(Vector2Int gridPos)
+        private void PlaySwapBack(Vector2Int outgoingSquare, PieceTransitionStyle style, PieceData incoming,
+            Vector2Int incomingSquare, Vector2Int revealAtSquare, System.Action<ChessPiece> onRevealed)
         {
-            if (!_piecesByPosition.TryGetValue(gridPos, out ChessPiece piece)) return;
+            _piecesByPosition.TryGetValue(outgoingSquare, out ChessPiece outgoing);
+            _piecesByPosition.Remove(outgoingSquare);
 
-            _piecesByPosition.Remove(gridPos);
+            if (outgoing != null)
+            {
+                // A piece about to stop existing can never deliver the callback any queued Betrayal
+                // follow-up is waiting on, so drop that work rather than leave it stranded.
+                _pendingStampVictimByAttacker.Remove(outgoing);
+                _pendingDefectionByAttacker.Remove(outgoing);
+            }
 
-            if (piece == null) return;
+            ChessPiece revealed = SpawnSinglePiece(incoming, incomingSquare);
+            if (revealed == null) return;
 
-            _pendingStampVictimByAttacker.Remove(piece);
-            _pendingDefectionByAttacker.Remove(piece);
+            // Fully dissolved rather than shrunk, because a piece scaled to nothing is refused by
+            // the animator's own guard. It stays invisible until the outgoing piece has finished
+            // leaving — the two must never be on the square together, or the swap reads as a
+            // duplicate rather than one becoming the other.
+            revealed.SetDissolveImmediate(1f);
+            revealed.SetPosition(PieceWorldPosition(revealAtSquare), force: true);
 
-            piece.StopAllAnimations();
-            Destroy(piece.gameObject);
+            if (outgoing == null)
+            {
+                RevealSwappedPiece(revealed, style, onRevealed);
+                return;
+            }
+
+            outgoing.PlayTransitionOut(style, () =>
+            {
+                // Either piece can be gone by the time this lands — a new match, a rebuild.
+                if (outgoing != null)
+                {
+                    outgoing.StopAllAnimations();
+                    Destroy(outgoing.gameObject);
+                }
+
+                if (revealed == null) return;
+                RevealSwappedPiece(revealed, style, onRevealed);
+            });
+        }
+
+        private void RevealSwappedPiece(ChessPiece revealed, PieceTransitionStyle style, System.Action<ChessPiece> onRevealed)
+        {
+            revealed.SetDissolveImmediate(0f);
+            revealed.PlayTransitionIn(style);
+            onRevealed?.Invoke(revealed);
         }
 
         /// <summary>
