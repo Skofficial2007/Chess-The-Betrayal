@@ -943,12 +943,21 @@ namespace ChessTheBetrayal.View
                 return;
             }
 
-            victim.EnableCollider();
-            victim.SetScale(PieceRestScale, force: true);
-            victim.SetPosition(PieceWorldPosition(capturePos), force: true);
+            // Turned to face its own side's direction before it sets off, so it travels home facing
+            // the way it will stand rather than spinning round on arrival.
             ApplyRestingRotation(victim.transform, captured.Team, captured.Type, captured.MoveDirection);
 
+            // Claim the square immediately, not on arrival: the board already believes the piece is
+            // there, and anything that looks in between (the next ply of the same takeback, a rebuild)
+            // must find it rather than an empty square with a piece in flight toward it.
             _piecesByPosition[capturePos] = victim;
+
+            victim.PlayGraveyardReturn(PieceWorldPosition(capturePos), PieceRestScale, onArrived: () =>
+            {
+                // The piece can be destroyed mid-flight — a new match, or a rebuild.
+                if (victim == null) return;
+                victim.EnableCollider();
+            });
         }
 
         /// <summary>

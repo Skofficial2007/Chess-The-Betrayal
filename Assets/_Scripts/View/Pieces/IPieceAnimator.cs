@@ -110,6 +110,18 @@ namespace ChessTheBetrayal.View
         void PlayEnPassantDeath(Vector3 graveyardWorldPos, Action onArrived);
 
         /// <summary>
+        /// A captured piece coming back to the board because its capture was taken back: the same
+        /// hop-and-glide as the death above, run the other way — travelling from the death pile to
+        /// boardWorldPos while growing from its shrunken graveyard size back to restScale, arriving
+        /// with a small overshoot like every other landing. Calls onArrived once it is home, the
+        /// moment BoardVisuals should treat it as standing on the board again.
+        ///
+        /// Deliberately not the capture stamp reversed: nothing is lifting this piece back up, and
+        /// a crush played backwards reads as the victim inflating rather than returning.
+        /// </summary>
+        void PlayGraveyardReturn(Vector3 boardWorldPos, Vector3 restScale, Action onArrived);
+
+        /// <summary>
         /// Scales the piece toward scale. force = true snaps instantly with no interpolation
         /// (used for initial spawn sizing).
         /// </summary>

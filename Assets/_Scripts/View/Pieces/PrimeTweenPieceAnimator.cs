@@ -620,6 +620,44 @@ namespace ChessTheBetrayal.View
                 .ChainCallback(() => onArrived?.Invoke());
         }
 
+        public void PlayGraveyardReturn(Vector3 boardWorldPos, Vector3 restScale, Action onArrived)
+        {
+            if (!IsFinite(boardWorldPos) || !IsFinite(restScale))
+            {
+                Debug.LogWarning($"[{nameof(PrimeTweenPieceAnimator)}] PlayGraveyardReturn given non-finite vector for {_transform.name}. Ignoring.");
+                onArrived?.Invoke();
+                return;
+            }
+
+            _moveTween.Stop();
+            _punchSequence.Stop();
+            _castleSequence.Stop();
+            _settleBobTween.Stop();
+            _settleBobBaseY = null;
+            _stampSequence.Stop();
+            StopLiftTweens();
+            _liftRestPosition = null;
+            HideSelectionOutline(instant: true);
+
+            Vector3 startPos = _transform.position;
+
+            // The death glide read backwards: the same InOutCubic travel and the same hop, with the
+            // piece swelling back to full size across it instead of shrinking away. The arrival
+            // overshoots where the death eased flat, because this one lands somewhere — a piece
+            // returning to the board should look like it means to be there.
+            _stampSequence = Sequence.Create(useUnscaledTime: true)
+                .Group(Tween.Position(_transform, new Vector3(boardWorldPos.x, startPos.y, boardWorldPos.z), EnPassantDeathDuration, EnPassantDeathMoveEase, useUnscaledTime: true))
+                .Group(Tween.Scale(_transform, restScale, EnPassantDeathDuration, Easing.Overshoot(1.4f), useUnscaledTime: true))
+                .Group(Sequence.Create(useUnscaledTime: true)
+                    .Chain(Tween.PositionY(_transform, startPos.y + EnPassantDeathHopHeight, EnPassantDeathDuration * 0.5f, EnPassantDeathHopEase, useUnscaledTime: true))
+                    .Chain(Tween.PositionY(_transform, boardWorldPos.y, EnPassantDeathDuration * 0.5f, Ease.OutBack, useUnscaledTime: true)))
+                .ChainCallback(() =>
+                {
+                    onArrived?.Invoke();
+                    PlaySettleBob();
+                });
+        }
+
         public void ScaleTo(Vector3 scale, bool force = false)
         {
             if (!IsFinite(scale) || scale.x <= 0f || scale.y <= 0f || scale.z <= 0f)

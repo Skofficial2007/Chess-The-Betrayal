@@ -50,6 +50,15 @@ namespace ChessTheBetrayal.View
 
         public void PlayStompedDeath(Action onVanished) => onVanished?.Invoke();
 
+        // Same deal in reverse: the piece is simply back on its square at full size, with onArrived
+        // fired synchronously so nothing waits on a tween that will never exist here.
+        public void PlayGraveyardReturn(Vector3 boardWorldPos, Vector3 restScale, Action onArrived)
+        {
+            _transform.position = boardWorldPos;
+            _transform.localScale = restScale;
+            onArrived?.Invoke();
+        }
+
         public void PlayEnPassantDeath(Vector3 graveyardWorldPos, Action onArrived)
         {
             _transform.position = graveyardWorldPos;

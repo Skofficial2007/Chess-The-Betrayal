@@ -144,6 +144,15 @@ namespace ChessTheBetrayal.View
         }
 
         /// <summary>
+        /// Brings this piece back from the death pile onto boardWorldPos at restScale, because the
+        /// capture that put it there was taken back.
+        /// </summary>
+        public void PlayGraveyardReturn(Vector3 boardWorldPos, Vector3 restScale, Action onArrived)
+        {
+            _animator.PlayGraveyardReturn(boardWorldPos, restScale, onArrived);
+        }
+
+        /// <summary>
         /// Sets the target local scale (used for death-pile shrinking and initial spawn sizing).
         /// force = true snaps instantly with no interpolation.
         /// </summary>
