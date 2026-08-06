@@ -313,6 +313,71 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
                 "The rook is back on a1 and it is White's turn — the player must be able to pick it up again.");
         }
 
+        /// <summary>
+        /// Anything replaying a takeback has to walk history backwards, because a captured piece
+        /// only goes back where it came from while the plies come off newest-first. The order is
+        /// reported rather than left to be worked out, so this pins it.
+        /// </summary>
+        [Test]
+        public void RequestUndo_ReportsEveryUnmadePly_NewestFirst()
+        {
+            _matchDriver.PlayMove(StandardMove(_board, "a2", "a3")); // White (human)
+            _matchDriver.PlayMove(StandardMove(_board, "a7", "a6")); // Black (AI)
+
+            var unmade = new System.Collections.Generic.List<MoveCommand>();
+            _undoService.RequestUndo(isAIMode: true, currentPhase: _matchDriver.CurrentPhase,
+                humanTeam: Team.White, aiMovesFirst: false, unmadeMoves: unmade);
+
+            Assert.That(unmade, Has.Count.EqualTo(2));
+            Assert.That(unmade[0].StartPosition, Is.EqualTo(TestBoardSetupUtility.AlgebraicToVector("a7")),
+                "The AI's reply came off first, so it must be reported first.");
+            Assert.That(unmade[1].StartPosition, Is.EqualTo(TestBoardSetupUtility.AlgebraicToVector("a2")),
+                "The player's own move came off underneath it.");
+        }
+
+        /// <summary>
+        /// A Betrayal turn is more than one ply, and all of them belong to the single turn a press
+        /// takes back — so every one has to be reported, still newest-first, or a replay would show
+        /// part of a turn undoing itself.
+        /// </summary>
+        [Test]
+        public void RequestUndo_BetrayalTurn_ReportsEveryPlyOfThatTurn()
+        {
+            ClearSquares("a2");
+            _board.WithPiece("b1", Team.White, ChessPieceType.Knight);
+            _board.WithPiece("a1", Team.White, ChessPieceType.Rook);
+            _board.WithPiece("a3", Team.White, ChessPieceType.Pawn); // Betrayal victim
+            _board.WithBetrayalRight(true);
+            _board.ComputeFullZobristHash();
+
+            var actMoves = new System.Collections.Generic.List<MoveCommand>();
+            ChessEngine.GetBetrayalTargets(_board, TestBoardSetupUtility.AlgebraicToVector("b1"), actMoves);
+            _matchDriver.PlayMove(actMoves[0]);
+
+            var retMoves = new System.Collections.Generic.List<MoveCommand>();
+            _engine.GetRetributionMoves(_board, Team.White, _board.PendingBetrayerSquare.Value, retMoves);
+            _matchDriver.PlayMove(retMoves[0]);
+
+            var unmade = new System.Collections.Generic.List<MoveCommand>();
+            _undoService.RequestUndo(isAIMode: true, currentPhase: _matchDriver.CurrentPhase,
+                humanTeam: Team.White, aiMovesFirst: false, unmadeMoves: unmade);
+
+            Assert.That(unmade, Has.Count.EqualTo(2), "Act and Retribution are one turn, but two plies to replay.");
+            Assert.That(unmade[0].Stage, Is.EqualTo(BetrayalStage.Retribution), "The turn's last ply comes off first.");
+            Assert.That(unmade[1].Stage, Is.EqualTo(BetrayalStage.Act));
+        }
+
+        [Test]
+        public void RequestUndo_NothingToUndo_ReportsNoPlies()
+        {
+            var unmade = new System.Collections.Generic.List<MoveCommand> { StandardMove(_board, "a2", "a3") };
+
+            _undoService.RequestUndo(isAIMode: true, currentPhase: TurnPhase.Normal,
+                humanTeam: Team.White, aiMovesFirst: false, unmadeMoves: unmade);
+
+            Assert.That(unmade, Is.Empty, "A press with nothing to take back must not leave stale plies for a replay to act on.");
+        }
+
         private void ClearSquares(params string[] squares)
         {
             for (int i = 0; i < squares.Length; i++)

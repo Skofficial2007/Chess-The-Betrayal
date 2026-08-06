@@ -102,8 +102,16 @@ namespace ChessTheBetrayal.Gameplay.Manager
         /// (AIMatchCoordinator.CancelInFlightSearch plus abandoning anything queued for playback),
         /// or that stale move lands on a position it was never chosen for.
         /// </summary>
-        public void RequestUndo(bool isAIMode, TurnPhase currentPhase, Team humanTeam, bool aiMovesFirst)
+        /// <param name="unmadeMoves">
+        /// Filled with every ply this call took off the board, in the order it took them off —
+        /// newest first. That is the order anything replaying the takeback has to follow, so it is
+        /// reported rather than left to be reconstructed. Cleared first; pass null to ignore.
+        /// </param>
+        public void RequestUndo(bool isAIMode, TurnPhase currentPhase, Team humanTeam, bool aiMovesFirst,
+            List<MoveCommand> unmadeMoves = null)
         {
+            unmadeMoves?.Clear();
+
             if (!CanUndo(isAIMode, currentPhase, aiMovesFirst)) return;
 
             // Never pop the AI's protected opening move (see CanUndo): when the AI moved first, the
@@ -114,7 +122,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
 
             for (int i = 0; i < MaxTurnsPerUndo && _turnStack.Count > floor; i++)
             {
-                PopOneTurn();
+                PopOneTurn(unmadeMoves);
 
                 if (_board.CurrentTurn == humanTeam) break;
             }
@@ -143,7 +151,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
         /// passes the turn (and BetrayalStageRules.FlipsTurn already says so for that Stage). See
         /// IsTurnFlippingMove for the combined rule.
         /// </summary>
-        private void PopOneTurn()
+        private void PopOneTurn(List<MoveCommand> unmadeMoves)
         {
             List<MoveCommand> turnMoves = _turnStack[_turnStack.Count - 1];
             _turnStack.RemoveAt(_turnStack.Count - 1);
@@ -158,6 +166,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
                 }
 
                 _engine.UndoMove(_board, move);
+                unmadeMoves?.Add(move);
             }
 
             _matchDriver.MoveLog.RemoveLast(turnMoves.Count);
