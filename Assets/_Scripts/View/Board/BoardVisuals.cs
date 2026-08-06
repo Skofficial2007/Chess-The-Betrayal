@@ -132,6 +132,7 @@ namespace ChessTheBetrayal.View
         private Mesh _captureReticleMesh;
         private Mesh _captureShadowMesh;
         private Mesh _betrayalMesh;
+        private Mesh _betrayerAtLargeMesh;
         private Mesh _checkFrameMesh;
         private Mesh _cornerTicksMesh;
 
@@ -442,6 +443,12 @@ namespace ChessTheBetrayal.View
                 tileSize * highlightPalette.CaptureRingThicknessRatio,
                 tileSize * highlightPalette.BetrayalDiamondRatio,
                 segments);
+            _betrayerAtLargeMesh = GenerateBetrayerMarkerMesh(
+                tileSize * highlightPalette.BetrayalRingRadiusRatio,
+                tileSize * highlightPalette.CaptureRingThicknessRatio,
+                tileSize * highlightPalette.BetrayerChevronLengthRatio,
+                tileSize * highlightPalette.BetrayerChevronHalfWidthRatio,
+                segments);
 
             float frameOuter = tileSize * highlightPalette.CheckFrameSizeRatio;
             _checkFrameMesh = GenerateFrameMesh(frameOuter, frameOuter * highlightPalette.CheckFrameThicknessRatio);
@@ -665,6 +672,65 @@ namespace ChessTheBetrayal.View
             mesh.triangles = triangles;
             mesh.RecalculateNormals();
             return mesh;
+        }
+
+        /// <summary>
+        /// Builds the Betrayer-at-large marker: the same hazard ring family as the Betrayal target,
+        /// with four chevrons pointing inward from its edge instead of a diamond floating inside it.
+        /// Marks the square the piece stands on rather than a square it threatens, so it earns a
+        /// silhouette of its own even though it shares the target's colour and ring.
+        /// </summary>
+        private static Mesh GenerateBetrayerMarkerMesh(float ringRadius, float ringThickness, float chevronLength, float chevronHalfWidth, int segments)
+        {
+            Mesh ring = GenerateRingMesh(ringRadius, ringThickness, segments);
+
+            Vector3[] ringVertices = ring.vertices;
+            int[] ringTriangles = ring.triangles;
+
+            var vertices = new Vector3[ringVertices.Length + 12];
+            var triangles = new int[ringTriangles.Length + 12];
+
+            ringVertices.CopyTo(vertices, 0);
+            ringTriangles.CopyTo(triangles, 0);
+
+            int vertexCount = ringVertices.Length;
+            int triangleCount = ringTriangles.Length;
+
+            AddChevron(vertices, triangles, ref vertexCount, ref triangleCount, 0f, ringRadius, chevronLength, chevronHalfWidth);
+            AddChevron(vertices, triangles, ref vertexCount, ref triangleCount, 90f, ringRadius, chevronLength, chevronHalfWidth);
+            AddChevron(vertices, triangles, ref vertexCount, ref triangleCount, 180f, ringRadius, chevronLength, chevronHalfWidth);
+            AddChevron(vertices, triangles, ref vertexCount, ref triangleCount, 270f, ringRadius, chevronLength, chevronHalfWidth);
+
+            var mesh = new Mesh { name = "BetrayerMarkerMesh" };
+            mesh.vertices = vertices;
+            mesh.triangles = triangles;
+            mesh.RecalculateNormals();
+            return mesh;
+        }
+
+        /// <summary>
+        /// Appends one triangular chevron: a base straddling the ring's outer edge at the given
+        /// angle, tapering to a point that reaches inward — toward the square's centre, not away
+        /// from it, which is what reads as a hazard closing in rather than a badge sitting on top.
+        /// </summary>
+        private static void AddChevron(Vector3[] vertices, int[] triangles, ref int vertexCount, ref int triangleCount,
+            float angleDegrees, float baseRadius, float length, float halfWidth)
+        {
+            float angle = angleDegrees * Mathf.Deg2Rad;
+            Vector3 outward = new Vector3(Mathf.Sin(angle), 0f, Mathf.Cos(angle));
+            Vector3 tangent = new Vector3(outward.z, 0f, -outward.x);
+
+            Vector3 baseCentre = outward * baseRadius;
+            Vector3 apex = outward * (baseRadius - length);
+
+            int start = vertexCount;
+            vertices[vertexCount++] = baseCentre + tangent * halfWidth;
+            vertices[vertexCount++] = baseCentre - tangent * halfWidth;
+            vertices[vertexCount++] = apex;
+
+            triangles[triangleCount++] = start;
+            triangles[triangleCount++] = start + 1;
+            triangles[triangleCount++] = start + 2;
         }
 
         /// <summary>
@@ -1233,6 +1299,7 @@ namespace ChessTheBetrayal.View
             ClearLegalMoveHighlights();
             ClearCheckHighlight();
             ClearLastMove();
+            ClearBetrayerAtLarge();
 
             // Castling is two pieces; the rook goes home alongside the king, trailing it by the same
             // beat it followed on the way out.
@@ -1624,10 +1691,10 @@ namespace ChessTheBetrayal.View
         }
 
         /// <summary>
-        /// Reacts to Betrayal phase transitions: glows the Betrayer while Retribution is
-        /// genuinely pending, and swaps its prefab to the opposing team the moment Defection
-        /// occurs — deferred until any in-flight capture stamp on that piece finishes first (see
-        /// SwapPieceTeam).
+        /// Reacts to Betrayal phase transitions: glows the Betrayer and marks its square while
+        /// Retribution is genuinely pending, and swaps its prefab to the opposing team the moment
+        /// Defection occurs — deferred until any in-flight capture stamp on that piece finishes
+        /// first (see SwapPieceTeam).
         /// </summary>
         public void HandleBetrayalPhaseChanged(ChessTheBetrayal.Events.Payloads.BetrayalPayload payload)
         {
@@ -1641,6 +1708,15 @@ namespace ChessTheBetrayal.View
                     // would only flash on for a beat before the piece spins away, which reads as a
                     // glitch rather than a deliberate cue.
                     _actWillDefect = payload.WillDefect;
+
+                    // Same reasoning applies to the square marker: it stays off entirely when
+                    // Defection is already locked in, rather than appearing for one frame with
+                    // nothing for the player to react to. Persists through RetributionPending on
+                    // its own — nothing else needs to touch it while that phase is active.
+                    if (!payload.WillDefect)
+                    {
+                        SetBetrayerAtLarge(payload.BetrayerPosition);
+                    }
                     break;
 
                 case ChessTheBetrayal.Events.Payloads.BetrayalPhase.RetributionPending:
@@ -1652,10 +1728,13 @@ namespace ChessTheBetrayal.View
 
                 case ChessTheBetrayal.Events.Payloads.BetrayalPhase.Resolved:
                     // Betrayer was already removed by AnimateMove's normal capture path
-                    // (Retribution stage raises a real MoveExecutedPayload) — nothing to do.
+                    // (Retribution stage raises a real MoveExecutedPayload) — nothing to do beyond
+                    // taking its square marker down.
+                    ClearBetrayerAtLarge();
                     break;
 
                 case ChessTheBetrayal.Events.Payloads.BetrayalPhase.DefectionOccurred:
+                    ClearBetrayerAtLarge();
                     SwapPieceTeam(payload.BetrayerPosition);
                     break;
 
@@ -1912,6 +1991,26 @@ namespace ChessTheBetrayal.View
         }
 
         /// <summary>
+        /// Marks the square a Betrayer is currently standing on while Retribution is still pending.
+        /// </summary>
+        private void SetBetrayerAtLarge(Vector2Int square)
+        {
+            _highlights.BetrayerSquare = square;
+            RedrawHighlights();
+        }
+
+        /// <summary>
+        /// Takes the Betrayer hazard marker off the board. Safe to call whether or not one is showing.
+        /// </summary>
+        private void ClearBetrayerAtLarge()
+        {
+            if (_highlights.BetrayerSquare == Vector2Int.Invalid) return;
+
+            _highlights.BetrayerSquare = Vector2Int.Invalid;
+            RedrawHighlights();
+        }
+
+        /// <summary>
         /// Records the move just played, so both its squares stay faintly tinted. This is the cheapest
         /// clarity win on the board: it answers "what just happened?" for a player who looked away
         /// during the animation, or who is picking the game back up after a pause.
@@ -2011,10 +2110,11 @@ namespace ChessTheBetrayal.View
             marker.sharedMaterial = _markerMaterials[(int)highlight.Marker];
             marker.enabled = true;
 
-            // Every marker except the capture reticle stays axis-aligned. The reticle's own rotation
-            // is driven continuously in Update() while it's shown, so it must not be reset out from
-            // under that here — only snapped back once the square stops being a capture target.
-            if (highlight.Marker != SquareMarker.Capture)
+            // Every marker except the capture reticle and the Betrayer hazard stays axis-aligned —
+            // both of those drive their own rotation continuously in Update() while shown, so it must
+            // not be reset out from under them here, only snapped back once a square stops showing
+            // one of them.
+            if (highlight.Marker != SquareMarker.Capture && highlight.Marker != SquareMarker.BetrayerAtLarge)
             {
                 marker.transform.localRotation = Quaternion.identity;
             }
@@ -2059,6 +2159,7 @@ namespace ChessTheBetrayal.View
                 case SquareMarker.QuietMove: return _dotMesh;
                 case SquareMarker.Capture: return _captureReticleMesh;
                 case SquareMarker.BetrayalTarget: return _betrayalMesh;
+                case SquareMarker.BetrayerAtLarge: return _betrayerAtLargeMesh;
                 case SquareMarker.Check: return _checkFrameMesh;
                 case SquareMarker.Selected: return _cornerTicksMesh;
                 default: return null;
@@ -2089,6 +2190,7 @@ namespace ChessTheBetrayal.View
 
             UpdateCheckPulse();
             UpdateCaptureReticle();
+            UpdateBetrayerHazard();
         }
 
         /// <summary>
@@ -2139,6 +2241,40 @@ namespace ChessTheBetrayal.View
                 if (_shownMarkers[square.x, square.y] != SquareMarker.Capture) continue;
 
                 _markerRenderers[square.x, square.y].transform.localRotation = spin;
+            }
+        }
+
+        /// <summary>
+        /// Pulses the Betrayer hazard's glow and spins its four chevrons, the same techniques as the
+        /// check pulse and the capture reticle's spin — but only ever one square at a time, since a
+        /// second Betrayer can't be at large while the first is still unresolved, so there is no
+        /// synchronisation to worry about.
+        /// </summary>
+        private void UpdateBetrayerHazard()
+        {
+            Material material = _markerMaterials[(int)SquareMarker.BetrayerAtLarge];
+            Vector2Int square = _highlights.BetrayerSquare;
+            bool active = square != Vector2Int.Invalid;
+
+            if (material != null)
+            {
+                if (!active)
+                {
+                    material.SetFloat(GlowProperty, highlightPalette.BetrayerAtLarge.Glow);
+                }
+                else
+                {
+                    float period = Mathf.Max(0.05f, highlightPalette.BetrayerPulsePeriod);
+                    float phase = Mathf.Sin(Time.unscaledTime * Mathf.PI * 2f / period) * 0.5f + 0.5f;
+                    material.SetFloat(GlowProperty,
+                        highlightPalette.BetrayerAtLarge.Glow + phase * highlightPalette.BetrayerPulseGlowAmount);
+                }
+            }
+
+            if (active && IsOnBoard(square))
+            {
+                float spin = Time.unscaledTime * highlightPalette.BetrayerChevronRotationSpeed;
+                _markerRenderers[square.x, square.y].transform.localRotation = Quaternion.Euler(0f, spin, 0f);
             }
         }
 

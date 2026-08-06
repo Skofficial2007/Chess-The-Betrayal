@@ -47,6 +47,9 @@ namespace ChessTheBetrayal.View
         [Tooltip("A square where this move would begin a Betrayal. Its own hue AND its own shape, so it can never be mistaken for an ordinary capture.")]
         [SerializeField] private Look betrayalTarget = new Look { Colour = new Color(0.72f, 0.36f, 0.98f, 0.85f), Glow = 1.4f };
 
+        [Tooltip("The square a Betrayer is currently standing on, while Retribution is still pending. Same hue as betrayalTarget so the mechanic keeps one colour end to end, but louder — this is the live hazard, not a move you could choose to make.")]
+        [SerializeField] private Look betrayerAtLarge = new Look { Colour = new Color(0.72f, 0.36f, 0.98f, 0.9f), Glow = 1.6f };
+
         [Tooltip("The square of a king in check. Deliberately the loudest state on the board.")]
         [SerializeField] private Look check = new Look { Colour = new Color(1f, 0.22f, 0.16f, 0.9f), Glow = 2f };
 
@@ -94,6 +97,12 @@ namespace ChessTheBetrayal.View
         [Tooltip("Half-width of the diamond inside the betrayal marker's ring.")]
         [SerializeField, Range(0.05f, 0.4f)] private float betrayalDiamondRatio = 0.16f;
 
+        [Tooltip("How far each of the Betrayer marker's four chevrons reaches inward from the ring's edge, as a fraction of one square.")]
+        [SerializeField, Range(0.02f, 0.3f)] private float betrayerChevronLengthRatio = 0.14f;
+
+        [Tooltip("Half-width of a Betrayer marker chevron's base.")]
+        [SerializeField, Range(0.02f, 0.2f)] private float betrayerChevronHalfWidthRatio = 0.05f;
+
         [Tooltip("Outer size of the check frame. Under 1 insets it, so the king reads as sitting inside the frame.")]
         [SerializeField, Range(0.5f, 1f)] private float checkFrameSizeRatio = 0.92f;
 
@@ -137,9 +146,19 @@ namespace ChessTheBetrayal.View
         [Tooltip("Degrees per second the capture reticle's four ticks rotate. Slow and constant, independent of the breathe.")]
         [SerializeField, Range(0f, 60f)] private float captureTickRotationSpeed = 12f;
 
+        [Tooltip("Seconds for one full pulse of the Betrayer marker's glow. Only one ever exists at a time, so this can be tuned freely without worrying about squares falling out of sync with each other.")]
+        [SerializeField, Range(0.2f, 3f)] private float betrayerPulsePeriod = 0.9f;
+
+        [Tooltip("How much glow the Betrayer marker's pulse adds at its peak, on top of its own base glow.")]
+        [SerializeField, Range(0f, 3f)] private float betrayerPulseGlowAmount = 1.4f;
+
+        [Tooltip("Degrees per second the Betrayer marker's four chevrons rotate.")]
+        [SerializeField, Range(0f, 90f)] private float betrayerChevronRotationSpeed = 25f;
+
         public Look QuietMove => quietMove;
         public Look Capture => capture;
         public Look BetrayalTarget => betrayalTarget;
+        public Look BetrayerAtLarge => betrayerAtLarge;
         public Look Check => check;
         public Look SelectedMarker => selectedMarker;
         public Look CaptureShadow => captureShadow;
@@ -156,6 +175,8 @@ namespace ChessTheBetrayal.View
         public float CaptureTickThicknessRatio => captureTickThicknessRatio;
         public float BetrayalRingRadiusRatio => betrayalRingRadiusRatio;
         public float BetrayalDiamondRatio => betrayalDiamondRatio;
+        public float BetrayerChevronLengthRatio => betrayerChevronLengthRatio;
+        public float BetrayerChevronHalfWidthRatio => betrayerChevronHalfWidthRatio;
         public float CheckFrameSizeRatio => checkFrameSizeRatio;
         public float CheckFrameThicknessRatio => checkFrameThicknessRatio;
         public float CornerTickLengthRatio => cornerTickLengthRatio;
@@ -171,6 +192,9 @@ namespace ChessTheBetrayal.View
         public float CaptureBreathePeriod => captureBreathePeriod;
         public float CaptureBreatheGlowAmount => captureBreatheGlowAmount;
         public float CaptureTickRotationSpeed => captureTickRotationSpeed;
+        public float BetrayerPulsePeriod => betrayerPulsePeriod;
+        public float BetrayerPulseGlowAmount => betrayerPulseGlowAmount;
+        public float BetrayerChevronRotationSpeed => betrayerChevronRotationSpeed;
 
         /// <summary>
         /// Returns the look for one marker state, so callers never need a switch of their own.
@@ -182,6 +206,7 @@ namespace ChessTheBetrayal.View
                 case SquareMarker.QuietMove: return quietMove;
                 case SquareMarker.Capture: return capture;
                 case SquareMarker.BetrayalTarget: return betrayalTarget;
+                case SquareMarker.BetrayerAtLarge: return betrayerAtLarge;
                 case SquareMarker.Check: return check;
                 case SquareMarker.Selected: return selectedMarker;
                 default: return default;

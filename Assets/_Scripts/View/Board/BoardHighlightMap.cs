@@ -13,6 +13,7 @@ namespace ChessTheBetrayal.View
         QuietMove,
         Capture,
         BetrayalTarget,
+        BetrayerAtLarge,
         Check,
         Selected
     }
@@ -66,6 +67,7 @@ namespace ChessTheBetrayal.View
         public Vector2Int CheckSquare { get; set; } = Vector2Int.Invalid;
         public Vector2Int LastMoveFrom { get; set; } = Vector2Int.Invalid;
         public Vector2Int LastMoveTo { get; set; } = Vector2Int.Invalid;
+        public Vector2Int BetrayerSquare { get; set; } = Vector2Int.Invalid;
 
         /// <summary>
         /// Records a legal destination. A move that opens a Betrayal wins over one that merely
@@ -119,14 +121,18 @@ namespace ChessTheBetrayal.View
             CheckSquare = Vector2Int.Invalid;
             LastMoveFrom = Vector2Int.Invalid;
             LastMoveTo = Vector2Int.Invalid;
+            BetrayerSquare = Vector2Int.Invalid;
         }
 
         /// <summary>
         /// What this square should show.
         ///
         /// Markers rank check first — a king in danger must never be hidden behind another marker —
-        /// then betrayal, capture, quiet move, and finally the selected square's own corner ticks,
-        /// which yield to anything that describes what a tap would do.
+        /// then the square a Betrayer is currently standing on, then betrayal, capture, quiet move,
+        /// and finally the selected square's own corner ticks, which yield to anything that describes
+        /// what a tap would do. The Betrayer's square ranks above Capture deliberately: while
+        /// Retribution is pending, that square is itself a legal capture destination for the piece
+        /// that can execute it, and the hazard is the more consequential thing to show there.
         ///
         /// Tints rank the picked-up square over the pointer, and the pointer over the last move,
         /// so the fainter, longer-lived hint always gives way to the more immediate one.
@@ -139,6 +145,7 @@ namespace ChessTheBetrayal.View
         private SquareMarker ResolveMarker(Vector2Int square)
         {
             if (square == CheckSquare) return SquareMarker.Check;
+            if (square == BetrayerSquare) return SquareMarker.BetrayerAtLarge;
             if (_betrayalTargets.Contains(square)) return SquareMarker.BetrayalTarget;
             if (_captures.Contains(square)) return SquareMarker.Capture;
             if (_quietMoves.Contains(square)) return SquareMarker.QuietMove;
@@ -168,6 +175,7 @@ namespace ChessTheBetrayal.View
             AddIfValid(into, CheckSquare);
             AddIfValid(into, LastMoveFrom);
             AddIfValid(into, LastMoveTo);
+            AddIfValid(into, BetrayerSquare);
 
             AddRange(into, _quietMoves);
             AddRange(into, _captures);

@@ -68,11 +68,26 @@ namespace ChessTheBetrayal.Tests.EditMode.View
             Vector2Int kingSquare = Sq(4, 0);
 
             map.CheckSquare = kingSquare;
+            map.BetrayerSquare = kingSquare;
             map.Selected = kingSquare;
             map.AddDestination(kingSquare, isCapture: true, isBetrayal: true);
 
             Assert.That(map.Resolve(kingSquare).Marker, Is.EqualTo(SquareMarker.Check),
                 "A king in danger must never be hidden behind another marker.");
+        }
+
+        [Test]
+        public void TheBetrayerAtLargeSquareOutranksACaptureDestinationOnTheSameSquare()
+        {
+            var map = new BoardHighlightMap();
+            Vector2Int betrayerSquare = Sq(5, 3);
+
+            map.BetrayerSquare = betrayerSquare;
+            map.AddDestination(betrayerSquare, isCapture: true, isBetrayal: false);
+
+            Assert.That(map.Resolve(betrayerSquare).Marker, Is.EqualTo(SquareMarker.BetrayerAtLarge),
+                "While Retribution is pending, the Betrayer's square is also a legal capture " +
+                "destination for whichever piece can execute it — the hazard must still win.");
         }
 
         [Test]
@@ -180,6 +195,7 @@ namespace ChessTheBetrayal.Tests.EditMode.View
             map.LastMoveFrom = Sq(0, 0);
             map.LastMoveTo = Sq(0, 1);
             map.CheckSquare = Sq(7, 7);
+            map.BetrayerSquare = Sq(6, 2);
             map.AddDestination(Sq(2, 2), isCapture: false, isBetrayal: false);
             map.AddDestination(Sq(3, 3), isCapture: true, isBetrayal: false);
             map.AddDestination(Sq(4, 4), isCapture: true, isBetrayal: true);
@@ -188,9 +204,10 @@ namespace ChessTheBetrayal.Tests.EditMode.View
             map.CollectActiveSquares(active);
 
             Assert.That(active, Is.Unique, "A square listed twice would be drawn twice.");
-            Assert.That(active.Count, Is.EqualTo(7));
+            Assert.That(active.Count, Is.EqualTo(8));
             Assert.That(active, Contains.Item(Sq(1, 1)));
             Assert.That(active, Contains.Item(Sq(7, 7)));
+            Assert.That(active, Contains.Item(Sq(6, 2)));
             Assert.That(active, Contains.Item(Sq(4, 4)));
         }
 
@@ -214,6 +231,7 @@ namespace ChessTheBetrayal.Tests.EditMode.View
             map.Selected = Sq(1, 1);
             map.CheckSquare = Sq(4, 0);
             map.LastMoveTo = Sq(4, 3);
+            map.BetrayerSquare = Sq(6, 2);
             map.AddDestination(Sq(2, 2), isCapture: false, isBetrayal: false);
 
             map.Clear();
