@@ -14,6 +14,7 @@ namespace ChessTheBetrayal.View
         Capture,
         BetrayalTarget,
         BetrayerAtLarge,
+        BetrayerTargeted,
         Check,
         Selected
     }
@@ -134,6 +135,13 @@ namespace ChessTheBetrayal.View
         /// Retribution is pending, that square is itself a legal capture destination for the piece
         /// that can execute it, and the hazard is the more consequential thing to show there.
         ///
+        /// That outranking used to cost the player the one thing they needed to know. Picking an
+        /// executioner marks the Betrayer's square as a capture destination, and the capture marker
+        /// was then swallowed, so choosing a piece that could carry out the Retribution looked
+        /// exactly like choosing one that could not. The Betrayer's square therefore has two states
+        /// rather than one, and reports which: at large on its own, targeted once some selected
+        /// piece can actually reach it.
+        ///
         /// Tints rank the picked-up square over the pointer, and the pointer over the last move,
         /// so the fainter, longer-lived hint always gives way to the more immediate one.
         /// </summary>
@@ -145,7 +153,10 @@ namespace ChessTheBetrayal.View
         private SquareMarker ResolveMarker(Vector2Int square)
         {
             if (square == CheckSquare) return SquareMarker.Check;
-            if (square == BetrayerSquare) return SquareMarker.BetrayerAtLarge;
+            if (square == BetrayerSquare)
+            {
+                return _captures.Contains(square) ? SquareMarker.BetrayerTargeted : SquareMarker.BetrayerAtLarge;
+            }
             if (_betrayalTargets.Contains(square)) return SquareMarker.BetrayalTarget;
             if (_captures.Contains(square)) return SquareMarker.Capture;
             if (_quietMoves.Contains(square)) return SquareMarker.QuietMove;

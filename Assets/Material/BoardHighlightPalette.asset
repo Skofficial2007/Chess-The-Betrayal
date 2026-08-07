@@ -24,6 +24,9 @@ MonoBehaviour:
   betrayerAtLarge:
     Colour: {r: 1, g: 0.13, b: 0.22, a: 0.92}
     Glow: 1.8
+  betrayerTargeted:
+    Colour: {r: 1, g: 0.28, b: 0.14, a: 1}
+    Glow: 2.4
   check:
     Colour: {r: 1, g: 0.22, b: 0.16, a: 0.9}
     Glow: 2
@@ -54,6 +57,7 @@ MonoBehaviour:
   betrayalDiamondRatio: 0.16
   betrayerChevronLengthRatio: 0.14
   betrayerChevronHalfWidthRatio: 0.05
+  betrayerTargetedChevronLengthRatio: 0.26
   checkFrameSizeRatio: 0.92
   checkFrameThicknessRatio: 0.09
   cornerTickLengthRatio: 0.22
@@ -76,3 +80,6 @@ MonoBehaviour:
   betrayerPulsePeriod: 0.9
   betrayerPulseGlowAmount: 1.4
   betrayerChevronRotationSpeed: 25
+  betrayerTargetedPulsePeriod: 0.45
+  betrayerLockOnPunchScale: 1.18
+  betrayerLockOnPunchDuration: 0.13

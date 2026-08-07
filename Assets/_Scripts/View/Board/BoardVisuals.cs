@@ -139,6 +139,11 @@ namespace ChessTheBetrayal.View
         // The Betrayer's corner brackets, likewise a single reparented instance rather than one per
         // tile. Separate from its marker because the marker rotates and these must not.
         private Transform _betrayerBracketsRoot;
+        private MeshRenderer _betrayerBracketsRenderer;
+
+        // Held so a lock that lands while the previous punch is still settling replaces it rather
+        // than fighting it.
+        private Tween _betrayerLockOnTween;
 
         private static readonly float[] SelectionTickSignX = { -1f, 1f, 1f, -1f };
         private static readonly float[] SelectionTickSignZ = { -1f, -1f, 1f, 1f };
@@ -152,6 +157,7 @@ namespace ChessTheBetrayal.View
         private Mesh _cornerBracketsMesh;
         private Mesh _betrayalMesh;
         private Mesh _betrayerAtLargeMesh;
+        private Mesh _betrayerTargetedMesh;
         private Mesh _checkFrameMesh;
 
         // One material per state, built from the palette at startup and shared across squares. These
@@ -482,6 +488,13 @@ namespace ChessTheBetrayal.View
                 tileSize * highlightPalette.BetrayerChevronLengthRatio,
                 tileSize * highlightPalette.BetrayerChevronHalfWidthRatio,
                 segments);
+            // Same shape, chevrons driven deeper — the lock closing on its target.
+            _betrayerTargetedMesh = GenerateBetrayerMarkerMesh(
+                tileSize * highlightPalette.BetrayalRingRadiusRatio,
+                tileSize * highlightPalette.CaptureRingThicknessRatio,
+                tileSize * highlightPalette.BetrayerTargetedChevronLengthRatio,
+                tileSize * highlightPalette.BetrayerChevronHalfWidthRatio,
+                segments);
 
             float frameOuter = tileSize * highlightPalette.CheckFrameSizeRatio;
             _checkFrameMesh = GenerateFrameMesh(frameOuter, frameOuter * highlightPalette.CheckFrameThicknessRatio);
@@ -588,10 +601,10 @@ namespace ChessTheBetrayal.View
 
             root.AddComponent<MeshFilter>().sharedMesh = _cornerBracketsMesh;
 
-            MeshRenderer renderer = root.AddComponent<MeshRenderer>();
-            renderer.sharedMaterial = _markerMaterials[(int)SquareMarker.BetrayerAtLarge];
-            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            renderer.receiveShadows = false;
+            _betrayerBracketsRenderer = root.AddComponent<MeshRenderer>();
+            _betrayerBracketsRenderer.sharedMaterial = _markerMaterials[(int)SquareMarker.BetrayerAtLarge];
+            _betrayerBracketsRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            _betrayerBracketsRenderer.receiveShadows = false;
         }
 
         private static Material CreateHighlightMaterial(Shader shader, string materialName, BoardHighlightPalette.Look look)
@@ -2261,12 +2274,13 @@ namespace ChessTheBetrayal.View
             }
 
             // The Betrayer's brackets ride alongside its marker rather than inside it, so that the
-            // marker can keep rotating while they hold their corners.
-            if (highlight.Marker == SquareMarker.BetrayerAtLarge)
+            // marker can keep rotating while they hold their corners. Both of its states want them.
+            bool showsBetrayer = IsBetrayerMarker(highlight.Marker);
+            if (showsBetrayer)
             {
-                ShowBetrayerBrackets(square);
+                ShowBetrayerBrackets(square, highlight.Marker);
             }
-            else if (previous == SquareMarker.BetrayerAtLarge)
+            else if (IsBetrayerMarker(previous))
             {
                 HideBetrayerBrackets();
             }
@@ -2281,18 +2295,52 @@ namespace ChessTheBetrayal.View
             marker.sharedMaterial = _markerMaterials[(int)highlight.Marker];
             marker.enabled = true;
 
-            // The capture ring and the Betrayer hazard drive their own rotation continuously in
+            // The capture ring and the Betrayer at large drive their own rotation continuously in
             // Update() while shown, so it must not be reset out from under them here — only snapped
-            // back once a square stops showing one of them. Every other marker stays axis-aligned.
+            // back once a square stops showing one of them. Every other marker stays axis-aligned,
+            // the targeted Betrayer emphatically included: coming to rest square-on is the loudest
+            // part of the lock.
             if (highlight.Marker != SquareMarker.Capture && highlight.Marker != SquareMarker.BetrayerAtLarge)
             {
                 marker.transform.localRotation = Quaternion.identity;
             }
 
-            if (previous != highlight.Marker)
+            if (previous == highlight.Marker) return;
+
+            // A lock closing on a Betrayer already on screen must not restage it. The generic appear
+            // grows a marker from nothing, which would read as the hazard vanishing and a new one
+            // arriving rather than the same one being caught in someone's sights.
+            if (showsBetrayer && IsBetrayerMarker(previous))
+            {
+                PlayBetrayerLockOn(marker.transform);
+            }
+            else
             {
                 PlayMarkerAppear(marker.transform, square);
             }
+        }
+
+        private static bool IsBetrayerMarker(SquareMarker marker) =>
+            marker == SquareMarker.BetrayerAtLarge || marker == SquareMarker.BetrayerTargeted;
+
+        /// <summary>
+        /// Punches the Betrayer's marker as a lock takes hold, overshooting past its resting size and
+        /// settling back. Paired with the rotation stopping and the chevrons driving deeper, so the
+        /// whole mark reads as snapping onto its target rather than merely changing colour.
+        /// </summary>
+        private void PlayBetrayerLockOn(Transform markerTransform)
+        {
+            float duration = highlightPalette.BetrayerLockOnPunchDuration;
+            if (duration <= 0f)
+            {
+                markerTransform.localScale = Vector3.one;
+                return;
+            }
+
+            _betrayerLockOnTween.Stop();
+            _betrayerLockOnTween = Tween.Scale(markerTransform,
+                Vector3.one * highlightPalette.BetrayerLockOnPunchScale, Vector3.one,
+                duration, Ease.OutBack, useUnscaledTime: true);
         }
 
         /// <summary>
@@ -2331,9 +2379,11 @@ namespace ChessTheBetrayal.View
         }
 
         /// <summary>
-        /// Moves the Betrayer's corner brackets onto the given square.
+        /// Moves the Betrayer's corner brackets onto the given square, in the colour of whichever of
+        /// its two states is showing, so the corners brighten with the lock rather than sitting
+        /// there in the hunting colour while the marker inside them changes.
         /// </summary>
-        private void ShowBetrayerBrackets(Vector2Int square)
+        private void ShowBetrayerBrackets(Vector2Int square, SquareMarker state)
         {
             if (_betrayerBracketsRoot == null || !IsOnBoard(square)) return;
 
@@ -2342,6 +2392,11 @@ namespace ChessTheBetrayal.View
             {
                 _betrayerBracketsRoot.SetParent(tile, false);
                 _betrayerBracketsRoot.localPosition = new Vector3(0f, bracketYOffset, 0f);
+            }
+
+            if (_markerMaterials != null && _betrayerBracketsRenderer != null)
+            {
+                _betrayerBracketsRenderer.sharedMaterial = _markerMaterials[(int)state];
             }
 
             _betrayerBracketsRoot.gameObject.SetActive(true);
@@ -2457,6 +2512,7 @@ namespace ChessTheBetrayal.View
                 case SquareMarker.Capture: return _captureReticleMesh;
                 case SquareMarker.BetrayalTarget: return _betrayalMesh;
                 case SquareMarker.BetrayerAtLarge: return _betrayerAtLargeMesh;
+                case SquareMarker.BetrayerTargeted: return _betrayerTargetedMesh;
                 case SquareMarker.Check: return _checkFrameMesh;
                 default: return null;
             }
@@ -2551,37 +2607,47 @@ namespace ChessTheBetrayal.View
         }
 
         /// <summary>
-        /// Pulses the Betrayer hazard's glow and spins its four chevrons, the same techniques as the
-        /// check pulse and the capture reticle's spin — but only ever one square at a time, since a
-        /// second Betrayer can't be at large while the first is still unresolved, so there is no
-        /// synchronisation to worry about.
+        /// Drives the Betrayer's two states — only ever one square at a time, since a second Betrayer
+        /// cannot be at large while the first is unresolved, so there is nothing to keep in sync.
+        ///
+        /// At large it hunts: chevrons turning, a slow pulse. Targeted it holds: the turning stops
+        /// dead and the pulse doubles in rate. Motion resolving into stillness is what reads as a
+        /// lock taking hold — a mark that kept spinning would read as still searching, however much
+        /// else about it changed.
         /// </summary>
         private void UpdateBetrayerHazard()
         {
-            Material material = _markerMaterials[(int)SquareMarker.BetrayerAtLarge];
             Vector2Int square = _highlights.BetrayerSquare;
-            bool active = square != Vector2Int.Invalid;
+            bool onBoard = square != Vector2Int.Invalid && IsOnBoard(square);
+            SquareMarker state = onBoard ? _shownMarkers[square.x, square.y] : SquareMarker.None;
+            bool targeted = state == SquareMarker.BetrayerTargeted;
 
-            if (material != null)
-            {
-                if (!active)
-                {
-                    material.SetFloat(GlowProperty, highlightPalette.BetrayerAtLarge.Glow);
-                }
-                else
-                {
-                    float period = Mathf.Max(0.05f, highlightPalette.BetrayerPulsePeriod);
-                    float phase = Mathf.Sin(Time.unscaledTime * Mathf.PI * 2f / period) * 0.5f + 0.5f;
-                    material.SetFloat(GlowProperty,
-                        highlightPalette.BetrayerAtLarge.Glow + phase * highlightPalette.BetrayerPulseGlowAmount);
-                }
-            }
+            PulseBetrayerMaterial(SquareMarker.BetrayerAtLarge, highlightPalette.BetrayerAtLarge.Glow,
+                highlightPalette.BetrayerPulsePeriod, onBoard && !targeted);
+            PulseBetrayerMaterial(SquareMarker.BetrayerTargeted, highlightPalette.BetrayerTargeted.Glow,
+                highlightPalette.BetrayerTargetedPulsePeriod, targeted);
 
-            if (active && IsOnBoard(square))
+            // Only the hunting state turns. The lock is held square-on by ApplyHighlight.
+            if (onBoard && state == SquareMarker.BetrayerAtLarge)
             {
                 float spin = Time.unscaledTime * highlightPalette.BetrayerChevronRotationSpeed;
                 _markerRenderers[square.x, square.y].transform.localRotation = Quaternion.Euler(0f, spin, 0f);
             }
+        }
+
+        private void PulseBetrayerMaterial(SquareMarker marker, float baseGlow, float period, bool pulsing)
+        {
+            Material material = _markerMaterials[(int)marker];
+            if (material == null) return;
+
+            if (!pulsing)
+            {
+                material.SetFloat(GlowProperty, baseGlow);
+                return;
+            }
+
+            float phase = Mathf.Sin(Time.unscaledTime * Mathf.PI * 2f / Mathf.Max(0.05f, period)) * 0.5f + 0.5f;
+            material.SetFloat(GlowProperty, baseGlow + phase * highlightPalette.BetrayerPulseGlowAmount);
         }
 
         #endregion

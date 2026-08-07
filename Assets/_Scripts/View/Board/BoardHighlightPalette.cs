@@ -64,6 +64,9 @@ namespace ChessTheBetrayal.View
         [Tooltip("The square a Betrayer is currently standing on, while Retribution is still pending. Red rather than the betrayal violet, because hue here means intent, not mechanic: violet offers you a choice, red says kill this. Deeper and colder than the capture red so the two stay apart.")]
         [SerializeField] private Look betrayerAtLarge = new Look { Colour = new Color(1f, 0.13f, 0.22f, 0.92f), Glow = 1.8f };
 
+        [Tooltip("The Betrayer's square once a selected piece can actually reach it. Hotter and more opaque than the at-large state — this is the moment the player is being told the execution is available.")]
+        [SerializeField] private Look betrayerTargeted = new Look { Colour = new Color(1f, 0.28f, 0.14f, 1f), Glow = 2.4f };
+
         [Tooltip("The square of a king in check. Deliberately the loudest state on the board.")]
         [SerializeField] private Look check = new Look { Colour = new Color(1f, 0.22f, 0.16f, 0.9f), Glow = 2f };
 
@@ -119,6 +122,9 @@ namespace ChessTheBetrayal.View
 
         [Tooltip("Half-width of a Betrayer marker chevron's base.")]
         [SerializeField, Range(0.02f, 0.2f)] private float betrayerChevronHalfWidthRatio = 0.05f;
+
+        [Tooltip("How far the Betrayer's chevrons reach in once a piece is aimed at it. Longer than the at-large reach — the chevrons visibly close on the target as the lock takes.")]
+        [SerializeField, Range(0.02f, 0.4f)] private float betrayerTargetedChevronLengthRatio = 0.26f;
 
         [Tooltip("Outer size of the check frame. Under 1 insets it, so the king reads as sitting inside the frame.")]
         [SerializeField, Range(0.5f, 1f)] private float checkFrameSizeRatio = 0.92f;
@@ -184,13 +190,23 @@ namespace ChessTheBetrayal.View
         [Tooltip("How much glow the Betrayer marker's pulse adds at its peak, on top of its own base glow.")]
         [SerializeField, Range(0f, 3f)] private float betrayerPulseGlowAmount = 1.4f;
 
-        [Tooltip("Degrees per second the Betrayer marker's four chevrons rotate.")]
+        [Tooltip("Degrees per second the Betrayer marker's four chevrons rotate while it is at large. The turning is what makes it read as hunting; the lock stops it dead, and that stop is the whole cue.")]
         [SerializeField, Range(0f, 90f)] private float betrayerChevronRotationSpeed = 25f;
+
+        [Tooltip("Seconds for one full pulse of the Betrayer marker once it is targeted. Faster than the at-large pulse — the mark tightens as well as stops.")]
+        [SerializeField, Range(0.1f, 2f)] private float betrayerTargetedPulsePeriod = 0.45f;
+
+        [Tooltip("How far the Betrayer's marker overshoots when a lock takes hold, before settling back to its resting size.")]
+        [SerializeField, Range(1f, 1.6f)] private float betrayerLockOnPunchScale = 1.18f;
+
+        [Tooltip("Seconds for the lock-on punch to settle. Short — a lock should land, not glide.")]
+        [SerializeField, Range(0.05f, 0.5f)] private float betrayerLockOnPunchDuration = 0.13f;
 
         public Look QuietMove => quietMove;
         public Look Capture => capture;
         public Look BetrayalTarget => betrayalTarget;
         public Look BetrayerAtLarge => betrayerAtLarge;
+        public Look BetrayerTargeted => betrayerTargeted;
         public Look Check => check;
         public Look SelectedMarker => selectedMarker;
         public Look SelectedTint => selectedTint;
@@ -210,6 +226,7 @@ namespace ChessTheBetrayal.View
         public float BetrayalDiamondRatio => betrayalDiamondRatio;
         public float BetrayerChevronLengthRatio => betrayerChevronLengthRatio;
         public float BetrayerChevronHalfWidthRatio => betrayerChevronHalfWidthRatio;
+        public float BetrayerTargetedChevronLengthRatio => betrayerTargetedChevronLengthRatio;
         public float CheckFrameSizeRatio => checkFrameSizeRatio;
         public float CheckFrameThicknessRatio => checkFrameThicknessRatio;
         public float CornerTickLengthRatio => cornerTickLengthRatio;
@@ -233,6 +250,9 @@ namespace ChessTheBetrayal.View
         public float BetrayerPulsePeriod => betrayerPulsePeriod;
         public float BetrayerPulseGlowAmount => betrayerPulseGlowAmount;
         public float BetrayerChevronRotationSpeed => betrayerChevronRotationSpeed;
+        public float BetrayerTargetedPulsePeriod => betrayerTargetedPulsePeriod;
+        public float BetrayerLockOnPunchScale => betrayerLockOnPunchScale;
+        public float BetrayerLockOnPunchDuration => betrayerLockOnPunchDuration;
 
         /// <summary>
         /// Returns the look for one marker state, so callers never need a switch of their own.
@@ -245,6 +265,7 @@ namespace ChessTheBetrayal.View
                 case SquareMarker.Capture: return capture;
                 case SquareMarker.BetrayalTarget: return betrayalTarget;
                 case SquareMarker.BetrayerAtLarge: return betrayerAtLarge;
+                case SquareMarker.BetrayerTargeted: return betrayerTargeted;
                 case SquareMarker.Check: return check;
                 case SquareMarker.Selected: return selectedMarker;
                 default: return default;

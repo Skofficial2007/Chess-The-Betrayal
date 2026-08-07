@@ -73,11 +73,12 @@ namespace ChessTheBetrayal.Tests.EditMode.View
             map.AddDestination(kingSquare, isCapture: true, isBetrayal: true);
 
             Assert.That(map.Resolve(kingSquare).Marker, Is.EqualTo(SquareMarker.Check),
-                "A king in danger must never be hidden behind another marker.");
+                "A king in danger must never be hidden behind another marker — including a " +
+                "Betrayer that something is currently aiming at.");
         }
 
         [Test]
-        public void TheBetrayerAtLargeSquareOutranksACaptureDestinationOnTheSameSquare()
+        public void TheBetrayerSquareOutranksACaptureDestinationButReportsBeingTargeted()
         {
             var map = new BoardHighlightMap();
             Vector2Int betrayerSquare = Sq(5, 3);
@@ -85,9 +86,39 @@ namespace ChessTheBetrayal.Tests.EditMode.View
             map.BetrayerSquare = betrayerSquare;
             map.AddDestination(betrayerSquare, isCapture: true, isBetrayal: false);
 
+            Assert.That(map.Resolve(betrayerSquare).Marker, Is.EqualTo(SquareMarker.BetrayerTargeted),
+                "The ordinary capture marker must still lose to the Betrayer's own square, but the " +
+                "player has to be told that the piece they picked can carry out the Retribution.");
+        }
+
+        [Test]
+        public void AnUnreachableBetrayerIsAtLargeRatherThanTargeted()
+        {
+            var map = new BoardHighlightMap();
+            Vector2Int betrayerSquare = Sq(5, 3);
+
+            map.BetrayerSquare = betrayerSquare;
+            map.AddDestination(Sq(2, 2), isCapture: true, isBetrayal: false);
+
             Assert.That(map.Resolve(betrayerSquare).Marker, Is.EqualTo(SquareMarker.BetrayerAtLarge),
-                "While Retribution is pending, the Betrayer's square is also a legal capture " +
-                "destination for whichever piece can execute it — the hazard must still win.");
+                "A capture somewhere else on the board says nothing about reaching the Betrayer.");
+        }
+
+        [Test]
+        public void PuttingTheExecutionerBackDownUntargetsTheBetrayer()
+        {
+            var map = new BoardHighlightMap();
+            Vector2Int betrayerSquare = Sq(5, 3);
+
+            map.BetrayerSquare = betrayerSquare;
+            map.AddDestination(betrayerSquare, isCapture: true, isBetrayal: false);
+            Assert.That(map.Resolve(betrayerSquare).Marker, Is.EqualTo(SquareMarker.BetrayerTargeted));
+
+            map.ClearDestinations();
+
+            Assert.That(map.Resolve(betrayerSquare).Marker, Is.EqualTo(SquareMarker.BetrayerAtLarge),
+                "Cancelling the selection has to release the lock — the Betrayer is still at large, " +
+                "just no longer in anyone's sights.");
         }
 
         [Test]
