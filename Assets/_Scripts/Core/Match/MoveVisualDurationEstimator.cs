@@ -30,8 +30,19 @@ namespace ChessTheBetrayal.Core.Match
         /// </summary>
         private const float CaptureStrikeSeconds = 0.79f;
 
+        /// <summary>
+        /// A victim that dies on its own — hop, shrink and glide to the death pile — rather than
+        /// waiting to be stomped. Runs alongside whatever the attacker is doing, not after it.
+        /// </summary>
+        private const float GlideDeathSeconds = 0.34f;
+
+        /// <summary>
+        /// Collapsing the pawn away and growing its replacement back in, once the pawn has arrived.
+        /// The travel that gets it there is counted separately, from the shared curve.
+        /// </summary>
+        private const float PromotionMorphSeconds = 0.34f;
+
         private const float CastlingSeconds = 0.45f;
-        private const float PromotionSeconds = 0.5f;
 
         /// <summary>
         /// A move can match more than one shape (e.g. a capturing promotion) — callers only ever
@@ -48,21 +59,35 @@ namespace ChessTheBetrayal.Core.Match
 
             if (move.IsCapture) seconds = Max(seconds, CaptureSeconds(move));
             if (move.IsCastling) seconds = Max(seconds, CastlingSeconds);
-            if (move.IsPromotion) seconds = Max(seconds, PromotionSeconds);
+            if (move.IsPromotion) seconds = Max(seconds, PromotionSeconds(squares));
 
             return seconds + PaddingSeconds;
         }
 
         /// <summary>
-        /// The strike, plus however long the attacker spends closing on its victim first. An
-        /// attacker already beside its target strikes immediately and only owes the strike.
+        /// How long the captured piece is still on screen, which depends on which death it plays.
+        /// A victim the attacker lands on waits out the whole strike, including the run-up closing
+        /// on it. One that dies on its own — en passant, or a capture that also promotes — glides
+        /// off under its own steam and is gone well before that.
         /// </summary>
         private static float CaptureSeconds(MoveCommand move)
         {
+            if (CaptureFate.Of(move) != CapturedPieceFate.CrushedByTheStamp) return GlideDeathSeconds;
+
             int runUp = CaptureApproach.RunUpSquares(move.StartPosition, move.EndPosition, move.PieceType);
             if (runUp == 0) return CaptureStrikeSeconds;
 
             return CaptureStrikeSeconds + MoveTravelTiming.ChargeSecondsForSquares(runUp);
+        }
+
+        /// <summary>
+        /// The pawn's walk onto the last rank plus the morph waiting for it there. A pawn promotes
+        /// exactly one square, but the travel is taken from the same curve as any other glide
+        /// rather than hard-coded, so retuning that curve carries the budget with it.
+        /// </summary>
+        private static float PromotionSeconds(int squares)
+        {
+            return MoveTravelTiming.SecondsForSquares(squares) + PromotionMorphSeconds;
         }
 
         private static float Max(float a, float b) => a > b ? a : b;

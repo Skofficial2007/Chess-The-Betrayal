@@ -66,6 +66,31 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Match
         }
 
         [Test]
+        public void EnPassantIsNotHeldForAStompItNeverPlays()
+        {
+            // The attacker lands on an empty square beside its victim, so there is no strike to
+            // wait out — only the victim's own glide off the board. Budgeting the full stomp here
+            // left half a second of dead air after every en passant.
+            MoveCommand enPassant = MoveCommand.CreateEnPassantMove(
+                Sq(4, 4), Sq(5, 5), Pawn(), Enemy(), Sq(5, 4));
+
+            Assert.That(MoveVisualDurationEstimator.EstimateSeconds(enPassant),
+                Is.LessThan(MeasuredStrikeSeconds));
+        }
+
+        [Test]
+        public void ACapturingPromotionIsNotHeldForAStompItNeverPlays()
+        {
+            // Same reasoning: the pawn is replaced the moment it arrives, so nothing is left to do
+            // the stomping and the victim clears the square on its own.
+            MoveCommand capturingPromotion = MoveCommand.CreatePromotionMove(
+                Sq(4, 6), Sq(5, 7), Pawn(), ChessPieceType.Queen, Enemy());
+
+            Assert.That(MoveVisualDurationEstimator.EstimateSeconds(capturingPromotion),
+                Is.LessThan(MeasuredStrikeSeconds));
+        }
+
+        [Test]
         public void AKnightsCaptureIsNotChargedForARunUpItNeverPlays()
         {
             float knight = MoveVisualDurationEstimator.EstimateSeconds(Capture(Sq(1, 0), Sq(2, 2), ChessPieceType.Knight));
@@ -121,6 +146,19 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Match
 
             // 0.12 collapsing out, then the longer of the 0.20 grow-in and the 0.22 pop hop.
             Assert.That(MoveVisualDurationEstimator.EstimateSeconds(promotion), Is.GreaterThanOrEqualTo(0.34f));
+        }
+
+        [Test]
+        public void APromotionIsBudgetedForTheWalkOntoTheLastRankAsWellAsTheMorph()
+        {
+            // The pawn is seen arriving before it turns into anything, so the budget owes both
+            // legs. Counting only the morph would release the next move while the pawn was still
+            // walking.
+            MoveCommand promotion = MoveCommand.CreatePromotionMove(
+                Sq(4, 6), Sq(4, 7), Pawn(), ChessPieceType.Queen);
+
+            Assert.That(MoveVisualDurationEstimator.EstimateSeconds(promotion),
+                Is.GreaterThanOrEqualTo(MoveTravelTiming.SecondsForSquares(1) + 0.34f));
         }
 
         [Test]

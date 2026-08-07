@@ -1,6 +1,6 @@
 using ChessTheBetrayal.Core.Engine;
 
-namespace ChessTheBetrayal.View
+namespace ChessTheBetrayal.Core.Match
 {
     /// <summary>What becomes of the piece a move takes.</summary>
     public enum CapturedPieceFate
@@ -30,6 +30,11 @@ namespace ChessTheBetrayal.View
     /// on the board belonging to no collection at all: not on the board, not in the death pile, and
     /// so not even reachable by the teardown that clears a match. Deciding it here, once, from the
     /// move itself, is what stops a future branch doing the same thing.
+    ///
+    /// Sits beside CaptureApproach and MoveVisualDurationEstimator for the reason recorded there:
+    /// the view plays these deaths and the move pacing has to budget for them, and the two live in
+    /// assemblies that cannot see each other. Budgeting for the wrong death is how en passant came
+    /// to be held for a stomp it never plays.
     /// </summary>
     public static class CaptureFate
     {

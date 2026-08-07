@@ -1,10 +1,10 @@
 using NUnit.Framework;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
-using ChessTheBetrayal.View;
+using ChessTheBetrayal.Core.Match;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
-namespace ChessTheBetrayal.Tests.EditMode.View
+namespace ChessTheBetrayal.Tests.EditMode.Core.Match
 {
     /// <summary>
     /// Which death a captured piece plays. This used to be decided halfway down the branch that
