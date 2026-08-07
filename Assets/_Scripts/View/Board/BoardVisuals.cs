@@ -2528,7 +2528,11 @@ namespace ChessTheBetrayal.View
             float duration = highlightPalette.BetrayerLockBracketDuration;
             _betrayerBracketTween.Stop();
 
-            if (duration <= 0f)
+            // A state change does not always mean the brackets have anywhere to go — arriving at the
+            // at-large state finds them already open, which is a change of state with no change of
+            // size. Animating that is a tween from a value to itself: it does nothing, and it makes
+            // the tween library rightly complain.
+            if (duration <= 0f || Mathf.Approximately(_betrayerBracketsRoot.localScale.x, target))
             {
                 _betrayerBracketsRoot.localScale = Vector3.one * target;
                 return;
