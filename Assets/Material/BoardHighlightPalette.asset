@@ -22,8 +22,8 @@ MonoBehaviour:
     Colour: {r: 0.72, g: 0.36, b: 0.98, a: 0.85}
     Glow: 1.4
   betrayerAtLarge:
-    Colour: {r: 0.72, g: 0.36, b: 0.98, a: 0.9}
-    Glow: 1.6
+    Colour: {r: 1, g: 0.13, b: 0.22, a: 0.92}
+    Glow: 1.8
   check:
     Colour: {r: 1, g: 0.22, b: 0.16, a: 0.9}
     Glow: 2

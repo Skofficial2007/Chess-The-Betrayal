@@ -7,16 +7,30 @@ namespace ChessTheBetrayal.View
     /// Every colour and dimension the board's square markers use, in one asset you can edit while
     /// the game runs. Nothing else in the project decides what a highlight looks like.
     ///
-    /// Two rules shaped these defaults, and both are worth keeping if you retune them:
+    /// Three rules shaped these defaults, and all three are worth keeping if you retune them:
     ///
-    /// Meaning is carried by SHAPE first and colour second — a dot for a quiet move, a ring for a
-    /// capture, a ringed diamond for a betrayal, a frame for check. Roughly one man in twelve cannot
-    /// separate the green from the red, so a board that encodes "move" and "capture" as hue alone is
-    /// unreadable to them. Every state here stays distinguishable in greyscale.
+    /// Meaning is carried by SHAPE first and colour second — a dot for a quiet move, a bracketed
+    /// ring for a capture, a ringed diamond for a betrayal, a frame for check. Roughly one man in
+    /// twelve cannot separate the green from the red, so a board that encodes "move" and "capture"
+    /// as hue alone is unreadable to them. Every state here stays distinguishable in greyscale.
+    /// That rule is why three different states can share red: check, capture and a betrayer at
+    /// large all mean "this piece dies", and they are told apart by silhouette and motion. Check is
+    /// a pulsing square frame, a capture is a still bracketed ring, a betrayer is a ring whose
+    /// chevrons turn. They also cannot appear together — while a Retribution is pending the only
+    /// legal moves target the betrayer's own square, and that square shows the betrayer.
+    ///
+    /// Anything marking a square that HAS A PIECE ON IT must put its meaning on the tile's edges and
+    /// corners, never its middle. The pieces are two to three times taller than a square is wide, so
+    /// from a tilted camera the piece hides the whole far half of anything drawn flat around it. The
+    /// middle of a tile is only safe for states whose square is empty by definition, like the
+    /// quiet-move dot.
     ///
     /// Glow is spent only where it means danger. Bloom in the scene's volume profile starts lifting
     /// at a threshold of 1.0, so a state only blooms once its colour times (1 + glow) clears that.
     /// Calm states are deliberately left below it; if everything glows, nothing reads as urgent.
+    /// Watch the individual channels, not the swatch: violet at glow 1.4 takes its blue to 2.3x the
+    /// threshold while its green stays under, which is why it reads on screen as magenta-pink rather
+    /// than the purple the colour picker shows.
     /// </summary>
     [CreateAssetMenu(menuName = "Chess/Board Highlight Palette", fileName = "BoardHighlightPalette")]
     public class BoardHighlightPalette : ScriptableObject
@@ -47,8 +61,8 @@ namespace ChessTheBetrayal.View
         [Tooltip("A square where this move would begin a Betrayal. Its own hue AND its own shape, so it can never be mistaken for an ordinary capture.")]
         [SerializeField] private Look betrayalTarget = new Look { Colour = new Color(0.72f, 0.36f, 0.98f, 0.85f), Glow = 1.4f };
 
-        [Tooltip("The square a Betrayer is currently standing on, while Retribution is still pending. Same hue as betrayalTarget so the mechanic keeps one colour end to end, but louder — this is the live hazard, not a move you could choose to make.")]
-        [SerializeField] private Look betrayerAtLarge = new Look { Colour = new Color(0.72f, 0.36f, 0.98f, 0.9f), Glow = 1.6f };
+        [Tooltip("The square a Betrayer is currently standing on, while Retribution is still pending. Red rather than the betrayal violet, because hue here means intent, not mechanic: violet offers you a choice, red says kill this. Deeper and colder than the capture red so the two stay apart.")]
+        [SerializeField] private Look betrayerAtLarge = new Look { Colour = new Color(1f, 0.13f, 0.22f, 0.92f), Glow = 1.8f };
 
         [Tooltip("The square of a king in check. Deliberately the loudest state on the board.")]
         [SerializeField] private Look check = new Look { Colour = new Color(1f, 0.22f, 0.16f, 0.9f), Glow = 2f };
