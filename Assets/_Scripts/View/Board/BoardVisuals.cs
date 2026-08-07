@@ -1381,14 +1381,14 @@ namespace ChessTheBetrayal.View
             {
                 _piecesByPosition.Remove(move.StartPosition);
 
-                // Handle Promotion: play the pawn's vanish animation, then — once it completes —
-                // destroy it and spawn the promoted piece with its own reveal animation. The swap
-                // is deferred to PlayTransitionOut's callback (which may fire on a later frame)
-                // rather than happening immediately, so the pawn is visibly seen collapsing into
-                // its new form instead of jump-cutting. The fields we need are copied into locals
-                // up front because `move` is a snapshot on this method's stack — by the time the
-                // callback runs, only what the closure explicitly captured is still guaranteed to
-                // hold the right values.
+                // Handle Promotion: walk the pawn onto the last rank, play its vanish animation
+                // there, then — once that completes — destroy it and spawn the promoted piece with
+                // its own reveal animation. Each step is deferred to the previous one's callback
+                // (which may fire many frames later) rather than happening immediately, so the pawn
+                // is seen arriving and then visibly collapsing into its new form instead of
+                // jump-cutting. The fields we need are copied into locals up front because `move`
+                // is a snapshot on this method's stack — by the time the callbacks run, only what
+                // the closures explicitly captured is still guaranteed to hold the right values.
                 if (move.IsPromotion)
                 {
                     Vector2Int promotionPos = move.EndPosition;

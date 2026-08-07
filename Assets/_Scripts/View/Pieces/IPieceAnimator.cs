@@ -20,10 +20,15 @@ namespace ChessTheBetrayal.View
     }
 
     /// <summary>
-    /// The visual feel of a board-move glide. Quiet is a plain slide; Capture adds a landing
-    /// impact punch to sell contact; Knight arcs over the board (it "hops" rather than slides
-    /// through occupied squares, matching how the piece actually moves); Promotion is a slower,
-    /// punch-free glide since the morph itself (PlayTransitionOut/In) is the payoff beat.
+    /// The visual feel of a board-move glide. Quiet is a plain slide, and the only one whose
+    /// duration follows the distance covered; Knight arcs over the board (it "hops" rather than
+    /// slides through occupied squares, matching how the piece actually moves); Promotion is a
+    /// slower, punch-free glide since the morph itself (PlayTransitionOut/In) is the payoff beat.
+    ///
+    /// Capture adds a landing impact punch to sell contact, but it is no longer how most captures
+    /// look: a piece landing on its victim plays the far heavier stamp instead (PlayCaptureStamp).
+    /// What is left for this style is en passant, where the attacker lands beside its victim rather
+    /// than on it, and a takeback, where the victim has already gone and there is nothing to land on.
     /// </summary>
     public enum MoveStyle
     {
