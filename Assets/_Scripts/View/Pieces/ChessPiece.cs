@@ -100,6 +100,16 @@ namespace ChessTheBetrayal.View
         }
 
         /// <summary>
+        /// Walks a promoting pawn onto the last rank and reports when it arrives, so the swap into
+        /// its new piece can wait for it. Reports immediately if the pawn is already standing there
+        /// — see PrimeTweenPieceAnimator.PlayPromotionApproach.
+        /// </summary>
+        public void PlayPromotionApproach(Vector3 worldPos, int squaresTravelled, Action onArrived)
+        {
+            _animator.PlayPromotionApproach(worldPos, squaresTravelled, onArrived);
+        }
+
+        /// <summary>
         /// Plays a small settle bob in place — used on the king's side of a castling move so both
         /// pieces end the maneuver with the same tiny "landed" beat.
         /// </summary>

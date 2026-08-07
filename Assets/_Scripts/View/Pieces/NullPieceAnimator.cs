@@ -36,6 +36,12 @@ namespace ChessTheBetrayal.View
             onSettled?.Invoke();
         }
 
+        public void PlayPromotionApproach(Vector3 worldPos, int squaresTravelled, Action onArrived)
+        {
+            _transform.position = worldPos;
+            onArrived?.Invoke();
+        }
+
         public void PlaySettleBob() { }
 
         // No stomp to play headlessly — just arrive and fire both callbacks synchronously so

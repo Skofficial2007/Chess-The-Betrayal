@@ -239,6 +239,7 @@ namespace ChessTheBetrayal.View
         private Tween _scaleTween;
         private Sequence _transitionSequence;
         private Sequence _castleSequence;
+        private Sequence _promotionApproachSequence;
         private Tween _settleBobTween;
         private float? _settleBobBaseY;
         private Sequence _stampSequence;
@@ -405,6 +406,42 @@ namespace ChessTheBetrayal.View
                     PlaySettleBob();
                     onSettled?.Invoke();
                 });
+        }
+
+        public void PlayPromotionApproach(Vector3 worldPos, int squaresTravelled, Action onArrived)
+        {
+            if (!IsFinite(worldPos))
+            {
+                Debug.LogWarning($"[{nameof(PrimeTweenPieceAnimator)}] PlayPromotionApproach given non-finite vector for {_transform.name}. Ignoring.");
+                onArrived?.Invoke();
+                return;
+            }
+
+            _moveTween.Stop();
+            _punchSequence.Stop();
+            _castleSequence.Stop();
+            _settleBobTween.Stop();
+            _settleBobBaseY = null;
+            _stampSequence.Stop();
+            _promotionApproachSequence.Stop();
+            StopLiftTweens();
+            _liftRestPosition = null;
+            HideSelectionOutline(instant: true);
+
+            // Already standing there, so there is nothing to watch and the morph should start now.
+            // This is the human's pawn: it walks onto the square while the promotion prompt is
+            // open, so by the time a choice comes back it has long since arrived. Reporting
+            // straight away keeps that path exactly as it was rather than making the player wait
+            // through a second walk they already watched.
+            if (_transform.position == worldPos)
+            {
+                onArrived?.Invoke();
+                return;
+            }
+
+            _promotionApproachSequence = Sequence.Create(useUnscaledTime: true)
+                .Chain(Tween.Position(_transform, worldPos, MoveTravelTiming.SecondsForSquares(squaresTravelled), BoardMoveEase, useUnscaledTime: true))
+                .ChainCallback(() => onArrived?.Invoke());
         }
 
         public void PlaySettleBob()

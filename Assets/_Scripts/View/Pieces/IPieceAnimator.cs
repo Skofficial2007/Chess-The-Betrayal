@@ -96,6 +96,14 @@ namespace ChessTheBetrayal.View
         void MoveToForCastle(Vector3 worldPos, float startDelay, Action onSettled = null);
 
         /// <summary>
+        /// Walks a promoting pawn onto the last rank and reports when it gets there, so the morph
+        /// that replaces it can wait until it has been seen arriving. A pawn that is already
+        /// standing on the square reports immediately rather than tweening nowhere — that is the
+        /// human's pawn, which walks across while the promotion prompt is still open.
+        /// </summary>
+        void PlayPromotionApproach(Vector3 worldPos, int squaresTravelled, Action onArrived);
+
+        /// <summary>
         /// Plays a small (millimeter-scale) settle bob in place — the tail end of the castling
         /// choreography once a piece has already arrived at its destination. Not a standalone
         /// move; callers are expected to have already positioned the piece.

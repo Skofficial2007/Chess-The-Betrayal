@@ -1396,23 +1396,34 @@ namespace ChessTheBetrayal.View
                     ChessPieceType promotedType = move.PromotedTo;
                     int promotedMoveDirection = move.PieceMoveDirection;
 
-                    movingPiece.PlayTransitionOut(PieceTransitionStyle.PromotionMorph, () =>
+                    // The pawn has to be seen reaching the last rank before it turns into anything.
+                    // A human's pawn walked there already, while the promotion prompt was open, so
+                    // this reports back immediately and the morph plays exactly as it always has.
+                    // The AI is never asked what it wants, so nothing had moved its pawn: it
+                    // dissolved on the rank below while its replacement appeared on a square the
+                    // opponent never saw it reach, which read as a piece changing by teleport.
+                    movingPiece.PlayPromotionApproach(PieceWorldPosition(promotionPos), SquaresTravelled(move), onArrived: () =>
                     {
-                        // The pawn (or the whole scene) may have been destroyed while the
-                        // transition was still playing — e.g. a game reset. Unity's overloaded
-                        // == correctly reports true here even though the C# reference isn't null.
                         if (movingPiece == null) return;
-                        Destroy(movingPiece.gameObject);
 
-                        PieceData promotedData = new PieceData(
-                            team: promotedTeam,
-                            type: promotedType,
-                            moveDirection: promotedMoveDirection,
-                            startRow: 0,
-                            hasMoved: true
-                        );
-                        ChessPiece promoted = SpawnSinglePiece(promotedData, promotionPos);
-                        promoted?.PlayTransitionIn(PieceTransitionStyle.PromotionMorph);
+                        movingPiece.PlayTransitionOut(PieceTransitionStyle.PromotionMorph, () =>
+                        {
+                            // The pawn (or the whole scene) may have been destroyed while the
+                            // transition was still playing — e.g. a game reset. Unity's overloaded
+                            // == correctly reports true here even though the C# reference isn't null.
+                            if (movingPiece == null) return;
+                            Destroy(movingPiece.gameObject);
+
+                            PieceData promotedData = new PieceData(
+                                team: promotedTeam,
+                                type: promotedType,
+                                moveDirection: promotedMoveDirection,
+                                startRow: 0,
+                                hasMoved: true
+                            );
+                            ChessPiece promoted = SpawnSinglePiece(promotedData, promotionPos);
+                            promoted?.PlayTransitionIn(PieceTransitionStyle.PromotionMorph);
+                        });
                     });
                 }
                 else if (move.IsCastling)
