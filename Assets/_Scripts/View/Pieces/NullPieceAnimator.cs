@@ -41,7 +41,7 @@ namespace ChessTheBetrayal.View
         // No stomp to play headlessly — just arrive and fire both callbacks synchronously so
         // BoardVisuals' capture logic (which drives the victim's PlayStompedDeath and any queued
         // Defection spin off these) doesn't stall waiting on a tween that will never exist here.
-        public void PlayCaptureStamp(Vector3 worldPos, Action onDescentStart = null, Action onSettled = null)
+        public void PlayCaptureStamp(Vector3 worldPos, CaptureRunUp runUp = default, Action onDescentStart = null, Action onSettled = null)
         {
             _transform.position = worldPos;
             onDescentStart?.Invoke();

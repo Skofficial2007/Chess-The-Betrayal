@@ -431,9 +431,9 @@ namespace ChessTheBetrayal.View
                 .OnComplete(this, self => self._settleBobBaseY = null);
         }
 
-        public void PlayCaptureStamp(Vector3 worldPos, Action onDescentStart = null, Action onSettled = null)
+        public void PlayCaptureStamp(Vector3 worldPos, CaptureRunUp runUp = default, Action onDescentStart = null, Action onSettled = null)
         {
-            if (!IsFinite(worldPos))
+            if (!IsFinite(worldPos) || (runUp.HasGroundToCover && !IsFinite(runUp.LaunchFrom)))
             {
                 Debug.LogWarning($"[{nameof(PrimeTweenPieceAnimator)}] PlayCaptureStamp given non-finite vector for {_transform.name}. Ignoring.");
                 onDescentStart?.Invoke();
@@ -452,7 +452,11 @@ namespace ChessTheBetrayal.View
             HideSelectionOutline(instant: true);
 
             Vector3 restScale = _transform.localScale;
-            Vector3 startPos = _transform.position;
+            // Where the strike begins. With ground to cover that is the square next to the victim,
+            // not the square the piece is standing on — so the wind-up, the arc and its peak are
+            // all measured from there, and the leap stays the short pounce it was built as however
+            // far away the attacker started.
+            Vector3 startPos = runUp.HasGroundToCover ? runUp.LaunchFrom : _transform.position;
             Vector3 landPos = worldPos;
             float peakY = Mathf.Max(startPos.y, landPos.y) + StampLeapHeight;
 
@@ -478,9 +482,23 @@ namespace ChessTheBetrayal.View
             // useUnscaledTime — mixing an unscaled child into a scaled-time sequence (or vice
             // versa) is silently dropped by PrimeTween, so the sequence itself must be created
             // with useUnscaledTime up front rather than inferred from its first child.
-            _stampSequence = Sequence.Create(useUnscaledTime: true)
+            _stampSequence = Sequence.Create(useUnscaledTime: true);
+
+            // 0. The run-up, when there is one: the attacker walks in and strikes from next door.
+            // Stretched across half a board the leap stops being a pounce — a bishop leaving c1 for
+            // g5 covers eight units in the same third of a second and simply appears on top of its
+            // victim. Closing the distance first is also the honest read: the piece really did
+            // travel that far. Same glide vocabulary as any other board move, at charge pace,
+            // ending in a dead stop that the wind-up below then loads against.
+            if (runUp.HasGroundToCover)
+            {
+                _stampSequence.Chain(Tween.Position(_transform, startPos,
+                    MoveTravelTiming.ChargeSecondsForSquares(runUp.SquaresToCover), BoardMoveEase, useUnscaledTime: true));
+            }
+
+            _stampSequence
                 // 1. Anticipation: pull back and crouch down — a held breath before the pounce.
-                .Group(Tween.Position(_transform, pullBackPos, StampAnticipationDuration, StampAnticipationEase, useUnscaledTime: true))
+                .Chain(Tween.Position(_transform, pullBackPos, StampAnticipationDuration, StampAnticipationEase, useUnscaledTime: true))
                 .Group(Tween.Scale(_transform, crouchScale, StampAnticipationDuration, StampAnticipationEase, useUnscaledTime: true))
                 // 2. Leap, first half (0 -> 0.5): one driver tween computes XZ (lerp) and Y (the
                 // rising half of a parabola) from the same progress value every frame, so

@@ -1442,6 +1442,7 @@ namespace ChessTheBetrayal.View
 
                     movingPiece.PlayCaptureStamp(
                         stampTargetPos,
+                        PlanCaptureRunUp(move),
                         onDescentStart: () =>
                         {
                             if (victimForClosure == null) return;
@@ -1634,6 +1635,28 @@ namespace ChessTheBetrayal.View
             return MoveTravelTiming.SquaresApart(
                 move.StartPosition.x, move.StartPosition.y,
                 move.EndPosition.x, move.EndPosition.y);
+        }
+
+        /// <summary>
+        /// Where an attacker should strike its victim from, in world space, or no run-up when it is
+        /// already beside it. CaptureApproach decides on squares; the world position is this
+        /// class's business, since it is the one that knows how big a tile is and where the board
+        /// starts.
+        /// </summary>
+        private CaptureRunUp PlanCaptureRunUp(MoveCommand move)
+        {
+            if (!CaptureApproach.TryPlanStagingSquare(move.StartPosition, move.EndPosition, move.PieceType, out Vector2Int staging))
+            {
+                return default;
+            }
+
+            Vector3 launchFrom = GetTileCenter(staging.x, staging.y);
+            launchFrom.y += pieceYOffset;
+
+            int squares = MoveTravelTiming.SquaresApart(
+                move.StartPosition.x, move.StartPosition.y, staging.x, staging.y);
+
+            return new CaptureRunUp(launchFrom, squares);
         }
 
         /// <summary>

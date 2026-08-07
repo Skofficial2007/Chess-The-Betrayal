@@ -34,6 +34,29 @@ namespace ChessTheBetrayal.View
     }
 
     /// <summary>
+    /// The travel leg in front of a capture, for an attacker that has ground to make up before it
+    /// can strike. Default means none: the victim is already next door, which is every pawn and
+    /// king capture, and the strike plays from where the piece stands.
+    /// </summary>
+    public readonly struct CaptureRunUp
+    {
+        /// <summary>Where the attacker strikes from — the square beside its victim.</summary>
+        public readonly Vector3 LaunchFrom;
+
+        /// <summary>Squares between the attacker and that square, so the glide can be paced.</summary>
+        public readonly int SquaresToCover;
+
+        public readonly bool HasGroundToCover;
+
+        public CaptureRunUp(Vector3 launchFrom, int squaresToCover)
+        {
+            LaunchFrom = launchFrom;
+            SquaresToCover = squaresToCover;
+            HasGroundToCover = true;
+        }
+    }
+
+    /// <summary>
     /// Owns how a single piece's transform animates in response to state changes ChessPiece is
     /// told about. Kept as an interface (DIP) so BoardVisuals can keep orchestrating what happens
     /// to a piece without knowing or caring how it's animated — and so AI self-play / headless
@@ -83,7 +106,12 @@ namespace ChessTheBetrayal.View
         /// The attacker's half of a capture "stamp": anticipation pull-back, a leap that clears the
         /// victim's head while swelling ~1.15x mid-air, a straight drop onto the target, a hard
         /// flat impact squash, and an overshoot recovery back to rest scale — a cartoon
-        /// power-stomp rather than a plain slide. Fires onDescentStart the frame the downward leg
+        /// power-stomp rather than a plain slide.
+        ///
+        /// Pass a runUp when the attacker is not already beside its victim (see CaptureApproach):
+        /// the piece glides in first and the pounce plays from the square next door, so the leap
+        /// stays the short, close-quarters strike it is built as instead of being stretched across
+        /// however much board lay between them. Fires onDescentStart the frame the downward leg
         /// of the leap begins (NOT at impact): the victim's cower-shrink (PlayStompedDeath) is
         /// timed to the same fall-duration constant, so starting it at descent guarantees the
         /// victim is already small when the attacker arrives — the two never overlap at full size.
@@ -92,7 +120,7 @@ namespace ChessTheBetrayal.View
         /// capture reads as complete (e.g. a Betrayal Defection spin queued on the same piece — see
         /// BoardVisuals.SwapPieceTeam). See PrimeTweenPieceAnimator for the full timing breakdown.
         /// </summary>
-        void PlayCaptureStamp(Vector3 worldPos, Action onDescentStart = null, Action onSettled = null);
+        void PlayCaptureStamp(Vector3 worldPos, CaptureRunUp runUp = default, Action onDescentStart = null, Action onSettled = null);
 
         /// <summary>
         /// The victim's half of a capture "stamp", started at the attacker's DESCENT (not impact):

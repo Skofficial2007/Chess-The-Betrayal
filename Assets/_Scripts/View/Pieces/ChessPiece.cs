@@ -118,9 +118,9 @@ namespace ChessTheBetrayal.View
         /// happen strictly AFTER this capture reads as complete (e.g. a queued Betrayal Defection
         /// spin on this same piece).
         /// </summary>
-        public void PlayCaptureStamp(Vector3 worldPos, Action onDescentStart = null, Action onSettled = null)
+        public void PlayCaptureStamp(Vector3 worldPos, CaptureRunUp runUp = default, Action onDescentStart = null, Action onSettled = null)
         {
-            _animator.PlayCaptureStamp(worldPos, onDescentStart, onSettled);
+            _animator.PlayCaptureStamp(worldPos, runUp, onDescentStart, onSettled);
         }
 
         /// <summary>
