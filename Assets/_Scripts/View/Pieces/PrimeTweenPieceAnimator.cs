@@ -4,6 +4,7 @@ using PrimeTween;
 using UnityEngine;
 using UnityEngine.Rendering;
 using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.Core.Match;
 
 namespace ChessTheBetrayal.View
 {
@@ -24,11 +25,12 @@ namespace ChessTheBetrayal.View
         private static readonly Ease MoveEase = Ease.OutQuad;
         private static readonly Ease ScaleEase = Ease.OutQuad;
 
-        // Per-style board-move feel. Quiet/Capture are both slightly longer than the legacy flat
-        // MoveDuration so the glide reads as deliberate motion rather than a snap; Knight is a
-        // touch slower still to give the arc room to read. Capture gets a brief landing punch;
-        // Knight arcs over the board via an extra Y-height tween run in parallel with the XZ slide.
-        private const float QuietMoveDuration = 0.22f;
+        // Per-style board-move feel. A quiet glide is the one style that can cross any distance, so
+        // its duration comes from MoveTravelTiming rather than a constant — a king stepping one
+        // square and a rook crossing the board used to take the same time, which made the rook read
+        // as a jump cut. The others each only ever cover a square or two: en passant is a single
+        // diagonal, a promotion is a step onto the back rank, and every knight move is two squares
+        // by definition, so an arc that needs a little extra room to read stays a fixed value.
         private const float CaptureMoveDuration = 0.2f;
         private const float KnightMoveDuration = 0.26f;
         private const float PromotionMoveDuration = 0.28f;
@@ -272,7 +274,7 @@ namespace ChessTheBetrayal.View
             MoveToInternal(worldPos, MoveDuration, MoveEase, punch: false, arc: false, force);
         }
 
-        public void MoveTo(Vector3 worldPos, MoveStyle style, bool force = false)
+        public void MoveTo(Vector3 worldPos, MoveStyle style, int squaresTravelled = 1, bool force = false)
         {
             switch (style)
             {
@@ -287,7 +289,7 @@ namespace ChessTheBetrayal.View
                     break;
                 case MoveStyle.Quiet:
                 default:
-                    MoveToInternal(worldPos, QuietMoveDuration, BoardMoveEase, punch: false, arc: false, force);
+                    MoveToInternal(worldPos, MoveTravelTiming.SecondsForSquares(squaresTravelled), BoardMoveEase, punch: false, arc: false, force);
                     break;
             }
         }

@@ -53,8 +53,13 @@ namespace ChessTheBetrayal.View
         /// Slides the piece toward worldPos with a specific move feel — see MoveStyle. This is the
         /// board-move entry point (AnimateMove); the plain MoveTo above stays for callers that
         /// don't carry move context (death-pile placement, selection snap-back).
+        ///
+        /// squaresTravelled is how far the move covers, counting a diagonal step as one, so a glide
+        /// can be paced against the ground it has to make up instead of every move taking the same
+        /// time whatever its length. Callers that aren't moving a piece across the board (a
+        /// promotion swap in place, a snap-back) can leave it alone.
         /// </summary>
-        void MoveTo(Vector3 worldPos, MoveStyle style, bool force = false);
+        void MoveTo(Vector3 worldPos, MoveStyle style, int squaresTravelled = 1, bool force = false);
 
         /// <summary>
         /// The rook's half of a castling move: an InOutCubic glide identical in feel to

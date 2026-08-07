@@ -80,10 +80,12 @@ namespace ChessTheBetrayal.View
         /// Same as SetPosition, but with an explicit MoveStyle (quiet slide, capture punch, knight
         /// arc, promotion glide) so a board move can carry its intended feel through to the
         /// animator without BoardVisuals needing to know how each style is actually tweened.
+        /// squaresTravelled lets a glide be paced against the distance it covers — see
+        /// IPieceAnimator.MoveTo.
         /// </summary>
-        public void SetPosition(Vector3 worldPos, MoveStyle style, bool force = false)
+        public void SetPosition(Vector3 worldPos, MoveStyle style, int squaresTravelled = 1, bool force = false)
         {
-            _animator.MoveTo(worldPos, style, force);
+            _animator.MoveTo(worldPos, style, squaresTravelled, force);
         }
 
         /// <summary>

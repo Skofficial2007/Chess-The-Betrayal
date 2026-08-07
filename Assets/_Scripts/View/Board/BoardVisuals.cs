@@ -1484,7 +1484,7 @@ namespace ChessTheBetrayal.View
                     MoveStyle style = move.IsCapture
                         ? MoveStyle.Capture
                         : (move.PieceType == ChessPieceType.Knight ? MoveStyle.Knight : MoveStyle.Quiet);
-                    movingPiece.SetPosition(targetPos, style);
+                    movingPiece.SetPosition(targetPos, style, SquaresTravelled(move));
 
                     // A Betrayal Act's MoveExecutedPayload arrives after MatchDriver has already
                     // raised Initiated/RetributionPending on the BetrayalEventChannel, so the piece
@@ -1598,7 +1598,7 @@ namespace ChessTheBetrayal.View
                 // betrayal pending for it to be marking.
                 movingPiece.SetBetrayerGlow(false);
 
-                movingPiece.SetPosition(PieceWorldPosition(move.StartPosition), ReverseMoveStyle(move));
+                movingPiece.SetPosition(PieceWorldPosition(move.StartPosition), ReverseMoveStyle(move), SquaresTravelled(move));
             }
 
             if (move.IsCapture)
@@ -1622,6 +1622,18 @@ namespace ChessTheBetrayal.View
         {
             if (move.PieceType == ChessPieceType.Knight) return MoveStyle.Knight;
             return move.IsCapture ? MoveStyle.Capture : MoveStyle.Quiet;
+        }
+
+        /// <summary>
+        /// How far a move covers, counting a diagonal step as one, so a glide can be paced against
+        /// the ground it has to make up. Same number in either direction, so a takeback travels at
+        /// the pace the move itself did.
+        /// </summary>
+        private static int SquaresTravelled(MoveCommand move)
+        {
+            return MoveTravelTiming.SquaresApart(
+                move.StartPosition.x, move.StartPosition.y,
+                move.EndPosition.x, move.EndPosition.y);
         }
 
         /// <summary>
