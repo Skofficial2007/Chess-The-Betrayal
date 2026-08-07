@@ -132,6 +132,10 @@ namespace ChessTheBetrayal.View
         private Transform _selectionTicksRoot;
         private readonly Mesh[] _selectionTickMeshes = new Mesh[4];
 
+        // Held so that picking up a second piece mid-clamp can stop the first clamp instead of
+        // leaving two tweens driving the same four transforms against each other.
+        private readonly Tween[] _selectionTickTweens = new Tween[4];
+
         // The Betrayer's corner brackets, likewise a single reparented instance rather than one per
         // tile. Separate from its marker because the marker rotates and these must not.
         private Transform _betrayerBracketsRoot;
@@ -2372,15 +2376,24 @@ namespace ChessTheBetrayal.View
         /// with a slight overshoot on arrival — a grip closing onto the square rather than a badge
         /// popping out of its centre, which is what a uniform scale-up of the whole group used to
         /// read as.
+        ///
+        /// The four corners are staggered rather than fired together: closing in sequence reads as
+        /// something taking hold, where four ticks arriving on the same frame reads as one shape
+        /// appearing. Any clamp still in flight is stopped first, because picking up a second piece
+        /// before the first has settled would otherwise leave two tweens driving the same four
+        /// transforms in opposite directions.
         /// </summary>
         private void PlaySelectionClampIn()
         {
             float half = tileSize * highlightPalette.TintSizeRatio * 0.5f;
             float duration = highlightPalette.CornerTickClampDuration;
             float startRatio = highlightPalette.CornerTickClampStartRatio;
+            float stagger = highlightPalette.CornerTickClampStagger;
 
             for (int i = 0; i < 4; i++)
             {
+                _selectionTickTweens[i].Stop();
+
                 Transform tick = _selectionTicksRoot.GetChild(i);
                 Vector3 resting = new Vector3(SelectionTickSignX[i] * half, 0f, SelectionTickSignZ[i] * half);
 
@@ -2391,8 +2404,9 @@ namespace ChessTheBetrayal.View
                 }
 
                 Vector3 start = resting * startRatio;
-                Tween.LocalPosition(tick, start, resting, duration,
-                    Easing.Overshoot(highlightPalette.CornerTickClampOvershoot), useUnscaledTime: true);
+                _selectionTickTweens[i] = Tween.LocalPosition(tick, start, resting, duration,
+                    Easing.Overshoot(highlightPalette.CornerTickClampOvershoot),
+                    startDelay: i * stagger, useUnscaledTime: true);
             }
         }
 
