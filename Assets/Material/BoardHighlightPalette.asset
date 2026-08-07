@@ -54,6 +54,7 @@ MonoBehaviour:
   markerBracketLengthRatio: 0.16
   markerBracketThicknessRatio: 0.07
   betrayalRingRadiusRatio: 0.46
+  betrayerRingRadiusRatio: 0.4
   betrayalDiamondRatio: 0.16
   betrayerChevronLengthRatio: 0.14
   betrayerChevronHalfWidthRatio: 0.05
@@ -82,3 +83,5 @@ MonoBehaviour:
   betrayerTargetedPulsePeriod: 0.45
   betrayerLockOnPunchScale: 1.18
   betrayerLockOnPunchDuration: 0.13
+  betrayerLockBracketScale: 0.78
+  betrayerLockBracketDuration: 0.2

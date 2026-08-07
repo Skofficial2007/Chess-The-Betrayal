@@ -114,6 +114,9 @@ namespace ChessTheBetrayal.View
         [Tooltip("Outer radius of the betrayal marker's ring.")]
         [SerializeField, Range(0.2f, 0.5f)] private float betrayalRingRadiusRatio = 0.46f;
 
+        [Tooltip("Outer radius of the Betrayer's ring. Deliberately smaller than the betrayal target's — the corner brackets close inward onto this ring when a lock takes, and at the target's radius there is no room between the two for that move to be visible.")]
+        [SerializeField, Range(0.2f, 0.5f)] private float betrayerRingRadiusRatio = 0.4f;
+
         [Tooltip("Half-width of the diamond inside the betrayal marker's ring.")]
         [SerializeField, Range(0.05f, 0.4f)] private float betrayalDiamondRatio = 0.16f;
 
@@ -199,6 +202,12 @@ namespace ChessTheBetrayal.View
         [Tooltip("Seconds for the lock-on punch to settle. Short — a lock should land, not glide.")]
         [SerializeField, Range(0.05f, 0.5f)] private float betrayerLockOnPunchDuration = 0.13f;
 
+        [Tooltip("How far in the Betrayer's corner brackets close when a lock takes, as a fraction of their resting size. Cannot go so low that they cross the ring — at the shipped sizes the brackets' arms reach 0.79 from centre and the ring sits at 0.60, so anything under about 0.76 starts to overlap.")]
+        [SerializeField, Range(0.5f, 1f)] private float betrayerLockBracketScale = 0.78f;
+
+        [Tooltip("Seconds for the brackets to close onto the ring. Slightly longer than the punch, so the closing reads as a movement rather than a snap.")]
+        [SerializeField, Range(0.05f, 0.6f)] private float betrayerLockBracketDuration = 0.2f;
+
         public Look QuietMove => quietMove;
         public Look Capture => capture;
         public Look BetrayalTarget => betrayalTarget;
@@ -220,6 +229,7 @@ namespace ChessTheBetrayal.View
         public float MarkerBracketLengthRatio => markerBracketLengthRatio;
         public float MarkerBracketThicknessRatio => markerBracketThicknessRatio;
         public float BetrayalRingRadiusRatio => betrayalRingRadiusRatio;
+        public float BetrayerRingRadiusRatio => betrayerRingRadiusRatio;
         public float BetrayalDiamondRatio => betrayalDiamondRatio;
         public float BetrayerChevronLengthRatio => betrayerChevronLengthRatio;
         public float BetrayerChevronHalfWidthRatio => betrayerChevronHalfWidthRatio;
@@ -249,6 +259,8 @@ namespace ChessTheBetrayal.View
         public float BetrayerTargetedPulsePeriod => betrayerTargetedPulsePeriod;
         public float BetrayerLockOnPunchScale => betrayerLockOnPunchScale;
         public float BetrayerLockOnPunchDuration => betrayerLockOnPunchDuration;
+        public float BetrayerLockBracketScale => betrayerLockBracketScale;
+        public float BetrayerLockBracketDuration => betrayerLockBracketDuration;
 
         /// <summary>
         /// Returns the look for one marker state, so callers never need a switch of their own.

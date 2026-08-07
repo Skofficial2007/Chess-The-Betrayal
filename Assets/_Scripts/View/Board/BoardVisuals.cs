@@ -148,6 +148,7 @@ namespace ChessTheBetrayal.View
         // Held so a lock that lands while the previous punch is still settling replaces it rather
         // than fighting it.
         private Tween _betrayerLockOnTween;
+        private Tween _betrayerBracketTween;
 
         private static readonly float[] SelectionTickSignX = { -1f, 1f, 1f, -1f };
         private static readonly float[] SelectionTickSignZ = { -1f, -1f, 1f, 1f };
@@ -510,15 +511,19 @@ namespace ChessTheBetrayal.View
                 tileSize * highlightPalette.CaptureRingThicknessRatio,
                 tileSize * highlightPalette.BetrayalDiamondRatio,
                 segments);
+            // The Betrayer's ring is smaller than the betrayal target's so its corner brackets have
+            // somewhere to close to. At the target's radius the brackets already sit almost on the
+            // ring and the lock would have nothing to travel across.
+            float betrayerRing = tileSize * highlightPalette.BetrayerRingRadiusRatio;
             _betrayerAtLargeMesh = GenerateBetrayerMarkerMesh(
-                tileSize * highlightPalette.BetrayalRingRadiusRatio,
+                betrayerRing,
                 tileSize * highlightPalette.CaptureRingThicknessRatio,
                 tileSize * highlightPalette.BetrayerChevronLengthRatio,
                 tileSize * highlightPalette.BetrayerChevronHalfWidthRatio,
                 segments);
             // Same shape, chevrons driven deeper — the lock closing on its target.
             _betrayerTargetedMesh = GenerateBetrayerMarkerMesh(
-                tileSize * highlightPalette.BetrayalRingRadiusRatio,
+                betrayerRing,
                 tileSize * highlightPalette.CaptureRingThicknessRatio,
                 tileSize * highlightPalette.BetrayerTargetedChevronLengthRatio,
                 tileSize * highlightPalette.BetrayerChevronHalfWidthRatio,
@@ -2338,7 +2343,7 @@ namespace ChessTheBetrayal.View
             bool showsBetrayer = IsBetrayerMarker(highlight.Marker);
             if (showsBetrayer)
             {
-                ShowBetrayerBrackets(square, highlight.Marker);
+                ShowBetrayerBrackets(square, highlight.Marker, stateChanged: previous != highlight.Marker);
             }
             else if (IsBetrayerMarker(previous))
             {
@@ -2443,7 +2448,7 @@ namespace ChessTheBetrayal.View
         /// its two states is showing, so the corners brighten with the lock rather than sitting
         /// there in the hunting colour while the marker inside them changes.
         /// </summary>
-        private void ShowBetrayerBrackets(Vector2Int square, SquareMarker state)
+        private void ShowBetrayerBrackets(Vector2Int square, SquareMarker state, bool stateChanged)
         {
             if (_betrayerBracketsRoot == null || !IsOnBoard(square)) return;
 
@@ -2460,6 +2465,31 @@ namespace ChessTheBetrayal.View
             }
 
             _betrayerBracketsRoot.gameObject.SetActive(true);
+
+            // All four brackets are one mesh on one transform, so scaling that transform drags every
+            // corner toward the centre at once — the close IS a uniform scale, no per-corner work.
+            float target = state == SquareMarker.BetrayerTargeted
+                ? highlightPalette.BetrayerLockBracketScale
+                : 1f;
+
+            if (!stateChanged)
+            {
+                // A redraw caused by something else on the board must not restart the close.
+                if (!_betrayerBracketTween.isAlive) _betrayerBracketsRoot.localScale = Vector3.one * target;
+                return;
+            }
+
+            float duration = highlightPalette.BetrayerLockBracketDuration;
+            _betrayerBracketTween.Stop();
+
+            if (duration <= 0f)
+            {
+                _betrayerBracketsRoot.localScale = Vector3.one * target;
+                return;
+            }
+
+            _betrayerBracketTween = Tween.Scale(_betrayerBracketsRoot, Vector3.one * target, duration,
+                Ease.OutBack, useUnscaledTime: true);
         }
 
         /// <summary>
@@ -2470,6 +2500,9 @@ namespace ChessTheBetrayal.View
         {
             if (_betrayerBracketsRoot == null) return;
 
+            // Reset the close, or the next Betrayal would open with brackets already drawn in.
+            _betrayerBracketTween.Stop();
+            _betrayerBracketsRoot.localScale = Vector3.one;
             _betrayerBracketsRoot.gameObject.SetActive(false);
         }
 
