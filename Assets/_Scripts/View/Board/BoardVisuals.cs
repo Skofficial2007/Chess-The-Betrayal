@@ -44,12 +44,16 @@ namespace ChessTheBetrayal.View
         [Header("Board Highlights")]
         [Tooltip("Every colour and dimension the square markers use. Retune the board's look by editing that asset — nothing on this component decides it.")]
         [SerializeField] private BoardHighlightPalette highlightPalette;
-        [Tooltip("Height of a square's tint above the tile surface.")]
-        [SerializeField] private float tintYOffset = 0.01f;
-        [Tooltip("Height of a square's marker above the tile surface. Keep this above tintYOffset — two transparent shapes at the same height flicker against each other as the camera moves.")]
-        [SerializeField] private float markerYOffset = 0.02f;
-        [Tooltip("Height of a square's corner brackets above the tile surface. Keep this between tintYOffset and markerYOffset — two transparent shapes at the same height flicker against each other as the camera moves.")]
-        [SerializeField] private float bracketYOffset = 0.015f;
+
+        [Tooltip("Height of the board model's playing surface, measured the same way tilesYOffset is. This is the surface a player actually sees: the tile quads sitting above it carry a white multiply material, which changes nothing on screen, so they are invisible and exist only to be raycast against. Highlights are seated against THIS, not against the tiles, or they end up floating well above the board.")]
+        [SerializeField] private float boardSurfaceYOffset = 0.25f;
+
+        [Tooltip("Height of a square's tint above the board's visible surface.")]
+        [SerializeField] private float tintYOffset = 0.003f;
+        [Tooltip("Height of a square's marker above the board's visible surface.")]
+        [SerializeField] private float markerYOffset = 0.005f;
+        [Tooltip("Height of a square's corner brackets above the board's visible surface.")]
+        [SerializeField] private float bracketYOffset = 0.004f;
 
         [Header("Hierarchy Containers")]
         [SerializeField] private Transform tilesParent;
@@ -194,6 +198,14 @@ namespace ChessTheBetrayal.View
         private const int KingThreatFlashCycles = 2;
 
         // Resolved once rather than hashing the same two strings on every material write.
+        // The board squares draw at 3000, so the highlights are queued explicitly above them rather
+        // than left to the usual back-to-front sort. That sort keys on distance to the camera, which
+        // is what used to force each overlay to sit at a different height just to keep a stable
+        // order — pinning the queue instead frees their heights to be whatever looks right on the
+        // board, which is the whole point of seating them against its surface.
+        private const int TintRenderQueue = 3001;
+        private const int MarkerRenderQueue = 3002;
+
         private static readonly int BaseColourProperty = Shader.PropertyToID("_BaseColor");
         private static readonly int GlowProperty = Shader.PropertyToID("_Glow");
 
@@ -407,10 +419,10 @@ namespace ChessTheBetrayal.View
                     // Tint lowest, then the corner brackets, then the marker on top. The tint and
                     // marker take their mesh per state; the brackets are the same shape whoever is
                     // using them, so only their material changes.
-                    _tintRenderers[x, y] = CreateOverlay(tileGO.transform, $"Tint_{x}_{y}", tintYOffset, null, initialTint, out MeshFilter tintFilter);
+                    _tintRenderers[x, y] = CreateOverlay(tileGO.transform, $"Tint_{x}_{y}", OverlayLocalY(tintYOffset), null, initialTint, out MeshFilter tintFilter);
                     _tintFilters[x, y] = tintFilter;
-                    _bracketRenderers[x, y] = CreateOverlay(tileGO.transform, $"Brackets_{x}_{y}", bracketYOffset, _cornerBracketsMesh, initialMarker, out _);
-                    _markerRenderers[x, y] = CreateOverlay(tileGO.transform, $"Marker_{x}_{y}", markerYOffset, null, initialMarker, out MeshFilter markerFilter);
+                    _bracketRenderers[x, y] = CreateOverlay(tileGO.transform, $"Brackets_{x}_{y}", OverlayLocalY(bracketYOffset), _cornerBracketsMesh, initialMarker, out _);
+                    _markerRenderers[x, y] = CreateOverlay(tileGO.transform, $"Marker_{x}_{y}", OverlayLocalY(markerYOffset), null, initialMarker, out MeshFilter markerFilter);
                     _markerFilters[x, y] = markerFilter;
 
                     // Store references
@@ -419,6 +431,19 @@ namespace ChessTheBetrayal.View
                 }
             }
         }
+
+        /// <summary>
+        /// Turns a height above the board's visible surface into a local offset under a tile.
+        ///
+        /// The two are not the same place. The tile quads sit above the board model, and they are
+        /// invisible — a white multiply material changes nothing it draws over — so seating a
+        /// highlight against a tile leaves it hanging in the air above the surface the player can
+        /// actually see. On a camera looking down at 50 degrees, every unit of that height slides the
+        /// mark most of a unit sideways from the square it belongs to, which is what makes a decal
+        /// read as hovering rather than lying on the board.
+        /// </summary>
+        private float OverlayLocalY(float heightAboveBoard) =>
+            boardSurfaceYOffset - tilesYOffset + heightAboveBoard;
 
         /// <summary>
         /// Adds one flat overlay child to a tile, hidden until something asks for it. A null mesh
@@ -529,13 +554,13 @@ namespace ChessTheBetrayal.View
             foreach (SquareMarker marker in System.Enum.GetValues(typeof(SquareMarker)))
             {
                 if (marker == SquareMarker.None) continue;
-                _markerMaterials[(int)marker] = CreateHighlightMaterial(shader, $"Marker_{marker}", highlightPalette.LookFor(marker));
+                _markerMaterials[(int)marker] = CreateHighlightMaterial(shader, $"Marker_{marker}", highlightPalette.LookFor(marker), MarkerRenderQueue);
             }
 
             foreach (SquareTint tint in System.Enum.GetValues(typeof(SquareTint)))
             {
                 if (tint == SquareTint.None) continue;
-                _tintMaterials[(int)tint] = CreateHighlightMaterial(shader, $"Tint_{tint}", highlightPalette.LookFor(tint));
+                _tintMaterials[(int)tint] = CreateHighlightMaterial(shader, $"Tint_{tint}", highlightPalette.LookFor(tint), TintRenderQueue);
             }
         }
 
@@ -610,9 +635,9 @@ namespace ChessTheBetrayal.View
             _betrayerBracketsRenderer.receiveShadows = false;
         }
 
-        private static Material CreateHighlightMaterial(Shader shader, string materialName, BoardHighlightPalette.Look look)
+        private static Material CreateHighlightMaterial(Shader shader, string materialName, BoardHighlightPalette.Look look, int renderQueue)
         {
-            Material material = new Material(shader) { name = materialName };
+            Material material = new Material(shader) { name = materialName, renderQueue = renderQueue };
             material.SetColor(BaseColourProperty, look.Colour.linear);
             material.SetFloat(GlowProperty, look.Glow);
             return material;
@@ -2391,7 +2416,7 @@ namespace ChessTheBetrayal.View
             if (_selectionTicksRoot.parent != tile)
             {
                 _selectionTicksRoot.SetParent(tile, false);
-                _selectionTicksRoot.localPosition = new Vector3(0f, markerYOffset, 0f);
+                _selectionTicksRoot.localPosition = new Vector3(0f, OverlayLocalY(markerYOffset), 0f);
             }
 
             _selectionTicksRoot.gameObject.SetActive(true);
@@ -2426,7 +2451,7 @@ namespace ChessTheBetrayal.View
             if (_betrayerBracketsRoot.parent != tile)
             {
                 _betrayerBracketsRoot.SetParent(tile, false);
-                _betrayerBracketsRoot.localPosition = new Vector3(0f, bracketYOffset, 0f);
+                _betrayerBracketsRoot.localPosition = new Vector3(0f, OverlayLocalY(bracketYOffset), 0f);
             }
 
             if (_markerMaterials != null && _betrayerBracketsRenderer != null)

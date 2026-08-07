@@ -4823,14 +4823,15 @@ MonoBehaviour:
   - 0
   - 0
   - 0
-  pieceYOffset: 0.2
-  pieceScaleMultiplier: 0.9
+  pieceYOffset: 0.1
+  pieceScaleMultiplier: 0.75
   deathSize: 0.5
   deathSpacing: 1.25
   highlightPalette: {fileID: 11400000, guid: a4c1e9b73d5f4e2a8b6c0d1f2e3a4b5c, type: 2}
-  tintYOffset: 0.01
-  markerYOffset: 0.02
-  bracketYOffset: 0.015
+  boardSurfaceYOffset: 0.25
+  tintYOffset: 0.003
+  markerYOffset: 0.005
+  bracketYOffset: 0.004
   tilesParent: {fileID: 608628692}
   whitePiecesParent: {fileID: 224791463}
   blackPiecesParent: {fileID: 1194650739}
