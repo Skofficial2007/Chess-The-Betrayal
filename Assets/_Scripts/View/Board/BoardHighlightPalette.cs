@@ -85,11 +85,14 @@ namespace ChessTheBetrayal.View
         [Tooltip("Outer radius of the capture reticle's grounding shadow, as a fraction of one square. Must stay under 0.5 — at exactly 0.5 it reaches the tile edge, and beyond that it spills onto the neighbouring squares.")]
         [SerializeField, Range(0.2f, 0.5f)] private float captureShadowRadiusRatio = 0.49f;
 
-        [Tooltip("How far the capture reticle's four cardinal ticks extend beyond the ring, as a fraction of one square.")]
-        [SerializeField, Range(0.02f, 0.2f)] private float captureTickLengthRatio = 0.08f;
+        [Tooltip("Footprint of the corner brackets shared by the capture, betrayal and betrayer markers, as a fraction of one square. Slightly under 1 keeps them off the tile edge.")]
+        [SerializeField, Range(0.5f, 1f)] private float markerBracketSpanRatio = 0.97f;
 
-        [Tooltip("Thickness of a capture reticle tick.")]
-        [SerializeField, Range(0.01f, 0.08f)] private float captureTickThicknessRatio = 0.025f;
+        [Tooltip("How far each corner bracket runs along its edge, as a fraction of one square. These carry the state when a tall piece hides the ring, so do not shrink them much.")]
+        [SerializeField, Range(0.05f, 0.4f)] private float markerBracketLengthRatio = 0.2f;
+
+        [Tooltip("Thickness of a corner bracket. Deliberately heavier than the selection ticks so the two read apart at a glance.")]
+        [SerializeField, Range(0.02f, 0.15f)] private float markerBracketThicknessRatio = 0.07f;
 
         [Tooltip("Outer radius of the betrayal marker's ring.")]
         [SerializeField, Range(0.2f, 0.5f)] private float betrayalRingRadiusRatio = 0.46f;
@@ -152,9 +155,6 @@ namespace ChessTheBetrayal.View
         [Tooltip("How much glow the capture breathe adds at its peak, on top of the capture state's own glow.")]
         [SerializeField, Range(0f, 2f)] private float captureBreatheGlowAmount = 0.35f;
 
-        [Tooltip("Degrees per second the capture reticle's four ticks rotate. Slow and constant, independent of the breathe.")]
-        [SerializeField, Range(0f, 60f)] private float captureTickRotationSpeed = 12f;
-
         [Tooltip("Seconds for one full pulse of the Betrayer marker's glow. Only one ever exists at a time, so this can be tuned freely without worrying about squares falling out of sync with each other.")]
         [SerializeField, Range(0.2f, 3f)] private float betrayerPulsePeriod = 0.9f;
 
@@ -180,8 +180,9 @@ namespace ChessTheBetrayal.View
         public float CaptureRingRadiusRatio => captureRingRadiusRatio;
         public float CaptureRingThicknessRatio => captureRingThicknessRatio;
         public float CaptureShadowRadiusRatio => captureShadowRadiusRatio;
-        public float CaptureTickLengthRatio => captureTickLengthRatio;
-        public float CaptureTickThicknessRatio => captureTickThicknessRatio;
+        public float MarkerBracketSpanRatio => markerBracketSpanRatio;
+        public float MarkerBracketLengthRatio => markerBracketLengthRatio;
+        public float MarkerBracketThicknessRatio => markerBracketThicknessRatio;
         public float BetrayalRingRadiusRatio => betrayalRingRadiusRatio;
         public float BetrayalDiamondRatio => betrayalDiamondRatio;
         public float BetrayerChevronLengthRatio => betrayerChevronLengthRatio;
@@ -203,7 +204,6 @@ namespace ChessTheBetrayal.View
         public float CheckPulseGlowAmount => checkPulseGlowAmount;
         public float CaptureBreathePeriod => captureBreathePeriod;
         public float CaptureBreatheGlowAmount => captureBreatheGlowAmount;
-        public float CaptureTickRotationSpeed => captureTickRotationSpeed;
         public float BetrayerPulsePeriod => betrayerPulsePeriod;
         public float BetrayerPulseGlowAmount => betrayerPulseGlowAmount;
         public float BetrayerChevronRotationSpeed => betrayerChevronRotationSpeed;
