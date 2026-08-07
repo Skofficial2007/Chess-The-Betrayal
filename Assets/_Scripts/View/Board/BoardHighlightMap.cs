@@ -20,7 +20,12 @@ namespace ChessTheBetrayal.View
     }
 
     /// <summary>
-    /// A wash across a whole square, drawn underneath any marker.
+    /// What a whole square carries underneath any marker — a wash for the states that follow what
+    /// the player is doing right now, and an outline for the two that record the move just played.
+    ///
+    /// The last move's two squares are drawn as complements: the origin as bars along its edges with
+    /// the corners left open, the destination as those same corners with the edges left open. One is
+    /// an enclosure, the other a mark, which is what tells them apart at a glance.
     /// </summary>
     public enum SquareTint
     {
@@ -147,7 +152,8 @@ namespace ChessTheBetrayal.View
         /// </summary>
         public SquareHighlight Resolve(Vector2Int square)
         {
-            return new SquareHighlight(ResolveTint(square), ResolveMarker(square));
+            SquareMarker marker = ResolveMarker(square);
+            return new SquareHighlight(ResolveTint(square, marker), marker);
         }
 
         private SquareMarker ResolveMarker(Vector2Int square)
@@ -164,13 +170,45 @@ namespace ChessTheBetrayal.View
             return SquareMarker.None;
         }
 
-        private SquareTint ResolveTint(Vector2Int square)
+        private SquareTint ResolveTint(Vector2Int square, SquareMarker marker)
         {
             if (square == Selected) return SquareTint.Selected;
             if (square == Hover) return SquareTint.Hover;
             if (square == LastMoveFrom) return SquareTint.LastMoveFrom;
-            if (square == LastMoveTo) return SquareTint.LastMoveTo;
+
+            // The destination mark is drawn in the tile's corners, and so is every marker that means
+            // something is about to happen on that square. Two of them there at once is unreadable,
+            // and the one describing what you can do now outranks the one describing what already
+            // happened — so the older mark simply stands down.
+            //
+            // The square a Betrayer occupies is the square the Act moved it to, so this is also what
+            // clears the last move out of the way of a Retribution.
+            if (square == LastMoveTo)
+            {
+                return OccupiesCorners(marker) ? SquareTint.None : SquareTint.LastMoveTo;
+            }
+
             return SquareTint.None;
+        }
+
+        /// <summary>
+        /// Whether this marker claims the tile's corners. The origin mark is deliberately absent from
+        /// this reckoning: it draws along the edges instead, and the square a piece has just left is
+        /// empty, so nothing that owns corners can be sitting on it anyway.
+        /// </summary>
+        private static bool OccupiesCorners(SquareMarker marker)
+        {
+            switch (marker)
+            {
+                case SquareMarker.Capture:
+                case SquareMarker.BetrayalTarget:
+                case SquareMarker.BetrayerAtLarge:
+                case SquareMarker.BetrayerTargeted:
+                case SquareMarker.Selected:
+                    return true;
+                default:
+                    return false;
+            }
         }
 
         /// <summary>

@@ -150,8 +150,7 @@ namespace ChessTheBetrayal.View
 
         // One mesh per shape, shared by all 64 squares, built once when the board is generated.
         private Mesh _tintMesh;
-        private Mesh _lastMoveFromOutlineMesh;
-        private Mesh _lastMoveToOutlineMesh;
+        private Mesh _lastMoveEdgesMesh;
         private Mesh _dotMesh;
         private Mesh _captureReticleMesh;
         private Mesh _cornerBracketsMesh;
@@ -462,14 +461,18 @@ namespace ChessTheBetrayal.View
 
             float tintOuter = tileSize * highlightPalette.TintSizeRatio;
             _tintMesh = GenerateQuadMesh(tintOuter);
-            _lastMoveFromOutlineMesh = GenerateFrameMesh(tintOuter, tintOuter * highlightPalette.LastMoveFromOutlineThicknessRatio);
-            _lastMoveToOutlineMesh = GenerateFrameMesh(tintOuter, tintOuter * highlightPalette.LastMoveToOutlineThicknessRatio);
             _dotMesh = GenerateCircleMesh(tileSize * highlightPalette.DotRadiusRatio, segments);
-            // One bracket mesh serves every state that needs corners; only the colour differs.
+            // One bracket mesh serves every state that needs corners; only the colour differs. The
+            // last move's destination is one of them, which is why the arm length is also what sets
+            // the gap its origin mark leaves at each corner — the two interlock.
+            float bracketHalf = tileSize * highlightPalette.MarkerBracketSpanRatio * 0.5f;
+            float bracketArm = tileSize * highlightPalette.MarkerBracketLengthRatio;
             _cornerBracketsMesh = GenerateCornerBracketsMesh(
-                tileSize * highlightPalette.MarkerBracketSpanRatio * 0.5f,
-                tileSize * highlightPalette.MarkerBracketLengthRatio,
+                bracketHalf, bracketArm,
                 tileSize * highlightPalette.MarkerBracketThicknessRatio);
+            _lastMoveEdgesMesh = GenerateEdgeBarsMesh(
+                bracketHalf, bracketArm,
+                tileSize * highlightPalette.LastMoveThicknessRatio);
 
             _captureReticleMesh = GenerateCaptureReticleMesh(
                 tileSize * highlightPalette.CaptureRingRadiusRatio,
@@ -786,6 +789,38 @@ namespace ChessTheBetrayal.View
             }
 
             var mesh = new Mesh { name = "CornerBracketsMesh" };
+            mesh.vertices = vertices;
+            mesh.triangles = triangles;
+            mesh.RecalculateNormals();
+            return mesh;
+        }
+
+        /// <summary>
+        /// Builds a bar along each side of a square of half-width <paramref name="half"/>, each one
+        /// stopping <paramref name="cornerGap"/> short of both ends — the square with its corners
+        /// taken off. Marks where the last move began.
+        ///
+        /// The gap is the bracket arm length on purpose. This shape and the corner brackets are
+        /// complements: bars where the brackets are absent, brackets where the bars are absent, so
+        /// the square a piece left and the square it landed on read as one pair rather than two
+        /// unrelated marks. An enclosure for where it was, a corner mark for where it is.
+        /// </summary>
+        private static Mesh GenerateEdgeBarsMesh(float half, float cornerGap, float thickness)
+        {
+            float span = Mathf.Max(0f, half - cornerGap);
+
+            var vertices = new Vector3[4 * 4];
+            var triangles = new int[4 * 6];
+            int vertexCount = 0;
+            int triangleCount = 0;
+
+            // Top and bottom run along X, left and right along Z, each inset inward by its thickness.
+            AddBar(vertices, triangles, ref vertexCount, ref triangleCount, -span, half - thickness, span, half);
+            AddBar(vertices, triangles, ref vertexCount, ref triangleCount, -span, -half, span, -half + thickness);
+            AddBar(vertices, triangles, ref vertexCount, ref triangleCount, half - thickness, -span, half, span);
+            AddBar(vertices, triangles, ref vertexCount, ref triangleCount, -half, -span, -half + thickness, span);
+
+            var mesh = new Mesh { name = "LastMoveEdgeBarsMesh" };
             mesh.vertices = vertices;
             mesh.triangles = triangles;
             mesh.RecalculateNormals();
@@ -2519,13 +2554,9 @@ namespace ChessTheBetrayal.View
         }
 
         /// <summary>
-        /// Both last-move squares draw an outline rather than a fill, the destination's heavier than
-        /// the origin's so the direction of travel reads without an arrow.
-        ///
-        /// Outlines rather than fills for two reasons. A last-move square usually has a piece on it,
-        /// and a piece hides the middle of a tile but not its edges, so a fill was invisible exactly
-        /// when it was needed. And a fill sitting underneath a capture ring on the same square turned
-        /// both into mush — nothing now fills a square that can have a piece standing on it.
+        /// The last move's two squares draw as complements — bars along the edges where the piece
+        /// came from, the corners it left open where the piece now stands. Neither fills the middle
+        /// of a tile, which is the part a piece standing there would hide anyway.
         ///
         /// The selection and hover tints keep the filled quad: they follow what the player is doing
         /// right now, so they are allowed to be the loudest thing on their square.
@@ -2534,8 +2565,8 @@ namespace ChessTheBetrayal.View
         {
             switch (tint)
             {
-                case SquareTint.LastMoveFrom: return _lastMoveFromOutlineMesh;
-                case SquareTint.LastMoveTo: return _lastMoveToOutlineMesh;
+                case SquareTint.LastMoveFrom: return _lastMoveEdgesMesh;
+                case SquareTint.LastMoveTo: return _cornerBracketsMesh;
                 case SquareTint.None: return null;
                 default: return _tintMesh;
             }

@@ -189,14 +189,67 @@ namespace ChessTheBetrayal.Tests.EditMode.View
             Vector2Int square = Sq(3, 5);
 
             map.LastMoveTo = square;
-            map.AddDestination(square, isCapture: true, isBetrayal: false);
+            map.AddDestination(square, isCapture: false, isBetrayal: false);
 
             SquareHighlight highlight = map.Resolve(square);
 
             Assert.That(highlight.Tint, Is.EqualTo(SquareTint.LastMoveTo));
-            Assert.That(highlight.Marker, Is.EqualTo(SquareMarker.Capture),
-                "The tint and the marker are independent slots — a capture on a just-played square " +
-                "must show both.");
+            Assert.That(highlight.Marker, Is.EqualTo(SquareMarker.QuietMove),
+                "The tint and the marker are independent slots — a quiet move onto a just-played " +
+                "square must show both, because the dot sits in the middle and the last-move mark " +
+                "sits in the corners.");
+        }
+
+        [Test]
+        public void AMarkerThatOwnsTheCornersStandsTheLastMoveDestinationDown()
+        {
+            var map = new BoardHighlightMap();
+            Vector2Int square = Sq(3, 5);
+            map.LastMoveTo = square;
+
+            map.AddDestination(square, isCapture: true, isBetrayal: false);
+            Assert.That(map.Resolve(square).Tint, Is.EqualTo(SquareTint.None),
+                "A capture draws in the same corners the last-move mark does, and what you can do " +
+                "now outranks what already happened.");
+
+            map.ClearDestinations();
+            map.AddDestination(square, isCapture: true, isBetrayal: true);
+            Assert.That(map.Resolve(square).Tint, Is.EqualTo(SquareTint.None),
+                "So does a betrayal target.");
+        }
+
+        [Test]
+        public void TheBetrayerStandsTheLastMoveDestinationDownInBothOfItsStates()
+        {
+            var map = new BoardHighlightMap();
+            Vector2Int square = Sq(5, 3);
+
+            // The Act moved the Betrayer here, so its square IS the last move's destination.
+            map.LastMoveTo = square;
+            map.BetrayerSquare = square;
+
+            Assert.That(map.Resolve(square).Tint, Is.EqualTo(SquareTint.None),
+                "A Betrayer at large owns the corners.");
+
+            map.AddDestination(square, isCapture: true, isBetrayal: false);
+
+            Assert.That(map.Resolve(square).Marker, Is.EqualTo(SquareMarker.BetrayerTargeted));
+            Assert.That(map.Resolve(square).Tint, Is.EqualTo(SquareTint.None),
+                "And still owns them once a piece is aimed at it — the Retribution must not have " +
+                "the last move drawn through it.");
+        }
+
+        [Test]
+        public void TheLastMoveOriginSurvivesAMarkerOnItsSquare()
+        {
+            var map = new BoardHighlightMap();
+            Vector2Int square = Sq(4, 1);
+
+            map.LastMoveFrom = square;
+            map.AddDestination(square, isCapture: false, isBetrayal: false);
+
+            Assert.That(map.Resolve(square).Tint, Is.EqualTo(SquareTint.LastMoveFrom),
+                "The origin draws along the edges, not the corners, so nothing displaces it.");
         }
 
         [Test]
