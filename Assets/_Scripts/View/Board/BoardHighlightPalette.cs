@@ -82,8 +82,8 @@ namespace ChessTheBetrayal.View
         [Tooltip("Thickness of the capture ring, as a fraction of one square.")]
         [SerializeField, Range(0.02f, 0.2f)] private float captureRingThicknessRatio = 0.07f;
 
-        [Tooltip("Outer radius of the capture reticle's grounding shadow, as a fraction of one square. Slightly larger than the ring itself so it reads as sitting under it rather than matching its edge exactly.")]
-        [SerializeField, Range(0.2f, 0.6f)] private float captureShadowRadiusRatio = 0.52f;
+        [Tooltip("Outer radius of the capture reticle's grounding shadow, as a fraction of one square. Must stay under 0.5 — at exactly 0.5 it reaches the tile edge, and beyond that it spills onto the neighbouring squares.")]
+        [SerializeField, Range(0.2f, 0.5f)] private float captureShadowRadiusRatio = 0.49f;
 
         [Tooltip("How far the capture reticle's four cardinal ticks extend beyond the ring, as a fraction of one square.")]
         [SerializeField, Range(0.02f, 0.2f)] private float captureTickLengthRatio = 0.08f;

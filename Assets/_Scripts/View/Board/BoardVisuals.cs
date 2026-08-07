@@ -343,6 +343,13 @@ namespace ChessTheBetrayal.View
             BuildHighlightMaterials();
             BuildSelectionCornerTicks();
 
+            // Every overlay is born holding a real material. The tint and marker slots overwrite
+            // theirs the moment they show something, so which one they start with is irrelevant —
+            // what matters is that no overlay can ever exist without one. A MeshRenderer with a null
+            // material does not draw nothing, it draws Unity's magenta error shader.
+            Material initialTint = _tintMaterials?[(int)SquareTint.Selected];
+            Material initialMarker = _markerMaterials?[(int)SquareMarker.Selected];
+
             for (int x = 0; x < _tileCountX; x++)
             {
                 for (int y = 0; y < _tileCountY; y++)
@@ -383,17 +390,17 @@ namespace ChessTheBetrayal.View
                     tileGO.layer = _tileLayer;
 
                     // The shadow sits lowest of the three, then the tint, then the marker on top —
-                    // its mesh never varies (only the capture reticle ever uses it), so it can take a
-                    // fixed mesh here instead of one assigned per state.
-                    _shadowRenderers[x, y] = CreateOverlay(tileGO.transform, $"Shadow_{x}_{y}", shadowYOffset, _captureShadowMesh, out _);
+                    // its mesh and material never vary (only the capture reticle ever uses it), so
+                    // both are fixed here rather than assigned per state.
+                    _shadowRenderers[x, y] = CreateOverlay(tileGO.transform, $"Shadow_{x}_{y}", shadowYOffset, _captureShadowMesh, _captureShadowMaterial, out _);
 
                     // The square's tint sits above the shadow, so a marker always reads as being on
                     // top of both. Its mesh is null here and assigned per state in ApplyHighlight, the
                     // same as the marker slot, because the last-move origin now draws a hollow outline
                     // rather than the same filled quad every other tint uses.
-                    _tintRenderers[x, y] = CreateOverlay(tileGO.transform, $"Tint_{x}_{y}", tintYOffset, null, out MeshFilter tintFilter);
+                    _tintRenderers[x, y] = CreateOverlay(tileGO.transform, $"Tint_{x}_{y}", tintYOffset, null, initialTint, out MeshFilter tintFilter);
                     _tintFilters[x, y] = tintFilter;
-                    _markerRenderers[x, y] = CreateOverlay(tileGO.transform, $"Marker_{x}_{y}", markerYOffset, null, out MeshFilter markerFilter);
+                    _markerRenderers[x, y] = CreateOverlay(tileGO.transform, $"Marker_{x}_{y}", markerYOffset, null, initialMarker, out MeshFilter markerFilter);
                     _markerFilters[x, y] = markerFilter;
 
                     // Store references
@@ -406,8 +413,13 @@ namespace ChessTheBetrayal.View
         /// <summary>
         /// Adds one flat overlay child to a tile, hidden until something asks for it. A null mesh
         /// means the caller will assign one per state (which is what the marker slot does).
+        ///
+        /// The material is a required argument rather than something the caller may set later,
+        /// because a MeshRenderer left without one silently draws Unity's magenta error shader
+        /// instead of drawing nothing — a mistake that is invisible in code review and glaring on
+        /// screen. Passing it here makes forgetting it impossible.
         /// </summary>
-        private MeshRenderer CreateOverlay(Transform tile, string overlayName, float yOffset, Mesh mesh, out MeshFilter filter)
+        private MeshRenderer CreateOverlay(Transform tile, string overlayName, float yOffset, Mesh mesh, Material material, out MeshFilter filter)
         {
             GameObject overlay = new GameObject(overlayName);
             overlay.transform.SetParent(tile, false);
@@ -418,6 +430,7 @@ namespace ChessTheBetrayal.View
             filter.sharedMesh = mesh;
 
             MeshRenderer renderer = overlay.AddComponent<MeshRenderer>();
+            renderer.sharedMaterial = material;
             renderer.enabled = false;
 
             // These are flat decals lying on the board. Letting them cast or receive shadows would
