@@ -522,7 +522,13 @@ namespace ChessTheBetrayal.View
                 // ...then recover with a big springy overshoot back down to rest scale — this is
                 // the "settling back to its normal size" beat that closes the whole arc.
                 .Chain(Tween.Scale(_transform, restScale, StampImpactRecoverDuration, Easing.Overshoot(StampRecoverOvershoot), useUnscaledTime: true))
+                // The bob is the last thing anyone sees of the capture, so onSettled waits it out
+                // rather than firing as it starts. Callers use that moment to begin an animation
+                // that must not overlap this one — a Defection spin queued on the piece that just
+                // captured — and starting one on top of a piece still bobbing is the overlap they
+                // were trying to avoid.
                 .ChainCallback(PlaySettleBob)
+                .Chain(Tween.Delay(SettleBobDuration, useUnscaledTime: true))
                 .ChainCallback(() => onSettled?.Invoke());
         }
 
