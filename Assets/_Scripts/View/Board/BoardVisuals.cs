@@ -1653,10 +1653,8 @@ namespace ChessTheBetrayal.View
             Vector3 launchFrom = GetTileCenter(staging.x, staging.y);
             launchFrom.y += pieceYOffset;
 
-            int squares = MoveTravelTiming.SquaresApart(
-                move.StartPosition.x, move.StartPosition.y, staging.x, staging.y);
-
-            return new CaptureRunUp(launchFrom, squares);
+            return new CaptureRunUp(launchFrom,
+                CaptureApproach.RunUpSquares(move.StartPosition, move.EndPosition, move.PieceType));
         }
 
         /// <summary>

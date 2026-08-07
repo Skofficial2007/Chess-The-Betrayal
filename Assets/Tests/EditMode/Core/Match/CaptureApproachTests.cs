@@ -1,9 +1,9 @@
 using NUnit.Framework;
 using ChessTheBetrayal.Core.Data;
-using ChessTheBetrayal.View;
+using ChessTheBetrayal.Core.Match;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
-namespace ChessTheBetrayal.Tests.EditMode.View
+namespace ChessTheBetrayal.Tests.EditMode.Core.Match
 {
     /// <summary>
     /// Which captures get walked into and which are struck from where the piece stands. The rule
@@ -149,7 +149,7 @@ namespace ChessTheBetrayal.Tests.EditMode.View
 
         private static int SquaresBetween(Vector2Int a, Vector2Int b)
         {
-            return ChessTheBetrayal.Core.Match.MoveTravelTiming.SquaresApart(a.x, a.y, b.x, b.y);
+            return MoveTravelTiming.SquaresApart(a.x, a.y, b.x, b.y);
         }
     }
 }

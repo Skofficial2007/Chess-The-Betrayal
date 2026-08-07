@@ -9,14 +9,27 @@ namespace ChessTheBetrayal.Core.Match
     /// (which paces move requests against it — see MoveVisualPacingGate) can depend on the exact
     /// same numbers without Gameplay.Manager needing an assembly reference on View.
     ///
-    /// These are hand-measured upper bounds on PrimeTweenPieceAnimator's private tween durations,
-    /// not a mirror of them — that animator stays free to retune its own constants without this
-    /// estimator needing to change in lockstep, as long as it stays within the padded budget below.
+    /// Travel time is not guessed at here: it comes from MoveTravelTiming, the same source the
+    /// animator glides against, so the two cannot drift. What is still hand-measured are the beats
+    /// that happen once a piece has arrived — a strike, a castle's settle, a promotion's swap.
+    /// Those are read off the animator's sequences and padded, and the padding is what lets the
+    /// animator retune itself without this having to follow in lockstep.
     /// </summary>
     public static class MoveVisualDurationEstimator
     {
-        private const float QuietMoveSeconds = 0.3f;
-        private const float CaptureSeconds = 0.55f;
+        /// <summary>
+        /// Slack over every measured figure below, so a small retune on the animator's side cannot
+        /// silently push a move past the window budgeted for it.
+        /// </summary>
+        private const float PaddingSeconds = 0.05f;
+
+        /// <summary>
+        /// The capture strike, measured from the wind-up to the last of the settle bob: the
+        /// anticipation crouch, the leap, the impact squash, the recovery overshoot and the bob.
+        /// Not the run-up, which varies with distance and is added separately.
+        /// </summary>
+        private const float CaptureStrikeSeconds = 0.79f;
+
         private const float CastlingSeconds = 0.45f;
         private const float PromotionSeconds = 0.5f;
 
@@ -27,11 +40,31 @@ namespace ChessTheBetrayal.Core.Match
         /// </summary>
         public static float EstimateSeconds(MoveCommand move)
         {
-            float seconds = QuietMoveSeconds;
-            if (move.IsCapture) seconds = System.Math.Max(seconds, CaptureSeconds);
-            if (move.IsCastling) seconds = System.Math.Max(seconds, CastlingSeconds);
-            if (move.IsPromotion) seconds = System.Math.Max(seconds, PromotionSeconds);
-            return seconds;
+            int squares = MoveTravelTiming.SquaresApart(
+                move.StartPosition.x, move.StartPosition.y,
+                move.EndPosition.x, move.EndPosition.y);
+
+            float seconds = MoveTravelTiming.SecondsForSquares(squares);
+
+            if (move.IsCapture) seconds = Max(seconds, CaptureSeconds(move));
+            if (move.IsCastling) seconds = Max(seconds, CastlingSeconds);
+            if (move.IsPromotion) seconds = Max(seconds, PromotionSeconds);
+
+            return seconds + PaddingSeconds;
         }
+
+        /// <summary>
+        /// The strike, plus however long the attacker spends closing on its victim first. An
+        /// attacker already beside its target strikes immediately and only owes the strike.
+        /// </summary>
+        private static float CaptureSeconds(MoveCommand move)
+        {
+            int runUp = CaptureApproach.RunUpSquares(move.StartPosition, move.EndPosition, move.PieceType);
+            if (runUp == 0) return CaptureStrikeSeconds;
+
+            return CaptureStrikeSeconds + MoveTravelTiming.ChargeSecondsForSquares(runUp);
+        }
+
+        private static float Max(float a, float b) => a > b ? a : b;
     }
 }

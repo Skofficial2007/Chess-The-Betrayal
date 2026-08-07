@@ -1,8 +1,7 @@
 using ChessTheBetrayal.Core.Data;
-using ChessTheBetrayal.Core.Match;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
-namespace ChessTheBetrayal.View
+namespace ChessTheBetrayal.Core.Match
 {
     /// <summary>
     /// Decides whether a capture should be walked into before it is struck, and from which square.
@@ -14,8 +13,13 @@ namespace ChessTheBetrayal.View
     /// piece with ground to cover now closes it first and strikes from the square next door, which
     /// is both the better read and the one a person would describe if asked what happened.
     ///
-    /// No Unity types here — board squares in, board square out. BoardVisuals turns the answer into
-    /// a world position, because tile size and board origin are its business, not this rule's.
+    /// Sits here for the same reason MoveVisualDurationEstimator does, not because staging a
+    /// capture is a rule of chess: the view plays this and the move pacing has to predict it, and
+    /// those two live in assemblies that cannot reference each other. One definition keeps the
+    /// animation and the time budgeted for it from disagreeing.
+    ///
+    /// Answers in board squares only. Turning a square into a world position needs to know how big
+    /// a tile is and where the board starts, which is the view's business.
     /// </summary>
     public static class CaptureApproach
     {
@@ -33,11 +37,23 @@ namespace ChessTheBetrayal.View
         {
             staging = Vector2Int.Invalid;
 
-            if (pieceType == ChessPieceType.Knight) return false;
-            if (MoveTravelTiming.SquaresApart(from.x, from.y, to.x, to.y) < 2) return false;
+            if (RunUpSquares(from, to, pieceType) == 0) return false;
 
             staging = new Vector2Int(to.x - Step(to.x - from.x), to.y - Step(to.y - from.y));
             return true;
+        }
+
+        /// <summary>
+        /// How far the attacker travels before it strikes, or zero when it strikes where it stands.
+        /// Separate from the square itself so the move pacing can budget for the run-up without
+        /// caring where on the board it happens.
+        /// </summary>
+        public static int RunUpSquares(Vector2Int from, Vector2Int to, ChessPieceType pieceType)
+        {
+            if (pieceType == ChessPieceType.Knight) return 0;
+
+            int squares = MoveTravelTiming.SquaresApart(from.x, from.y, to.x, to.y);
+            return squares < 2 ? 0 : squares - 1;
         }
 
         private static int Step(int delta)
