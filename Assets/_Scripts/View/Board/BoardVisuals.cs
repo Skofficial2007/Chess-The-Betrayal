@@ -1333,13 +1333,12 @@ namespace ChessTheBetrayal.View
 
             // 1. Handle Captures. A direct capture (attacker lands ON the victim's tile) plays the
             // full cartoon "stamp": the attacker lunges in and stomps, the victim gets crushed flat
-            // at the exact instant of impact. En passant is captured on a DIFFERENT square than the
-            // attacker's landing tile — there's no piece-on-piece contact to stomp, so it keeps the
-            // plain squash-and-shrink death instead of a lunge onto empty air.
-            bool isDirectCaptureStamp = move.IsCapture && !move.IsEnPassant;
+            // at the exact instant of impact. Every other capture kills the victim on the spot,
+            // because the attacker never ends up standing on it as itself — see CaptureFate.
+            CapturedPieceFate victimFate = CaptureFate.Of(move);
             ChessPiece stampVictim = null;
 
-            if (move.IsCapture)
+            if (victimFate != CapturedPieceFate.NothingCaptured)
             {
                 Vector2Int capturePos = move.IsEnPassant && move.EnPassantCapturePosition.HasValue
                     ? move.EnPassantCapturePosition.Value
@@ -1349,7 +1348,7 @@ namespace ChessTheBetrayal.View
                 {
                     _piecesByPosition.Remove(capturePos);
 
-                    if (isDirectCaptureStamp)
+                    if (victimFate == CapturedPieceFate.CrushedByTheStamp)
                     {
                         // Deferred to the attacker's onImpact below (see step 2) so the victim's
                         // squash lands on the exact same frame the attacker's lunge does, rather
@@ -1416,7 +1415,7 @@ namespace ChessTheBetrayal.View
                     kingTargetPos.y += pieceYOffset;
                     movingPiece.PlayCastleMove(kingTargetPos, startDelay: 0f);
                 }
-                else if (isDirectCaptureStamp)
+                else if (victimFate == CapturedPieceFate.CrushedByTheStamp)
                 {
                     // The stamp: attacker leaps above the victim's tile and stomps down onto it.
                     // onDescentStart fires the frame the attacker begins dropping — the victim
@@ -1429,8 +1428,12 @@ namespace ChessTheBetrayal.View
                     Vector3 stampTargetPos = GetTileCenter(move.EndPosition.x, move.EndPosition.y);
                     stampTargetPos.y += pieceYOffset;
 
+                    // The stamp takes ownership of the victim from here: it is the thing that will
+                    // bury it. Handing it over clears the local, so the sweep below can tell a
+                    // victim somebody is dealing with from one nobody is.
                     ChessPiece victimForClosure = stampVictim;
                     ChessPiece attackerForClosure = movingPiece;
+                    stampVictim = null;
 
                     // Registered BEFORE the stamp starts so SwapPieceTeam knows to QUEUE (rather
                     // than immediately play) a Defection spin on this same piece if one arrives
@@ -1500,12 +1503,18 @@ namespace ChessTheBetrayal.View
                     }
                 }
             }
-            else if (stampVictim != null)
+
+            // A victim nobody claimed still has to be buried. It has already been taken off the
+            // board, so if nothing animates it away it belongs to no collection at all — not the
+            // board, not the death pile — and even clearing the match for a new game would walk
+            // straight past it and leave it standing there.
+            //
+            // Two ways to get here. The attacker was not found on its starting square, which should
+            // not happen in normal play; or the branch that ran was never the stamp's, which is how
+            // a capture that also promotes used to abandon its victim outright. Either way the
+            // plain death is the honest answer: there is no landing to crush against.
+            if (stampVictim != null)
             {
-                // Defensive: the attacker wasn't found at StartPosition (shouldn't happen in normal
-                // play) but a victim was already pulled off the board above — don't leave it stuck
-                // invisible-but-alive in the dictionary. Falls back to the plain death animation
-                // since there's no attacker to synchronize a stomp with.
                 AnimateDeath(stampVictim);
             }
 
