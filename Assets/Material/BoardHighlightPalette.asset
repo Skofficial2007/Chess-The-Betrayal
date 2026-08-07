@@ -30,9 +30,6 @@ MonoBehaviour:
   selectedMarker:
     Colour: {r: 1, g: 0.78, b: 0.25, a: 0.95}
     Glow: 0.2
-  captureShadow:
-    Colour: {r: 0, g: 0, b: 0, a: 0.25}
-    Glow: 0
   selectedTint:
     Colour: {r: 1, g: 0.78, b: 0.25, a: 0.22}
     Glow: 0
@@ -46,11 +43,12 @@ MonoBehaviour:
     Colour: {r: 0.35, g: 0.65, b: 1, a: 0.85}
     Glow: 0
   dotRadiusRatio: 0.42
-  captureRingRadiusRatio: 0.5
+  captureRingRadiusRatio: 0.43
   captureRingThicknessRatio: 0.07
-  captureShadowRadiusRatio: 0.49
+  captureRingTickLengthRatio: 0.07
+  captureRingTickThicknessRatio: 0.025
   markerBracketSpanRatio: 0.97
-  markerBracketLengthRatio: 0.2
+  markerBracketLengthRatio: 0.16
   markerBracketThicknessRatio: 0.07
   betrayalRingRadiusRatio: 0.46
   betrayalDiamondRatio: 0.16
@@ -74,6 +72,7 @@ MonoBehaviour:
   checkPulseGlowAmount: 1.2
   captureBreathePeriod: 2.2
   captureBreatheGlowAmount: 0.35
+  captureRingSpinSpeed: 18
   betrayerPulsePeriod: 0.9
   betrayerPulseGlowAmount: 1.4
   betrayerChevronRotationSpeed: 25

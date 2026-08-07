@@ -48,8 +48,8 @@ namespace ChessTheBetrayal.View
         [SerializeField] private float tintYOffset = 0.01f;
         [Tooltip("Height of a square's marker above the tile surface. Keep this above tintYOffset — two transparent shapes at the same height flicker against each other as the camera moves.")]
         [SerializeField] private float markerYOffset = 0.02f;
-        [Tooltip("Height of the capture reticle's grounding shadow above the tile surface. Keep this below tintYOffset, same reason as markerYOffset.")]
-        [SerializeField] private float shadowYOffset = 0.005f;
+        [Tooltip("Height of a square's corner brackets above the tile surface. Keep this between tintYOffset and markerYOffset — two transparent shapes at the same height flicker against each other as the camera moves.")]
+        [SerializeField] private float bracketYOffset = 0.015f;
 
         [Header("Hierarchy Containers")]
         [SerializeField] private Transform tilesParent;
@@ -120,10 +120,10 @@ namespace ChessTheBetrayal.View
         private MeshRenderer[,] _markerRenderers;
         private MeshFilter[,] _markerFilters;
 
-        // A third overlay, below the tint, that only ever shows the capture reticle's grounding
-        // shadow today. Independent of the tint slot because a capture square can already carry a
-        // last-move or selection tint at the same time.
-        private MeshRenderer[,] _shadowRenderers;
+        // A third overlay between the tint and the marker, holding the corner brackets. They get a
+        // layer of their own so the marker above them is free to turn: a bracket that rotates has
+        // left the corner it exists to hold.
+        private MeshRenderer[,] _bracketRenderers;
 
         // The selected square's four corner ticks are NOT drawn through the generic marker slot —
         // each one needs to travel toward its own corner from its own direction, which one shared
@@ -139,7 +139,6 @@ namespace ChessTheBetrayal.View
         // The Betrayer's corner brackets, likewise a single reparented instance rather than one per
         // tile. Separate from its marker because the marker rotates and these must not.
         private Transform _betrayerBracketsRoot;
-        private Mesh _betrayerBracketsMesh;
 
         private static readonly float[] SelectionTickSignX = { -1f, 1f, 1f, -1f };
         private static readonly float[] SelectionTickSignZ = { -1f, -1f, 1f, 1f };
@@ -150,7 +149,7 @@ namespace ChessTheBetrayal.View
         private Mesh _lastMoveToOutlineMesh;
         private Mesh _dotMesh;
         private Mesh _captureReticleMesh;
-        private Mesh _captureShadowMesh;
+        private Mesh _cornerBracketsMesh;
         private Mesh _betrayalMesh;
         private Mesh _betrayerAtLargeMesh;
         private Mesh _checkFrameMesh;
@@ -159,7 +158,6 @@ namespace ChessTheBetrayal.View
         // are created at runtime, so OnDestroy has to clean them up.
         private Material[] _markerMaterials;
         private Material[] _tintMaterials;
-        private Material _captureShadowMaterial;
 
         // Where every square's highlight is decided. This component only draws what it answers.
         private readonly BoardHighlightMap _highlights = new BoardHighlightMap();
@@ -346,7 +344,7 @@ namespace ChessTheBetrayal.View
             _tintFilters = new MeshFilter[_tileCountX, _tileCountY];
             _markerRenderers = new MeshRenderer[_tileCountX, _tileCountY];
             _markerFilters = new MeshFilter[_tileCountX, _tileCountY];
-            _shadowRenderers = new MeshRenderer[_tileCountX, _tileCountY];
+            _bracketRenderers = new MeshRenderer[_tileCountX, _tileCountY];
             _shownMarkers = new SquareMarker[_tileCountX, _tileCountY];
             _tileByTransform.Clear();
 
@@ -401,17 +399,12 @@ namespace ChessTheBetrayal.View
                     // Set layer
                     tileGO.layer = _tileLayer;
 
-                    // The shadow sits lowest of the three, then the tint, then the marker on top —
-                    // its mesh and material never vary (only the capture reticle ever uses it), so
-                    // both are fixed here rather than assigned per state.
-                    _shadowRenderers[x, y] = CreateOverlay(tileGO.transform, $"Shadow_{x}_{y}", shadowYOffset, _captureShadowMesh, _captureShadowMaterial, out _);
-
-                    // The square's tint sits above the shadow, so a marker always reads as being on
-                    // top of both. Its mesh is null here and assigned per state in ApplyHighlight, the
-                    // same as the marker slot, because the last-move origin now draws a hollow outline
-                    // rather than the same filled quad every other tint uses.
+                    // Tint lowest, then the corner brackets, then the marker on top. The tint and
+                    // marker take their mesh per state; the brackets are the same shape whoever is
+                    // using them, so only their material changes.
                     _tintRenderers[x, y] = CreateOverlay(tileGO.transform, $"Tint_{x}_{y}", tintYOffset, null, initialTint, out MeshFilter tintFilter);
                     _tintFilters[x, y] = tintFilter;
+                    _bracketRenderers[x, y] = CreateOverlay(tileGO.transform, $"Brackets_{x}_{y}", bracketYOffset, _cornerBracketsMesh, initialMarker, out _);
                     _markerRenderers[x, y] = CreateOverlay(tileGO.transform, $"Marker_{x}_{y}", markerYOffset, null, initialMarker, out MeshFilter markerFilter);
                     _markerFilters[x, y] = markerFilter;
 
@@ -466,22 +459,22 @@ namespace ChessTheBetrayal.View
             _lastMoveFromOutlineMesh = GenerateFrameMesh(tintOuter, tintOuter * highlightPalette.LastMoveFromOutlineThicknessRatio);
             _lastMoveToOutlineMesh = GenerateFrameMesh(tintOuter, tintOuter * highlightPalette.LastMoveToOutlineThicknessRatio);
             _dotMesh = GenerateCircleMesh(tileSize * highlightPalette.DotRadiusRatio, segments);
-            // Shared by every marker that has to stay readable with a piece standing on its square.
-            float bracketHalf = tileSize * highlightPalette.MarkerBracketSpanRatio * 0.5f;
-            float bracketLength = tileSize * highlightPalette.MarkerBracketLengthRatio;
-            float bracketThickness = tileSize * highlightPalette.MarkerBracketThicknessRatio;
+            // One bracket mesh serves every state that needs corners; only the colour differs.
+            _cornerBracketsMesh = GenerateCornerBracketsMesh(
+                tileSize * highlightPalette.MarkerBracketSpanRatio * 0.5f,
+                tileSize * highlightPalette.MarkerBracketLengthRatio,
+                tileSize * highlightPalette.MarkerBracketThicknessRatio);
 
             _captureReticleMesh = GenerateCaptureReticleMesh(
                 tileSize * highlightPalette.CaptureRingRadiusRatio,
                 tileSize * highlightPalette.CaptureRingThicknessRatio,
-                bracketHalf, bracketLength, bracketThickness,
+                tileSize * highlightPalette.CaptureRingTickLengthRatio,
+                tileSize * highlightPalette.CaptureRingTickThicknessRatio,
                 segments);
-            _captureShadowMesh = GenerateCircleMesh(tileSize * highlightPalette.CaptureShadowRadiusRatio, segments);
             _betrayalMesh = GenerateBetrayalMarkerMesh(
                 tileSize * highlightPalette.BetrayalRingRadiusRatio,
                 tileSize * highlightPalette.CaptureRingThicknessRatio,
                 tileSize * highlightPalette.BetrayalDiamondRatio,
-                bracketHalf, bracketLength, bracketThickness,
                 segments);
             _betrayerAtLargeMesh = GenerateBetrayerMarkerMesh(
                 tileSize * highlightPalette.BetrayalRingRadiusRatio,
@@ -528,8 +521,6 @@ namespace ChessTheBetrayal.View
                 if (tint == SquareTint.None) continue;
                 _tintMaterials[(int)tint] = CreateHighlightMaterial(shader, $"Tint_{tint}", highlightPalette.LookFor(tint));
             }
-
-            _captureShadowMaterial = CreateHighlightMaterial(shader, "CaptureShadow", highlightPalette.CaptureShadow);
         }
 
         /// <summary>
@@ -595,22 +586,7 @@ namespace ChessTheBetrayal.View
             root.SetActive(false);
             _betrayerBracketsRoot = root.transform;
 
-            var vertices = new Vector3[CornerBracketVertexCount];
-            var triangles = new int[CornerBracketIndexCount];
-            int vertexCount = 0;
-            int triangleCount = 0;
-
-            AppendCornerBrackets(vertices, triangles, ref vertexCount, ref triangleCount,
-                tileSize * highlightPalette.MarkerBracketSpanRatio * 0.5f,
-                tileSize * highlightPalette.MarkerBracketLengthRatio,
-                tileSize * highlightPalette.MarkerBracketThicknessRatio);
-
-            _betrayerBracketsMesh = new Mesh { name = "BetrayerBracketsMesh" };
-            _betrayerBracketsMesh.vertices = vertices;
-            _betrayerBracketsMesh.triangles = triangles;
-            _betrayerBracketsMesh.RecalculateNormals();
-
-            root.AddComponent<MeshFilter>().sharedMesh = _betrayerBracketsMesh;
+            root.AddComponent<MeshFilter>().sharedMesh = _cornerBracketsMesh;
 
             MeshRenderer renderer = root.AddComponent<MeshRenderer>();
             renderer.sharedMaterial = _markerMaterials[(int)SquareMarker.BetrayerAtLarge];
@@ -632,9 +608,6 @@ namespace ChessTheBetrayal.View
             DestroyMaterials(_tintMaterials);
             _markerMaterials = null;
             _tintMaterials = null;
-
-            if (_captureShadowMaterial != null) Destroy(_captureShadowMaterial);
-            _captureShadowMaterial = null;
         }
 
         private static void DestroyMaterials(Material[] materials)
@@ -713,27 +686,23 @@ namespace ChessTheBetrayal.View
         }
 
         /// <summary>
-        /// Builds the capture marker: the capture ring plus a bracket hugging each corner of the
-        /// tile, as one mesh.
+        /// Builds the capture marker: the ring plus four short ticks straddling its edge at the
+        /// cardinal points.
         ///
-        /// The brackets are not decoration. A capture square always has a piece standing on it, and
-        /// the pieces are two to three times taller than a square is wide, so from a tilted camera
-        /// the piece hides everything on the board behind it far past the ring's own radius — the
-        /// whole far half of the ring is gone, and what is left reads as a smear at the piece's base
-        /// rather than a ring around it. The tile corners are the furthest points from the piece and
-        /// the occlusion travels up-screen rather than sideways, so a mark placed there survives
-        /// whatever is standing on the square. The ring still carries the look when the piece is
-        /// small; the corners are what guarantee the state is readable under a Queen.
+        /// The ring turns, and a circle is the same shape at every angle — the ticks are the only
+        /// part of it that can show that. They were removed once, when the corner brackets shared
+        /// this mesh and rotating it would have swung them off the corners they exist to hold; the
+        /// brackets now live on their own layer, so the ring is free to move again.
         /// </summary>
-        private static Mesh GenerateCaptureReticleMesh(float ringOuterRadius, float ringThickness, float bracketHalf, float bracketLength, float bracketThickness, int segments)
+        private static Mesh GenerateCaptureReticleMesh(float ringOuterRadius, float ringThickness, float tickLength, float tickThickness, int segments)
         {
             Mesh ring = GenerateRingMesh(ringOuterRadius, ringThickness, segments);
 
             Vector3[] ringVertices = ring.vertices;
             int[] ringTriangles = ring.triangles;
 
-            var vertices = new Vector3[ringVertices.Length + CornerBracketVertexCount];
-            var triangles = new int[ringTriangles.Length + CornerBracketIndexCount];
+            var vertices = new Vector3[ringVertices.Length + 16];
+            var triangles = new int[ringTriangles.Length + 24];
 
             ringVertices.CopyTo(vertices, 0);
             ringTriangles.CopyTo(triangles, 0);
@@ -741,8 +710,19 @@ namespace ChessTheBetrayal.View
             int vertexCount = ringVertices.Length;
             int triangleCount = ringTriangles.Length;
 
-            AppendCornerBrackets(vertices, triangles, ref vertexCount, ref triangleCount,
-                bracketHalf, bracketLength, bracketThickness);
+            float halfTick = tickLength * 0.5f;
+            float halfThickness = tickThickness * 0.5f;
+
+            // Each bar is centred on the ring's own edge, so it reads as marking that edge rather
+            // than as something floating beside it.
+            AddBar(vertices, triangles, ref vertexCount, ref triangleCount,
+                -halfThickness, ringOuterRadius - halfTick, halfThickness, ringOuterRadius + halfTick);
+            AddBar(vertices, triangles, ref vertexCount, ref triangleCount,
+                -halfThickness, -ringOuterRadius - halfTick, halfThickness, -ringOuterRadius + halfTick);
+            AddBar(vertices, triangles, ref vertexCount, ref triangleCount,
+                ringOuterRadius - halfTick, -halfThickness, ringOuterRadius + halfTick, halfThickness);
+            AddBar(vertices, triangles, ref vertexCount, ref triangleCount,
+                -ringOuterRadius - halfTick, -halfThickness, -ringOuterRadius + halfTick, halfThickness);
 
             var mesh = new Mesh { name = "CaptureReticleMesh" };
             mesh.vertices = vertices;
@@ -756,19 +736,24 @@ namespace ChessTheBetrayal.View
         private const int CornerBracketIndexCount = 4 * 2 * 6;
 
         /// <summary>
-        /// Appends an L-shaped bracket at each corner of a square of half-width <paramref name="half"/>,
+        /// Builds an L-shaped bracket at each corner of a square of half-width <paramref name="half"/>,
         /// each one running inward along both edges from the corner it sits in.
         ///
-        /// Shared by every marker whose square has a piece standing on it, because the corners are
-        /// the only part of a tile a tall piece cannot hide (see GenerateCaptureReticleMesh). The
-        /// selection marker draws the same shape, but builds its four corners as separate meshes on
-        /// separate transforms so each can animate independently — here they are baked into one
-        /// static mesh, which is all these states need.
+        /// One mesh serves every state that needs corners — capture, betrayal target, the betrayer,
+        /// the last move's destination — because they differ only in colour, and drawing them from a
+        /// shared mesh on a layer of their own is what lets the markers above them move. Corners are
+        /// the only part of a tile a tall piece cannot hide: a piece is two to three times taller
+        /// than a square is wide, so on a tilted camera it swallows the whole far half of anything
+        /// drawn flat around it, and the occlusion runs up-screen rather than sideways.
         /// </summary>
-        private static void AppendCornerBrackets(Vector3[] vertices, int[] triangles, ref int vertexCount, ref int triangleCount,
-            float half, float length, float thickness)
+        private static Mesh GenerateCornerBracketsMesh(float half, float length, float thickness)
         {
             length = Mathf.Min(length, half);
+
+            var vertices = new Vector3[CornerBracketVertexCount];
+            var triangles = new int[CornerBracketIndexCount];
+            int vertexCount = 0;
+            int triangleCount = 0;
 
             for (int corner = 0; corner < 4; corner++)
             {
@@ -786,6 +771,12 @@ namespace ChessTheBetrayal.View
                 AddBar(vertices, triangles, ref vertexCount, ref triangleCount,
                     cornerX, cornerZ - signZ * thickness, cornerX - signX * thickness, cornerZ - signZ * length);
             }
+
+            var mesh = new Mesh { name = "CornerBracketsMesh" };
+            mesh.vertices = vertices;
+            mesh.triangles = triangles;
+            mesh.RecalculateNormals();
+            return mesh;
         }
 
         /// <summary>
@@ -794,16 +785,15 @@ namespace ChessTheBetrayal.View
         /// silhouette of its own rather than only a different colour, which keeps it distinguishable
         /// for a player who cannot separate the two hues.
         /// </summary>
-        private static Mesh GenerateBetrayalMarkerMesh(float ringRadius, float ringThickness, float diamondRadius,
-            float bracketHalf, float bracketLength, float bracketThickness, int segments)
+        private static Mesh GenerateBetrayalMarkerMesh(float ringRadius, float ringThickness, float diamondRadius, int segments)
         {
             Mesh ring = GenerateRingMesh(ringRadius, ringThickness, segments);
 
             Vector3[] ringVertices = ring.vertices;
             int[] ringTriangles = ring.triangles;
 
-            var vertices = new Vector3[ringVertices.Length + 4 + CornerBracketVertexCount];
-            var triangles = new int[ringTriangles.Length + 6 + CornerBracketIndexCount];
+            var vertices = new Vector3[ringVertices.Length + 4];
+            var triangles = new int[ringTriangles.Length + 6];
 
             ringVertices.CopyTo(vertices, 0);
             ringTriangles.CopyTo(triangles, 0);
@@ -822,14 +812,9 @@ namespace ChessTheBetrayal.View
             triangles[triangleIndex + 4] = baseIndex + 2;
             triangles[triangleIndex + 5] = baseIndex + 3;
 
-            // The diamond sits dead centre, which is exactly where the victim piece stands — so it
-            // is the first thing lost to occlusion and cannot be what carries the state. The corner
-            // brackets are what actually make this readable on a real board.
-            int vertexCount = baseIndex + 4;
-            int triangleCount = triangleIndex + 6;
-            AppendCornerBrackets(vertices, triangles, ref vertexCount, ref triangleCount,
-                bracketHalf, bracketLength, bracketThickness);
-
+            // The diamond sits dead centre, which is exactly where the victim piece stands, so it is
+            // the first thing lost to occlusion and cannot be what carries the state. The corner
+            // brackets drawn underneath on their own layer are what make this readable on a board.
             var mesh = new Mesh { name = "BetrayalMarkerMesh" };
             mesh.vertices = vertices;
             mesh.triangles = triangles;
@@ -2246,10 +2231,12 @@ namespace ChessTheBetrayal.View
                 }
             }
 
-            MeshRenderer shadow = _shadowRenderers[square.x, square.y];
-            if (shadow != null)
+            MeshRenderer brackets = _bracketRenderers[square.x, square.y];
+            if (brackets != null)
             {
-                shadow.enabled = highlight.Marker == SquareMarker.Capture && _captureShadowMaterial != null;
+                Material bracketMaterial = BracketMaterialFor(highlight.Marker);
+                brackets.enabled = bracketMaterial != null;
+                if (bracketMaterial != null) brackets.sharedMaterial = bracketMaterial;
             }
 
             MeshRenderer marker = _markerRenderers[square.x, square.y];
@@ -2294,10 +2281,10 @@ namespace ChessTheBetrayal.View
             marker.sharedMaterial = _markerMaterials[(int)highlight.Marker];
             marker.enabled = true;
 
-            // Every marker except the Betrayer hazard stays axis-aligned. That one drives its own
-            // rotation continuously in Update() while shown, so it must not be reset out from under
-            // it here — only snapped back once a square stops showing it.
-            if (highlight.Marker != SquareMarker.BetrayerAtLarge)
+            // The capture ring and the Betrayer hazard drive their own rotation continuously in
+            // Update() while shown, so it must not be reset out from under them here — only snapped
+            // back once a square stops showing one of them. Every other marker stays axis-aligned.
+            if (highlight.Marker != SquareMarker.Capture && highlight.Marker != SquareMarker.BetrayerAtLarge)
             {
                 marker.transform.localRotation = Quaternion.identity;
             }
@@ -2354,7 +2341,7 @@ namespace ChessTheBetrayal.View
             if (_betrayerBracketsRoot.parent != tile)
             {
                 _betrayerBracketsRoot.SetParent(tile, false);
-                _betrayerBracketsRoot.localPosition = new Vector3(0f, markerYOffset, 0f);
+                _betrayerBracketsRoot.localPosition = new Vector3(0f, bracketYOffset, 0f);
             }
 
             _betrayerBracketsRoot.gameObject.SetActive(true);
@@ -2438,6 +2425,27 @@ namespace ChessTheBetrayal.View
         }
 
         /// <summary>
+        /// Which states draw corner brackets, and in whose colour. Null means this square shows
+        /// none.
+        ///
+        /// The Betrayer is absent on purpose: its brackets come from a single reparented object
+        /// rather than this per-tile layer, because only one Betrayer is ever at large.
+        /// </summary>
+        private Material BracketMaterialFor(SquareMarker marker)
+        {
+            if (_markerMaterials == null) return null;
+
+            switch (marker)
+            {
+                case SquareMarker.Capture:
+                case SquareMarker.BetrayalTarget:
+                    return _markerMaterials[(int)marker];
+                default:
+                    return null;
+            }
+        }
+
+        /// <summary>
         /// Selected has no case here — it never reaches this generic marker slot. See
         /// ShowSelectionCornerTicks for why its four ticks are drawn a different way.
         /// </summary>
@@ -2485,7 +2493,7 @@ namespace ChessTheBetrayal.View
             if (_markerMaterials == null) return;
 
             UpdateCheckPulse();
-            UpdateCaptureBreathe();
+            UpdateCaptureReticle();
             UpdateBetrayerHazard();
         }
 
@@ -2515,21 +2523,31 @@ namespace ChessTheBetrayal.View
 
         /// <summary>
         /// Breathes the capture material's glow the same way the check frame does, only slower and
-        /// gentler — a capture is an option on the table, not a warning.
+        /// gentler — a capture is an option on the table, not a warning — and turns every shown
+        /// capture ring at a constant rate.
         ///
-        /// The marker deliberately does NOT rotate. Its corner brackets only work because they sit
-        /// where a tall piece cannot hide them, and spinning the marker would sweep them straight
-        /// back into the occluded zone.
+        /// Only the ring turns. Its corner brackets are on a layer of their own for exactly this
+        /// reason: a bracket that rotates has left the corner it exists to hold.
         /// </summary>
-        private void UpdateCaptureBreathe()
+        private void UpdateCaptureReticle()
         {
             Material captureMaterial = _markerMaterials[(int)SquareMarker.Capture];
-            if (captureMaterial == null) return;
+            if (captureMaterial != null)
+            {
+                float period = Mathf.Max(0.05f, highlightPalette.CaptureBreathePeriod);
+                float phase = Mathf.Sin(Time.unscaledTime * Mathf.PI * 2f / period) * 0.5f + 0.5f;
+                captureMaterial.SetFloat(GlowProperty,
+                    highlightPalette.Capture.Glow + phase * highlightPalette.CaptureBreatheGlowAmount);
+            }
 
-            float period = Mathf.Max(0.05f, highlightPalette.CaptureBreathePeriod);
-            float phase = Mathf.Sin(Time.unscaledTime * Mathf.PI * 2f / period) * 0.5f + 0.5f;
-            captureMaterial.SetFloat(GlowProperty,
-                highlightPalette.Capture.Glow + phase * highlightPalette.CaptureBreatheGlowAmount);
+            Quaternion spin = Quaternion.Euler(0f, Time.unscaledTime * highlightPalette.CaptureRingSpinSpeed, 0f);
+            for (int i = 0; i < _drawnSquares.Count; i++)
+            {
+                Vector2Int square = _drawnSquares[i];
+                if (_shownMarkers[square.x, square.y] != SquareMarker.Capture) continue;
+
+                _markerRenderers[square.x, square.y].transform.localRotation = spin;
+            }
         }
 
         /// <summary>
