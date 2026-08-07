@@ -1265,12 +1265,18 @@ namespace ChessTheBetrayal.View
         {
             _destroyQueue.Clear();
 
-            // Collect first, then destroy — destroying a piece while iterating the dictionary would
-            // break the enumeration mid-loop.
-            foreach (var kv in _piecesByPosition)
-            {
-                _destroyQueue.Add(kv.Value);
-            }
+            // Gathered from the transforms every piece is spawned under rather than from the board
+            // and the death piles, because a piece is regularly in neither of those. A victim comes
+            // off the board the moment it is taken and only joins its pile once its death has
+            // finished playing, which is most of a second; a promotion or defection swap hands its
+            // outgoing piece to a callback and it belongs nowhere until that callback runs. Clearing
+            // by collection walked past anything caught in between, so a match ended mid-animation
+            // left pieces standing in the one that followed.
+            //
+            // Collect first, then destroy — destroying while walking the hierarchy would renumber
+            // the children underneath the loop.
+            CollectPiecesUnder(whitePiecesParent);
+            CollectPiecesUnder(blackPiecesParent);
 
             for (int i = 0; i < _destroyQueue.Count; i++)
             {
@@ -1278,15 +1284,6 @@ namespace ChessTheBetrayal.View
                 {
                     _destroyQueue[i].StopAllAnimations();
                     Destroy(_destroyQueue[i].gameObject);
-                }
-            }
-
-            foreach (ChessPiece dead in _graveyard.All)
-            {
-                if (dead != null)
-                {
-                    dead.StopAllAnimations();
-                    Destroy(dead.gameObject);
                 }
             }
 
@@ -1298,6 +1295,23 @@ namespace ChessTheBetrayal.View
             // Clear highlights
             _highlights.Clear();
             RedrawHighlights();
+        }
+
+        /// <summary>
+        /// Adds every piece parented under <paramref name="parent"/> to the destroy queue. Spawning
+        /// is the only thing that ever puts a child there and nothing reparents a piece afterwards
+        /// — not even reaching the death pile, which only moves it — so these two transforms are
+        /// the one place that knows about every piece the board has made.
+        /// </summary>
+        private void CollectPiecesUnder(Transform parent)
+        {
+            if (parent == null) return;
+
+            for (int i = 0; i < parent.childCount; i++)
+            {
+                ChessPiece piece = parent.GetChild(i).GetComponent<ChessPiece>();
+                if (piece != null) _destroyQueue.Add(piece);
+            }
         }
 
         /// <summary>
