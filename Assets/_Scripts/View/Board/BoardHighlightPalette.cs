@@ -80,11 +80,11 @@ namespace ChessTheBetrayal.View
         [Tooltip("Wash under the pointer. Kept very faint — it follows the cursor, so anything stronger reads as noise.")]
         [SerializeField] private Look hoverTint = new Look { Colour = new Color(1f, 1f, 1f, 0.1f), Glow = 0f };
 
-        [Tooltip("Hollow outline on the square the last-moved piece left. A cool, desaturated hue deliberately far from selection's amber — the two used to sit close enough to read as the same state failing to clear.")]
-        [SerializeField] private Look lastMoveFromTint = new Look { Colour = new Color(0.4f, 0.58f, 0.62f, 0.32f), Glow = 0f };
+        [Tooltip("Thin outline on the square the last-moved piece left. Blue is the one hue nothing else here claims — amber is selection, red is a kill, violet is betrayal, green is a quiet move — so the last move can never be mistaken for something you can act on.")]
+        [SerializeField] private Look lastMoveFromTint = new Look { Colour = new Color(0.35f, 0.65f, 1f, 0.55f), Glow = 0f };
 
-        [Tooltip("Soft fill on the square the last-moved piece landed on. Same cool hue as the origin outline, so the pair reads as one story — where it came from, where it went — without needing an arrow.")]
-        [SerializeField] private Look lastMoveToTint = new Look { Colour = new Color(0.4f, 0.58f, 0.62f, 0.16f), Glow = 0f };
+        [Tooltip("Thicker, brighter outline on the square the last-moved piece landed on. Same blue as the origin, heavier weight — that difference alone tells you which way the piece travelled, with no arrow needed.")]
+        [SerializeField] private Look lastMoveToTint = new Look { Colour = new Color(0.35f, 0.65f, 1f, 0.85f), Glow = 0f };
 
         [Header("Shape sizes — fractions of one square")]
         [Tooltip("Radius of the quiet-move dot. Kept large because a tall 3D piece standing on a neighbouring square can occlude most of a small one.")]
@@ -138,8 +138,11 @@ namespace ChessTheBetrayal.View
         [Tooltip("Size of a square tint. Slightly under 1 leaves a hairline of board showing, which stops neighbouring tinted squares merging into one block.")]
         [SerializeField, Range(0.5f, 1f)] private float tintSizeRatio = 0.97f;
 
-        [Tooltip("Border thickness of the last-move origin's hollow outline, as a fraction of the tint footprint.")]
-        [SerializeField, Range(0.02f, 0.2f)] private float lastMoveFromOutlineThicknessRatio = 0.06f;
+        [Tooltip("Border thickness of the last-move origin's outline, as a fraction of the tint footprint.")]
+        [SerializeField, Range(0.02f, 0.2f)] private float lastMoveFromOutlineThicknessRatio = 0.05f;
+
+        [Tooltip("Border thickness of the last-move destination's outline. Heavier than the origin's — the weight difference is what encodes the direction of travel.")]
+        [SerializeField, Range(0.02f, 0.25f)] private float lastMoveToOutlineThicknessRatio = 0.11f;
 
         [Tooltip("Segments in the round shapes. 24 is smooth at any sane board size; lower it only if you are chasing vertices.")]
         [SerializeField, Range(8, 64)] private int circleSegments = 24;
@@ -208,6 +211,7 @@ namespace ChessTheBetrayal.View
         public float CornerTickClampStartRatio => cornerTickClampStartRatio;
         public float TintSizeRatio => tintSizeRatio;
         public float LastMoveFromOutlineThicknessRatio => lastMoveFromOutlineThicknessRatio;
+        public float LastMoveToOutlineThicknessRatio => lastMoveToOutlineThicknessRatio;
         public int CircleSegments => circleSegments;
 
         public float AppearDuration => appearDuration;

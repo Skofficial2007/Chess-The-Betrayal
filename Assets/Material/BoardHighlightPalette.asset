@@ -40,10 +40,10 @@ MonoBehaviour:
     Colour: {r: 1, g: 1, b: 1, a: 0.1}
     Glow: 0
   lastMoveFromTint:
-    Colour: {r: 0.4, g: 0.58, b: 0.62, a: 0.32}
+    Colour: {r: 0.35, g: 0.65, b: 1, a: 0.55}
     Glow: 0
   lastMoveToTint:
-    Colour: {r: 0.4, g: 0.58, b: 0.62, a: 0.16}
+    Colour: {r: 0.35, g: 0.65, b: 1, a: 0.85}
     Glow: 0
   dotRadiusRatio: 0.42
   captureRingRadiusRatio: 0.5
@@ -62,7 +62,8 @@ MonoBehaviour:
   cornerTickThicknessRatio: 0.055
   cornerTickClampStartRatio: 1.6
   tintSizeRatio: 0.97
-  lastMoveFromOutlineThicknessRatio: 0.06
+  lastMoveFromOutlineThicknessRatio: 0.05
+  lastMoveToOutlineThicknessRatio: 0.11
   circleSegments: 24
   appearDuration: 0.18
   appearStaggerPerSquare: 0.012

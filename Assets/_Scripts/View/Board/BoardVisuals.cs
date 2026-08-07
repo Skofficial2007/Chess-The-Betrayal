@@ -143,6 +143,7 @@ namespace ChessTheBetrayal.View
         // One mesh per shape, shared by all 64 squares, built once when the board is generated.
         private Mesh _tintMesh;
         private Mesh _lastMoveFromOutlineMesh;
+        private Mesh _lastMoveToOutlineMesh;
         private Mesh _dotMesh;
         private Mesh _captureReticleMesh;
         private Mesh _captureShadowMesh;
@@ -459,6 +460,7 @@ namespace ChessTheBetrayal.View
             float tintOuter = tileSize * highlightPalette.TintSizeRatio;
             _tintMesh = GenerateQuadMesh(tintOuter);
             _lastMoveFromOutlineMesh = GenerateFrameMesh(tintOuter, tintOuter * highlightPalette.LastMoveFromOutlineThicknessRatio);
+            _lastMoveToOutlineMesh = GenerateFrameMesh(tintOuter, tintOuter * highlightPalette.LastMoveToOutlineThicknessRatio);
             _dotMesh = GenerateCircleMesh(tileSize * highlightPalette.DotRadiusRatio, segments);
             // Shared by every marker that has to stay readable with a piece standing on its square.
             float bracketHalf = tileSize * highlightPalette.MarkerBracketSpanRatio * 0.5f;
@@ -2439,15 +2441,23 @@ namespace ChessTheBetrayal.View
         }
 
         /// <summary>
-        /// Every tint shares one filled quad except the last move's origin square, which draws a
-        /// hollow outline instead — the destination gets the fill, the departure gets a trace of
-        /// where the piece used to stand.
+        /// Both last-move squares draw an outline rather than a fill, the destination's heavier than
+        /// the origin's so the direction of travel reads without an arrow.
+        ///
+        /// Outlines rather than fills for two reasons. A last-move square usually has a piece on it,
+        /// and a piece hides the middle of a tile but not its edges, so a fill was invisible exactly
+        /// when it was needed. And a fill sitting underneath a capture ring on the same square turned
+        /// both into mush — nothing now fills a square that can have a piece standing on it.
+        ///
+        /// The selection and hover tints keep the filled quad: they follow what the player is doing
+        /// right now, so they are allowed to be the loudest thing on their square.
         /// </summary>
         private Mesh TintMeshFor(SquareTint tint)
         {
             switch (tint)
             {
                 case SquareTint.LastMoveFrom: return _lastMoveFromOutlineMesh;
+                case SquareTint.LastMoveTo: return _lastMoveToOutlineMesh;
                 case SquareTint.None: return null;
                 default: return _tintMesh;
             }
