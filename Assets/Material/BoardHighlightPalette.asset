@@ -65,7 +65,9 @@ MonoBehaviour:
   cornerTickThicknessRatio: 0.055
   cornerTickClampStartRatio: 1.45
   tintSizeRatio: 0.97
-  lastMoveThicknessRatio: 0.07
+  lastMoveThicknessRatio: 0.05
+  lastMoveFromSpanRatio: 0.9
+  lastMoveTaperRatio: 0.07
   circleSegments: 24
   appearDuration: 0.18
   appearStaggerPerSquare: 0.012

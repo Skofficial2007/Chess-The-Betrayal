@@ -147,8 +147,14 @@ namespace ChessTheBetrayal.View
         [Tooltip("Size of a square tint. Slightly under 1 leaves a hairline of board showing, which stops neighbouring tinted squares merging into one block.")]
         [SerializeField, Range(0.5f, 1f)] private float tintSizeRatio = 0.97f;
 
-        [Tooltip("Thickness of the last move's edge bars, as a fraction of one square. Its destination mark borrows the corner brackets' own thickness instead, so the pair keeps a single weight.")]
-        [SerializeField, Range(0.02f, 0.2f)] private float lastMoveThicknessRatio = 0.07f;
+        [Tooltip("Thickness of the last move's origin bars, as a fraction of one square. Deliberately lighter than the corner brackets its destination borrows — the origin should sit behind the destination, not beside it.")]
+        [SerializeField, Range(0.02f, 0.2f)] private float lastMoveThicknessRatio = 0.05f;
+
+        [Tooltip("Footprint of the last move's origin mark, as a fraction of one square. Under the corner brackets' span so the origin sits inside the destination's perimeter and reads as receding.")]
+        [SerializeField, Range(0.5f, 1f)] private float lastMoveFromSpanRatio = 0.9f;
+
+        [Tooltip("How far each origin bar narrows to a point at both ends. A bar that stops square reads as a drawn box; a tapered one reads as a trace of something that left.")]
+        [SerializeField, Range(0f, 0.2f)] private float lastMoveTaperRatio = 0.07f;
 
         [Tooltip("Segments in the round shapes. 24 is smooth at any sane board size; lower it only if you are chasing vertices.")]
         [SerializeField, Range(8, 64)] private int circleSegments = 24;
@@ -241,6 +247,8 @@ namespace ChessTheBetrayal.View
         public float CornerTickClampStartRatio => cornerTickClampStartRatio;
         public float TintSizeRatio => tintSizeRatio;
         public float LastMoveThicknessRatio => lastMoveThicknessRatio;
+        public float LastMoveFromSpanRatio => lastMoveFromSpanRatio;
+        public float LastMoveTaperRatio => lastMoveTaperRatio;
         public int CircleSegments => circleSegments;
 
         public float AppearDuration => appearDuration;

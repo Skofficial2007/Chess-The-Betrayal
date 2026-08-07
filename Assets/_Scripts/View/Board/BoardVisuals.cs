@@ -496,9 +496,16 @@ namespace ChessTheBetrayal.View
             _cornerBracketsMesh = GenerateCornerBracketsMesh(
                 bracketHalf, bracketArm,
                 tileSize * highlightPalette.MarkerBracketThicknessRatio);
+            // The origin sits inside the destination's perimeter and lighter, so the pair reads as a
+            // hierarchy rather than two boxes of equal weight — where the piece IS matters more than
+            // where it was. Its corner gap shrinks by the same factor as its span, so it stays a
+            // proportionally correct complement of the brackets rather than drifting out of step.
+            float originScale = highlightPalette.LastMoveFromSpanRatio / highlightPalette.MarkerBracketSpanRatio;
             _lastMoveEdgesMesh = GenerateEdgeBarsMesh(
-                bracketHalf, bracketArm,
-                tileSize * highlightPalette.LastMoveThicknessRatio);
+                bracketHalf * originScale,
+                bracketArm * originScale,
+                tileSize * highlightPalette.LastMoveThicknessRatio,
+                tileSize * highlightPalette.LastMoveTaperRatio);
 
             _captureReticleMesh = GenerateCaptureReticleMesh(
                 tileSize * highlightPalette.CaptureRingRadiusRatio,
@@ -835,26 +842,65 @@ namespace ChessTheBetrayal.View
         /// the square a piece left and the square it landed on read as one pair rather than two
         /// unrelated marks. An enclosure for where it was, a corner mark for where it is.
         /// </summary>
-        private static Mesh GenerateEdgeBarsMesh(float half, float cornerGap, float thickness)
+        private static Mesh GenerateEdgeBarsMesh(float half, float cornerGap, float thickness, float taper)
         {
             float span = Mathf.Max(0f, half - cornerGap);
 
-            var vertices = new Vector3[4 * 4];
-            var triangles = new int[4 * 6];
+            var vertices = new Vector3[4 * TaperedBarVertexCount];
+            var triangles = new int[4 * TaperedBarIndexCount];
             int vertexCount = 0;
             int triangleCount = 0;
 
-            // Top and bottom run along X, left and right along Z, each inset inward by its thickness.
-            AddBar(vertices, triangles, ref vertexCount, ref triangleCount, -span, half - thickness, span, half);
-            AddBar(vertices, triangles, ref vertexCount, ref triangleCount, -span, -half, span, -half + thickness);
-            AddBar(vertices, triangles, ref vertexCount, ref triangleCount, half - thickness, -span, half, span);
-            AddBar(vertices, triangles, ref vertexCount, ref triangleCount, -half, -span, -half + thickness, span);
+            // Each bar runs along one axis and is pushed out to its own edge along the other.
+            AddTaperedBar(vertices, triangles, ref vertexCount, ref triangleCount, new Vector3(1f, 0f, 0f), new Vector3(0f, 0f, 1f), half, span, thickness, taper);
+            AddTaperedBar(vertices, triangles, ref vertexCount, ref triangleCount, new Vector3(1f, 0f, 0f), new Vector3(0f, 0f, -1f), half, span, thickness, taper);
+            AddTaperedBar(vertices, triangles, ref vertexCount, ref triangleCount, new Vector3(0f, 0f, 1f), new Vector3(1f, 0f, 0f), half, span, thickness, taper);
+            AddTaperedBar(vertices, triangles, ref vertexCount, ref triangleCount, new Vector3(0f, 0f, 1f), new Vector3(-1f, 0f, 0f), half, span, thickness, taper);
 
             var mesh = new Mesh { name = "LastMoveEdgeBarsMesh" };
             mesh.vertices = vertices;
             mesh.triangles = triangles;
             mesh.RecalculateNormals();
             return mesh;
+        }
+
+        // Six points around the outline, fanned from the first.
+        private const int TaperedBarVertexCount = 6;
+        private const int TaperedBarIndexCount = 4 * 3;
+
+        /// <summary>
+        /// Appends one bar lying along <paramref name="along"/>, pushed out to the tile edge in the
+        /// <paramref name="outward"/> direction, narrowing to a point at both ends.
+        ///
+        /// The taper is the whole point. A bar that stops square reads as a drawn box, which is what
+        /// made the last move's origin look like a label pasted on the square rather than a trace of
+        /// something that left it. Winding does not matter here — the highlight shader draws with
+        /// culling off and no lighting, so a bar facing the wrong way is neither invisible nor
+        /// mis-shaded.
+        /// </summary>
+        private static void AddTaperedBar(Vector3[] vertices, int[] triangles, ref int vertexCount, ref int triangleCount,
+            Vector3 along, Vector3 outward, float half, float span, float thickness, float taper)
+        {
+            taper = Mathf.Min(taper, span);
+
+            Vector3 outer = outward * half;
+            Vector3 inner = outward * (half - thickness);
+            Vector3 mid = outward * (half - thickness * 0.5f);
+
+            int start = vertexCount;
+            vertices[vertexCount++] = mid - along * span;                 // point at one end
+            vertices[vertexCount++] = outer - along * (span - taper);
+            vertices[vertexCount++] = outer + along * (span - taper);
+            vertices[vertexCount++] = mid + along * span;                 // point at the other
+            vertices[vertexCount++] = inner + along * (span - taper);
+            vertices[vertexCount++] = inner - along * (span - taper);
+
+            for (int i = 1; i <= 4; i++)
+            {
+                triangles[triangleCount++] = start;
+                triangles[triangleCount++] = start + i;
+                triangles[triangleCount++] = start + i + 1;
+            }
         }
 
         /// <summary>
