@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using ChessTheBetrayal.AI;
+using ChessTheBetrayal.AI.DeviceBenchmark;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Core.Logic;
@@ -253,7 +254,8 @@ namespace ChessTheBetrayal.App
                     ChessTheBetrayal.Core.Match.MoveVisualDurationEstimator.EstimateSeconds);
             }
 
-            _aiCoordinator = new AIMatchCoordinator(_engine, LiveBoard, _moveVisualPacingGate.Enqueue, _domainLogger);
+            _aiCoordinator = new AIMatchCoordinator(_engine, LiveBoard, _moveVisualPacingGate.Enqueue, _domainLogger,
+                DeviceDescriptionReader.ReadReportLines);
             _aiCoordinator.RecordTelemetry = enableAiTelemetrySharing;
             _aiCoordinator.OnSearchException += HandleAISearchException;
 

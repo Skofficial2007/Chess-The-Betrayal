@@ -246,6 +246,51 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         }
 
         [Test]
+        public void SetAIMode_WithDeviceFactsSupplied_StampsThemOnThisMatchsTelemetry()
+        {
+            var coordinator = new AIMatchCoordinator(
+                _engine, _board, move => _lastPlayedMove = move, ShallowSettings, ProfileProvider,
+                logger: null, deviceFacts: () => new[] { "Device model: TestPhone" });
+
+            try
+            {
+                coordinator.SetAIMode(Team.Black, BetrayalUsage.Full, "normal");
+
+                // Without this a shared match report is timings attributable to no hardware, which
+                // is most of what makes one worth sending back.
+                Assert.That(coordinator.Telemetry.Render(), Does.Contain("Device model: TestPhone"));
+            }
+            finally
+            {
+                coordinator.Dispose();
+            }
+        }
+
+        [Test]
+        public void SetAIMode_StampsTheFactsAgainForASecondMatch_NotOnlyTheFirst()
+        {
+            int reads = 0;
+            var coordinator = new AIMatchCoordinator(
+                _engine, _board, move => _lastPlayedMove = move, ShallowSettings, ProfileProvider,
+                logger: null, deviceFacts: () => { reads++; return new[] { "Device model: TestPhone" }; });
+
+            try
+            {
+                coordinator.SetAIMode(Team.Black, BetrayalUsage.Full, "normal");
+                coordinator.SetAIMode(Team.Black, BetrayalUsage.Full, "normal");
+
+                Assert.That(reads, Is.EqualTo(2));
+                Assert.That(coordinator.Telemetry.Render(), Does.Contain("Device model: TestPhone"),
+                    "A Replay builds fresh telemetry, and a header only stamped on the first match " +
+                    "would leave the second one unattributable.");
+            }
+            finally
+            {
+                coordinator.Dispose();
+            }
+        }
+
+        [Test]
         public void RecordDefection_RecordsThePieceAsBelongingToWhoeverGainedIt()
         {
             _board.CurrentTurn = Team.Black;

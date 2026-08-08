@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using ChessTheBetrayal.AI;
 using ChessTheBetrayal.AI.MatchTelemetry;
@@ -85,8 +86,14 @@ namespace ChessTheBetrayal.Gameplay.Manager
         /// mid-match, only before the first SetAIMode call.</summary>
         public AiMatchTelemetry Telemetry { get; private set; }
 
-        public AIMatchCoordinator(IChessEngine engine, BoardState board, Action<MoveCommand> playMove, IDomainLogger logger = null)
-            : this(engine, board, playMove, AISearchSettings.FromProfile, new AIProfileTableProvider(), logger)
+        // Optional. Supplies the device/build facts a shared report needs to be attributable to the
+        // hardware it came off — null in every test and in any host with no platform to read.
+        private readonly Func<IReadOnlyList<string>> _deviceFacts;
+
+        public AIMatchCoordinator(IChessEngine engine, BoardState board, Action<MoveCommand> playMove,
+            IDomainLogger logger = null, Func<IReadOnlyList<string>> deviceFacts = null)
+            : this(engine, board, playMove, AISearchSettings.FromProfile, new AIProfileTableProvider(), logger,
+                deviceFacts)
         {
         }
 
@@ -101,7 +108,8 @@ namespace ChessTheBetrayal.Gameplay.Manager
         public AIMatchCoordinator(
             IChessEngine engine, BoardState board, Action<MoveCommand> playMove,
             Func<BetrayalUsage, AIProfile, AISearchSettings> searchSettingsFactory,
-            IAIProfileProvider profileProvider, IDomainLogger logger = null)
+            IAIProfileProvider profileProvider, IDomainLogger logger = null,
+            Func<IReadOnlyList<string>> deviceFacts = null)
         {
             _engine = engine;
             _board = board;
@@ -109,6 +117,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
             _searchSettingsFactory = searchSettingsFactory;
             _profileProvider = profileProvider ?? new AIProfileTableProvider();
             _logger = logger;
+            _deviceFacts = deviceFacts;
         }
 
         /// <summary>
@@ -144,6 +153,16 @@ namespace ChessTheBetrayal.Gameplay.Manager
             _aiAgent = agent;
 
             Telemetry = new AiMatchTelemetry(DateTime.Now.ToString("yyyyMMdd-HHmmss"));
+
+            // Stamped per match rather than once at startup, so a report that arrives on its own
+            // still says which phone produced it. Without this a shared match report is a page of
+            // timings attributable to no hardware at all, which is most of what makes it worth
+            // sending — the same facts the device benchmark's own report carries, from the same
+            // reader, so two reports off one phone can never describe it differently.
+            if (_deviceFacts != null)
+            {
+                foreach (string line in _deviceFacts()) Telemetry.AppendHeaderLine(line);
+            }
         }
 
         /// <summary>Call once it's aiTeam's turn in a live match to kick off a background search.</summary>

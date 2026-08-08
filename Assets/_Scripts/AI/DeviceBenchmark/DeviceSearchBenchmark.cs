@@ -14,9 +14,9 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
     /// took and how deep it got, so the per-move promise can be checked on real hardware instead of
     /// only on a desktop — the same check anyone who forks the AI or the rules will need to re-run.
     ///
-    /// Owns the run and nothing else: the pacing, every read of a Unity-only API (device info,
-    /// battery, build config, keeping the screen awake), and assembling those into the one
-    /// BenchmarkReport that the screen, Debug.Log/adb logcat and an exported file all render
+    /// Owns the run and nothing else: the pacing, the Unity-only reads a run needs of its own
+    /// (battery, keeping the screen awake), and assembling those together with the device facts
+    /// into the one BenchmarkReport that the screen, Debug.Log/adb logcat and an exported file render
     /// identically. It draws nothing itself — whatever displays the run reads the state below and
     /// asks for a rendered report. The benchmark logic proper lives in MobileSearchBenchmarkRunner,
     /// which has no engine dependency at all.
@@ -139,7 +139,7 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             lock (_reportLock)
             {
                 _report = new BenchmarkReport(runId, plan.Name, plan.TotalCells);
-                foreach (string line in DescribeDevice().ToReportLines()) _report.AppendHeaderLine(line);
+                foreach (string line in DeviceDescriptionReader.ReadReportLines()) _report.AppendHeaderLine(line);
                 _report.AppendHeaderLine(plan.Describe());
                 _report.AppendHeaderLine(BuildBatteryLine("start"));
                 _report.SetEstimatedWorstCase(plan.EstimatedWorstCase);
@@ -225,54 +225,11 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             Debug.Log($"[DeviceSearchBenchmark] {line}");
         }
 
-        /// <summary>
-        /// Reads the platform for everything worth knowing when correlating a timing result with
-        /// the hardware it came off. What is deliberately left out, and why, is DeviceDescription's
-        /// own business — this is only the one place that can ask Unity for any of it.
-        ///
-        /// Development Build and the scripting backend are the exception to that: both are baked in
-        /// at build time rather than queryable from a running app, so the preprocessor symbols are
-        /// the only honest way to report which one this build actually is.
-        /// </summary>
-        private static DeviceDescription DescribeDevice()
-        {
-#if DEVELOPMENT_BUILD
-            const string buildType = "Development Build";
-#else
-            const string buildType = "Release Build";
-#endif
-#if ENABLE_IL2CPP
-            const string scriptingBackend = "IL2CPP";
-#else
-            const string scriptingBackend = "Mono";
-#endif
-            return new DeviceDescription
-            {
-                Model = SystemInfo.deviceModel,
-                OperatingSystem = SystemInfo.operatingSystem,
-                Processor = SystemInfo.processorType,
-                ProcessorCount = SystemInfo.processorCount,
-                ProcessorFrequencyMhz = SystemInfo.processorFrequency,
-                GraphicsDeviceName = SystemInfo.graphicsDeviceName,
-                GraphicsDeviceVendor = SystemInfo.graphicsDeviceVendor,
-                GraphicsApi = SystemInfo.graphicsDeviceType.ToString(),
-                SystemMemoryMb = SystemInfo.systemMemorySize,
-                GraphicsMemoryMb = SystemInfo.graphicsMemorySize,
-                ScreenWidth = Screen.width,
-                ScreenHeight = Screen.height,
-                ScreenDpi = Screen.dpi,
-                BuildType = buildType,
-                ScriptingBackend = scriptingBackend,
-                Platform = Application.platform.ToString(),
-            };
-        }
-
         private static string BuildBatteryLine(string when) =>
             $"Battery ({when}): {SystemInfo.batteryLevel * 100f:F0}% ({SystemInfo.batteryStatus})";
 
         /// <summary>The device model, for anything that needs to name this device outside the
-        /// report — a filename, say. Kept here because this is the one place in the feature that
-        /// legitimately touches Unity APIs.</summary>
-        public static string DeviceModel => SystemInfo.deviceModel;
+        /// report — a filename, say.</summary>
+        public static string DeviceModel => DeviceDescriptionReader.Model;
     }
 }
