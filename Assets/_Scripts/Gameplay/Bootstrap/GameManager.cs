@@ -269,6 +269,10 @@ namespace ChessTheBetrayal.App
             // moment a piece changed armies.
             _matchDriver.OnDefectionResolved += _aiCoordinator.RecordDefection;
 
+            // The AI hands its move to the pacing gate, which may hold it back until the previous
+            // animation has played, so only the driver knows which ply it eventually became.
+            _matchDriver.OnPlyApplied += _aiCoordinator.NotePlyApplied;
+
             _clockCoordinator = new ClockCoordinator(_setup, OnClockTimeout, OnLowTimeWarning);
 
             _matchFlow = new MatchFlowCoordinator(
@@ -348,7 +352,11 @@ namespace ChessTheBetrayal.App
             if (_matchDriver != null)
             {
                 _matchDriver.OnBetrayalMoveRequired -= OnBetrayalMoveRequiredForAI;
-                if (_aiCoordinator != null) _matchDriver.OnDefectionResolved -= _aiCoordinator.RecordDefection;
+                if (_aiCoordinator != null)
+                {
+                    _matchDriver.OnDefectionResolved -= _aiCoordinator.RecordDefection;
+                    _matchDriver.OnPlyApplied -= _aiCoordinator.NotePlyApplied;
+                }
             }
 
             if (_uiManager != null)

@@ -43,6 +43,14 @@ namespace ChessTheBetrayal.AI.MatchTelemetry
             new AiMoveRecord(plyNumber, defectedTo, move, AiMoveSource.Defection,
                 elapsedMs: 0, completedDepth: 0, stopReason: SearchStopReason.Unset);
 
+        /// <summary>
+        /// The same record with the ply number it actually landed on. What a search cost is known
+        /// the moment it finishes, but which ply it becomes is not — a move can wait behind an
+        /// animation before it reaches the board — so the two are filled in at different moments.
+        /// </summary>
+        public AiMoveRecord WithPlyNumber(int plyNumber) =>
+            new AiMoveRecord(plyNumber, Team, Move, Source, ElapsedMs, CompletedDepth, StopReason);
+
         public int PlyNumber { get; }
 
         /// <summary>Who made the move — or, for a Defection, whose army the piece landed in.</summary>

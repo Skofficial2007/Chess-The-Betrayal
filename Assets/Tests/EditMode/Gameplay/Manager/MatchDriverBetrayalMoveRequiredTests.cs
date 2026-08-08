@@ -139,6 +139,33 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         }
 
         [Test]
+        public void EveryAppliedPly_IsAnnouncedWithTheNumberItLandedOn()
+        {
+            // Act then Retribution: two plies of one turn, each with its own number, even though
+            // the turn does not pass between them.
+            _board.WithPiece("b1", Team.White, ChessPieceType.Knight);
+            _board.WithPiece("a1", Team.White, ChessPieceType.Rook);
+            _board.WithPiece("a3", Team.White, ChessPieceType.Pawn);
+            _board.WithBetrayalRight(true);
+            _board.ComputeFullZobristHash();
+
+            var announced = new List<int>();
+            _matchDriver.OnPlyApplied += (_, plyNumber) => announced.Add(plyNumber);
+
+            var actMoves = new List<MoveCommand>();
+            ChessEngine.GetBetrayalTargets(_board, TestBoardSetupUtility.AlgebraicToVector("b1"), actMoves);
+            _matchDriver.PlayMove(actMoves[0]);
+
+            var retMoves = new List<MoveCommand>();
+            _engine.GetRetributionMoves(_board, Team.White, _board.PendingBetrayerSquare.Value, retMoves);
+            _matchDriver.PlayMove(retMoves[0]);
+
+            Assert.That(announced, Is.EqualTo(new[] { 1, 2 }),
+                "The number has to come from the board at the moment each ply reached it — that is " +
+                "the only place it is knowable, since a move source may hold its move back.");
+        }
+
+        [Test]
         public void ActWithALegalExecutioner_NeverAnnouncesADefection()
         {
             _board.WithPiece("b1", Team.White, ChessPieceType.Knight);
