@@ -14,13 +14,20 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
     public static class DeviceDescriptionReader
     {
         /// <summary>
-        /// Development Build and the scripting backend are the exception to reading the platform at
+        /// The build type and the scripting backend are the exception to reading the platform at
         /// runtime: both are baked in at build time rather than queryable from a running app, so the
-        /// preprocessor symbols are the only honest way to report which one this build actually is.
+        /// preprocessor symbols are the only honest way to report which one this is.
+        ///
+        /// The Editor is checked first and named as itself. It is neither of the other two, and
+        /// falling through to "Release Build" put that on the header of every report produced from
+        /// a Play-mode session — which is most of them during development, and which would read in
+        /// a table as a measurement taken under the same conditions as a device row.
         /// </summary>
         public static DeviceDescription Read()
         {
-#if DEVELOPMENT_BUILD
+#if UNITY_EDITOR
+            const string buildType = "Editor (not a build)";
+#elif DEVELOPMENT_BUILD
             const string buildType = "Development Build";
 #else
             const string buildType = "Release Build";

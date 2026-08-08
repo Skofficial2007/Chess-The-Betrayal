@@ -279,6 +279,20 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         }
 
         [Test]
+        public void SetAIMode_NamesTheTierAndWhatItWasAllowed()
+        {
+            _board.CurrentTurn = Team.Black;
+            _coordinator.SetAIMode(Team.Black, BetrayalUsage.Full, "aggressive");
+
+            // Every elapsed and depth figure in the report is only judgeable against these. A worst
+            // elapsed of 3005ms is a tier sitting on its budget or one well inside it depending
+            // entirely on which budget it had, and nothing else in the file says which.
+            string report = _coordinator.Telemetry.Render();
+            Assert.That(report, Does.Contain("AI tier: aggressive"));
+            Assert.That(report, Does.Contain("budget"));
+        }
+
+        [Test]
         public void SetAIMode_StampsTheFactsAgainForASecondMatch_NotOnlyTheFirst()
         {
             int reads = 0;

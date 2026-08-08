@@ -164,6 +164,14 @@ namespace ChessTheBetrayal.Gameplay.Manager
             {
                 foreach (string line in _deviceFacts()) Telemetry.AppendHeaderLine(line);
             }
+
+            // Which tier played, and what it was allowed. Every timing and depth in the report below
+            // is only judgeable against these: an elapsed worst of 3005ms is a tier sitting on its
+            // budget or one comfortably inside it depending entirely on which budget it had, and
+            // nothing else in the file says. Taken from the settings the agent was actually built
+            // with rather than the profile row, since a caller may substitute them.
+            Telemetry.AppendHeaderLine(
+                $"AI tier: {profile.Id} (max depth {settings.MaxDepth}, budget {settings.TimeBudget.HardMs}ms)");
         }
 
         /// <summary>Call once it's aiTeam's turn in a live match to kick off a background search.</summary>

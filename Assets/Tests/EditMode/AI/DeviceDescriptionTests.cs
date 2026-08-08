@@ -33,6 +33,17 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
+        public void Read_InTheEditor_DoesNotClaimToBeABuild()
+        {
+            // These tests run in the Editor, which is neither a Release nor a Development build.
+            // Falling through to "Release Build" put that on the header of every report a Play-mode
+            // session produced, where in a table it reads as a measurement taken under the same
+            // conditions as a real device row.
+            Assert.That(DeviceDescriptionReader.Read().BuildType, Does.Not.Contain("Release Build"));
+            Assert.That(DeviceDescriptionReader.Read().BuildType, Does.Contain("Editor"));
+        }
+
+        [Test]
         public void ToReportLines_SayNothingAboutTheValuesThatUsedToIdentifyTheOwner()
         {
             var description = SampleDescription();
