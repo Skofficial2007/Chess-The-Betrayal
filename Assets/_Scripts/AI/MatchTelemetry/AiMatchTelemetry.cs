@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Text;
+using ChessTheBetrayal.Core.Match;
 
 namespace ChessTheBetrayal.AI.MatchTelemetry
 {
@@ -37,9 +38,10 @@ namespace ChessTheBetrayal.AI.MatchTelemetry
         public void RecordMove(AiMoveRecord record) => _moves.Add(record);
 
         /// <summary>
-        /// Renders the whole match: a header, a summary (move counts and the elapsed/depth spread
-        /// over searched moves only — a book move has neither), then every move in order. Summary
-        /// before detail, same ordering and reasoning as BenchmarkReport.
+        /// Renders the whole match: a header, a summary (ply counts and the elapsed/depth spread
+        /// over searched moves only — a book move and a Defection have neither), then every
+        /// recorded ply in order. Summary before detail, same ordering and reasoning as
+        /// BenchmarkReport.
         /// </summary>
         public string Render()
         {
@@ -57,7 +59,8 @@ namespace ChessTheBetrayal.AI.MatchTelemetry
             AppendSummary(text);
             text.AppendLine();
 
-            text.AppendLine("--- Moves ---");
+            text.AppendLine("--- Plies ---");
+            text.AppendLine("(the AI's own plies and any Defection; the opponent's moves are not recorded, so ply numbers skip)");
             foreach (AiMoveRecord move in _moves) text.AppendLine(FormatMove(move));
 
             return text.ToString();
@@ -66,26 +69,48 @@ namespace ChessTheBetrayal.AI.MatchTelemetry
         private void AppendSummary(StringBuilder text)
         {
             int searchedCount = 0;
+            int bookCount = 0;
+            int defectionCount = 0;
             int worstElapsed = 0;
             int minElapsed = int.MaxValue;
             long elapsedSum = 0;
+
+            // A search that finds a forced mate stops on the spot, however shallow it is, because no
+            // deeper look can change the answer. Pooling that with a search the clock or the tier
+            // ceiling cut short would let the best outcome available set the headline for the worst
+            // one: one real match ended on a mate found at depth 2 and was summarised as "depth
+            // reached: worst=2", which reads as an AI that struggled all game.
+            int matesFound = 0;
+            int depthSampleCount = 0;
             int worstDepth = int.MaxValue; // shallowest reached, matching the benchmark's own "worst = shallowest" convention
             long depthSum = 0;
 
             foreach (AiMoveRecord move in _moves)
             {
-                if (move.FromBook) continue;
+                switch (move.Source)
+                {
+                    case AiMoveSource.Book: bookCount++; continue;
+                    case AiMoveSource.Defection: defectionCount++; continue;
+                }
 
                 searchedCount++;
                 if (move.ElapsedMs > worstElapsed) worstElapsed = move.ElapsedMs;
                 if (move.ElapsedMs < minElapsed) minElapsed = move.ElapsedMs;
                 elapsedSum += move.ElapsedMs;
+
+                if (move.StopReason == SearchStopReason.MateFound)
+                {
+                    matesFound++;
+                    continue;
+                }
+
+                depthSampleCount++;
                 if (move.CompletedDepth < worstDepth) worstDepth = move.CompletedDepth;
                 depthSum += move.CompletedDepth;
             }
 
-            int bookCount = _moves.Count - searchedCount;
-            text.AppendLine($"{_moves.Count} moves total ({bookCount} from the opening book, {searchedCount} searched)");
+            text.AppendLine($"{_moves.Count} plies recorded ({bookCount} from the opening book, "
+                + $"{searchedCount} searched, {defectionCount} by Defection)");
 
             if (searchedCount == 0)
             {
@@ -94,14 +119,27 @@ namespace ChessTheBetrayal.AI.MatchTelemetry
             }
 
             double meanElapsed = elapsedSum / (double)searchedCount;
-            double meanDepth = depthSum / (double)searchedCount;
             text.AppendLine($"elapsed ms: worst={worstElapsed} mean={meanElapsed:F0} min={minElapsed}");
-            text.AppendLine($"depth reached: worst={worstDepth} mean={meanDepth:F1}");
+
+            string mateNote = matesFound > 0
+                ? $" ({matesFound} more stopped early on a forced mate)"
+                : "";
+
+            if (depthSampleCount == 0)
+            {
+                text.AppendLine($"depth reached: every searched move stopped early on a forced mate ({matesFound})");
+                return;
+            }
+
+            double meanDepth = depthSum / (double)depthSampleCount;
+            text.AppendLine($"depth reached over {depthSampleCount} moves: worst={worstDepth} mean={meanDepth:F1}{mateNote}");
         }
 
-        private static string FormatMove(AiMoveRecord move) =>
-            move.FromBook
-                ? $"ply {move.PlyNumber}: {move.Team} plays {move.Move} (book)"
-                : $"ply {move.PlyNumber}: {move.Team} plays {move.Move} (depth {move.CompletedDepth}, {move.StopReason}, {move.ElapsedMs}ms)";
+        private static string FormatMove(AiMoveRecord move) => move.Source switch
+        {
+            AiMoveSource.Book => $"ply {move.PlyNumber}: {move.Team} plays {move.Move} (book)",
+            AiMoveSource.Defection => $"ply {move.PlyNumber}: {MoveNotation.Describe(move.Move)} — now {move.Team}'s",
+            _ => $"ply {move.PlyNumber}: {move.Team} plays {move.Move} (depth {move.CompletedDepth}, {move.StopReason}, {move.ElapsedMs}ms)",
+        };
     }
 }

@@ -231,7 +231,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
 
             if (RecordTelemetry && _aiAgent is AsyncAIAgent recordingAgent)
             {
-                Telemetry.RecordMove(new AiMoveRecord(_board.PliesPlayed, _aiTeam, move, fromBook: false,
+                Telemetry.RecordMove(new AiMoveRecord(_board.PliesPlayed, _aiTeam, move, AiMoveSource.Searched,
                     auxMs, recordingAgent.LastCompletedDepth, recordingAgent.StopReason));
             }
 
@@ -257,11 +257,30 @@ namespace ChessTheBetrayal.Gameplay.Manager
 
             if (RecordTelemetry)
             {
-                Telemetry.RecordMove(new AiMoveRecord(_board.PliesPlayed, _aiTeam, move, fromBook: true,
+                Telemetry.RecordMove(new AiMoveRecord(_board.PliesPlayed, _aiTeam, move, AiMoveSource.Book,
                     elapsedMs: 0, completedDepth: 0, stopReason: SearchStopReason.Unset));
             }
 
             Activity = AgentActivity.Idle;
+        }
+
+        /// <summary>
+        /// Records a Betrayer changing sides. Nothing here decides that move — the rules produce it
+        /// when Retribution is refused or impossible — so it reaches neither of the hand-offs above
+        /// and would go unrecorded. It matters because it is the one ply in a match that moves a
+        /// piece between the two armies: a log without it shows the AI holding a piece nothing
+        /// accounts for, and one real match had a Black queen appear on a1 out of nowhere for
+        /// exactly this reason. Recorded whichever side's Betrayer it was, since either changes
+        /// what the AI is playing with. No elapsed time or depth, because no search produced it.
+        /// </summary>
+        public void RecordDefection(MoveCommand move)
+        {
+            if (!RecordTelemetry || Telemetry == null) return;
+
+            // The move carries the Betrayer as it was before it turned, so the army it landed in is
+            // the other one.
+            Team gainedBy = move.PieceTeam == Team.White ? Team.Black : Team.White;
+            Telemetry.RecordMove(AiMoveRecord.ForDefection(_board.PliesPlayed, gainedBy, move));
         }
 
         /// <summary>

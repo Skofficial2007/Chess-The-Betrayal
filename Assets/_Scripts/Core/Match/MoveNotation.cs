@@ -28,7 +28,22 @@ namespace ChessTheBetrayal.Core.Match
 
             sb.Append(plyNumber);
             sb.Append(move.PieceTeam == Team.White ? ". " : "... ");
+            AppendMove(sb, move);
 
+            return sb.ToString();
+        }
+
+        /// <summary>The move on its own, with no leading number — for a caller that numbers its
+        /// own lines and would otherwise print the number twice.</summary>
+        public static string Describe(MoveCommand move)
+        {
+            var sb = new StringBuilder(32);
+            AppendMove(sb, move);
+            return sb.ToString();
+        }
+
+        private static void AppendMove(StringBuilder sb, MoveCommand move)
+        {
             if (move.IsCastling)
             {
                 sb.Append(move.EndPosition.x > move.StartPosition.x ? "O-O" : "O-O-O");
@@ -74,8 +89,6 @@ namespace ChessTheBetrayal.Core.Match
                 sb.Append(move.Stage);
                 sb.Append(']');
             }
-
-            return sb.ToString();
         }
 
         /// <summary>Appends a result suffix (+, #, or nothing) — call after the engine evaluates the

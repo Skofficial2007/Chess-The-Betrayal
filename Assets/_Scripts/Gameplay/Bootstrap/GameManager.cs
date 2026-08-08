@@ -262,6 +262,11 @@ namespace ChessTheBetrayal.App
             // TurnChangedEvent fires — this event is what re-prompts the AI to play the owed move.
             _matchDriver.OnBetrayalMoveRequired += OnBetrayalMoveRequiredForAI;
 
+            // A Defection is the one ply neither side plays, so nothing on the coordinator's own
+            // move-decided path ever sees it — without this the match report would be missing the
+            // moment a piece changed armies.
+            _matchDriver.OnDefectionResolved += _aiCoordinator.RecordDefection;
+
             _clockCoordinator = new ClockCoordinator(_setup, OnClockTimeout, OnLowTimeWarning);
 
             _matchFlow = new MatchFlowCoordinator(
@@ -341,6 +346,7 @@ namespace ChessTheBetrayal.App
             if (_matchDriver != null)
             {
                 _matchDriver.OnBetrayalMoveRequired -= OnBetrayalMoveRequiredForAI;
+                if (_aiCoordinator != null) _matchDriver.OnDefectionResolved -= _aiCoordinator.RecordDefection;
             }
 
             if (_uiManager != null)

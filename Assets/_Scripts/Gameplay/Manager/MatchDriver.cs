@@ -80,6 +80,15 @@ namespace ChessTheBetrayal.Gameplay.Manager
         /// </summary>
         public event System.Action<Team> OnBetrayalMoveRequired;
 
+        /// <summary>
+        /// Fires the moment a Betrayer changes sides, carrying the Defection move itself. Nobody
+        /// chooses this ply — the rules produce it once Retribution is refused or impossible — so
+        /// it reaches no move-decided path and would otherwise be invisible to anything recording
+        /// the match. It still spends a ply and hands a piece to the other army, which is enough to
+        /// leave a log unable to explain the board it describes.
+        /// </summary>
+        public event System.Action<MoveCommand> OnDefectionResolved;
+
         /// <summary>Clears the in-progress turn buffer. Call alongside MoveLog.Clear() whenever a
         /// new match starts, so a stale partial turn from a previous game can never leak in.</summary>
         public void ResetTurnAccumulator()
@@ -325,6 +334,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
             if (result.DefectionMove.HasValue)
             {
                 _currentTurnMoves.Add(result.DefectionMove.Value);
+                OnDefectionResolved?.Invoke(result.DefectionMove.Value);
             }
 
             if (result.RequiresForcedSave)

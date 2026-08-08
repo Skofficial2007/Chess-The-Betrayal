@@ -240,9 +240,56 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             Assert.That(_coordinator.Telemetry.MoveCount, Is.EqualTo(1));
 
             string report = _coordinator.Telemetry.Render();
-            Assert.That(report, Does.Contain("1 moves total (0 from the opening book, 1 searched)"));
+            Assert.That(report, Does.Contain("1 plies recorded (0 from the opening book, 1 searched, 0 by Defection)"));
             Assert.That(report, Does.Contain("depth 1,"));
             Assert.That(report, Does.Not.Contain("(book)"));
+        }
+
+        [Test]
+        public void RecordDefection_RecordsThePieceAsBelongingToWhoeverGainedIt()
+        {
+            _board.CurrentTurn = Team.Black;
+            _coordinator.SetAIMode(Team.Black, BetrayalUsage.Full, "normal");
+            _coordinator.RecordTelemetry = true;
+
+            // A White queen that has just changed sides. The move carries the Betrayer as it was
+            // beforehand, so what the log must name is the other army — the one now holding it.
+            var betrayer = new PieceData(Team.White, ChessPieceType.Queen, moveDirection: 1, startRow: 0);
+            _coordinator.RecordDefection(
+                MoveCommand.CreateDefectionMove(new Vector2Int(0, 0), betrayer));
+
+            string report = _coordinator.Telemetry.Render();
+            Assert.That(report, Does.Contain("Qa1 defects"));
+            Assert.That(report, Does.Contain("now Black's"),
+                "A White Betrayer that defects ends up in Black's army, and that is what makes " +
+                "the piece's later moves explicable.");
+            Assert.That(report, Does.Contain("1 by Defection"));
+        }
+
+        [Test]
+        public void RecordDefection_WithTelemetryOff_RecordsNothing()
+        {
+            _board.CurrentTurn = Team.Black;
+            _coordinator.SetAIMode(Team.Black, BetrayalUsage.Full, "normal");
+
+            var betrayer = new PieceData(Team.White, ChessPieceType.Queen, moveDirection: 1, startRow: 0);
+            _coordinator.RecordDefection(
+                MoveCommand.CreateDefectionMove(new Vector2Int(0, 0), betrayer));
+
+            Assert.That(_coordinator.Telemetry.MoveCount, Is.Zero,
+                "The same opt-in flag gates this as gates every other recorded ply.");
+        }
+
+        [Test]
+        public void RecordDefection_BeforeAnyMatchHasStarted_DoesNotThrow()
+        {
+            // The composition root wires this once and leaves it wired, so it stays subscribed
+            // through a plain human-vs-human match where there is no telemetry object at all.
+            var betrayer = new PieceData(Team.White, ChessPieceType.Queen, moveDirection: 1, startRow: 0);
+            _coordinator.RecordTelemetry = true;
+
+            Assert.DoesNotThrow(() => _coordinator.RecordDefection(
+                MoveCommand.CreateDefectionMove(new Vector2Int(0, 0), betrayer)));
         }
 
         [Test]
