@@ -364,7 +364,7 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             MoveCommand best = TimedSearch(search, board, settings, rescoreMargin, out SearchTiming timing);
             RecordTiming(profile.Id, threadLabel, timing);
 
-            Emit($"[{profile.Id} {threadLabel}] {positionName} single-move rep{repeatIndex + 1} depth {profile.MaxDepth}: {FormatTiming(timing)}, best={best} — {BudgetNote(timing)}");
+            Emit($"[{profile.Id} {threadLabel}] {positionName} single-move rep{repeatIndex + 1} depth {profile.MaxDepth}: {FormatTiming(timing)}, best={best} - {BudgetNote(timing)}");
         }
 
         private void RunMultiMove(AIProfile profile, string positionName, BoardState board, int repeatIndex,
@@ -387,14 +387,14 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
                 engine.GetAllLegalMovesIncludingBetrayal(board, board.CurrentTurn, legalMoves);
                 if (legalMoves.Count == 0)
                 {
-                    Emit($"[{profile.Id} {threadLabel}] {positionName} multi-move rep{repeatIndex + 1} ply {ply + 1}/{plyCount}: game ended (checkmate/stalemate) — stopping early.");
+                    Emit($"[{profile.Id} {threadLabel}] {positionName} multi-move rep{repeatIndex + 1} ply {ply + 1}/{plyCount}: game ended (checkmate/stalemate) - stopping early.");
                     break;
                 }
 
                 MoveCommand best = TimedSearch(search, board, settings, rescoreMargin, out SearchTiming timing);
                 RecordTiming(profile.Id, threadLabel, timing);
 
-                Emit($"[{profile.Id} {threadLabel}] {positionName} multi-move rep{repeatIndex + 1} ply {ply + 1}/{plyCount}: {FormatTiming(timing)} — {BudgetNote(timing)}");
+                Emit($"[{profile.Id} {threadLabel}] {positionName} multi-move rep{repeatIndex + 1} ply {ply + 1}/{plyCount}: {FormatTiming(timing)} - {BudgetNote(timing)}");
 
                 // DefendOnly means the search never hands us an Act at the root, so this simple
                 // apply-and-flip loop can't wander into a Retribution sub-sequence it doesn't
@@ -402,7 +402,7 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
                 // surfacing loudly rather than silently corrupting the rest of the run.
                 if (best.Stage != BetrayalStage.None)
                 {
-                    Emit($"[{profile.Id} {threadLabel}] {positionName} multi-move rep{repeatIndex + 1} ply {ply + 1}/{plyCount}: UNEXPECTED staged move ({best.Stage}) under DefendOnly — aborting this cell.");
+                    Emit($"[{profile.Id} {threadLabel}] {positionName} multi-move rep{repeatIndex + 1} ply {ply + 1}/{plyCount}: UNEXPECTED staged move ({best.Stage}) under DefendOnly - aborting this cell.");
                     break;
                 }
 
