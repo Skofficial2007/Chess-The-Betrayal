@@ -255,7 +255,7 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             double sumSeconds = 0;
             int worstDepth = samples[0].DepthReached;
             int sumDepth = 0;
-            double worstOvershootMs = samples[0].OvershootMs;
+            int worstOvershootMs = samples[0].OvershootMsRounded;
 
             foreach (SearchTiming timing in samples)
             {
@@ -266,12 +266,12 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
                 if (timing.DepthReached < worstDepth) worstDepth = timing.DepthReached;
                 sumDepth += timing.DepthReached;
 
-                if (timing.OvershootMs > worstOvershootMs) worstOvershootMs = timing.OvershootMs;
+                if (timing.OvershootMsRounded > worstOvershootMs) worstOvershootMs = timing.OvershootMsRounded;
             }
 
             double meanSeconds = sumSeconds / samples.Count;
             double meanDepth = (double)sumDepth / samples.Count;
-            string overshootNote = worstOvershootMs > 0 ? $"+{worstOvershootMs:F0}ms" : "none";
+            string overshootNote = worstOvershootMs > 0 ? $"+{worstOvershootMs}ms" : "none";
 
             string line = $"[{profile.Id} {threadLabel}] {samples.Count} samples: elapsed worst {worstSeconds:F2}s mean {meanSeconds:F2}s min {minSeconds:F2}s "
                 + $"(budget {profile.TimeBudget.HardMs}ms, worst overshoot {overshootNote}); depth worst {worstDepth} mean {meanDepth:F1}";
@@ -360,7 +360,7 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             MoveCommand best = TimedSearch(search, board, settings, rescoreMargin, out SearchTiming timing);
             RecordTiming(profile.Id, threadLabel, timing);
 
-            Emit($"[{profile.Id} {threadLabel}] {positionName} single-move rep{repeatIndex + 1} depth {profile.MaxDepth}: {FormatTiming(timing)}, best={best} — {Verdict(timing)}");
+            Emit($"[{profile.Id} {threadLabel}] {positionName} single-move rep{repeatIndex + 1} depth {profile.MaxDepth}: {FormatTiming(timing)}, best={best} — {BudgetNote(timing)}");
         }
 
         private void RunMultiMove(AIProfile profile, string positionName, BoardState board, int repeatIndex,
@@ -390,7 +390,7 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
                 MoveCommand best = TimedSearch(search, board, settings, rescoreMargin, out SearchTiming timing);
                 RecordTiming(profile.Id, threadLabel, timing);
 
-                Emit($"[{profile.Id} {threadLabel}] {positionName} multi-move rep{repeatIndex + 1} ply {ply + 1}/{plyCount}: {FormatTiming(timing)} — {Verdict(timing)}");
+                Emit($"[{profile.Id} {threadLabel}] {positionName} multi-move rep{repeatIndex + 1} ply {ply + 1}/{plyCount}: {FormatTiming(timing)} — {BudgetNote(timing)}");
 
                 // DefendOnly means the search never hands us an Act at the root, so this simple
                 // apply-and-flip loop can't wander into a Retribution sub-sequence it doesn't
@@ -417,14 +417,19 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         }
 
         /// <summary>
-        /// A move must always arrive within its own tier's budget, not some fixed number — a
-        /// six-second ceiling means nothing when every tier is already cut off at three seconds or
-        /// less. Reports the actual overshoot rather than a bare pass/fail so a device that misses
-        /// its budget by 10ms and one that misses it by 2 seconds don't read the same.
+        /// How one search sat against its own tier's budget, not some fixed number — a six-second
+        /// ceiling means nothing when every tier is already cut off at three seconds or less.
+        ///
+        /// States the overshoot as a quantity and leaves the judging to the per-tier summary. The
+        /// timer that cancels a search has a resolution of its own — a few milliseconds on a phone,
+        /// around fifteen on Windows — so a line-by-line pass/fail word would be putting a property
+        /// of the clock in front of a reader as a failure of the search, on nearly every line of a
+        /// long run. The magnitude is still printed in full, and a device that misses by 2 ms and
+        /// one that misses by 2 seconds still read nothing alike.
         /// </summary>
-        internal static string Verdict(SearchTiming timing) =>
-            timing.OvershootMs > 0
-                ? $"OVER BUDGET by {timing.OvershootMs:F0}ms (budget {timing.HardMs}ms)"
+        internal static string BudgetNote(SearchTiming timing) =>
+            timing.OvershootMsRounded > 0
+                ? $"+{timing.OvershootMsRounded}ms past budget ({timing.HardMs}ms)"
                 : $"within budget ({timing.HardMs}ms)";
 
         private void Emit(string line) => OnLine?.Invoke(line);
@@ -461,6 +466,16 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             /// cancellation at node boundaries, so a positive value is how late that check came,
             /// not a sign the cancellation itself was late to fire.</summary>
             public double OvershootMs => (Seconds * 1000.0) - HardMs;
+
+            /// <summary>
+            /// The overshoot as a report prints it. Everything that decides whether a search went
+            /// past its budget reads this rather than <see cref="OvershootMs"/>, so the question is
+            /// settled by the same number the reader is shown. A search landing 0.3 ms late is past
+            /// its budget by any exact measure and renders as "0ms" at the precision a report uses,
+            /// and a page full of lines claiming an overshoot of zero teaches whoever reads it to
+            /// stop believing the lines that mean something.
+            /// </summary>
+            public int OvershootMsRounded => (int)Math.Round(OvershootMs, MidpointRounding.AwayFromZero);
         }
     }
 }

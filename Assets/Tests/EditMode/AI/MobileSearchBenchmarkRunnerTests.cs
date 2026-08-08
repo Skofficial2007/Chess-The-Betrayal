@@ -155,36 +155,70 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
-        public void Verdict_WithinItsOwnBudget_ReportsNoOvershoot()
+        public void BudgetNote_WithinItsOwnBudget_ReportsNoOvershoot()
         {
             var timing = new MobileSearchBenchmarkRunner.SearchTiming(seconds: 2.5, budgetCapped: false, depthReached: 7, hardMs: 3000);
 
-            string verdict = MobileSearchBenchmarkRunner.Verdict(timing);
+            string note = MobileSearchBenchmarkRunner.BudgetNote(timing);
 
-            Assert.That(verdict, Does.Contain("within budget"));
-            Assert.That(verdict, Does.Not.Contain("OVER BUDGET"));
+            Assert.That(note, Does.Contain("within budget"));
+            Assert.That(note, Does.Not.Contain("past budget"));
         }
 
         [Test]
-        public void Verdict_PastItsOwnBudget_ReportsTheOvershootInMilliseconds()
+        public void BudgetNote_PastItsOwnBudget_ReportsTheOvershootInMilliseconds()
         {
             var timing = new MobileSearchBenchmarkRunner.SearchTiming(seconds: 3.2, budgetCapped: true, depthReached: 4, hardMs: 3000);
 
-            string verdict = MobileSearchBenchmarkRunner.Verdict(timing);
+            string note = MobileSearchBenchmarkRunner.BudgetNote(timing);
 
-            Assert.That(verdict, Does.Contain("OVER BUDGET by 200ms"));
+            Assert.That(note, Does.Contain("+200ms past budget"));
         }
 
         [Test]
-        public void Verdict_JudgesAgainstTheTiersOwnBudget_NotAFixedSixSeconds()
+        public void BudgetNote_JudgesAgainstTheTiersOwnBudget_NotAFixedSixSeconds()
         {
             // easy's real budget is 1300ms. Two seconds is a genuine, serious overshoot for this
             // tier — the fixed 6-second threshold this replaced would have called it a pass.
             var timing = new MobileSearchBenchmarkRunner.SearchTiming(seconds: 2.0, budgetCapped: true, depthReached: 3, hardMs: 1300);
 
-            string verdict = MobileSearchBenchmarkRunner.Verdict(timing);
+            string note = MobileSearchBenchmarkRunner.BudgetNote(timing);
 
-            Assert.That(verdict, Does.Contain("OVER BUDGET"));
+            Assert.That(note, Does.Contain("past budget"));
+        }
+
+        [Test]
+        public void BudgetNote_AnOvershootTooSmallToPrint_ReadsAsWithinBudget()
+        {
+            // 0.3ms past a 3000ms budget. Exact enough to be a positive number, far too small to
+            // survive being rendered at whole-millisecond precision — a run of 200 searches on a
+            // real device produced 194 lines exactly like this one, each announcing an overshoot
+            // and then naming it as zero.
+            var timing = new MobileSearchBenchmarkRunner.SearchTiming(seconds: 3.0003, budgetCapped: true, depthReached: 7, hardMs: 3000);
+
+            string note = MobileSearchBenchmarkRunner.BudgetNote(timing);
+
+            Assert.That(note, Does.Contain("within budget"),
+                "An overshoot that rounds away to nothing must not be announced as one.");
+            Assert.That(note, Does.Not.Contain("0ms past budget"));
+        }
+
+        [Test]
+        public void EmitTierSummaries_AnOvershootTooSmallToPrint_ReportsNoneRatherThanPlusZero()
+        {
+            var runner = new MobileSearchBenchmarkRunner();
+            string mainThread = MobileSearchBenchmarkRunner.MainThreadLabel;
+            runner.RecordTiming("easy", mainThread,
+                new MobileSearchBenchmarkRunner.SearchTiming(seconds: 1.3004, budgetCapped: true, depthReached: 3, hardMs: 1300));
+
+            var lines = new List<string>();
+            runner.OnLine += lines.Add;
+            runner.EmitTierSummaries(AIProfileTable.BuiltIn);
+
+            string line = lines.Single(l => l.StartsWith($"[easy {mainThread}]"));
+            Assert.That(line, Does.Contain("worst overshoot none"),
+                "The summary decides and prints from the same rounded value the detail lines do.");
+            Assert.That(line, Does.Not.Contain("+0ms"));
         }
 
         [Test]
