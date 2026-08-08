@@ -37,6 +37,7 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         private readonly int _totalCells;
         private IReadOnlyList<string> _summaryLines = Array.Empty<string>();
         private IReadOnlyList<string> _thermalLines = Array.Empty<string>();
+        private bool _thermalLinesTrackSustainedLoad;
         private int _completedCells;
         private bool _isComplete;
         private TimeSpan? _estimatedWorstCase;
@@ -86,13 +87,22 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             Revision++;
         }
 
-        /// <summary>The per-minute depth trend (see MobileSearchBenchmarkRunner.EmitThermalBuckets).
-        /// Left empty for a run too short to say anything about a trend — the section is omitted
-        /// from Render entirely rather than printed empty, so a short run's report reads exactly as
-        /// it did before this existed.</summary>
-        public void SetThermalLines(IReadOnlyList<string> lines)
+        /// <summary>
+        /// The per-minute depth breakdown (see MobileSearchBenchmarkRunner.EmitThermalBuckets).
+        /// Left empty for a run too short to say anything — the section is omitted from Render
+        /// entirely rather than printed empty.
+        ///
+        /// tracksSustainedLoad is what decides whether it may be presented as a thermal reading. A
+        /// minute's depth only says something about the device when every sample in it did the same
+        /// work; on a run that sweeps positions or tiers it says which cells happened to fall in
+        /// that minute instead, and the numbers climb or fall with the running order. The lines are
+        /// still worth printing either way — they are the only place a stall shows up as a minute
+        /// with no samples in it — but they get a heading that does not claim more than they are.
+        /// </summary>
+        public void SetThermalLines(IReadOnlyList<string> lines, bool tracksSustainedLoad)
         {
             _thermalLines = lines;
+            _thermalLinesTrackSustainedLoad = tracksSustainedLoad;
             Revision++;
         }
 
@@ -153,21 +163,28 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
                 : "";
 
             text.AppendLine(SectionTitle(_isComplete
-                ? $"STATUS: COMPLETE — {PlanName}, {_completedCells}/{_totalCells} cells, elapsed {FormatElapsed(elapsed)}"
-                : $"STATUS: RUNNING — {PlanName}, {_completedCells}/{_totalCells} cells, elapsed {FormatElapsed(elapsed)}{estimateNote} "
+                ? $"STATUS: COMPLETE - {PlanName}, {_completedCells}/{_totalCells} cells, elapsed {FormatElapsed(elapsed)}"
+                : $"STATUS: RUNNING - {PlanName}, {_completedCells}/{_totalCells} cells, elapsed {FormatElapsed(elapsed)}{estimateNote} "
                     + "(if this is the last line you see, the run did not finish)", style));
             text.AppendLine();
 
             text.AppendLine(SectionTitle("--- Summary ---", style));
             if (_summaryLines.Count == 0)
-                text.AppendLine("(not yet available — printed once the run completes)");
+                text.AppendLine("(not yet available - printed once the run completes)");
             else
                 foreach (string line in _summaryLines) text.AppendLine(line);
             text.AppendLine();
 
             if (_thermalLines.Count > 0)
             {
-                text.AppendLine(SectionTitle("--- Thermal curve ---", style));
+                text.AppendLine(SectionTitle(_thermalLinesTrackSustainedLoad
+                    ? "--- Thermal curve ---"
+                    : "--- Per-minute breakdown ---", style));
+                if (!_thermalLinesTrackSustainedLoad)
+                {
+                    text.AppendLine("(not a thermal reading: this run varies position or tier, so a minute's depth "
+                        + "reflects which cells fell in it, not how the device was holding up)");
+                }
                 foreach (string line in _thermalLines) text.AppendLine(line);
                 text.AppendLine();
             }
@@ -176,7 +193,7 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             int shown = Math.Max(0, Math.Min(maxDetailLines, _detailLines.Count));
             int firstShown = _detailLines.Count - shown;
             if (firstShown > 0)
-                text.AppendLine($"(showing the last {shown} of {_detailLines.Count} lines — a saved copy has all of them)");
+                text.AppendLine($"(showing the last {shown} of {_detailLines.Count} lines - a saved copy has all of them)");
             for (int i = firstShown; i < _detailLines.Count; i++) text.AppendLine(_detailLines[i]);
 
             return text.ToString();

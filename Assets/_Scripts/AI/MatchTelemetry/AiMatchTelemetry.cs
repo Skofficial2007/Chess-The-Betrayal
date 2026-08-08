@@ -120,6 +120,9 @@ namespace ChessTheBetrayal.AI.MatchTelemetry
 
             double meanElapsed = elapsedSum / (double)searchedCount;
             text.AppendLine($"elapsed ms: worst={worstElapsed} mean={meanElapsed:F0} min={minElapsed}");
+            text.AppendLine("(elapsed runs from asking for a move to that move reaching the board, so it includes "
+                + "the wait for the next frame. It is what the player waited, not what the search spent, and does "
+                + "not compare against a device benchmark figure.)");
 
             string mateNote = matesFound > 0
                 ? $" ({matesFound} more stopped early on a forced mate)"
@@ -138,7 +141,7 @@ namespace ChessTheBetrayal.AI.MatchTelemetry
         private static string FormatMove(AiMoveRecord move) => move.Source switch
         {
             AiMoveSource.Book => $"ply {move.PlyNumber}: {move.Team} plays {move.Move} (book)",
-            AiMoveSource.Defection => $"ply {move.PlyNumber}: {MoveNotation.Describe(move.Move)} — now {move.Team}'s",
+            AiMoveSource.Defection => $"ply {move.PlyNumber}: {MoveNotation.Describe(move.Move)} - now {move.Team}'s",
             _ => $"ply {move.PlyNumber}: {move.Team} plays {move.Move} (depth {move.CompletedDepth}, {move.StopReason}, {move.ElapsedMs}ms)",
         };
     }

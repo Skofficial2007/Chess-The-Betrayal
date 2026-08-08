@@ -132,6 +132,17 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         public bool HasMainThreadControl => ControlPositionCount > 0 && MainThreadControlRepeats > 0;
 
         /// <summary>
+        /// Whether a per-minute depth trend from this run can be read as heat. Only a run that
+        /// repeats one position at one tier can: every sample then did identical work, so a change
+        /// across minutes is a change in the device. Vary either and each minute contains whatever
+        /// cells happened to fall in it, and the trend tracks the running order instead — the
+        /// tester plan's curve climbs a ply and a half between its first two minutes purely because
+        /// the deeper-searching positions come second, which reads as a phone speeding up as it
+        /// warms.
+        /// </summary>
+        public bool CurveTracksSustainedLoad => PositionIndices.Count == 1 && Profiles.Count == 1;
+
+        /// <summary>
         /// The run's shape in one line. A cell count on its own cannot separate breadth from
         /// repetition, and the two answer entirely different questions.
         /// </summary>
@@ -145,7 +156,7 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
                 ? $", plus a main-thread control on {ControlPositionCount} of them"
                 : ", worker thread only";
 
-            return $"Plan: {Name} — {positions} x {tiers}, {repeats}{playForward}{control}";
+            return $"Plan: {Name} - {positions} x {tiers}, {repeats}{playForward}{control}";
         }
 
         /// <summary>Worker-thread cells plus main-thread control cells.</summary>

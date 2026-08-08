@@ -177,7 +177,7 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             lock (_reportLock)
             {
                 _report.SetSummaryLines(summaryLines);
-                _report.SetThermalLines(thermalLines);
+                _report.SetThermalLines(thermalLines, plan.CurveTracksSustainedLoad);
                 _report.AppendHeaderLine(BuildBatteryLine("end"));
                 _report.MarkComplete();
             }

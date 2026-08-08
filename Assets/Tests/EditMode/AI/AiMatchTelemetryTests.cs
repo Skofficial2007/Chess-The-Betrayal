@@ -211,6 +211,32 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
+        public void Render_SaysWhatItsElapsedClockActuallyCovers()
+        {
+            var telemetry = new AiMatchTelemetry("match");
+            telemetry.RecordMove(Searched(1, Team.White, elapsedMs: 3044, depth: 6));
+
+            // 3044ms against a 3000ms budget reads as a missed deadline next to a benchmark whose
+            // worst overshoot across 200 searches was 10ms. It is not the same measurement: this
+            // clock starts when the move is asked for and stops when it reaches the board, so it
+            // carries the wait for the next frame as well.
+            Assert.That(telemetry.Render(), Does.Contain("reaching the board"));
+        }
+
+        [Test]
+        public void Render_ProducesNothingOutsidePlainAscii()
+        {
+            var telemetry = new AiMatchTelemetry("match");
+            telemetry.AppendHeaderLine("Device model: TestPhone");
+            telemetry.RecordMove(Book(1, Team.White));
+            telemetry.RecordMove(Searched(3, Team.White, elapsedMs: 3044, depth: 6));
+            telemetry.RecordMove(Searched(5, Team.White, elapsedMs: 36, depth: 2, SearchStopReason.MateFound));
+            telemetry.RecordMove(Defection(7, Team.Black));
+
+            BenchmarkReportTests.AssertPlainAscii(telemetry.Render());
+        }
+
+        [Test]
         public void MoveCount_ReflectsEveryRecordedPly_WhateverProducedIt()
         {
             var telemetry = new AiMatchTelemetry("match");

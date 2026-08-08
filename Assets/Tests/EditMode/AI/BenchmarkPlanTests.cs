@@ -233,6 +233,25 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
+        public void CurveTracksSustainedLoad_OnlyForTheRunWhereEverySampleDidTheSameWork()
+        {
+            Assert.That(BenchmarkPlan.Thermal().CurveTracksSustainedLoad, Is.True,
+                "One position at one tier, repeated — a change across minutes is a change in the device.");
+            Assert.That(BenchmarkPlan.Tester().CurveTracksSustainedLoad, Is.False,
+                "Four positions and six tiers: a minute holds whatever cells fell in it, so its depth " +
+                "tracks the running order and not the hardware.");
+            Assert.That(BenchmarkPlan.Exhaustive().CurveTracksSustainedLoad, Is.False);
+        }
+
+        [Test]
+        public void Describe_ProducesNothingOutsidePlainAscii()
+        {
+            BenchmarkReportTests.AssertPlainAscii(BenchmarkPlan.Tester().Describe());
+            BenchmarkReportTests.AssertPlainAscii(BenchmarkPlan.Thermal().Describe());
+            BenchmarkReportTests.AssertPlainAscii(BenchmarkPlan.Exhaustive().Describe());
+        }
+
+        [Test]
         public void HasMainThreadControl_IsTrueOnlyForAPlanThatActuallyRunsOne()
         {
             Assert.That(BenchmarkPlan.Tester().HasMainThreadControl, Is.True);
