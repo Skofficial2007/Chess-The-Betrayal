@@ -41,13 +41,19 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         private bool _isComplete;
         private TimeSpan? _estimatedWorstCase;
 
-        public BenchmarkReport(string runId, int totalCells)
+        public BenchmarkReport(string runId, string planName, int totalCells)
         {
             RunId = runId;
+            PlanName = planName;
             _totalCells = totalCells;
         }
 
         public string RunId { get; }
+
+        /// <summary>Which run this was. A cell count alone reads the same whether it covered 200
+        /// positions or repeated one of them 200 times, and a file arriving weeks later has
+        /// nothing else to say which it was.</summary>
+        public string PlanName { get; }
 
         /// <summary>
         /// Bumped by every change to the report. A display can compare this against the last value
@@ -147,8 +153,8 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
                 : "";
 
             text.AppendLine(SectionTitle(_isComplete
-                ? $"STATUS: COMPLETE — {_completedCells}/{_totalCells} cells, elapsed {FormatElapsed(elapsed)}"
-                : $"STATUS: RUNNING — {_completedCells}/{_totalCells} cells, elapsed {FormatElapsed(elapsed)}{estimateNote} "
+                ? $"STATUS: COMPLETE — {PlanName}, {_completedCells}/{_totalCells} cells, elapsed {FormatElapsed(elapsed)}"
+                : $"STATUS: RUNNING — {PlanName}, {_completedCells}/{_totalCells} cells, elapsed {FormatElapsed(elapsed)}{estimateNote} "
                     + "(if this is the last line you see, the run did not finish)", style));
             text.AppendLine();
 

@@ -28,6 +28,7 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         /// exhaustive run, not in the one measuring whether the promise holds.
         /// </summary>
         public static BenchmarkPlan Tester() => new BenchmarkPlan(
+            name: "Quick Run",
             positionIndices: TesterPositionIndices(),
             repeatCount: 2,
             includePlayForward: false,
@@ -41,6 +42,7 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         /// handed to someone else.
         /// </summary>
         public static BenchmarkPlan Exhaustive() => new BenchmarkPlan(
+            name: "Exhaustive Run",
             positionIndices: AllPositionIndices(),
             repeatCount: MobileSearchBenchmarkRunner.DefaultRepeatCount,
             includePlayForward: true,
@@ -64,6 +66,7 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         /// onto a worker, so that is the only context whose sustained behaviour matters here.
         /// </summary>
         public static BenchmarkPlan Thermal() => new BenchmarkPlan(
+            name: "Long Run (sustained load)",
             positionIndices: new[] { CuratedOpeningLines.Count },
             repeatCount: ThermalSearchCount,
             includePlayForward: false,
@@ -79,9 +82,11 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             throw new InvalidOperationException("AIProfileTable.BuiltIn has no 'impossible' tier.");
         }
 
-        private BenchmarkPlan(IReadOnlyList<int> positionIndices, int repeatCount, bool includePlayForward,
-            int mainThreadControlPositions, int mainThreadControlRepeats, IReadOnlyList<AIProfile> profiles)
+        private BenchmarkPlan(string name, IReadOnlyList<int> positionIndices, int repeatCount,
+            bool includePlayForward, int mainThreadControlPositions, int mainThreadControlRepeats,
+            IReadOnlyList<AIProfile> profiles)
         {
+            Name = name;
             PositionIndices = positionIndices;
             RepeatCount = repeatCount;
             IncludePlayForward = includePlayForward;
@@ -89,6 +94,14 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             MainThreadControlRepeats = mainThreadControlRepeats;
             Profiles = profiles;
         }
+
+        /// <summary>
+        /// What this run is, in the words the button that starts it uses. A report that only counts
+        /// its cells describes 200 repeats of one position exactly the way it would describe a
+        /// matrix of 200 different ones, and whoever reads the file later has no way to tell which
+        /// they were sent.
+        /// </summary>
+        public string Name { get; }
 
         /// <summary>Positions this run covers, by the index MobileSearchBenchmarkRunner uses.</summary>
         public IReadOnlyList<int> PositionIndices { get; }
@@ -112,6 +125,28 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         public int MainThreadControlPositions { get; }
 
         public int MainThreadControlRepeats { get; }
+
+        /// <summary>Whether this run measures the main thread at all. A plan that doesn't should
+        /// not be reported against it — an absence only says something where something was
+        /// expected.</summary>
+        public bool HasMainThreadControl => ControlPositionCount > 0 && MainThreadControlRepeats > 0;
+
+        /// <summary>
+        /// The run's shape in one line. A cell count on its own cannot separate breadth from
+        /// repetition, and the two answer entirely different questions.
+        /// </summary>
+        public string Describe()
+        {
+            string positions = PositionIndices.Count == 1 ? "1 position" : $"{PositionIndices.Count} positions";
+            string tiers = Profiles.Count == 1 ? $"the {Profiles[0].Id} tier alone" : $"{Profiles.Count} tiers";
+            string repeats = RepeatCount == 1 ? "once each" : $"{RepeatCount} times each";
+            string playForward = IncludePlayForward ? ", cold search plus play-forward" : ", cold search only";
+            string control = HasMainThreadControl
+                ? $", plus a main-thread control on {ControlPositionCount} of them"
+                : ", worker thread only";
+
+            return $"Plan: {Name} — {positions} x {tiers}, {repeats}{playForward}{control}";
+        }
 
         /// <summary>Worker-thread cells plus main-thread control cells.</summary>
         public int TotalCells =>

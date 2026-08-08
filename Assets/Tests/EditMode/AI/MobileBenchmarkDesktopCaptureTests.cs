@@ -22,7 +22,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
     public class MobileBenchmarkDesktopCaptureTests
     {
         [Test]
-        public void CaptureTesterPlanReference() => Capture(BenchmarkPlan.Tester(), "TESTER");
+        public void CaptureTesterPlanReference() => Capture(BenchmarkPlan.Tester());
 
         /// <summary>
         /// Impossible tier only, 200 cold searches in a row — the sustained-load probe, not a
@@ -35,7 +35,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         [Test]
         [Explicit("Ten-minute sustained-load run — start it deliberately.")]
         [Timeout(700_000)]
-        public void CaptureThermalPlanReference() => Capture(BenchmarkPlan.Thermal(), "THERMAL");
+        public void CaptureThermalPlanReference() => Capture(BenchmarkPlan.Thermal());
 
         /// <summary>
         /// Every position, every repeat, play-forward included, both thread contexts. Hours long —
@@ -43,15 +43,18 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         /// </summary>
         [Test]
         [Explicit("Multi-hour exhaustive run — start it deliberately.")]
-        public void CaptureExhaustiveReference() => Capture(BenchmarkPlan.Exhaustive(), "EXHAUSTIVE");
+        public void CaptureExhaustiveReference() => Capture(BenchmarkPlan.Exhaustive());
 
-        private static void Capture(BenchmarkPlan plan, string label)
+        private static void Capture(BenchmarkPlan plan)
         {
             var runner = new MobileSearchBenchmarkRunner();
             var profileProvider = new AIProfileTableProvider();
             runner.OnLine += line => Debug.Log($"[capture] {line}");
 
-            Debug.Log($"[capture] === {label} PLAN: {plan.TotalCells} cells, at most {plan.EstimatedWorstCase:mm\\:ss} ===");
+            // The plan names and describes itself, so a desktop reference and the device report it
+            // is the reference for cannot end up labelled differently.
+            Debug.Log($"[capture] === {plan.Name}: {plan.TotalCells} cells, at most {plan.EstimatedWorstCase:mm\\:ss} ===");
+            Debug.Log($"[capture] {plan.Describe()}");
 
             // The same cells, in the same order, that a device runs — walked from the plan itself
             // rather than re-derived here, so a desktop reference row can't quietly describe a
@@ -72,11 +75,11 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 }
             }
 
-            Debug.Log($"[capture] === {label} SUMMARY ===");
-            foreach (string line in runner.EmitTierSummaries(plan.Profiles))
+            Debug.Log($"[capture] === {plan.Name} SUMMARY ===");
+            foreach (string line in runner.EmitTierSummaries(plan.Profiles, plan.HasMainThreadControl))
                 Debug.Log($"[capture-summary] {line}");
 
-            Debug.Log($"[capture] === {label} THERMAL CURVE ===");
+            Debug.Log($"[capture] === {plan.Name} THERMAL CURVE ===");
             foreach (string line in runner.EmitThermalBuckets())
                 Debug.Log($"[capture-thermal] {line}");
         }

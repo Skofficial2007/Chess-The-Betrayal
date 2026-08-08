@@ -287,6 +287,25 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
+        public void EmitTierSummaries_ForAPlanWithNoMainThreadControl_SaysNothingAboutTheMainThread()
+        {
+            var runner = new MobileSearchBenchmarkRunner();
+            runner.RecordTiming("impossible", MobileSearchBenchmarkRunner.WorkerThreadLabel,
+                new MobileSearchBenchmarkRunner.SearchTiming(seconds: 3.0, budgetCapped: true, depthReached: 7, hardMs: 3000));
+
+            var lines = new List<string>();
+            runner.OnLine += lines.Add;
+            runner.EmitTierSummaries(AIProfileTable.BuiltIn, includeMainThreadControl: false);
+
+            // A "no samples recorded" line is only worth printing where samples were expected. The
+            // sustained-load run deliberately never touches the main thread, so saying it found
+            // nothing there reads as a run that fell short of something it was asked to do.
+            Assert.That(lines.Any(l => l.Contains(MobileSearchBenchmarkRunner.MainThreadLabel)), Is.False,
+                "Got:\n" + string.Join("\n", lines));
+            Assert.That(lines.Any(l => l.StartsWith($"[impossible {MobileSearchBenchmarkRunner.WorkerThreadLabel}]")), Is.True);
+        }
+
+        [Test]
         public void EmitTierSummaries_AllSixBuiltInTiersAlwaysGetALineForEachThreadContext()
         {
             var runner = new MobileSearchBenchmarkRunner();

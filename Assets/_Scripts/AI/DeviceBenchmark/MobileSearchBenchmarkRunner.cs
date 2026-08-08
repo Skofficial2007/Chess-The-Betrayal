@@ -220,21 +220,25 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         /// something against the tiers a run was actually meant to cover. Enumerating every built-in
         /// tier regardless put eleven "no samples recorded" lines above the single real one on the
         /// first single-tier run that reached a device, which reads at a glance like a run that
-        /// failed rather than one that was never asked to sweep. A plan already knows its own tiers;
-        /// this takes them rather than assuming.
+        /// failed rather than one that was never asked to sweep. The same reasoning applies to the
+        /// main-thread control, which some plans deliberately skip: includeMainThreadControl is
+        /// false for those, so they stop reporting an absence nobody was owed.
         ///
         /// Safe to call at any point, since it only ever reports on whatever has been recorded so
         /// far. Also emits each line the usual way (for adb logcat / a plain console listener);
         /// returning them too lets a caller assembling a structured report (see BenchmarkReport)
         /// place the summary as its own section rather than re-parsing the general line stream.
         /// </summary>
-        public IReadOnlyList<string> EmitTierSummaries(IReadOnlyList<AIProfile> profiles)
+        public IReadOnlyList<string> EmitTierSummaries(IReadOnlyList<AIProfile> profiles,
+            bool includeMainThreadControl = true)
         {
             var lines = new List<string>();
 
             foreach (AIProfile profile in profiles)
             {
-                lines.Add(EmitTierSummaryLine(profile, MainThreadLabel));
+                if (includeMainThreadControl)
+                    lines.Add(EmitTierSummaryLine(profile, MainThreadLabel));
+
                 lines.Add(EmitTierSummaryLine(profile, WorkerThreadLabel));
             }
 

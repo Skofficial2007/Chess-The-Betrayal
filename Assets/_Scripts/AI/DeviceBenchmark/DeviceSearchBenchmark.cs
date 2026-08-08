@@ -138,8 +138,9 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             string runId = DateTime.Now.ToString("yyyyMMdd-HHmmss");
             lock (_reportLock)
             {
-                _report = new BenchmarkReport(runId, plan.TotalCells);
+                _report = new BenchmarkReport(runId, plan.Name, plan.TotalCells);
                 foreach (string line in DescribeDevice().ToReportLines()) _report.AppendHeaderLine(line);
+                _report.AppendHeaderLine(plan.Describe());
                 _report.AppendHeaderLine(BuildBatteryLine("start"));
                 _report.SetEstimatedWorstCase(plan.EstimatedWorstCase);
             }
@@ -171,7 +172,7 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
                 yield return null;
             }
 
-            IReadOnlyList<string> summaryLines = _runner.EmitTierSummaries(plan.Profiles);
+            IReadOnlyList<string> summaryLines = _runner.EmitTierSummaries(plan.Profiles, plan.HasMainThreadControl);
             IReadOnlyList<string> thermalLines = _runner.EmitThermalBuckets();
             lock (_reportLock)
             {
