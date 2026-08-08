@@ -51,6 +51,10 @@ namespace ChessTheBetrayal.View
             public float Glow;
         }
 
+        [Header("Shader")]
+        [Tooltip("The unlit shader every highlight material is built from. Must stay assigned: this reference is the only reason the shader is in a player build at all.")]
+        [SerializeField] private Shader highlightShader;
+
         [Header("Markers — the shape drawn on a square")]
         [Tooltip("A square this piece can move to with nothing to take. The quietest thing on the board.")]
         [SerializeField] private Look quietMove = new Look { Colour = new Color(0.35f, 0.85f, 0.45f, 0.72f), Glow = 0f };
@@ -213,6 +217,19 @@ namespace ChessTheBetrayal.View
 
         [Tooltip("Seconds for the brackets to close onto the ring. Slightly longer than the punch, so the closing reads as a movement rather than a snap.")]
         [SerializeField, Range(0.05f, 0.6f)] private float betrayerLockBracketDuration = 0.2f;
+
+        /// <summary>
+        /// The shader every highlight material is built from.
+        ///
+        /// This looks like a reference that could be replaced with a lookup by name, and it must
+        /// not be. A shader reaches a player build only when something in the build refers to it,
+        /// and nothing else does: the materials are all made at runtime, so there is no material
+        /// asset carrying it. Finding it by name instead compiles and runs perfectly in the editor,
+        /// which searches the whole project, and then ships a build with no shader in it — every
+        /// square marker silently absent on the device while looking correct on the desk it was
+        /// built on. Keeping the reference here is what puts the shader in the build.
+        /// </summary>
+        public Shader HighlightShader => highlightShader;
 
         public Look QuietMove => quietMove;
         public Look Capture => capture;

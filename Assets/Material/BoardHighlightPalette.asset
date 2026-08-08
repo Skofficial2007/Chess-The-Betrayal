@@ -12,6 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 36d760726e4429f4bb991947e4c2d300, type: 3}
   m_Name: BoardHighlightPalette
   m_EditorClassIdentifier: 
+  highlightShader: {fileID: 4800000, guid: 4756b053f405f4f4fa979c18212194ff, type: 3}
   quietMove:
     Colour: {r: 0.35, g: 0.85, b: 0.45, a: 0.72}
     Glow: 0

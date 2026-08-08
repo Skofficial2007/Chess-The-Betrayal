@@ -551,10 +551,15 @@ namespace ChessTheBetrayal.View
         /// </summary>
         private void BuildHighlightMaterials()
         {
-            Shader shader = Shader.Find("Chess/BoardHighlight");
+            // Taken from the palette rather than looked up by name. The lookup searches whatever
+            // shaders a build happens to contain, and a shader only gets into a build if something
+            // in it refers to the shader — which nothing did, because every material here is made
+            // at runtime. The editor searches the whole project instead, so the lookup always
+            // worked on the desk and shipped a build with no highlights on it at all.
+            Shader shader = highlightPalette.HighlightShader;
             if (shader == null)
             {
-                Debug.LogError($"[{nameof(BoardVisuals)}] The board highlight shader is missing, so no square markers can be drawn.", this);
+                Debug.LogError($"[{nameof(BoardVisuals)}] The board highlight palette has no shader assigned, so no square markers can be drawn.", this);
                 return;
             }
 
@@ -584,7 +589,7 @@ namespace ChessTheBetrayal.View
         /// </summary>
         private void BuildSelectionCornerTicks()
         {
-            Shader shader = Shader.Find("Chess/BoardHighlight");
+            Shader shader = highlightPalette.HighlightShader;
             if (shader == null) return;
 
             // Rebuilding the board rebuilds the materials these point at, so an earlier group would
