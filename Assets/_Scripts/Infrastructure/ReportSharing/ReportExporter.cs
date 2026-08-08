@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Runtime.CompilerServices;
+using System.Text;
 using UnityEngine;
 
 [assembly: InternalsVisibleTo("ChessTheBetrayal.Tests.EditMode")]
@@ -40,6 +41,23 @@ namespace ChessTheBetrayal.Infrastructure
     /// </summary>
     public static class ReportExporter
     {
+        /// <summary>
+        /// UTF-8 with a byte-order mark, and the mark is the whole point. A report is written on a
+        /// phone and opened on whatever the person receiving it happens to use, and a plain UTF-8
+        /// file with nothing to identify it is read as the local ANSI codepage by enough Windows
+        /// text viewers that the first real device report came back with every em-dash rendered as
+        /// mojibake. The three-byte mark makes the encoding unambiguous to a reader that would
+        /// otherwise have to guess. Anything writing a report as bytes uses this, so no two export
+        /// routes can encode the same text differently.
+        /// </summary>
+        internal static readonly UTF8Encoding ReportEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
+
+        /// <summary>Writes a report to an explicit path. Separate from <see cref="Save"/> so the
+        /// bytes that reach disk can be asserted in a test without a clipboard or a platform
+        /// path being involved.</summary>
+        internal static void WriteReport(string path, string contents) =>
+            File.WriteAllText(path, contents, ReportEncoding);
+
         public static ReportExportResult Save(string fileName, string contents)
         {
             GUIUtility.systemCopyBuffer = contents;
@@ -47,7 +65,7 @@ namespace ChessTheBetrayal.Infrastructure
             string path = Path.Combine(Application.persistentDataPath, fileName);
             try
             {
-                File.WriteAllText(path, contents);
+                WriteReport(path, contents);
             }
             catch (Exception e)
             {
