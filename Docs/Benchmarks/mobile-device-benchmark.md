@@ -22,8 +22,9 @@ searching cannot go past it.
 this because both plans have now been seen to finish late. A run yields a frame between cells so
 results appear as they arrive, and a frame costs whatever that device's Update loop costs at the
 time — so real wall clock is the ceiling plus a per-cell overhead that says nothing about the search
-and everything about what else is on screen. A phone drawing the live report measured about 75 ms a
-cell: a few seconds onto the 54-cell tester run, about fifteen onto the 200-cell thermal one. In the
+and everything about what else is on screen. A phone drawing the live report measured 75–100 ms a
+cell across two devices: a few seconds onto the 54-cell tester run, fifteen to twenty onto the
+200-cell thermal one. In the
 Editor it is far larger and depends on window focus — a hand-driven Play-mode tester run took closer
 to three minutes — which is worth knowing before reading one as a slow device. Quote the ceiling for
 what it bounds, which is the searching, because that is the part that measures the phone.
@@ -299,7 +300,7 @@ Quick Run, and send back the shared report. One row per device once a full run c
 | Device | Chipset (GPU proxy) | Worst-case overshoot | Tier that overshot | Deepest tier's depth reached (worst-case) | Verdict | Notes |
 |---|---|---:|---|---:|---|---|
 | TrebleDroid GSI, Android 14 / API 34 (model not reported) | Mali-G68 MC4 [ARM], 8 cores @ 2400 MHz, 7.6 GB | +1 ms | impossible | 7 (impossible) | Pass | Thermal run only — the tester run was lost, see below |
-| realme RMX3998, Android 16 / API 36 | Mali-G57 MC2, 8 cores @ 2200 MHz, 5.5 GB | +2 ms | impossible | 7 (impossible, thermal run) | Pass | First device to complete both plans — all six tiers, see below |
+| realme RMX3998, Android 16 / API 36 | Mali-G57 MC2, 8 cores @ 2200 MHz, 5.5 GB | +10 ms | impossible | 7 (impossible, sustained run) | Pass | First device to complete both plans — all six tiers, see below |
 
 ### The first complete six-tier device run — realme RMX3998
 
@@ -312,36 +313,41 @@ on real hardware, which is the claim the whole "how long it takes" section above
 
 Worker-thread pass, 8 samples per tier:
 
-| Tier | Budget | Mean elapsed | Mean depth |
-|---|---:|---:|---:|
-| easy | 1300 ms | 0.42 s | 3.0 |
-| normal | 2250 ms | 1.63 s | 5.0 |
-| hard | 3000 ms | 3.00 s | 6.3 |
-| aggressive | 3000 ms | 3.00 s | 6.5 |
-| extreme | 3000 ms | 3.00 s | 7.0 |
-| impossible | 3000 ms | 3.00 s | 6.4 |
+| Tier | Budget | Worst elapsed | Worst overshoot | Depth worst / mean |
+|---|---:|---:|---:|---:|
+| easy | 1300 ms | 0.62 s | none | 3 / 3.0 |
+| normal | 2250 ms | 2.25 s | +1 ms | 5 / 5.0 |
+| hard | 3000 ms | 3.00 s | +5 ms | 5 / 6.3 |
+| aggressive | 3000 ms | 3.00 s | none | 6 / 6.5 |
+| extreme | 3000 ms | 3.00 s | +5 ms | 6 / 7.0 |
+| impossible | 3000 ms | 3.00 s | +1 ms | 5 / 6.3 |
 
 **Reading it against the desktop.** The two shallow tiers reach their configured ceiling exactly, as
 they do everywhere — the only thing their timings measure is how little they were asked to do. The
 four deep tiers are budget-bound by construction, so depth is the whole of the signal, and the phone
-lands around 6.3–7.0 against the desktop's 7.0–7.8. Roughly one ply shallower on a chip with a
-fraction of the desktop's power is a good result, not a finding.
+means 6.3–7.0 against the desktop's 7.0–7.8. Roughly one ply shallower on a chip with a fraction of
+the desktop's power is a good result, not a finding.
 
-The four deep tiers sitting within 0.7 of each other, with `impossible` reading below `extreme`, is
-not a defect either. Eight samples against a known ±1–2 ply of wall-clock jitter cannot separate
-them, and the tiers being close at the top is a deliberate, recorded property of the profile table
-rather than something this run discovered.
+The main-thread control, one sample per tier, matched the worker pass on time throughout and reached
+depth 3/5/6/6/7/6. Nothing here suggests this device's scheduler treats background work differently.
 
-**Two columns this row cannot fill exactly.** The per-tier worst-case overshoot and worst-case depth
-for the tester run were not transcribed off the shared report, so the table's headline overshoot is
-taken from the sustained-load run's 200 samples instead — a stricter figure, being the worst of two
-hundred rather than of eight. Both belong in the per-tier table above and go in as soon as a report
-carries them; a device sharing after each run fills them without any code change.
+**The worst-depth column is where this run says something the means hide.** On one position — the
+Italian, `e2e4 e7e5 g1f3 b8c6 f1c4` — `hard` and `impossible` reach only depth 5 while `extreme`
+reaches 7, on both repeats. `extreme` and `impossible` share a `MaxDepth` of 9 and the same 3000 ms
+budget and differ only in evaluator weighting, which makes that a controlled comparison: the weighted
+evaluator orders this position roughly two plies better than the identity one, and the two
+identity-weighted tiers settle on a weakening pawn push as a result. Repeats are not independent
+samples here — the search is deterministic given identical inputs — so both agreeing means this is a
+property of the position and the profile rather than wall-clock noise.
 
-**Sustained load: no throttling, at all.** 200 cold searches at the impossible tier over 10m 19s.
-Depth read **7.0 in every one of the eleven minute buckets** — not a mean of 7 with variation under
-it, but the same figure from minute 0 to minute 10. Worst overshoot across all 200 was **+2 ms on a
-3000 ms budget**, 0.07%. Battery went 70% to 68%.
+Recorded as a measurement, not a call to action. The four deep tiers sitting close together, with
+`impossible` no deeper than `hard`, is a deliberate and separately recorded property of the profile
+table, not something this run discovered.
+
+**Sustained load: no throttling, at all.** 200 cold searches at the impossible tier over 10m 20s.
+Depth read **7 in every one of the eleven minute buckets** — not a mean of 7 with variation under
+it, but the same figure from minute 0 to minute 10. Worst overshoot across all 200 was **+10 ms on a
+3000 ms budget**, and all but a handful came in at +2 ms or less. Battery went 87% to 85%.
 
 That is the second phone in a row to hold depth flat across a full ten minutes at the heaviest tier
 the game ships, and it settles the open question about asking Android for a sustained-performance
@@ -458,6 +464,20 @@ that arrived in 40 ms genuinely arrived in 40 ms.
 
 The report carries the same device and build header the benchmark's does, from the same reader, and
 is stamped per match so a Replay's own report is attributable too.
+
+**Its elapsed is not the benchmark's elapsed, and the two must not be read against each other.**
+This clock starts when a move is asked for and stops when that move reaches the board, so it carries
+the wait for the next frame as well as the search. The benchmark's wraps the search call and nothing
+else. The first real match report showed a worst of 3044 ms against a 3000 ms budget while the same
+phone's 200-search sustained run never went past +10 ms — that gap is the frame, not a missed
+deadline. The report says as much on the page, because the two figures otherwise sit on this one and
+invite the comparison. What this clock measures that no benchmark can is the delay a player actually
+sat through, which is worth having precisely because it is the larger number.
+
+**The realme's first shared match** (aggressive tier, seven recorded plies) also exercised the parts
+of the log added for exactly this: two book plies, a mate found at depth 2 in 36 ms correctly kept
+out of the depth spread and counted separately, and no Defection — so the Defection line is still the
+one part of this feature never yet seen on a device.
 
 Shipping off by default, behind `GameManager`'s `enableAiTelemetrySharing` — the same
 composition-root-owned-flag shape as its existing `logMoves` field. When it's on and the match that
