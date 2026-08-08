@@ -24,21 +24,12 @@ namespace ChessTheBetrayal.AI.OpeningBook
             if (board == null) return false;
             if (profile.OpeningBookDepthPlies <= 0) return true;
 
-            return PliesPlayed(board) < profile.OpeningBookDepthPlies;
+            // Read straight off the board rather than tracked by the agent, so taking a move back
+            // moves the book boundary back with it. A Betrayal sequence records every one of its
+            // steps there even though the turn only passes once, so the count runs slightly ahead
+            // during one — which costs nothing, since the book declines outright while a Betrayal
+            // is in progress and no book line contains one.
+            return board.PliesPlayed < profile.OpeningBookDepthPlies;
         }
-
-        /// <summary>
-        /// How many single moves have been played so far.
-        ///
-        /// BoardState records a move as two entries (where it came from and where it went), so the
-        /// property below counts half-moves despite being named for full ones — which happens to be
-        /// exactly the unit a book depth is measured in. It is read straight off the board rather
-        /// than tracked by the agent so that taking a move back moves the book boundary back too.
-        ///
-        /// A Betrayal sequence records every one of its steps here even though the turn only
-        /// passes once, so this runs slightly ahead during one. That costs nothing: the book
-        /// declines outright while a Betrayal is in progress, and no book line contains one.
-        /// </summary>
-        private static int PliesPlayed(BoardState board) => board.FullMoveNumber;
     }
 }

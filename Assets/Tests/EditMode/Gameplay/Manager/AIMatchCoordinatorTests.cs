@@ -249,7 +249,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         public void RecordTelemetry_On_ReadsThePlyNumberFromTheBoardOnceTheMoveIsActuallyApplied()
         {
             // The shared fixture's playMove stub above only records the move for assertions and
-            // never touches the board, so BoardState.FullMoveNumber would never move off zero
+            // never touches the board, so BoardState.PliesPlayed would never move off zero
             // there. This test uses a playMove that actually applies the move, the way MatchDriver
             // does in production, so the recorded ply number reflects something real.
             var engine = new ChessEngineAdapter();

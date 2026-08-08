@@ -75,7 +75,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             Assert.That(board.CurrentTurn, Is.EqualTo(Team.White));
             Assert.That(board.CastlingRights, Is.EqualTo(BoardState.CastlingAllRights));
             Assert.That(board.EnPassantFile, Is.Null);
-            Assert.That(board.FullMoveNumber, Is.EqualTo(0),
+            Assert.That(board.PliesPlayed, Is.EqualTo(0),
                 "A board that reports plies already played would put the opening book past a tier's " +
                 "allowance before the first move.");
             Assert.That(board.IsGameOver, Is.False);

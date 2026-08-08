@@ -231,7 +231,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
 
             if (RecordTelemetry && _aiAgent is AsyncAIAgent recordingAgent)
             {
-                Telemetry.RecordMove(new AiMoveRecord(_board.FullMoveNumber, _aiTeam, move, fromBook: false,
+                Telemetry.RecordMove(new AiMoveRecord(_board.PliesPlayed, _aiTeam, move, fromBook: false,
                     auxMs, recordingAgent.LastCompletedDepth, recordingAgent.StopReason));
             }
 
@@ -257,7 +257,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
 
             if (RecordTelemetry)
             {
-                Telemetry.RecordMove(new AiMoveRecord(_board.FullMoveNumber, _aiTeam, move, fromBook: true,
+                Telemetry.RecordMove(new AiMoveRecord(_board.PliesPlayed, _aiTeam, move, fromBook: true,
                     elapsedMs: 0, completedDepth: 0, stopReason: SearchStopReason.Unset));
             }
 

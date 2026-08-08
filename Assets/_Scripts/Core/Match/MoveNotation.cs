@@ -14,14 +14,19 @@ namespace ChessTheBetrayal.Core.Match
     /// Deliberately NOT full SAN (no disambiguation, no +/# suffixes) — this is a debugging and
     /// replay aid, not a PGN exporter. If you need PGN export later, build it as a separate pass
     /// over MatchMoveLog rather than complicating this formatter.
+    ///
+    /// The leading number counts plies, so both sides get their own — "12." and "13..." rather
+    /// than the chess convention of "12." and "12...". That suits a log meant for recreating an
+    /// exact position, where every ply including a Betrayal sub-sequence's needs its own address;
+    /// a PGN exporter would want the other convention and should number its own lines.
     /// </summary>
     public static class MoveNotation
     {
-        public static string Format(MoveCommand move, int fullMoveNumber)
+        public static string Format(MoveCommand move, int plyNumber)
         {
             var sb = new StringBuilder(32);
 
-            sb.Append(fullMoveNumber);
+            sb.Append(plyNumber);
             sb.Append(move.PieceTeam == Team.White ? ". " : "... ");
 
             if (move.IsCastling)

@@ -285,11 +285,15 @@ namespace ChessTheBetrayal.Core.Data
         public List<Vector2Int> MoveHistory { get; private set; }
 
         /// <summary>
-        /// The full move number (e.g. Turn 1 covers both White's and Black's 1st moves).
-        /// Single source of truth for turn-number derivation — used by move-executed events,
-        /// PGN-style logging, and network replay.
+        /// How many plies (single moves by one side) have been recorded — not full moves. A ply by
+        /// either side counts one, and so does each ply of a Betrayal sub-sequence, since
+        /// <see cref="RecordMove"/> runs for every one of them. Where the count comes from: history
+        /// stores a from/to pair per ply, so halving it gives the number of plies, not turns.
+        ///
+        /// Every caller wants plies. Anything wanting the chess convention where one number covers
+        /// both sides' moves has to halve this again, and should say so where it does.
         /// </summary>
-        public int FullMoveNumber => MoveHistory.Count / 2;
+        public int PliesPlayed => MoveHistory.Count / 2;
 
         /// <summary>
         /// Tracks captured pieces for each team.

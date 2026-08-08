@@ -13,10 +13,9 @@ using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
 {
     /// <summary>
-    /// Pins the per-ply match-lifecycle event-stream contract:
-    /// MoveExecutedPayload.PlyIndex stays monotonic independent of TurnNumber (which repeats
-    /// across a Betrayal sub-sequence), and MatchFlowCoordinator.ConfigureMatch is a genuinely
-    /// pure domain seam that raises zero view-facing callbacks — the exact gap a future
+    /// Pins the per-ply match-lifecycle event-stream contract: MoveExecutedPayload.PlyIndex counts
+    /// every applied ply and only ever climbs, and MatchFlowCoordinator.ConfigureMatch is a
+    /// genuinely pure domain seam that raises zero view-facing callbacks — the exact gap a future
     /// server-authoritative caller needs closed (see MatchFlowCoordinator's doc comments).
     /// </summary>
     [TestFixture]
@@ -57,8 +56,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         public void PlyIndex_BetrayalActThenRetribution_KeepsIncrementingAcrossTheSubSequence()
         {
             // PlyIndex must increment on EVERY applied ply, including the Act/Retribution pair of
-            // a Betrayal sub-sequence — unlike TurnNumber, which stays pinned to the same value for
-            // both plies since the turn hasn't flipped yet (see _betrayalSequenceMoveNumber).
+            // a Betrayal sub-sequence, where the turn does not flip between the two.
             var engine = new ChessEngineAdapter();
             var board = TestBoardSetupUtility.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
@@ -88,7 +86,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             matchDriver.PlayMove(retMoves[0]);
 
             Assert.That(seenPlyIndexes, Is.EqualTo(new[] { 1, 2 }),
-                "Act and Retribution are two distinct plies — PlyIndex must count both even though TurnNumber doesn't advance between them.");
+                "Act and Retribution are two distinct plies — PlyIndex must count both even though the turn doesn't pass between them.");
 
             Object.DestroyImmediate(moveExecutedChannel);
         }
