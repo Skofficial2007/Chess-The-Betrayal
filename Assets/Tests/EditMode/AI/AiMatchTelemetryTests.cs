@@ -211,6 +211,26 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
+        public void Render_WritesEveryPlyInTheSameNotation_WhateverProducedIt()
+        {
+            var telemetry = new AiMatchTelemetry("match");
+            telemetry.RecordMove(Book(1, Team.White));
+            telemetry.RecordMove(Searched(3, Team.White, elapsedMs: 900, depth: 6));
+            telemetry.RecordMove(Defection(5, Team.Black));
+
+            string text = telemetry.Render();
+
+            // A MoveCommand's own ToString gives "White Pawn from (0, 1) to (0, 2)", which asks the
+            // reader to know x is the file and both are zero-based. One report carrying that on
+            // most lines and algebraic on the Defection left them decoding one line and reading
+            // the next.
+            Assert.That(text, Does.Not.Contain("from ("),
+                "No line may fall back to a coordinate pair:\n" + text);
+            Assert.That(text, Does.Contain("a2-a3"),
+                "The pawn push should read as the move log writes it.");
+        }
+
+        [Test]
         public void Render_SaysWhatItsElapsedClockActuallyCovers()
         {
             var telemetry = new AiMatchTelemetry("match");

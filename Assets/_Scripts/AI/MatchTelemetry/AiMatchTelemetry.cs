@@ -138,11 +138,19 @@ namespace ChessTheBetrayal.AI.MatchTelemetry
             text.AppendLine($"depth reached over {depthSampleCount} moves: worst={worstDepth} mean={meanDepth:F1}{mateNote}");
         }
 
+        /// <summary>
+        /// Every line goes through MoveNotation, which exists to be the one way this project writes
+        /// down what happened in a ply. A MoveCommand's own ToString spells out a coordinate pair
+        /// ("Black Pawn from (7, 6) to (6, 5) capturing Pawn"), which asks a reader to know that x
+        /// is the file and that both are counted from zero — and having two notations in one file,
+        /// as this had, leaves them decoding one line and reading the next.
+        /// </summary>
         private static string FormatMove(AiMoveRecord move) => move.Source switch
         {
-            AiMoveSource.Book => $"ply {move.PlyNumber}: {move.Team} plays {move.Move} (book)",
+            AiMoveSource.Book => $"ply {move.PlyNumber}: {move.Team} plays {MoveNotation.Describe(move.Move)} (book)",
             AiMoveSource.Defection => $"ply {move.PlyNumber}: {MoveNotation.Describe(move.Move)} - now {move.Team}'s",
-            _ => $"ply {move.PlyNumber}: {move.Team} plays {move.Move} (depth {move.CompletedDepth}, {move.StopReason}, {move.ElapsedMs}ms)",
+            _ => $"ply {move.PlyNumber}: {move.Team} plays {MoveNotation.Describe(move.Move)} "
+                + $"(depth {move.CompletedDepth}, {move.StopReason}, {move.ElapsedMs}ms)",
         };
     }
 }
