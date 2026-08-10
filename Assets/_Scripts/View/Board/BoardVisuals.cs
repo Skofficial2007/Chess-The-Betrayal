@@ -1473,9 +1473,23 @@ namespace ChessTheBetrayal.View
                         _pendingStampVictimByAttacker[attackerForClosure] = victimForClosure;
                     }
 
+                    CaptureRunUp runUp = PlanCaptureRunUp(move);
+
+                    // Only an attacker with ground to make up gets a flinch out of its victim.
+                    // Struck from next door there is no approach to react to — the strike is the
+                    // first thing that happens — and that is the capture that already read well.
+                    // The lean lasts exactly as long as the walk, off the same curve that paces it,
+                    // so the piece is upright again by the moment the leap begins.
+                    if (victimForClosure != null && runUp.HasGroundToCover)
+                    {
+                        victimForClosure.PlayBrace(
+                            stampTargetPos - PieceWorldPosition(move.StartPosition),
+                            MoveTravelTiming.SecondsForTiles(runUp.TilesToCover));
+                    }
+
                     movingPiece.PlayCaptureStamp(
                         stampTargetPos,
-                        PlanCaptureRunUp(move),
+                        runUp,
                         onDescentStart: () =>
                         {
                             if (victimForClosure == null) return;

@@ -113,6 +113,19 @@ namespace ChessTheBetrayal.View
         // is what a close-quarters pounce wants and is the case that already read well.
         private const float StampRunUpCrouchShare = 0.35f;
 
+        // A charging piece leans into the run, and the piece it is charging leans away from it.
+        //
+        // Beyond the plain fact that something moving under its own power tips forward, the lean is
+        // what lets the eye read speed on a shape that cannot smear. A drawn character stretches
+        // along its path when it moves quickly; a chess piece is a rigid silhouette that would have
+        // to be scaled along an arbitrary world direction to do the same, which a single localScale
+        // cannot express. Tipping does that job instead, and costs nothing but a rotation.
+        //
+        // The victim's half is smaller and answers a different problem: while the attacker crosses
+        // the board, the piece being taken is the only thing on screen with nothing happening to it.
+        private const float ChargeLeanDegrees = 11f;
+        private const float BraceLeanDegrees = 7f;
+
         private const float StampImpactSquashDuration = 0.06f;
         // A beat with nothing moving at all, at maximum squash. The victim already froze here (see
         // StampVictimHoldDuration) while the attacker sprang straight back up, so the two disagreed
@@ -262,6 +275,15 @@ namespace ChessTheBetrayal.View
         private Tween _settleBobTween;
         private float? _settleBobBaseY;
         private Sequence _stampSequence;
+
+        // The lean runs alongside the stamp rather than inside it, because the victim plays one too
+        // and it has no stamp of its own to hang it on. _leaning says whether the resting rotation
+        // below is a real one worth putting back — a strike cut off halfway would otherwise leave
+        // the piece tipped over for the rest of the game.
+        private Tween _leanTween;
+        private Quaternion _leanRestRotation;
+        private bool _leaning;
+
         private MaterialPropertyBlock _mpb;
 
         // Selection-lift state. _liftRestPosition/_liftRestScale are captured the moment
@@ -327,7 +349,7 @@ namespace ChessTheBetrayal.View
             _castleSequence.Stop();
             _settleBobTween.Stop();
             _settleBobBaseY = null;
-            _stampSequence.Stop();
+            StopStampBeat();
 
             // A caller driving MoveTo directly (a board move, castling, snap-back) means the piece
             // is no longer conceptually "lifted" — stop any in-flight lift/bob so they can't fight
@@ -399,7 +421,7 @@ namespace ChessTheBetrayal.View
             _castleSequence.Stop();
             _settleBobTween.Stop();
             _settleBobBaseY = null;
-            _stampSequence.Stop();
+            StopStampBeat();
             StopLiftTweens();
             _liftRestPosition = null;
             HideSelectionOutline(instant: true);
@@ -441,7 +463,7 @@ namespace ChessTheBetrayal.View
             _castleSequence.Stop();
             _settleBobTween.Stop();
             _settleBobBaseY = null;
-            _stampSequence.Stop();
+            StopStampBeat();
             _promotionApproachSequence.Stop();
             StopLiftTweens();
             _liftRestPosition = null;
@@ -502,7 +524,7 @@ namespace ChessTheBetrayal.View
             _castleSequence.Stop();
             _settleBobTween.Stop();
             _settleBobBaseY = null;
-            _stampSequence.Stop();
+            StopStampBeat();
             StopLiftTweens();
             _liftRestPosition = null;
             HideSelectionOutline(instant: true);
@@ -565,6 +587,13 @@ namespace ChessTheBetrayal.View
                     .Group(Sequence.Create(useUnscaledTime: true)
                         .Chain(Tween.Delay(runUpSeconds - crouchSeconds, useUnscaledTime: true))
                         .Chain(Tween.Scale(_transform, crouchScale, crouchSeconds, StampAnticipationEase, useUnscaledTime: true)));
+
+                // Started beside the sequence rather than inside it because the piece being charged
+                // plays the mirror of this and has no sequence of its own to hang it on — one
+                // implementation, two callers. Both begin on the same frame, which is all the
+                // synchronising they need. It writes rotation only, so it cannot fight the walk
+                // above for an axis the way two position tweens would.
+                PlayLean(towardVictim, ChargeLeanDegrees, runUpSeconds);
             }
             else
             {
@@ -614,6 +643,71 @@ namespace ChessTheBetrayal.View
                 .ChainCallback(PlaySettleBob)
                 .Chain(Tween.Delay(SettleBobDuration, useUnscaledTime: true))
                 .ChainCallback(() => onSettled?.Invoke());
+        }
+
+        public void PlayBrace(Vector3 shoveDirection, float seconds)
+        {
+            PlayLean(shoveDirection, BraceLeanDegrees, seconds);
+        }
+
+        /// <summary>
+        /// Tips the piece about the axis across the given direction — hardest halfway through and
+        /// back to exactly upright by the end, which is where a glide is quickest and where a
+        /// leaning thing is leaning most.
+        ///
+        /// Works in world space throughout, and never reads a rotation back as a set of angles: the
+        /// resting rotation is cached as a quaternion and multiplied, so the piece lands on the
+        /// exact pose it started from rather than on some other triple that describes the same
+        /// facing. Getting that wrong is what once left defected pieces facing their old side.
+        /// </summary>
+        private void PlayLean(Vector3 towardDirection, float degrees, float seconds)
+        {
+            towardDirection.y = 0f;
+            if (seconds <= 0f || towardDirection.sqrMagnitude < 0.000001f) return;
+
+            StopLean();
+
+            _leanRestRotation = _transform.rotation;
+            _leaning = true;
+
+            Vector3 axis = Vector3.Cross(Vector3.up, towardDirection.normalized);
+
+            _leanTween = Tween.Custom(this, 0f, 1f, seconds,
+                    (self, u) => self.ApplyLean(u, axis, degrees), Ease.Linear, useUnscaledTime: true)
+                .OnComplete(this, self => self._leaning = false);
+        }
+
+        private void ApplyLean(float u, Vector3 axis, float degrees)
+        {
+            // Sin is zero at both ends whatever the numbers, so the piece cannot finish out of true
+            // even if the tween is retimed — the same envelope trick the check shake relies on.
+            float lean = Mathf.Sin(u * Mathf.PI) * degrees;
+            _transform.rotation = Quaternion.AngleAxis(lean, axis) * _leanRestRotation;
+        }
+
+        /// <summary>
+        /// Ends a lean and puts the piece back upright. Only restores when a lean was actually
+        /// live: the cached rotation is meaningless otherwise, and writing it back would snap the
+        /// piece to wherever it last happened to be leaning from.
+        /// </summary>
+        private void StopLean()
+        {
+            _leanTween.Stop();
+            if (!_leaning) return;
+
+            _transform.rotation = _leanRestRotation;
+            _leaning = false;
+        }
+
+        /// <summary>
+        /// Ends the whole capture beat — the sequence and the lean running beside it. Every caller
+        /// that interrupts a strike needs both, since stopping the sequence alone leaves the piece
+        /// tipped at whatever angle it had reached.
+        /// </summary>
+        private void StopStampBeat()
+        {
+            _stampSequence.Stop();
+            StopLean();
         }
 
         /// <summary>
@@ -666,7 +760,7 @@ namespace ChessTheBetrayal.View
             _castleSequence.Stop();
             _settleBobTween.Stop();
             _settleBobBaseY = null;
-            _stampSequence.Stop();
+            StopStampBeat();
             StopLiftTweens();
             _liftRestPosition = null;
             HideSelectionOutline(instant: true);
@@ -711,7 +805,7 @@ namespace ChessTheBetrayal.View
             _castleSequence.Stop();
             _settleBobTween.Stop();
             _settleBobBaseY = null;
-            _stampSequence.Stop();
+            StopStampBeat();
             StopLiftTweens();
             _liftRestPosition = null;
             HideSelectionOutline(instant: true);
@@ -748,7 +842,7 @@ namespace ChessTheBetrayal.View
             _castleSequence.Stop();
             _settleBobTween.Stop();
             _settleBobBaseY = null;
-            _stampSequence.Stop();
+            StopStampBeat();
             StopLiftTweens();
             _liftRestPosition = null;
             HideSelectionOutline(instant: true);
@@ -1147,6 +1241,7 @@ namespace ChessTheBetrayal.View
             _shakeTween.Stop();
             _outlineTween.Stop();
             _dissolveTween.Stop();
+            _leanTween.Stop();
 
             _punchSequence.Stop();
             _transitionSequence.Stop();

@@ -158,6 +158,20 @@ namespace ChessTheBetrayal.View
         void PlayStompedDeath(Action onVanished);
 
         /// <summary>
+        /// The flinch of a piece watching something cross the board to take it: it leans away along
+        /// shoveDirection for seconds, then straightens.
+        ///
+        /// Only for a capture the attacker has to walk into. While that walk happens the piece being
+        /// taken is the one thing on screen that nothing is happening to, which reads as it not
+        /// having noticed. A capture struck from next door has no such gap and plays nothing here.
+        ///
+        /// Ends before the attacker lands, so it neither overlaps nor has to be unwound by the
+        /// stomp that follows (PlayStompedDeath) — the piece is upright again by the time it is
+        /// crushed, which is the pose that beat was built against.
+        /// </summary>
+        void PlayBrace(Vector3 shoveDirection, float seconds);
+
+        /// <summary>
         /// The en passant victim's death: since the attacker never visually lands on this piece's
         /// square (en passant captures on a different tile than the one the attacker ends up on),
         /// there's no impact to crush against — instead the piece plays its own small hop-and-shrink

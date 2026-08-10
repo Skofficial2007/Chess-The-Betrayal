@@ -77,6 +77,44 @@ namespace ChessTheBetrayal.Tests.EditMode.View
         }
 
         [Test]
+        public void AStrikeCutShortLeavesThePieceUpright()
+        {
+            // A charge tips the piece over as it runs and only puts it back at the very end. Cut one
+            // short — a takeback, a rebuild, a piece moved out from under it — and whatever ends the
+            // strike has to straighten the piece, or it leans for the rest of the game.
+            //
+            // Nothing ticks a tween in here, so the tilt a running lean would have applied is set by
+            // hand. What is being tested is the putting back, not the leaning.
+            PrimeTweenPieceAnimator animator = Animator();
+            Quaternion upright = _pieceObject.transform.rotation;
+
+            animator.PlayCaptureStamp(new Vector3(7f, 0.5f, 7f), new CaptureRunUp(new Vector3(6f, 0.5f, 6f), 2.83f));
+            _pieceObject.transform.rotation = Quaternion.AngleAxis(9f, Vector3.right) * upright;
+
+            animator.MoveTo(new Vector3(1f, 0.5f, 1f));
+
+            Assert.That(Quaternion.Angle(_pieceObject.transform.rotation, upright), Is.LessThan(0.01f),
+                "The piece was left tilted after its strike was interrupted.");
+        }
+
+        [Test]
+        public void AFlinchCutShortLeavesThePieceUpright()
+        {
+            // The stomp that follows is built against an upright victim, so a flinch that does not
+            // undo itself would rotate the piece a little further on every capture it survives.
+            PrimeTweenPieceAnimator animator = Animator();
+            Quaternion upright = _pieceObject.transform.rotation;
+
+            animator.PlayBrace(new Vector3(1f, 0f, 1f), 0.4f);
+            _pieceObject.transform.rotation = Quaternion.AngleAxis(6f, Vector3.forward) * upright;
+
+            animator.PlayStompedDeath(onVanished: null);
+
+            Assert.That(Quaternion.Angle(_pieceObject.transform.rotation, upright), Is.LessThan(0.01f),
+                "The victim was still leaning when the crush landed on it.");
+        }
+
+        [Test]
         public void APieceStoppedWhileDoingNothingIsFine()
         {
             // Teardown runs on pieces that were never animating at all, and it must not complain.

@@ -145,6 +145,15 @@ namespace ChessTheBetrayal.View
         }
 
         /// <summary>
+        /// Leans this piece away from something crossing the board to take it, for as long as that
+        /// approach lasts. See IPieceAnimator.PlayBrace — only captures with a walk-in play it.
+        /// </summary>
+        public void PlayBrace(Vector3 shoveDirection, float seconds)
+        {
+            _animator.PlayBrace(shoveDirection, seconds);
+        }
+
+        /// <summary>
         /// The en passant victim's death: a hop-and-shrink glide straight to graveyardWorldPos
         /// (no crush, since the attacker never visually lands on this piece). onArrived fires once
         /// it's arrived at vanished scale — the moment BoardVisuals should snap it to death-pile

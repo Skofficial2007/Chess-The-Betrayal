@@ -56,6 +56,10 @@ namespace ChessTheBetrayal.View
 
         public void PlayStompedDeath(Action onVanished) => onVanished?.Invoke();
 
+        // A flinch is nothing but a rotation that ends where it started, so headless play has
+        // nothing to do and nothing to report back.
+        public void PlayBrace(Vector3 shoveDirection, float seconds) { }
+
         // Same deal in reverse: the piece is simply back on its square at full size, with onArrived
         // fired synchronously so nothing waits on a tween that will never exist here.
         public void PlayGraveyardReturn(Vector3 boardWorldPos, Vector3 restScale, Action onArrived)
