@@ -304,9 +304,13 @@ Quick Run, and send back the shared report. One row per device once a full run c
 
 ### The first complete six-tier device run — realme RMX3998
 
-Release IL2CPP, ARM64, under the pinned build config below. This is the first phone to run the
-tester plan and the sustained-load plan and share both, so it is the first row where all six tiers
-have numbers rather than one.
+Release IL2CPP, ARM64. This is the first phone to run the tester plan and the sustained-load plan and
+share both, so it is the first row where all six tiers have numbers rather than one. It was captured
+before both of the later changes to the build config below — the package was ARM64-only and listed
+Vulkan ahead of OpenGL ES 3. Neither disturbs the worker-thread figures, which is nearly all of what
+follows: this phone runs the same 64-bit code out of either package, and search never touches the
+GPU. The one figure worth re-checking on a re-run is the main-thread control, which shares a frame
+with rendering.
 
 **The tester plan finished 54 cells in 2m 11s** against its promised 2m 20s ceiling. The bound holds
 on real hardware, which is the claim the whole "how long it takes" section above rests on.
@@ -385,10 +389,17 @@ which is search work; budget for a few seconds past it on a device with a screen
 
 ## Build config this was measured under
 
-Pinned in `ProjectSettings/ProjectSettings.asset`, not left on template defaults: IL2CPP, ARM64 only,
-IL2CPP configuration Release, code generation "faster runtime," managed stripping Low, target API 36,
-min API 26. Never compare device numbers captured under different settings than these — a timing
-difference would measure the configuration change, not the phone.
+Pinned in `ProjectSettings/ProjectSettings.asset`, not left on template defaults: IL2CPP, ARM64 and
+ARMv7, IL2CPP configuration Release, code generation "faster runtime," managed stripping Low, target
+API 36, min API 26, graphics APIs OpenGL ES 3 ahead of Vulkan. Never compare device numbers captured
+under different settings than these — a timing difference would measure the configuration change, not
+the phone.
+
+ARMv7 is in that list because a phone refused to install an ARM64-only package outright; carrying
+both lets the phone choose which one it runs. Rows captured before it was added still stand, since a
+64-bit phone runs the identical code either way. The graphics API order is listed because it is not
+free of these numbers: search runs on a worker thread and never touches the GPU, but the main-thread
+control cell shares a frame with rendering, so that one figure can move when the order does.
 
 ## Using this on your own project
 
