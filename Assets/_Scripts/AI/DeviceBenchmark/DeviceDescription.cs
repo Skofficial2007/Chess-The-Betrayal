@@ -36,6 +36,7 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         public float ScreenDpi { get; set; }
         public string BuildType { get; set; }
         public string ScriptingBackend { get; set; }
+        public int ProcessBits { get; set; }
         public string Platform { get; set; }
 
         /// <summary>
@@ -44,6 +45,11 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         /// part implies MediaTek, Exynos or Unisoc and an Adreno one implies Snapdragon. Battery is
         /// not in here: it is the one fact that changes while a run happens, so it is sampled at
         /// both ends instead of stated once.
+        ///
+        /// The build line carries a bit width because an Android build ships a 32-bit and a 64-bit
+        /// binary together and the phone picks one, so two rows can differ for a reason that has
+        /// nothing to do with the hardware. The processor line names the chip, which is the same
+        /// chip whichever binary ran, so it cannot answer this on its own.
         /// </summary>
         public IReadOnlyList<string> ToReportLines() => new List<string>
         {
@@ -53,7 +59,7 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             $"GPU (chipset proxy): {GraphicsDeviceName} [{GraphicsDeviceVendor}], API {GraphicsApi}",
             $"RAM: {SystemMemoryMb}MB system, {GraphicsMemoryMb}MB graphics",
             $"Screen: {ScreenWidth}x{ScreenHeight} @ {ScreenDpi}dpi",
-            $"Build: {BuildType}, {ScriptingBackend}, platform {Platform}",
+            $"Build: {BuildType}, {ScriptingBackend}, {ProcessBits}-bit, platform {Platform}",
         };
     }
 }

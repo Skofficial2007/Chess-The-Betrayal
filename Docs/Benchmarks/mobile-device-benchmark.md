@@ -295,12 +295,15 @@ device or in the Editor alike, exactly as the on-screen text already asks.
 ## Per-device results
 
 The user builds; testers/devices run the app with `DeviceBenchmark.unity` as the boot scene, press
-Quick Run, and send back the shared report. One row per device once a full run completes on it.
+Quick Run, and send back the shared report. One row per device and binary once a full run completes
+on it — the same phone can hold two rows, because the 32-bit binary searches fewer positions in the
+same milliseconds and its row would otherwise read as slower hardware. Take that column from the
+report's build line, never from what was built: the package carries both and the phone is what chose.
 
-| Device | Chipset (GPU proxy) | Worst-case overshoot | Tier that overshot | Deepest tier's depth reached (worst-case) | Verdict | Notes |
-|---|---|---:|---|---:|---|---|
-| TrebleDroid GSI, Android 14 / API 34 (model not reported) | Mali-G68 MC4 [ARM], 8 cores @ 2400 MHz, 7.6 GB | +1 ms | impossible | 7 (impossible) | Pass | Thermal run only — the tester run was lost, see below |
-| realme RMX3998, Android 16 / API 36 | Mali-G57 MC2, 8 cores @ 2200 MHz, 5.5 GB | +10 ms | impossible | 7 (impossible, sustained run) | Pass | First device to complete both plans — all six tiers, see below |
+| Device | Chipset (GPU proxy) | Binary | Worst-case overshoot | Tier that overshot | Deepest tier's depth reached (worst-case) | Verdict | Notes |
+|---|---|---|---:|---|---:|---|---|
+| TrebleDroid GSI, Android 14 / API 34 (model not reported) | Mali-G68 MC4 [ARM], 8 cores @ 2400 MHz, 7.6 GB | 64-bit | +1 ms | impossible | 7 (impossible) | Pass | Thermal run only — the tester run was lost, see below |
+| realme RMX3998, Android 16 / API 36 | Mali-G57 MC2, 8 cores @ 2200 MHz, 5.5 GB | 64-bit | +10 ms | impossible | 7 (impossible, sustained run) | Pass | First device to complete both plans — all six tiers, see below |
 
 ### The first complete six-tier device run — realme RMX3998
 
@@ -396,10 +399,11 @@ under different settings than these — a timing difference would measure the co
 the phone.
 
 ARMv7 is in that list because a phone refused to install an ARM64-only package outright; carrying
-both lets the phone choose which one it runs. Rows captured before it was added still stand, since a
-64-bit phone runs the identical code either way. The graphics API order is listed because it is not
-free of these numbers: search runs on a worker thread and never touches the GPU, but the main-thread
-control cell shares a frame with rendering, so that one figure can move when the order does.
+both lets the phone choose, which is the same reason a row has to record which one it chose. Rows
+captured before it was added still stand, since a 64-bit phone runs the identical code either way.
+The graphics API order is listed because it is not free of these numbers: search runs on a worker
+thread and never touches the GPU, but the main-thread control cell shares a frame with rendering, so
+that one figure can move when the order does.
 
 ## Using this on your own project
 

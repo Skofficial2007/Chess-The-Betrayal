@@ -22,6 +22,12 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         /// falling through to "Release Build" put that on the header of every report produced from
         /// a Play-mode session — which is most of them during development, and which would read in
         /// a table as a measurement taken under the same conditions as a device row.
+        ///
+        /// The bit width is settled at build time as well, but unlike those two it can simply be
+        /// asked of the running process, so it needs no symbol of its own. It is reported because an
+        /// Android build carries a 32-bit and a 64-bit binary and the phone decides which of them
+        /// runs: the narrower one searches fewer positions in the same milliseconds, which would
+        /// otherwise land in a table looking like a slower phone.
         /// </summary>
         public static DeviceDescription Read()
         {
@@ -54,6 +60,7 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
                 ScreenDpi = Screen.dpi,
                 BuildType = buildType,
                 ScriptingBackend = scriptingBackend,
+                ProcessBits = System.IntPtr.Size * 8,
                 Platform = Application.platform.ToString(),
             };
         }
