@@ -17,8 +17,8 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Match
     public class MoveVisualDurationEstimatorTests
     {
         // Measured off PrimeTweenPieceAnimator's stamp sequence: 0.09 anticipation, 0.30 leap,
-        // 0.06 impact squash, 0.24 recovery, 0.10 settle bob.
-        private const float MeasuredStrikeSeconds = 0.79f;
+        // 0.06 impact squash, 0.05 hold at contact, 0.24 recovery, 0.10 settle bob.
+        private const float MeasuredStrikeSeconds = 0.84f;
 
         private static PieceData Pawn() => new PieceData(Team.White, ChessPieceType.Pawn, moveDirection: 1, startRow: 1, hasMoved: true);
         private static PieceData Piece(ChessPieceType type) => new PieceData(Team.White, type, moveDirection: 1, startRow: 0, hasMoved: true);
@@ -100,6 +100,20 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Match
                 "A knight leaps the whole way, so it owes only the strike.");
         }
 
+        [Test]
+        public void ACaptureWalkedInAlongADiagonalIsBudgetedForMoreGroundThanOneAlongARank()
+        {
+            // Both attackers cross four squares to reach their victim, but the bishop's four steps
+            // are half again as much floor. Budgeting them the same is what let the diagonal run at
+            // the higher speed, so the estimate has to see the difference too or the pacing will
+            // release the next move while the bishop is still travelling.
+            MoveCommand alongARank = Capture(Sq(0, 4), Sq(4, 4), ChessPieceType.Rook);
+            MoveCommand alongADiagonal = Capture(Sq(0, 0), Sq(4, 4), ChessPieceType.Bishop);
+
+            Assert.That(MoveVisualDurationEstimator.EstimateSeconds(alongADiagonal),
+                Is.GreaterThan(MoveVisualDurationEstimator.EstimateSeconds(alongARank)));
+        }
+
         #endregion
 
         #region Everything else
@@ -123,7 +137,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Match
                 MoveCommand move = Quiet(Sq(0, 0), Sq(0, squares));
 
                 Assert.That(MoveVisualDurationEstimator.EstimateSeconds(move),
-                    Is.GreaterThanOrEqualTo(MoveTravelTiming.SecondsForSquares(squares)),
+                    Is.GreaterThanOrEqualTo(MoveTravelTiming.SecondsForTiles(squares)),
                     $"A {squares}-square glide is budgeted for less time than it takes.");
             }
         }
@@ -158,7 +172,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Match
                 Sq(4, 6), Sq(4, 7), Pawn(), ChessPieceType.Queen);
 
             Assert.That(MoveVisualDurationEstimator.EstimateSeconds(promotion),
-                Is.GreaterThanOrEqualTo(MoveTravelTiming.SecondsForSquares(1) + 0.34f));
+                Is.GreaterThanOrEqualTo(MoveTravelTiming.SecondsForTiles(1f) + 0.34f));
         }
 
         [Test]

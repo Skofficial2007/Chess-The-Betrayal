@@ -20,15 +20,21 @@ namespace ChessTheBetrayal.View
     }
 
     /// <summary>
-    /// The visual feel of a board-move glide. Quiet is a plain slide, and the only one whose
-    /// duration follows the distance covered; Knight arcs over the board (it "hops" rather than
-    /// slides through occupied squares, matching how the piece actually moves); Promotion is a
-    /// slower, punch-free glide since the morph itself (PlayTransitionOut/In) is the payoff beat.
+    /// The visual feel of a board-move glide. Quiet is a plain slide; Knight arcs over the board (it
+    /// "hops" rather than slides through occupied squares, matching how the piece actually moves);
+    /// Promotion is a slower, punch-free glide since the morph itself (PlayTransitionOut/In) is the
+    /// payoff beat.
     ///
     /// Capture adds a landing impact punch to sell contact, but it is no longer how most captures
     /// look: a piece landing on its victim plays the far heavier stamp instead (PlayCaptureStamp).
     /// What is left for this style is en passant, where the attacker lands beside its victim rather
     /// than on it, and a takeback, where the victim has already gone and there is nothing to land on.
+    ///
+    /// Quiet and Capture both follow the distance covered. Capture used to hold a fixed duration
+    /// whatever the distance, which was harmless while it only ever meant en passant — but a
+    /// takeback also comes through here, and taking back a rook's capture from across the board sent
+    /// it home seven tiles in a fifth of a second. Knight and Promotion keep fixed durations because
+    /// each covers a known distance by definition.
     /// </summary>
     public enum MoveStyle
     {
@@ -48,15 +54,19 @@ namespace ChessTheBetrayal.View
         /// <summary>Where the attacker strikes from — the square beside its victim.</summary>
         public readonly Vector3 LaunchFrom;
 
-        /// <summary>Squares between the attacker and that square, so the glide can be paced.</summary>
-        public readonly int SquaresToCover;
+        /// <summary>
+        /// Ground between the attacker and that square in tile widths, so the walk can be paced
+        /// against what it actually covers. Tiles rather than squares because a diagonal approach
+        /// is half again as long as a straight one of the same square count.
+        /// </summary>
+        public readonly float TilesToCover;
 
         public readonly bool HasGroundToCover;
 
-        public CaptureRunUp(Vector3 launchFrom, int squaresToCover)
+        public CaptureRunUp(Vector3 launchFrom, float tilesToCover)
         {
             LaunchFrom = launchFrom;
-            SquaresToCover = squaresToCover;
+            TilesToCover = tilesToCover;
             HasGroundToCover = true;
         }
     }
@@ -82,12 +92,14 @@ namespace ChessTheBetrayal.View
         /// board-move entry point (AnimateMove); the plain MoveTo above stays for callers that
         /// don't carry move context (death-pile placement, selection snap-back).
         ///
-        /// squaresTravelled is how far the move covers, counting a diagonal step as one, so a glide
-        /// can be paced against the ground it has to make up instead of every move taking the same
-        /// time whatever its length. Callers that aren't moving a piece across the board (a
-        /// promotion swap in place, a snap-back) can leave it alone.
+        /// tilesTravelled is the ground the move covers, measured in tile widths, so a glide can be
+        /// paced against what it has to make up instead of every move taking the same time whatever
+        /// its length. Tiles rather than squares because a diagonal step is 1.414 tiles of real
+        /// floor: pacing it as one square makes every diagonal the faster move. Callers that aren't
+        /// moving a piece across the board (a promotion swap in place, a snap-back) can leave it
+        /// alone.
         /// </summary>
-        void MoveTo(Vector3 worldPos, MoveStyle style, int squaresTravelled = 1, bool force = false);
+        void MoveTo(Vector3 worldPos, MoveStyle style, float tilesTravelled = 1f, bool force = false);
 
         /// <summary>
         /// The rook's half of a castling move: an InOutCubic glide identical in feel to
@@ -106,7 +118,7 @@ namespace ChessTheBetrayal.View
         /// standing on the square reports immediately rather than tweening nowhere — that is the
         /// human's pawn, which walks across while the promotion prompt is still open.
         /// </summary>
-        void PlayPromotionApproach(Vector3 worldPos, int squaresTravelled, Action onArrived);
+        void PlayPromotionApproach(Vector3 worldPos, float tilesTravelled, Action onArrived);
 
         /// <summary>
         /// Plays a small (millimeter-scale) settle bob in place — the tail end of the castling

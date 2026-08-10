@@ -80,12 +80,12 @@ namespace ChessTheBetrayal.View
         /// Same as SetPosition, but with an explicit MoveStyle (quiet slide, capture punch, knight
         /// arc, promotion glide) so a board move can carry its intended feel through to the
         /// animator without BoardVisuals needing to know how each style is actually tweened.
-        /// squaresTravelled lets a glide be paced against the distance it covers — see
+        /// tilesTravelled lets a glide be paced against the ground it covers — see
         /// IPieceAnimator.MoveTo.
         /// </summary>
-        public void SetPosition(Vector3 worldPos, MoveStyle style, int squaresTravelled = 1, bool force = false)
+        public void SetPosition(Vector3 worldPos, MoveStyle style, float tilesTravelled = 1f, bool force = false)
         {
-            _animator.MoveTo(worldPos, style, squaresTravelled, force);
+            _animator.MoveTo(worldPos, style, tilesTravelled, force);
         }
 
         /// <summary>
@@ -104,9 +104,9 @@ namespace ChessTheBetrayal.View
         /// its new piece can wait for it. Reports immediately if the pawn is already standing there
         /// — see PrimeTweenPieceAnimator.PlayPromotionApproach.
         /// </summary>
-        public void PlayPromotionApproach(Vector3 worldPos, int squaresTravelled, Action onArrived)
+        public void PlayPromotionApproach(Vector3 worldPos, float tilesTravelled, Action onArrived)
         {
-            _animator.PlayPromotionApproach(worldPos, squaresTravelled, onArrived);
+            _animator.PlayPromotionApproach(worldPos, tilesTravelled, onArrived);
         }
 
         /// <summary>

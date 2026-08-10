@@ -11,7 +11,8 @@
     "ChessTheBetrayal.UI.SafeArea",
     "ChessTheBetrayal.UI",
     "ChessTheBetrayal.View",
-    "ChessTheBetrayal.Infrastructure"
+    "ChessTheBetrayal.Infrastructure",
+    "PrimeTween.Runtime"
   ],
   "includePlatforms": ["Editor"],
   "excludePlatforms": [],

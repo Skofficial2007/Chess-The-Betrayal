@@ -56,6 +56,23 @@ namespace ChessTheBetrayal.Core.Match
             return squares < 2 ? 0 : squares - 1;
         }
 
+        /// <summary>
+        /// The same run-up measured as ground rather than squares, which is what pacing it needs: a
+        /// bishop walking four diagonal steps covers half again as much floor as a rook walking
+        /// four along a rank, and giving them the same duration makes the bishop the faster piece.
+        /// Zero when the attacker strikes where it stands.
+        ///
+        /// Both the animator and the move pacing ask this rather than each deriving it from the
+        /// staging square, so neither can end up disagreeing with the other about how far the
+        /// attacker had to come.
+        /// </summary>
+        public static float RunUpTiles(Vector2Int from, Vector2Int to, ChessPieceType pieceType)
+        {
+            if (!TryPlanStagingSquare(from, to, pieceType, out Vector2Int staging)) return 0f;
+
+            return MoveTravelTiming.TilesApart(from.x, from.y, staging.x, staging.y);
+        }
+
         private static int Step(int delta)
         {
             if (delta > 0) return 1;

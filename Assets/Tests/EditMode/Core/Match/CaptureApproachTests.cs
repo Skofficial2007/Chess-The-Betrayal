@@ -147,6 +147,43 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Match
 
         #endregion
 
+        #region How far the walk-in actually is
+
+        [Test]
+        public void ADiagonalWalkInCoversMoreGroundThanAStraightOneOfTheSameSquareCount()
+        {
+            // Four steps either way, but the bishop's four are 5.66 tiles of floor against the
+            // rook's 4. Reporting both as "four" is what gave the bishop the higher speed.
+            float alongARank = CaptureApproach.RunUpTiles(Sq(0, 4), Sq(5, 4), ChessPieceType.Rook);
+            float alongADiagonal = CaptureApproach.RunUpTiles(Sq(0, 0), Sq(5, 5), ChessPieceType.Bishop);
+
+            Assert.That(alongARank, Is.EqualTo(4f).Within(0.001f));
+            Assert.That(alongADiagonal, Is.EqualTo(5.657f).Within(0.001f));
+        }
+
+        [Test]
+        public void AnAttackerBesideItsVictimHasNoGroundToCover()
+        {
+            // Nothing to pace, and a run-up leg played over zero distance would be a tween that
+            // starts and ends in the same place.
+            Assert.That(CaptureApproach.RunUpTiles(Sq(4, 3), Sq(5, 4), ChessPieceType.Pawn), Is.EqualTo(0f));
+            Assert.That(CaptureApproach.RunUpTiles(Sq(1, 0), Sq(2, 2), ChessPieceType.Knight), Is.EqualTo(0f));
+        }
+
+        [Test]
+        public void TheGroundReportedIsTheGroundToTheStagingSquareAndNotToTheVictim()
+        {
+            // The walk stops one square short — that is the whole point of it — so pacing it against
+            // the full distance would have the piece arrive before its own glide finished.
+            Vector2Int from = Sq(0, 0);
+            Vector2Int to = Sq(0, 7);
+
+            Assert.That(CaptureApproach.RunUpTiles(from, to, ChessPieceType.Rook),
+                Is.EqualTo(MoveTravelTiming.TilesApart(0, 0, 0, 6)).Within(0.0001f));
+        }
+
+        #endregion
+
         private static int SquaresBetween(Vector2Int a, Vector2Int b)
         {
             return MoveTravelTiming.SquaresApart(a.x, a.y, b.x, b.y);

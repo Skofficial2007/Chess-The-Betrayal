@@ -1407,7 +1407,7 @@ namespace ChessTheBetrayal.View
                     // The AI is never asked what it wants, so nothing had moved its pawn: it
                     // dissolved on the rank below while its replacement appeared on a square the
                     // opponent never saw it reach, which read as a piece changing by teleport.
-                    movingPiece.PlayPromotionApproach(PieceWorldPosition(promotionPos), SquaresTravelled(move), onArrived: () =>
+                    movingPiece.PlayPromotionApproach(PieceWorldPosition(promotionPos), TilesTravelled(move), onArrived: () =>
                     {
                         if (movingPiece == null) return;
 
@@ -1518,7 +1518,7 @@ namespace ChessTheBetrayal.View
                     MoveStyle style = move.IsCapture
                         ? MoveStyle.Capture
                         : (move.PieceType == ChessPieceType.Knight ? MoveStyle.Knight : MoveStyle.Quiet);
-                    movingPiece.SetPosition(targetPos, style, SquaresTravelled(move));
+                    movingPiece.SetPosition(targetPos, style, TilesTravelled(move));
 
                     // A Betrayal Act's MoveExecutedPayload arrives after MatchDriver has already
                     // raised Initiated/RetributionPending on the BetrayalEventChannel, so the piece
@@ -1638,7 +1638,7 @@ namespace ChessTheBetrayal.View
                 // betrayal pending for it to be marking.
                 movingPiece.SetBetrayerGlow(false);
 
-                movingPiece.SetPosition(PieceWorldPosition(move.StartPosition), ReverseMoveStyle(move), SquaresTravelled(move));
+                movingPiece.SetPosition(PieceWorldPosition(move.StartPosition), ReverseMoveStyle(move), TilesTravelled(move));
             }
 
             if (move.IsCapture)
@@ -1665,13 +1665,13 @@ namespace ChessTheBetrayal.View
         }
 
         /// <summary>
-        /// How far a move covers, counting a diagonal step as one, so a glide can be paced against
-        /// the ground it has to make up. Same number in either direction, so a takeback travels at
-        /// the pace the move itself did.
+        /// The ground a move covers in tile widths, so a glide can be paced against what it has to
+        /// make up. Same number in either direction, so a takeback travels at the pace the move
+        /// itself did.
         /// </summary>
-        private static int SquaresTravelled(MoveCommand move)
+        private static float TilesTravelled(MoveCommand move)
         {
-            return MoveTravelTiming.SquaresApart(
+            return MoveTravelTiming.TilesApart(
                 move.StartPosition.x, move.StartPosition.y,
                 move.EndPosition.x, move.EndPosition.y);
         }
@@ -1693,7 +1693,7 @@ namespace ChessTheBetrayal.View
             launchFrom.y += pieceYOffset;
 
             return new CaptureRunUp(launchFrom,
-                CaptureApproach.RunUpSquares(move.StartPosition, move.EndPosition, move.PieceType));
+                CaptureApproach.RunUpTiles(move.StartPosition, move.EndPosition, move.PieceType));
         }
 
         /// <summary>

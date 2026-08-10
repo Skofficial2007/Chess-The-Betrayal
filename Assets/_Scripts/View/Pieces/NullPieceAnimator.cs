@@ -25,7 +25,7 @@ namespace ChessTheBetrayal.View
 
         public void MoveTo(Vector3 worldPos, bool force = false) => _transform.position = worldPos;
 
-        public void MoveTo(Vector3 worldPos, MoveStyle style, int squaresTravelled = 1, bool force = false) => _transform.position = worldPos;
+        public void MoveTo(Vector3 worldPos, MoveStyle style, float tilesTravelled = 1f, bool force = false) => _transform.position = worldPos;
 
         // Headless/AI play has no notion of a staggered choreography — the rook just arrives, and
         // onSettled must still fire synchronously so BoardVisuals' castling logic (if it ever
@@ -36,7 +36,7 @@ namespace ChessTheBetrayal.View
             onSettled?.Invoke();
         }
 
-        public void PlayPromotionApproach(Vector3 worldPos, int squaresTravelled, Action onArrived)
+        public void PlayPromotionApproach(Vector3 worldPos, float tilesTravelled, Action onArrived)
         {
             _transform.position = worldPos;
             onArrived?.Invoke();
