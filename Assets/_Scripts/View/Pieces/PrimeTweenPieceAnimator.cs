@@ -1125,18 +1125,36 @@ namespace ChessTheBetrayal.View
         }
 
         /// <summary>
-        /// Stops every tween/sequence this animator can have live, regardless of which field holds
-        /// it. Tween.StopAll(onTarget) covers every tween created against a given target object —
-        /// this class's tweens are split between targeting `this` (the Tween.Custom ones driving
-        /// shake/dissolve/outline) and `_transform` (the Tween.Position/Scale ones) — so both
-        /// targets need a StopAll pass. Individual .Stop() calls on each field would be equivalent
-        /// but require updating this method every time a new tween field is added; StopAll(target)
-        /// is self-maintaining against that drift.
+        /// Stops every tween and sequence this animator can have live.
+        ///
+        /// One field at a time, deliberately. Stopping everything aimed at a target instead reads
+        /// as the tidier version of this and does not work: almost everything here is built as a
+        /// sequence, and a tween that belongs to one can only be stopped through the sequence that
+        /// owns it. Reaching for the children directly is refused, so the sweep left running
+        /// exactly the animations most likely to be interrupted — a strike, a swap, a lift — while
+        /// reporting that it had stopped them. The piece was then destroyed with those still
+        /// writing to its Transform, which is the very thing this method exists to prevent.
+        ///
+        /// The cost is that a new tween field has to be added to the list below. A test asserts
+        /// nothing is left running afterwards, so forgetting fails rather than going quiet.
         /// </summary>
         public void StopAllAnimations()
         {
-            Tween.StopAll(onTarget: this);
-            Tween.StopAll(onTarget: _transform);
+            _moveTween.Stop();
+            _scaleTween.Stop();
+            _settleBobTween.Stop();
+            _bobTween.Stop();
+            _shakeTween.Stop();
+            _outlineTween.Stop();
+            _dissolveTween.Stop();
+
+            _punchSequence.Stop();
+            _transitionSequence.Stop();
+            _castleSequence.Stop();
+            _promotionApproachSequence.Stop();
+            _stampSequence.Stop();
+            _liftSequence.Stop();
+            _glowFlashSequence.Stop();
         }
 
         private void StartBobLoop()
