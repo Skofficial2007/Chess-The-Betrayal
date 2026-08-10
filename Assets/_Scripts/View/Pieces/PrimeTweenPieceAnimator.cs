@@ -123,8 +123,13 @@ namespace ChessTheBetrayal.View
         //
         // The victim's half is smaller and answers a different problem: while the attacker crosses
         // the board, the piece being taken is the only thing on screen with nothing happening to it.
-        private const float ChargeLeanDegrees = 11f;
-        private const float BraceLeanDegrees = 7f;
+        //
+        // These are large for a tilt because the window is small. Most real captures are struck from
+        // two or three squares out, which is a third of a second of walking — an angle that would be
+        // plenty on a piece standing still is gone before the eye finds it on a piece crossing the
+        // board. Read them against the board's own tilt rather than against upright.
+        private const float ChargeLeanDegrees = 24f;
+        private const float BraceLeanDegrees = 15f;
 
         private const float StampImpactSquashDuration = 0.06f;
         // A beat with nothing moving at all, at maximum squash. The victim already froze here (see
@@ -593,7 +598,15 @@ namespace ChessTheBetrayal.View
                 // implementation, two callers. Both begin on the same frame, which is all the
                 // synchronising they need. It writes rotation only, so it cannot fight the walk
                 // above for an axis the way two position tweens would.
-                PlayLean(towardVictim, ChargeLeanDegrees, runUpSeconds);
+                //
+                // Carried through the leap rather than unwound at the end of the walk. The lean is
+                // strongest at the middle of whatever it spans, and spanning the walk alone put that
+                // peak out in open ground and had the piece already upright by the time it gathered
+                // itself — the least interesting moment to be leaning and the most interesting one
+                // not to be. Across the walk and the leap together, the peak lands on the crouch and
+                // the launch, and the piece rotates square again on its way down. It reaches exactly
+                // upright before the impact, which is the pose the landing was built against.
+                PlayLean(towardVictim, ChargeLeanDegrees, runUpSeconds + StampLeapDuration);
             }
             else
             {
