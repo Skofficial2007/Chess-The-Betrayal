@@ -327,9 +327,11 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             // beforehand, so what the log must name is the other army — the one now holding it.
             var betrayer = new PieceData(Team.White, ChessPieceType.Queen, moveDirection: 1, startRow: 0);
             _coordinator.RecordDefection(
-                MoveCommand.CreateDefectionMove(new Vector2Int(0, 0), betrayer));
+                MoveCommand.CreateDefectionMove(new Vector2Int(0, 0), betrayer), plyNumber: 7);
 
             string report = _coordinator.Telemetry.Render();
+            Assert.That(report, Does.Contain("ply 7:"),
+                "The number the driver announced is the one the report shows.");
             Assert.That(report, Does.Contain("Qa1 defects"));
             Assert.That(report, Does.Contain("now Black's"),
                 "A White Betrayer that defects ends up in Black's army, and that is what makes " +
@@ -345,7 +347,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
 
             var betrayer = new PieceData(Team.White, ChessPieceType.Queen, moveDirection: 1, startRow: 0);
             _coordinator.RecordDefection(
-                MoveCommand.CreateDefectionMove(new Vector2Int(0, 0), betrayer));
+                MoveCommand.CreateDefectionMove(new Vector2Int(0, 0), betrayer), plyNumber: 7);
 
             Assert.That(_coordinator.Telemetry.MoveCount, Is.Zero,
                 "The same opt-in flag gates this as gates every other recorded ply.");
@@ -360,7 +362,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             _coordinator.RecordTelemetry = true;
 
             Assert.DoesNotThrow(() => _coordinator.RecordDefection(
-                MoveCommand.CreateDefectionMove(new Vector2Int(0, 0), betrayer)));
+                MoveCommand.CreateDefectionMove(new Vector2Int(0, 0), betrayer), plyNumber: 1));
         }
 
         [Test]
@@ -404,6 +406,73 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             {
                 coordinator.Dispose();
             }
+        }
+
+        /// <summary>
+        /// CancelInFlightSearch covers the reply that had not landed yet; this covers the plies that
+        /// had. Both halves are needed: one real match took two turns back and its report still
+        /// listed the moves from them, so its ply numbers ran 47, 49, 50 and then 47 again.
+        /// </summary>
+        [Test]
+        public void NotePliesUnmade_RemovesTheRecordsForPliesATakebackTookOffTheBoard()
+        {
+            var engine = new ChessEngineAdapter();
+            var board = TestBoardSetupUtility.CreateStandard();
+            board.CurrentTurn = Team.Black;
+            AIMatchCoordinator coordinator = null;
+            coordinator = new AIMatchCoordinator(
+                engine, board,
+                move =>
+                {
+                    new TurnResolver().Advance(board, move);
+                    coordinator.NotePlyApplied(move, board.PliesPlayed);
+                },
+                ShallowSettings, ProfileProvider);
+
+            try
+            {
+                coordinator.SetAIMode(Team.Black, BetrayalUsage.Full, "normal");
+                coordinator.RecordTelemetry = true;
+                coordinator.TryRequestMove(isGameActive: true);
+
+                var stopwatch = Stopwatch.StartNew();
+                while (coordinator.Telemetry.MoveCount == 0 && stopwatch.ElapsedMilliseconds < PollTimeoutMs)
+                {
+                    coordinator.Tick();
+                    Thread.Sleep(PollIntervalMs);
+                }
+
+                var betrayer = new PieceData(Team.White, ChessPieceType.Queen, moveDirection: 1, startRow: 0);
+                coordinator.RecordDefection(
+                    MoveCommand.CreateDefectionMove(new Vector2Int(0, 0), betrayer), plyNumber: 2);
+
+                Assert.That(coordinator.Telemetry.MoveCount, Is.EqualTo(2),
+                    "A searched ply and a Defection on top of it — the state before the takeback.");
+
+                // Undo has rewound the board to where it stood after the first ply.
+                coordinator.NotePliesUnmade(lastSurvivingPlyNumber: 1);
+
+                Assert.That(coordinator.Telemetry.MoveCount, Is.EqualTo(1));
+
+                string report = coordinator.Telemetry.Render();
+                Assert.That(report, Does.Contain("ply 1:"), "The ply that survived the takeback stays.");
+                Assert.That(report, Does.Not.Contain("ply 2:"));
+                Assert.That(report, Does.Contain("0 by Defection"),
+                    "A Defection that was taken back must stop being counted, or the report claims a "
+                    + "Betrayal right was spent twice in one match.");
+            }
+            finally
+            {
+                coordinator.Dispose();
+            }
+        }
+
+        [Test]
+        public void NotePliesUnmade_BeforeAnyMatchHasStarted_DoesNotThrow()
+        {
+            // Wired once by the composition root and left wired, so it stays subscribed through a
+            // plain human-vs-human match where there is no telemetry object at all.
+            Assert.DoesNotThrow(() => _coordinator.NotePliesUnmade(0));
         }
 
         [Test]

@@ -266,5 +266,61 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
 
             Assert.That(telemetry.MoveCount, Is.EqualTo(3));
         }
+
+        /// <summary>
+        /// The exact shape a real match produced: a searched ply, a Defection, and the reply on top
+        /// of it, all taken back by two presses of Undo. Every one of them must leave the report,
+        /// including the Defection — a Betrayal right can only be spent once per match, so a report
+        /// claiming two of them describes a game that cannot happen.
+        /// </summary>
+        [Test]
+        public void RemoveAfterPly_DropsEveryPlyRecordedAboveIt()
+        {
+            var telemetry = new AiMatchTelemetry("match");
+            telemetry.RecordMove(Searched(45, Team.White, elapsedMs: 2248, depth: 7));
+            telemetry.RecordMove(Searched(47, Team.White, elapsedMs: 216, depth: 7));
+            telemetry.RecordMove(Defection(49, Team.White));
+            telemetry.RecordMove(Searched(50, Team.White, elapsedMs: 61, depth: 7));
+
+            telemetry.RemoveAfterPly(46);
+
+            Assert.That(telemetry.MoveCount, Is.EqualTo(1));
+
+            string report = telemetry.Render();
+            Assert.That(report, Does.Contain("ply 45:"));
+            Assert.That(report, Does.Not.Contain("ply 47:"));
+            Assert.That(report, Does.Not.Contain("ply 49:"));
+            Assert.That(report, Does.Not.Contain("ply 50:"));
+            Assert.That(report, Does.Contain("0 by Defection"),
+                "The summary counts what is left, not what was ever recorded.");
+        }
+
+        [Test]
+        public void RemoveAfterPly_LeavesTheReportAloneWhenNothingWasTakenBack()
+        {
+            var telemetry = new AiMatchTelemetry("match");
+            telemetry.RecordMove(Book(1, Team.White));
+            telemetry.RecordMove(Searched(3, Team.White, elapsedMs: 900, depth: 6));
+
+            telemetry.RemoveAfterPly(3);
+
+            Assert.That(telemetry.MoveCount, Is.EqualTo(2),
+                "A ply numbered exactly at the surviving count is still on the board.");
+        }
+
+        [Test]
+        public void RemoveAfterPly_KeepsTheElapsedAndDepthSummaryHonest()
+        {
+            var telemetry = new AiMatchTelemetry("match");
+            telemetry.RecordMove(Searched(1, Team.White, elapsedMs: 100, depth: 7));
+            telemetry.RecordMove(Searched(3, Team.White, elapsedMs: 3000, depth: 4));
+
+            telemetry.RemoveAfterPly(1);
+
+            string report = telemetry.Render();
+            Assert.That(report, Does.Contain("worst=100"),
+                "A search that was taken back must stop setting the headline for the ones that stood.");
+            Assert.That(report, Does.Contain("worst=7"));
+        }
     }
 }

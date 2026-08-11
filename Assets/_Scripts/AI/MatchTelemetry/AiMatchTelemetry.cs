@@ -38,6 +38,26 @@ namespace ChessTheBetrayal.AI.MatchTelemetry
         public void RecordMove(AiMoveRecord record) => _moves.Add(record);
 
         /// <summary>
+        /// Drops every ply recorded above <paramref name="lastSurvivingPlyNumber"/> — the report's
+        /// half of a takeback, the same job MatchMoveLog.RemoveLast does for the move log. The
+        /// caller unmakes the plies on the board; this only keeps the report in step with them.
+        ///
+        /// Keyed on the ply number rather than on how many plies came off the board, because this
+        /// holds only the AI's own plies and any Defection. A takeback that unmade three plies may
+        /// have unmade none of them, one, or all three, and a count cannot tell those apart. The
+        /// number can: every record takes its number from the board's own ply count, and a takeback
+        /// rewinds that count too, so anything numbered above where the board now sits describes a
+        /// ply that no longer happened.
+        /// </summary>
+        public void RemoveAfterPly(int lastSurvivingPlyNumber)
+        {
+            for (int i = _moves.Count - 1; i >= 0; i--)
+            {
+                if (_moves[i].PlyNumber > lastSurvivingPlyNumber) _moves.RemoveAt(i);
+            }
+        }
+
+        /// <summary>
         /// Renders the whole match: a header, a summary (ply counts and the elapsed/depth spread
         /// over searched moves only — a book move and a Defection have neither), then every
         /// recorded ply in order. Summary before detail, same ordering and reasoning as
@@ -60,7 +80,8 @@ namespace ChessTheBetrayal.AI.MatchTelemetry
             text.AppendLine();
 
             text.AppendLine("--- Plies ---");
-            text.AppendLine("(the AI's own plies and any Defection; the opponent's moves are not recorded, so ply numbers skip)");
+            text.AppendLine("(the AI's own plies and any Defection; the opponent's moves are not recorded, so ply numbers skip.");
+            text.AppendLine("A Defection spends a ply of its own, so the AI's plies change from odd to even across one.)");
             foreach (AiMoveRecord move in _moves) text.AppendLine(FormatMove(move));
 
             return text.ToString();

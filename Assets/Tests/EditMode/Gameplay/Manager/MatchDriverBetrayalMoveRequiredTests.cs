@@ -123,7 +123,12 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             _board.ComputeFullZobristHash();
 
             MoveCommand? defection = null;
-            _matchDriver.OnDefectionResolved += move => defection = move;
+            int defectionPlyNumber = 0;
+            _matchDriver.OnDefectionResolved += (move, plyNumber) =>
+            {
+                defection = move;
+                defectionPlyNumber = plyNumber;
+            };
 
             var actMoves = new List<MoveCommand>();
             ChessEngine.GetBetrayalTargets(_board, TestBoardSetupUtility.AlgebraicToVector("b1"), actMoves);
@@ -136,6 +141,9 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
                 "reader which army just lost the piece.");
             Assert.That(_board.GetPiece(defection.Value.StartPosition).Team, Is.EqualTo(Team.Black),
                 "By the time this is announced the piece has already changed sides.");
+            Assert.That(defectionPlyNumber, Is.EqualTo(_board.PliesPlayed),
+                "A Defection spends a ply like any other, and the number has to come from the " +
+                "driver announcing it rather than from a subscriber reading the board for itself.");
         }
 
         [Test]
@@ -175,7 +183,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             _board.ComputeFullZobristHash();
 
             bool fired = false;
-            _matchDriver.OnDefectionResolved += _ => fired = true;
+            _matchDriver.OnDefectionResolved += (_, _) => fired = true;
 
             var actMoves = new List<MoveCommand>();
             ChessEngine.GetBetrayalTargets(_board, TestBoardSetupUtility.AlgebraicToVector("b1"), actMoves);

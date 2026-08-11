@@ -86,8 +86,12 @@ namespace ChessTheBetrayal.Gameplay.Manager
         /// it reaches no move-decided path and would otherwise be invisible to anything recording
         /// the match. It still spends a ply and hands a piece to the other army, which is enough to
         /// leave a log unable to explain the board it describes.
+        ///
+        /// Carries the ply number it landed on for the same reason OnPlyApplied does: this driver
+        /// is the only thing that knows what a ply was numbered, and a subscriber reading the
+        /// board's count for itself is reading a second clock that only happens to agree.
         /// </summary>
-        public event System.Action<MoveCommand> OnDefectionResolved;
+        public event System.Action<MoveCommand, int> OnDefectionResolved;
 
         /// <summary>
         /// Fires as each ply reaches the board, carrying the move and the ply number it landed on.
@@ -347,7 +351,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
             if (result.DefectionMove.HasValue)
             {
                 _currentTurnMoves.Add(result.DefectionMove.Value);
-                OnDefectionResolved?.Invoke(result.DefectionMove.Value);
+                OnDefectionResolved?.Invoke(result.DefectionMove.Value, _board.PliesPlayed);
             }
 
             if (result.RequiresForcedSave)

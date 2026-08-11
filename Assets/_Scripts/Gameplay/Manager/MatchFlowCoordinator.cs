@@ -438,6 +438,12 @@ namespace ChessTheBetrayal.Gameplay.Manager
 
             _undoService.RequestUndo(IsAiMode, CurrentPhase, PlayerTeam, AiMovesFirst, _unmadePlies);
 
+            // The board has just been rewound, so its ply count is now the last ply that really
+            // happened — anything the match report numbered above that describes a move the player
+            // took back. Read here rather than before the pop, for the obvious reason that before
+            // the pop it still counts the plies we are about to remove.
+            _aiCoordinator.NotePliesUnmade(_board.PliesPlayed);
+
             // The undo mutated only the domain board (pieces unmade, captures restored).
             // BoardVisuals is an incremental animator driven by per-move events, so without being
             // told something it would keep showing the post-move position. Re-point the shared board

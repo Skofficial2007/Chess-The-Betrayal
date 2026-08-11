@@ -336,6 +336,19 @@ namespace ChessTheBetrayal.Gameplay.Manager
         }
 
         /// <summary>
+        /// Drops any already-recorded ply that a takeback has just taken off the board. Pass the
+        /// board's ply count as it stands AFTER the rewind.
+        ///
+        /// CancelInFlightSearch above covers the move that hasn't landed yet; this covers the ones
+        /// that had. Without it the report goes on describing moves nobody ended up playing: one
+        /// match took two turns back and its report still listed them, so its ply numbers ran 47,
+        /// 49, 50 and then 47 again, and it summarised two Defections in a game whose Betrayal
+        /// right can only be spent once.
+        /// </summary>
+        public void NotePliesUnmade(int lastSurvivingPlyNumber) =>
+            Telemetry?.RemoveAfterPly(lastSurvivingPlyNumber);
+
+        /// <summary>
         /// Records a Betrayer changing sides. Nothing here decides that move — the rules produce it
         /// when Retribution is refused or impossible — so it reaches neither of the hand-offs above
         /// and would go unrecorded. It matters because it is the one ply in a match that moves a
@@ -343,15 +356,20 @@ namespace ChessTheBetrayal.Gameplay.Manager
         /// accounts for, and one real match had a Black queen appear on a1 out of nowhere for
         /// exactly this reason. Recorded whichever side's Betrayer it was, since either changes
         /// what the AI is playing with. No elapsed time or depth, because no search produced it.
+        ///
+        /// The ply number comes from the driver raising this, the same source every other recorded
+        /// ply uses. Reading the board's own count here instead would be a second way of answering
+        /// a question the driver has already answered, and the two only agree by coincidence of
+        /// when this happens to be called.
         /// </summary>
-        public void RecordDefection(MoveCommand move)
+        public void RecordDefection(MoveCommand move, int plyNumber)
         {
             if (!RecordTelemetry || Telemetry == null) return;
 
             // The move carries the Betrayer as it was before it turned, so the army it landed in is
             // the other one.
             Team gainedBy = move.PieceTeam == Team.White ? Team.Black : Team.White;
-            Telemetry.RecordMove(AiMoveRecord.ForDefection(_board.PliesPlayed, gainedBy, move));
+            Telemetry.RecordMove(AiMoveRecord.ForDefection(plyNumber, gainedBy, move));
         }
 
         /// <summary>
