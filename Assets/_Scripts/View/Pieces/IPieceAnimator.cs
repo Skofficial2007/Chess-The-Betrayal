@@ -144,8 +144,13 @@ namespace ChessTheBetrayal.View
         /// moment BoardVisuals can safely start any animation that must play AFTER this piece's own
         /// capture reads as complete (e.g. a Betrayal Defection spin queued on the same piece — see
         /// BoardVisuals.SwapPieceTeam). See PrimeTweenPieceAnimator for the full timing breakdown.
+        ///
+        /// victimHeft says how big the thing being taken is, 0 for the smallest piece on the board
+        /// and 1 for the tallest, so that felling a queen costs more effort and lands harder than
+        /// swatting a pawn. Zero plays exactly what a capture has always played, which is why the
+        /// pawn case cannot be changed by this.
         /// </summary>
-        void PlayCaptureStamp(Vector3 worldPos, CaptureRunUp runUp = default, Action onDescentStart = null, Action onSettled = null);
+        void PlayCaptureStamp(Vector3 worldPos, CaptureRunUp runUp = default, float victimHeft = 0f, Action onDescentStart = null, Action onImpact = null, Action onSettled = null);
 
         /// <summary>
         /// The victim's half of a capture "stamp", started at the attacker's DESCENT (not impact):

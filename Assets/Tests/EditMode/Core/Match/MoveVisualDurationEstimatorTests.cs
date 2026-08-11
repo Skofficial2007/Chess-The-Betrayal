@@ -16,9 +16,11 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Match
     [TestFixture]
     public class MoveVisualDurationEstimatorTests
     {
-        // Measured off PrimeTweenPieceAnimator's stamp sequence: 0.09 anticipation, 0.30 leap,
-        // 0.06 impact squash, 0.05 hold at contact, 0.24 recovery, 0.10 settle bob.
-        private const float MeasuredStrikeSeconds = 0.84f;
+        // Measured off PrimeTweenPieceAnimator's stamp sequence at its heaviest, which is what the
+        // estimate has to cover: 0.09 anticipation, 0.30 leap, 0.06 impact squash, 0.05 hold at
+        // contact plus 0.05 more for felling the tallest piece on the board, 0.24 recovery, 0.10
+        // settle bob.
+        private const float MeasuredStrikeSeconds = 0.89f;
 
         private static PieceData Pawn() => new PieceData(Team.White, ChessPieceType.Pawn, moveDirection: 1, startRow: 1, hasMoved: true);
         private static PieceData Piece(ChessPieceType type) => new PieceData(Team.White, type, moveDirection: 1, startRow: 0, hasMoved: true);

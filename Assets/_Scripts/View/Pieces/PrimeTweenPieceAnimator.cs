@@ -139,6 +139,19 @@ namespace ChessTheBetrayal.View
         private const float ChargeLeanDegrees = 24f;
         private const float BraceLeanDegrees = 15f;
 
+        // How much of the strike answers to the size of what is being taken. Heft is 0 for the
+        // smallest piece on the board and 1 for the tallest, and everything below is written so that
+        // heft 0 plays exactly what a capture has always played — taking a pawn is the case that
+        // already read well, so it is the floor, and weight only ever adds.
+        //
+        // Felling something big should cost more effort and land harder than swatting a pawn, and
+        // the leap in particular has a second job: the arc is too low to clear a tall piece (see
+        // StampLeapHeight), so giving the tall victims a higher one buys back some of the room the
+        // constant never had.
+        private const float StampLeapHeightPerHeft = 0.9f;
+        private const float StampImpactHoldPerHeft = 0.05f;
+        private const float StampRecoverOvershootPerHeft = 0.5f;
+
         private const float StampImpactSquashDuration = 0.06f;
         // A beat with nothing moving at all, at maximum squash. The victim already froze here (see
         // StampVictimHoldDuration) while the attacker sprang straight back up, so the two disagreed
@@ -522,8 +535,11 @@ namespace ChessTheBetrayal.View
                 .OnComplete(this, self => self._settleBobBaseY = null);
         }
 
-        public void PlayCaptureStamp(Vector3 worldPos, CaptureRunUp runUp = default, Action onDescentStart = null, Action onSettled = null)
+        public void PlayCaptureStamp(Vector3 worldPos, CaptureRunUp runUp = default, float victimHeft = 0f, Action onDescentStart = null, Action onImpact = null, Action onSettled = null)
         {
+            // Anything outside 0..1 would scale a beat past what the estimator budgeted for it.
+            victimHeft = Mathf.Clamp01(victimHeft);
+
             if (!IsFinite(worldPos) || (runUp.HasGroundToCover && !IsFinite(runUp.LaunchFrom)))
             {
                 Debug.LogWarning($"[{nameof(PrimeTweenPieceAnimator)}] PlayCaptureStamp given non-finite vector for {_transform.name}. Ignoring.");
@@ -564,7 +580,7 @@ namespace ChessTheBetrayal.View
             // the piece in a single frame the instant the leap started — a small teleport forwards
             // that every capture in the game was paying, hidden inside the snap of the release.
             Vector3 launchPos = pullBackPos;
-            float peakY = Mathf.Max(launchPos.y, landPos.y) + StampLeapHeight;
+            float peakY = Mathf.Max(launchPos.y, landPos.y) + StampLeapHeight + StampLeapHeightPerHeft * victimHeft;
 
             // Swollen mid-air size — held through the landing and only released back to restScale
             // by the post-impact recover, so the piece that lands is visibly bigger than the piece
@@ -649,13 +665,18 @@ namespace ChessTheBetrayal.View
                 // Leap, second half (0.5 -> 1): same driver, same coupled XZ/Y formula, continuing
                 // seamlessly from the peak down to the landing tile.
                 .Chain(Tween.Custom(this, 0.5f, 1f, halfDuration, (self, t) => self.ApplyStampArc(t, launchPos, landPos, peakY), Ease.Linear, useUnscaledTime: true))
-                // 4. Impact: flatten hard against the tile (still oversized — a big flat slap)...
+                // 4. Contact. Its own beat rather than something a caller has to time for itself:
+                // anything that answers the collision — the camera's knock, a sound, dust — has to
+                // land on this exact frame, and the only thing that knows when it arrives is the
+                // sequence playing it.
+                .ChainCallback(() => onImpact?.Invoke())
+                // Flatten hard against the tile (still oversized — a big flat slap)...
                 .Chain(Tween.Scale(_transform, impactScale, StampImpactSquashDuration, Ease.OutQuad, useUnscaledTime: true))
                 // ...hold there, dead still, for the same beat the victim holds under it...
-                .Chain(Tween.Delay(StampImpactHoldDuration, useUnscaledTime: true))
+                .Chain(Tween.Delay(StampImpactHoldDuration + StampImpactHoldPerHeft * victimHeft, useUnscaledTime: true))
                 // ...then recover with a big springy overshoot back down to rest scale — this is
                 // the "settling back to its normal size" beat that closes the whole arc.
-                .Chain(Tween.Scale(_transform, restScale, StampImpactRecoverDuration, Easing.Overshoot(StampRecoverOvershoot), useUnscaledTime: true))
+                .Chain(Tween.Scale(_transform, restScale, StampImpactRecoverDuration, Easing.Overshoot(StampRecoverOvershoot + StampRecoverOvershootPerHeft * victimHeft), useUnscaledTime: true))
                 // The bob is the last thing anyone sees of the capture, so onSettled waits it out
                 // rather than firing as it starts. Callers use that moment to begin an animation
                 // that must not overlap this one — a Defection spin queued on the piece that just

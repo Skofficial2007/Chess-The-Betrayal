@@ -2,7 +2,10 @@ using NUnit.Framework;
 using PrimeTween;
 using UnityEngine;
 using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.Core.Engine;
+using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.View;
+using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
 namespace ChessTheBetrayal.Tests.EditMode.View
 {
@@ -112,6 +115,28 @@ namespace ChessTheBetrayal.Tests.EditMode.View
 
             Assert.That(Quaternion.Angle(_pieceObject.transform.rotation, upright), Is.LessThan(0.01f),
                 "The victim was still leaning when the crush landed on it.");
+        }
+
+        [Test]
+        public void FellingSomethingBigNeverOutlastsWhatThePacingBudgetedForIt()
+        {
+            // The strike stretches with the size of what it takes, and the move pacing releases the
+            // next move on a fixed estimate. If the heaviest capture ran past that estimate, two
+            // moves would animate on top of each other — the exact fault the pacing gate exists to
+            // prevent, arriving quietly through a feature that has nothing to do with pacing.
+            //
+            // Read off PrimeTweenPieceAnimator's own constants at full heft: anticipation 0.09,
+            // leap 0.30, impact squash 0.06, hold 0.05 + 0.05, recover 0.24, settle bob 0.10.
+            const float heaviestStrikeSeconds = 0.09f + 0.30f + 0.06f + 0.05f + 0.05f + 0.24f + 0.10f;
+
+            MoveCommand strikeOnANeighbour = MoveCommand.CreateStandardMove(
+                new Vector2Int(4, 3), new Vector2Int(5, 4),
+                new PieceData(Team.White, ChessPieceType.Pawn, moveDirection: 1, startRow: 1, hasMoved: true),
+                new PieceData(Team.Black, ChessPieceType.Queen, moveDirection: -1, startRow: 7, hasMoved: true));
+
+            Assert.That(MoveVisualDurationEstimator.EstimateSeconds(strikeOnANeighbour),
+                Is.GreaterThanOrEqualTo(heaviestStrikeSeconds),
+                "The heaviest capture plays for longer than the pacing gate holds the next move back.");
         }
 
         [Test]

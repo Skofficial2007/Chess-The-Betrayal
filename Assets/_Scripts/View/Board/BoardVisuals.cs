@@ -196,6 +196,18 @@ namespace ChessTheBetrayal.View
         // than an unexplained rules interruption.
         private const float KingThreatFlashIntensity = 2.5f;
         private const float KingThreatFlashDuration = 0.15f;
+
+        // The shortest and tallest a piece stands, in tile widths, measured off the models the board
+        // is currently built from: a pawn comes out at 0.80 of a tile and a king at 1.74. They anchor
+        // the two ends of how heavy a capture feels (see HeftOf), and they are deliberately fixed
+        // rather than taken from whatever is still on the board — otherwise the same capture would
+        // land differently depending on which pieces happened to have survived.
+        private const float ShortestPieceTiles = 0.80f;
+        private const float TallestPieceTiles = 1.74f;
+
+        // What the camera feels when the smallest capture on the board lands. A pawn taking a pawn
+        // is still a collision, so the knock has a floor rather than fading to nothing.
+        private const float CaptureShakeFloor = 0.35f;
         private const int KingThreatFlashCycles = 2;
 
         // Resolved once rather than hashing the same two strings on every material write.
@@ -1487,14 +1499,20 @@ namespace ChessTheBetrayal.View
                             MoveTravelTiming.SecondsForTiles(runUp.TilesToCover));
                     }
 
+                    // Read before the strike starts, not inside the callback: by the time contact
+                    // lands the victim is already being crushed and would measure short.
+                    float victimHeft = HeftOf(victimForClosure);
+
                     movingPiece.PlayCaptureStamp(
                         stampTargetPos,
                         runUp,
+                        victimHeft,
                         onDescentStart: () =>
                         {
                             if (victimForClosure == null) return;
                             victimForClosure.PlayStompedDeath(() => SendToGraveyard(victimForClosure));
                         },
+                        onImpact: () => ShakeCamera(victimHeft),
                         onSettled: () =>
                         {
                             // The attacker's whole capture animation has now fully finished. Only
@@ -1688,6 +1706,45 @@ namespace ChessTheBetrayal.View
             return MoveTravelTiming.TilesApart(
                 move.StartPosition.x, move.StartPosition.y,
                 move.EndPosition.x, move.EndPosition.y);
+        }
+
+        /// <summary>
+        /// Passes a landed strike on to whatever is looking at the board, if anything is.
+        ///
+        /// Resolved each time rather than cached, and optional throughout: headless play registers
+        /// no camera at all, and a scene that never had one should quietly not shake rather than
+        /// throw on the first capture of the game.
+        ///
+        /// The lightest capture still gets a knock — a pawn landing on a pawn is a real collision —
+        /// so heft only ever raises it above that floor.
+        /// </summary>
+        private void ShakeCamera(float victimHeft)
+        {
+            if (!ServiceLocator.Instance.TryResolve<ICameraShake>(out ICameraShake shake)) return;
+
+            shake.Shake(Mathf.Lerp(CaptureShakeFloor, 1f, victimHeft));
+        }
+
+        /// <summary>
+        /// How big a piece is to be taken, from 0 for the smallest thing on the board to 1 for the
+        /// tallest, so a strike can cost more effort when it fells something worth felling.
+        ///
+        /// Measured off the piece rather than read from a table of types. Two reasons: a table would
+        /// go stale the moment the piece set was swapped for a taller one, and material value is the
+        /// evaluator's business — what the board wants to know here is how much of the screen the
+        /// thing takes up, which is a question only the thing being drawn can answer.
+        ///
+        /// The two ends are anchored on measurements of the current set rather than on whatever
+        /// happens to be standing on the board, so the same capture always looks the same however
+        /// many pieces are left. A pawn stands about half a tile and a king about a tile and a
+        /// sixth; anything outside that just clamps.
+        /// </summary>
+        private float HeftOf(ChessPiece victim)
+        {
+            if (victim == null) return 0f;
+
+            float heightInTiles = victim.WorldHeight / Mathf.Max(0.0001f, tileSize);
+            return Mathf.Clamp01(Mathf.InverseLerp(ShortestPieceTiles, TallestPieceTiles, heightInTiles));
         }
 
         /// <summary>

@@ -32,8 +32,12 @@ namespace ChessTheBetrayal.Core.Match
         /// An attacker that walks in folds its crouch into the end of that walk rather than playing
         /// it afterwards, so for those this is around a tenth of a second long. That is the right
         /// direction for a figure whose whole job is to be an upper bound.
+        ///
+        /// Taken at the heaviest a strike gets. The hold at contact stretches with the size of what
+        /// was taken, so this is the figure for felling a king; every lighter capture comes in under
+        /// it, which is the direction an upper bound is allowed to be wrong in.
         /// </summary>
-        private const float CaptureStrikeSeconds = 0.84f;
+        private const float CaptureStrikeSeconds = 0.89f;
 
         /// <summary>
         /// A victim that dies on its own — hop, shrink and glide to the death pile — rather than
