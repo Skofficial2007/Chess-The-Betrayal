@@ -92,24 +92,21 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         /// <summary>
-        /// When a tier's hard cap fires, the candidate-rescore pass never finishes,
-        /// RootScoresExactForSelection stays false, and AsyncAIAgent then skips MoveSelectionPolicy
-        /// entirely — so that tier's blunder rate and tie-break window do not apply to that move.
+        /// A turn played the way the live agent plays one, on a position heavy enough that the pass
+        /// cannot finish inside the tier's soft budget. What must come back is a partial settlement:
+        /// more than the best move alone, fewer than all of them, and an honest report that the
+        /// whole pass did not run.
+        ///
+        /// All three matter together. Reporting the whole pass as complete would let a selection
+        /// read alpha-beta bounds as though they were scores; reporting nothing settled would cost
+        /// the tier its dials on every heavy position, which is what a real match caught it doing.
         ///
         /// Measured on "hard" rather than "aggressive", even though a real match surfaced this on
-        /// aggressive. Aggressive sits within measurement noise of its own budget on this position
-        /// (its rescore has been timed either side of 3000ms across runs), so a test keyed to it
-        /// reports whichever way the machine happened to fall. Hard reaches its depth in well under
-        /// a second and then spends the entire remaining budget on the pass, which is the same
-        /// behaviour with room to spare either side of it. The tier-by-tier survey below is where
-        /// aggressive's borderline reading belongs.
-        ///
-        /// The assertion is the implication, not a wall-clock number, so it can't rot into a
-        /// guaranteed pass as the search gets faster: if the budget was NOT reached the test says so
-        /// and stops, rather than quietly asserting nothing.
+        /// aggressive. Aggressive sat within measurement noise of its own budget on this position,
+        /// so a test keyed to it reported whichever way the machine happened to fall.
         /// </summary>
         [Test]
-        public void ASearchThatSpendsItsWholeBudget_LeavesCandidateScoresInexact()
+        public void ATurnTooHeavyToFinishItsPass_SettlesSomeCandidatesButNotAll()
         {
             IChessEngine engine = new ChessEngineAdapter();
             AIProfile profile = new AIProfileTableProvider().Resolve("hard");
@@ -129,30 +126,34 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             TestContext.WriteLine($"tier={profile.Id} soft={settings.TimeBudget.SoftMs}ms hard={settings.TimeBudget.HardMs}ms "
                 + $"margin={rescoreMargin}cp -> elapsed={stopwatch.ElapsedMilliseconds}ms "
                 + $"depth={search.LastCompletedDepth} stop={search.StopReason} "
-                + $"scoresExact={search.RootScoresExactForSelection}");
+                + $"settled={search.RootScoresExactCount}/{search.RootMoveCount}");
 
-            Assume.That(cts.IsCancellationRequested, Is.True,
-                "This position no longer reaches the tier's hard budget, so it can't demonstrate what "
-                + "happens when the budget is reached. Pick a heavier position.");
+            Assume.That(search.RootScoresExactCount, Is.LessThan(search.RootMoveCount),
+                "This position no longer outlasts the tier's pass, so it cannot demonstrate what a "
+                + "partial settlement looks like. Pick a heavier position.");
 
             Assert.That(search.RootScoresExactForSelection, Is.False,
-                "A search stopped by its own time budget cannot have finished the whole rescore pass.");
+                "A pass that did not reach every root move must not report itself complete.");
 
             Assert.That(search.RootScoresExactCount, Is.GreaterThan(1),
-                "Not finishing the pass must not cost the tier its personality outright: the "
-                + "candidates it did settle before the budget ran out are still honestly comparable, "
-                + "and selecting among those is the difference between a tier playing with its dials "
-                + "and playing as though it had none.");
+                "Stopping the pass early must not cost the tier its dials outright: the candidates it "
+                + "did settle are still honestly comparable, and choosing among those is the "
+                + "difference between a tier playing with a personality and playing without one.");
         }
 
         /// <summary>
-        /// The other half of the test above — same tier, same position, same margin, with the cap
-        /// as the only difference. Given time to finish, the pass completes and the scores come back
-        /// exact. Without this, a false reading there could just as well mean the flag never comes
-        /// back true at all; the pair together is what pins the budget as the thing that decides it.
+        /// The other half of the test above: with no clock running at all, the pass has nothing to
+        /// cut it short and settles every root move. Without this, a partial reading there could
+        /// just as well mean the pass never completes under any conditions, and the pair together is
+        /// what pins time as the thing that decides how much of it runs.
+        ///
+        /// This is also what holds the depth-bound guarantee in place. A caller that asks for no
+        /// time management has no deadline applied to the pass either, so the benchmark suites stay
+        /// a measurement of work done rather than of who ran out of time first — if that ever stops
+        /// being true, this test is where it shows up.
         /// </summary>
         [Test]
-        public void ASearchGivenTimeToFinish_DoesProduceExactCandidateScores()
+        public void ASearchWithNoClockRunning_SettlesEveryCandidate()
         {
             IChessEngine engine = new ChessEngineAdapter();
             AIProfile profile = new AIProfileTableProvider().Resolve("hard");
@@ -163,16 +164,16 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             BoardState board = DepthWallPositions.QuietMidgame();
 
             var stopwatch = Stopwatch.StartNew();
-            search.FindBestMove(board, settings, CancellationToken.None, rescoreMargin,
-                enableInstabilityTimeManagement: true);
+            search.FindBestMove(board, settings, CancellationToken.None, rescoreMargin);
             stopwatch.Stop();
 
-            TestContext.WriteLine($"uncapped: elapsed={stopwatch.ElapsedMilliseconds}ms depth={search.LastCompletedDepth} "
-                + $"stop={search.StopReason} scoresExact={search.RootScoresExactForSelection}");
+            TestContext.WriteLine($"no clock: elapsed={stopwatch.ElapsedMilliseconds}ms depth={search.LastCompletedDepth} "
+                + $"stop={search.StopReason} settled={search.RootScoresExactCount}/{search.RootMoveCount} "
+                + $"wholePassRan={search.RootScoresExactForSelection}");
 
             Assert.That(search.RootScoresExactForSelection, Is.True,
-                "With nothing cutting it short the rescore pass runs to the end, which is the only "
-                + "state in which the tier's personality dials are allowed to apply.");
+                "With no clock running there is no deadline and no cancellation, so the pass has "
+                + "nothing to cut it short and every root move should come back settled.");
         }
 
         /// <summary>

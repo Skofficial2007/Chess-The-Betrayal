@@ -813,6 +813,15 @@ namespace ChessTheBetrayal.AI
             _tt.Stats.StopReason = _stopReason;
 #endif
 
+            // Unbounded beyond the caller's own cancellation, and that costs a player real time: on
+            // a quiet midgame the deeper tiers reach their ceiling inside a second and then spend
+            // the rest of a three-second budget here. Stopping the pass at the soft budget was tried
+            // and does buy that time back, but it stops part-way down the root list while the moves
+            // a tie-break chooses between are spread along that list, so what it costs depends
+            // entirely on how many moves are really in contention. Measured on one midgame that was
+            // nothing at all for most tiers — a window of one move stays a window of one move — and
+            // a five-move window down to one for the tier that had one. Which of those a real game
+            // looks like is not settled by a single position, so the pass stays whole until it is.
             RescoreCandidatesWithFullWindow(board, rootTeam, _lastCompletedDepth, candidateRescoreMarginCp, ct);
 
             return bestMove;
