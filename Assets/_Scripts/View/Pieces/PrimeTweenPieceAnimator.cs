@@ -95,8 +95,16 @@ namespace ChessTheBetrayal.View
         // the attacker's actual remaining airtime rather than duplicating the numbers by hand.
         public const float StampLeapDuration = 0.3f;
         public const float StampDescentStartFraction = 0.5f;
-        // Peak height above the higher of start/land Y. Pieces are ~1 unit tall at this board
-        // scale, so 1.3 clears even the King/Queen's head with visible air underneath.
+        // Peak height above the higher of start/land Y.
+        //
+        // This does NOT clear a tall piece's head, whatever it may once have been chosen to do. The
+        // pieces stand between 1.2 and 2.6 units on this board — a King is 2.6 — so a peak 1.3 above
+        // the tile passes through the band a King, Queen or Bishop occupies, and only actually
+        // clears a Pawn. What keeps the two from reading as interpenetrating is that the arc peaks
+        // over the boundary between the two squares rather than over the victim, that the victim is
+        // already shrinking by the time the attacker is above it, and that every piece tapers to
+        // almost nothing at the top. It works, but it works by staging rather than by clearance, and
+        // anything that changes the descent timing has to keep that in mind.
         private const float StampLeapHeight = 1.3f;
         // Mid-air growth: the attacker swells on the way up and stays swollen through the landing,
         // only releasing back to rest scale in the post-impact recover — "big things fall hard."
