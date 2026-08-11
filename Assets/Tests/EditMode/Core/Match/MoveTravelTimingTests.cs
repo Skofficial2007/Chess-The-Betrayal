@@ -37,6 +37,13 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Match
         /// <summary>The longest move a chessboard allows: a queen's seven diagonal steps.</summary>
         private const float LongestMoveTiles = 9.8995f;
 
+        /// <summary>
+        /// The longest journey anything makes, which is not a move at all: the far corner of the
+        /// board to the far end of a full death pile, since each side's pile sits off the edge and
+        /// grows away from it. Measured against the board this game is built with.
+        /// </summary>
+        private const float LongestJourneyTiles = 14.84f;
+
         [Test]
         public void ASingleTileTakesExactlyAsLongAsItAlwaysHas()
         {
@@ -91,6 +98,24 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Match
             float tilesPerFrame = MoveTravelTiming.PeakTilesPerSecond(LongestMoveTiles) / FramesPerSecond;
 
             Assert.That(tilesPerFrame, Is.LessThanOrEqualTo(MaxTilesPerFrame));
+        }
+
+        [Test]
+        public void NothingTravellingOffTheBoardOutrunsTheFramesEither()
+        {
+            // A captured piece leaving for its side's pile, and the same piece coming back when the
+            // capture is taken back, travel further than any move on the board — up to fifteen
+            // tiles. Those journeys were the third place in this game found holding a fixed duration
+            // whatever the distance, and by far the worst: a third of a second across fifteen tiles
+            // is over two tiles between drawn frames. Whatever paces them has to answer to the same
+            // ceiling every other glide does.
+            for (float tiles = 1f; tiles <= LongestJourneyTiles; tiles += 0.25f)
+            {
+                float tilesPerFrame = MoveTravelTiming.PeakTilesPerSecond(tiles) / FramesPerSecond;
+
+                Assert.That(tilesPerFrame, Is.LessThanOrEqualTo(MaxTilesPerFrame),
+                    $"A {tiles}-tile journey jumps {tilesPerFrame:F3} tiles between frames at its quickest.");
+            }
         }
 
         [Test]

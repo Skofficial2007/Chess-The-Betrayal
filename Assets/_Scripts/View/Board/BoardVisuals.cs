@@ -1697,6 +1697,19 @@ namespace ChessTheBetrayal.View
         }
 
         /// <summary>
+        /// The ground between two world points in tile widths, for a journey that is not a move
+        /// between two squares — a piece leaving for its side's pile, or coming back off it. The
+        /// pile sits off the edge of the board, so these are the longest distances anything travels
+        /// in the game and by far the most in need of pacing.
+        /// </summary>
+        private float TilesBetween(Vector3 from, Vector3 to)
+        {
+            from.y = 0f;
+            to.y = 0f;
+            return Vector3.Distance(from, to) / Mathf.Max(0.0001f, tileSize);
+        }
+
+        /// <summary>
         /// The ground a move covers in tile widths, so a glide can be paced against what it has to
         /// make up. Same number in either direction, so a takeback travels at the pace the move
         /// itself did.
@@ -1802,7 +1815,9 @@ namespace ChessTheBetrayal.View
             // must find it rather than an empty square with a piece in flight toward it.
             _piecesByPosition[capturePos] = victim;
 
-            victim.PlayGraveyardReturn(PieceWorldPosition(capturePos), PieceRestScale, onArrived: () =>
+            Vector3 homeSquare = PieceWorldPosition(capturePos);
+
+            victim.PlayGraveyardReturn(homeSquare, PieceRestScale, TilesBetween(victim.transform.position, homeSquare), onArrived: () =>
             {
                 // The piece can be destroyed mid-flight — a new match, or a rebuild.
                 if (victim == null) return;
@@ -1944,7 +1959,7 @@ namespace ChessTheBetrayal.View
 
             GraveyardSlot slot = ReserveGraveyardSlot(victim);
 
-            victim.PlayEnPassantDeath(slot.Position, onArrived: () =>
+            victim.PlayEnPassantDeath(slot.Position, TilesBetween(victim.transform.position, slot.Position), onArrived: () =>
             {
                 if (victim == null) return;
                 victim.SetScale(Vector3.one * deathSize, force: true);

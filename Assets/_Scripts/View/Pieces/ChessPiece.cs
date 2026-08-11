@@ -176,18 +176,18 @@ namespace ChessTheBetrayal.View
         /// it's arrived at vanished scale — the moment BoardVisuals should snap it to death-pile
         /// scale/facing.
         /// </summary>
-        public void PlayEnPassantDeath(Vector3 graveyardWorldPos, Action onArrived)
+        public void PlayEnPassantDeath(Vector3 graveyardWorldPos, float tilesTravelled, Action onArrived)
         {
-            _animator.PlayEnPassantDeath(graveyardWorldPos, onArrived);
+            _animator.PlayEnPassantDeath(graveyardWorldPos, tilesTravelled, onArrived);
         }
 
         /// <summary>
         /// Brings this piece back from the death pile onto boardWorldPos at restScale, because the
         /// capture that put it there was taken back.
         /// </summary>
-        public void PlayGraveyardReturn(Vector3 boardWorldPos, Vector3 restScale, Action onArrived)
+        public void PlayGraveyardReturn(Vector3 boardWorldPos, Vector3 restScale, float tilesTravelled, Action onArrived)
         {
-            _animator.PlayGraveyardReturn(boardWorldPos, restScale, onArrived);
+            _animator.PlayGraveyardReturn(boardWorldPos, restScale, tilesTravelled, onArrived);
         }
 
         /// <summary>

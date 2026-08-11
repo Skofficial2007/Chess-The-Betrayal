@@ -184,9 +184,22 @@ namespace ChessTheBetrayal.View
         // piece, so it plays its own "swept away" beat instead — a quick hop-and-shrink glide
         // straight to its team's graveyard slot, matching the weight of every other board glide
         // (InOutCubic) rather than the old instant teleport.
-        private const float EnPassantDeathDuration = 0.34f;
+        // The journey between the board and a side's pile, both ways. Paced off the same curve as
+        // any other travel rather than a fixed duration, because the pile sits off the edge of the
+        // board and the distance to it is not small: the far corner of the board to the far end of
+        // a full pile is fifteen tiles, and a fixed third of a second across that is two tiles
+        // between one drawn frame and the next — the piece does not glide, it streaks. It reached
+        // this far because a corpse leaving the board is easy not to look at, but the same journey
+        // run backwards is a piece arriving on it, which is very much looked at.
         private const float EnPassantDeathHopHeight = 0.22f;
-        private static readonly Ease EnPassantDeathMoveEase = Ease.InOutCubic;
+
+        // How long the piece takes to shrink away, kept separate from how long it takes to get
+        // there. Those used to be one number, which is what made the journey a fixed duration in the
+        // first place. They answer different questions: the shrink is how long a captured piece is
+        // still worth looking at, and the move pacing waits on exactly that; the travel is just a
+        // corpse being carried off, and stretching it to a readable speed costs nothing because by
+        // then there is almost nothing left to see.
+        private const float DeathVanishSeconds = 0.34f;
         private static readonly Ease EnPassantDeathHopEase = Ease.OutQuad;
         private static readonly Ease EnPassantDeathScaleEase = Ease.InQuad;
 
@@ -833,7 +846,7 @@ namespace ChessTheBetrayal.View
                 .ChainCallback(() => onVanished?.Invoke());
         }
 
-        public void PlayEnPassantDeath(Vector3 graveyardWorldPos, Action onArrived)
+        public void PlayEnPassantDeath(Vector3 graveyardWorldPos, float tilesTravelled, Action onArrived)
         {
             if (!IsFinite(graveyardWorldPos))
             {
@@ -853,24 +866,25 @@ namespace ChessTheBetrayal.View
             HideSelectionOutline(instant: true);
 
             Vector3 startPos = _transform.position;
+            float journeySeconds = MoveTravelTiming.SecondsForTiles(tilesTravelled);
 
             // The attacker never visually touches this piece (it's captured on a different square
             // than the one it lands on), so instead of a crush it plays its own "swept off the
-            // board" beat: a small hop — same InOutCubic/OutQuad vocabulary as a normal board move,
-            // just with the piece shrinking to nothing across the same glide rather than teleporting
-            // to the graveyard at full size and only then scaling down. XZ and Y are driven by
-            // separate tweens (same pattern as PlayCaptureStamp's leap) so the horizontal glide and
-            // the vertical hop-arc don't fight over the Y axis.
+            // board" beat: a small hop, the same glide vocabulary as a normal board move, with the
+            // piece shrinking away as it goes rather than teleporting to the pile at full size and
+            // only then scaling down. XZ and Y are driven by separate tweens (same pattern as
+            // PlayCaptureStamp's leap) so the horizontal glide and the vertical hop don't fight over
+            // the Y axis. The shrink runs on its own clock — see DeathVanishSeconds.
             _stampSequence = Sequence.Create(useUnscaledTime: true)
-                .Group(Tween.Position(_transform, new Vector3(graveyardWorldPos.x, startPos.y, graveyardWorldPos.z), EnPassantDeathDuration, EnPassantDeathMoveEase, useUnscaledTime: true))
-                .Group(Tween.Scale(_transform, VanishedScale, EnPassantDeathDuration, EnPassantDeathScaleEase, useUnscaledTime: true))
+                .Group(Tween.Position(_transform, new Vector3(graveyardWorldPos.x, startPos.y, graveyardWorldPos.z), journeySeconds, BoardGlideEase, useUnscaledTime: true))
+                .Group(Tween.Scale(_transform, VanishedScale, DeathVanishSeconds, EnPassantDeathScaleEase, useUnscaledTime: true))
                 .Group(Sequence.Create(useUnscaledTime: true)
-                    .Chain(Tween.PositionY(_transform, startPos.y + EnPassantDeathHopHeight, EnPassantDeathDuration * 0.5f, EnPassantDeathHopEase, useUnscaledTime: true))
-                    .Chain(Tween.PositionY(_transform, graveyardWorldPos.y, EnPassantDeathDuration * 0.5f, Ease.InQuad, useUnscaledTime: true)))
+                    .Chain(Tween.PositionY(_transform, startPos.y + EnPassantDeathHopHeight, journeySeconds * 0.5f, EnPassantDeathHopEase, useUnscaledTime: true))
+                    .Chain(Tween.PositionY(_transform, graveyardWorldPos.y, journeySeconds * 0.5f, Ease.InQuad, useUnscaledTime: true)))
                 .ChainCallback(() => onArrived?.Invoke());
         }
 
-        public void PlayGraveyardReturn(Vector3 boardWorldPos, Vector3 restScale, Action onArrived)
+        public void PlayGraveyardReturn(Vector3 boardWorldPos, Vector3 restScale, float tilesTravelled, Action onArrived)
         {
             if (!IsFinite(boardWorldPos) || !IsFinite(restScale))
             {
@@ -890,17 +904,18 @@ namespace ChessTheBetrayal.View
             HideSelectionOutline(instant: true);
 
             Vector3 startPos = _transform.position;
+            float journeySeconds = MoveTravelTiming.SecondsForTiles(tilesTravelled);
 
             // The death glide read backwards: the same InOutCubic travel and the same hop, with the
             // piece swelling back to full size across it instead of shrinking away. The arrival
             // overshoots where the death eased flat, because this one lands somewhere — a piece
             // returning to the board should look like it means to be there.
             _stampSequence = Sequence.Create(useUnscaledTime: true)
-                .Group(Tween.Position(_transform, new Vector3(boardWorldPos.x, startPos.y, boardWorldPos.z), EnPassantDeathDuration, EnPassantDeathMoveEase, useUnscaledTime: true))
-                .Group(Tween.Scale(_transform, restScale, EnPassantDeathDuration, Easing.Overshoot(1.4f), useUnscaledTime: true))
+                .Group(Tween.Position(_transform, new Vector3(boardWorldPos.x, startPos.y, boardWorldPos.z), journeySeconds, BoardGlideEase, useUnscaledTime: true))
+                .Group(Tween.Scale(_transform, restScale, DeathVanishSeconds, Easing.Overshoot(1.4f), useUnscaledTime: true))
                 .Group(Sequence.Create(useUnscaledTime: true)
-                    .Chain(Tween.PositionY(_transform, startPos.y + EnPassantDeathHopHeight, EnPassantDeathDuration * 0.5f, EnPassantDeathHopEase, useUnscaledTime: true))
-                    .Chain(Tween.PositionY(_transform, boardWorldPos.y, EnPassantDeathDuration * 0.5f, Ease.OutBack, useUnscaledTime: true)))
+                    .Chain(Tween.PositionY(_transform, startPos.y + EnPassantDeathHopHeight, journeySeconds * 0.5f, EnPassantDeathHopEase, useUnscaledTime: true))
+                    .Chain(Tween.PositionY(_transform, boardWorldPos.y, journeySeconds * 0.5f, Ease.OutBack, useUnscaledTime: true)))
                 .ChainCallback(() =>
                 {
                     onArrived?.Invoke();

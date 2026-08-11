@@ -63,14 +63,14 @@ namespace ChessTheBetrayal.View
 
         // Same deal in reverse: the piece is simply back on its square at full size, with onArrived
         // fired synchronously so nothing waits on a tween that will never exist here.
-        public void PlayGraveyardReturn(Vector3 boardWorldPos, Vector3 restScale, Action onArrived)
+        public void PlayGraveyardReturn(Vector3 boardWorldPos, Vector3 restScale, float tilesTravelled, Action onArrived)
         {
             _transform.position = boardWorldPos;
             _transform.localScale = restScale;
             onArrived?.Invoke();
         }
 
-        public void PlayEnPassantDeath(Vector3 graveyardWorldPos, Action onArrived)
+        public void PlayEnPassantDeath(Vector3 graveyardWorldPos, float tilesTravelled, Action onArrived)
         {
             _transform.position = graveyardWorldPos;
             onArrived?.Invoke();

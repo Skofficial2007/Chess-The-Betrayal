@@ -26,7 +26,16 @@ namespace ChessTheBetrayal.Core.Match
     public static class MoveTravelTiming
     {
         private const float OneTileSeconds = 0.22f;
-        private const float ExtraSecondsPerTile = 0.045f;
+
+        /// <summary>
+        /// Sized so the ceiling holds across everything that travels, not just everything that
+        /// moves. The longest move on the board is a queen's seven diagonal steps, just under ten
+        /// tiles — but a captured piece leaving for its side's pile crosses about fifteen, and this
+        /// curve is what paces that too. Tuned for ten it came apart at fifteen; the difference to a
+        /// board move is about twelve milliseconds, which is nothing to pay for one rule instead of
+        /// two.
+        /// </summary>
+        private const float ExtraSecondsPerTile = 0.047f;
 
         /// <summary>
         /// How much faster a glide's quickest instant is than its average, for the easing the board

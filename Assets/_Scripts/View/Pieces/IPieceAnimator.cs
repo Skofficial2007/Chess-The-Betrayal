@@ -184,7 +184,7 @@ namespace ChessTheBetrayal.View
         /// once the glide completes — the moment BoardVisuals should restore its death-pile
         /// scale/facing there (mirroring PlayStompedDeath's onVanished pattern).
         /// </summary>
-        void PlayEnPassantDeath(Vector3 graveyardWorldPos, Action onArrived);
+        void PlayEnPassantDeath(Vector3 graveyardWorldPos, float tilesTravelled, Action onArrived);
 
         /// <summary>
         /// A captured piece coming back to the board because its capture was taken back: the same
@@ -196,7 +196,7 @@ namespace ChessTheBetrayal.View
         /// Deliberately not the capture stamp reversed: nothing is lifting this piece back up, and
         /// a crush played backwards reads as the victim inflating rather than returning.
         /// </summary>
-        void PlayGraveyardReturn(Vector3 boardWorldPos, Vector3 restScale, Action onArrived);
+        void PlayGraveyardReturn(Vector3 boardWorldPos, Vector3 restScale, float tilesTravelled, Action onArrived);
 
         /// <summary>
         /// Scales the piece toward scale. force = true snaps instantly with no interpolation
