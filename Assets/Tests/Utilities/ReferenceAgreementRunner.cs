@@ -72,14 +72,14 @@ namespace ChessTheBetrayal.Tests.Utilities
                 // leftover alpha-beta bounds picks near-randomly among moves whose scores were never
                 // really comparable.
                 bool selectionOffered = (subject.BlunderRate > 0f || subject.TieBreakWindowCp > 0)
-                    && search.RootScoresExactForSelection;
+                    && search.RootScoresExactCount > 1;
                 bool blunderRollFired = false;
                 MoveCommand selectedMove = rawMove;
                 if (selectionOffered)
                 {
                     selectedMove = policy.SelectFinalMove(
-                        search.RootMoves, search.RootScores, search.RootMoveCount, search.BestRootIndex,
-                        subject, rng, out blunderRollFired);
+                        search.RootMoves, search.RootScores, search.RootScoresExactCount,
+                        search.BestRootIndex, subject, rng, out blunderRollFired);
                 }
 
                 int subjectScoreCp = search.RootMoveCount > 0 ? search.RootScores[search.BestRootIndex] : 0;

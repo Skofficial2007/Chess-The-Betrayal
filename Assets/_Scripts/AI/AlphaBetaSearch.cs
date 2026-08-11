@@ -446,18 +446,31 @@ namespace ChessTheBetrayal.AI
         public int BestRootIndex { get; private set; }
 
         /// <summary>
-        /// True only when the candidate-rescore pass ran to completion, i.e. every RootScores entry
-        /// within the requested margin of the best is a genuine full-window value rather than the
-        /// tightened alpha-beta bound the main loop recorded. A search that spends its whole time
-        /// budget on the depth loop gets its rescore pass cancelled before it starts — its
-        /// non-best RootScores are then only upper bounds, and a bound can sit arbitrarily close
-        /// to the best score while the move it belongs to is actually much worse. Any caller that
-        /// picks among near-best candidates (tie-break windows, deliberate blunders) MUST check
-        /// this first and fall back to the best move alone when it is false — selecting from
-        /// bound scores is how a time-capped tier ends up playing near-random moves with full
-        /// confidence.
+        /// How many of the leading RootMoves/RootScores entries are safe to choose among. Index 0
+        /// always counts — it is the search's own best move, found under the full window the depth
+        /// loop opens with. The rest are added as the candidate-rescore pass settles them, either
+        /// by re-searching a candidate with a full window or by finding its tightened score already
+        /// too far below the best for the true score to come back into contention.
+        ///
+        /// Past this count the scores are alpha-beta upper bounds, and a bound can sit arbitrarily
+        /// close to the best while the move it belongs to is much worse. Any caller picking among
+        /// near-best candidates (tie-break windows, deliberate blunders) has to stop here;
+        /// selecting from bound scores is how a time-capped tier ends up playing near-random moves
+        /// with complete confidence.
+        ///
+        /// Reported as a count rather than as "the pass finished" so a search that could not afford
+        /// the whole pass keeps the part of its personality the pass did pay for, instead of losing
+        /// all of it. That is not a corner case: the deeper tiers reach their ceiling in well under
+        /// a second and then cannot finish the pass inside their budget at all, so an all-or-nothing
+        /// answer left them playing every heavy position with their dials silently switched off.
+        /// The pass works down from the best move, so what it settles first is what a selection is
+        /// most likely to want.
         /// </summary>
-        public bool RootScoresExactForSelection { get; private set; }
+        public int RootScoresExactCount { get; private set; }
+
+        /// <summary>True when every root move was settled, not just the leading ones — see
+        /// <see cref="RootScoresExactCount"/>, which is what a selection should actually read.</summary>
+        public bool RootScoresExactForSelection => _rootMoves.Count > 0 && RootScoresExactCount >= _rootMoves.Count;
 
         /// <summary>
         /// Iterative deepening entry point. Returns the best move for board.CurrentTurn.
@@ -528,7 +541,7 @@ namespace ChessTheBetrayal.AI
             // Build the root move list ONCE. This is where the agent-level Betrayal policy applies.
             BuildRootMoves(board, rootTeam, settings.BetrayalUsage);
             EnsureRootScoreCapacity(_rootMoves.Count);
-            RootScoresExactForSelection = false;
+            RootScoresExactCount = 0;
 
             // TT informs root ORDERING ONLY — never a short-circuit. The root list carries the
             // BetrayalUsage.DefendOnly filter and MoveToFront's PV bookkeeping; a TT cutoff here
@@ -814,18 +827,29 @@ namespace ChessTheBetrayal.AI
         private void RescoreCandidatesWithFullWindow(BoardState board, Team rootTeam, int lastCompletedDepth,
             int candidateRescoreMarginCp, CancellationToken ct)
         {
+            // The best move is exact by construction, so it counts as settled before the pass looks
+            // at anything else — a caller that gets no further than this still has one valid move
+            // to choose from, which is the same answer the pass not running at all should give.
+            RootScoresExactCount = _rootMoves.Count > 0 ? 1 : 0;
+
             if (candidateRescoreMarginCp <= 0 || _rootMoves.Count == 0 || lastCompletedDepth <= 0) return;
 
             int threshold = _rootScores[0] - candidateRescoreMarginCp; // BestRootIndex == 0
             for (int i = 1; i < _rootMoves.Count; i++) // index 0 is already exact-enough by construction
             {
                 // Cancelled mid-pass: leave the remaining entries at their tightened-window values
-                // and — critically — leave RootScoresExactForSelection false, so no caller
-                // mistakes those bounds for real scores. A search that spends its whole time
-                // budget on the depth loop lands here with the token already fired, which is the
-                // normal case for a deep tier, not an anomaly.
+                // and leave the settled count where it stands, so no caller mistakes those bounds
+                // for real scores. Everything already counted stays usable — a deep tier reaches
+                // here with the token about to fire as a matter of course, not as an anomaly, and
+                // throwing away the candidates it did settle is what used to cost it its dials.
                 if (ct.IsCancellationRequested) return;
-                if (_rootScores[i] < threshold) continue;
+
+                // Below the margin the recorded score is an upper bound that is already too low, so
+                // the true score cannot climb back into range and nothing needs re-searching. The
+                // margin is the widest of the profile's own dials, so a move outside it is outside
+                // every window a selection might open — counting it settled is safe, and it keeps
+                // one skippable move from stopping the count short of the ones behind it.
+                if (_rootScores[i] < threshold) { RootScoresExactCount = i + 1; continue; }
 
                 MoveCommand move = _rootMoves[i];
                 ApplyMoveAndTurn(board, move);
@@ -851,9 +875,8 @@ namespace ChessTheBetrayal.AI
                 if (ct.IsCancellationRequested) return;
 
                 _rootScores[i] = exactScore;
+                RootScoresExactCount = i + 1;
             }
-
-            RootScoresExactForSelection = true;
         }
 
         /// <summary>Grows the root-score buffers to fit a pathological branching root, mirroring

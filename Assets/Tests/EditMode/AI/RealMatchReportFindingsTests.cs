@@ -136,8 +136,13 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 + "happens when the budget is reached. Pick a heavier position.");
 
             Assert.That(search.RootScoresExactForSelection, Is.False,
-                "A search stopped by its own time budget cannot have finished the rescore pass, which "
-                + "is what the personality dials require before they are allowed to apply.");
+                "A search stopped by its own time budget cannot have finished the whole rescore pass.");
+
+            Assert.That(search.RootScoresExactCount, Is.GreaterThan(1),
+                "Not finishing the pass must not cost the tier its personality outright: the "
+                + "candidates it did settle before the budget ran out are still honestly comparable, "
+                + "and selecting among those is the difference between a tier playing with its dials "
+                + "and playing as though it had none.");
         }
 
         /// <summary>
@@ -219,13 +224,18 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 AISearchSettings settings = AISearchSettings.FromProfile(BetrayalUsage.Full, profile);
                 int margin = Math.Max(profile.BlunderMarginCp, profile.TieBreakWindowCp);
 
-                long plainMs = TimeBudgetedSearch(engine, profile, settings, 0, out _, out int plainDepth);
-                long rescoredMs = TimeBudgetedSearch(engine, profile, settings, margin, out bool exact, out int rescoredDepth);
+                long plainMs = TimeBudgetedSearch(engine, profile, settings, 0, out _, out _, out int plainDepth);
+                long rescoredMs = TimeBudgetedSearch(engine, profile, settings, margin,
+                    out bool wholePassRan, out int settled, out int rescoredDepth);
+
+                // A tier with no dials at all (margin 0) is reported as not selecting because it
+                // never asks to — that is the configured answer, not a pass it failed to afford.
+                string personality = margin == 0 ? "n/a (no dials)" : (settled > 1).ToString();
 
                 TestContext.WriteLine(
                     $"{profile.Id,-11} maxDepth={settings.MaxDepth} budget={settings.TimeBudget.HardMs,4}ms margin={margin,3}cp | "
                     + $"no rescore {plainMs,4}ms d{plainDepth} | with rescore {rescoredMs,4}ms d{rescoredDepth} | "
-                    + $"personality applies: {exact}");
+                    + $"settled {settled,3} (whole pass: {wholePassRan}) | selects: {personality}");
 
                 // Deliberately no timing comparison between the two columns. Both runs stop at the
                 // same budget, so once a tier is heavy enough to reach it they both report roughly
@@ -242,7 +252,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         private static long TimeBudgetedSearch(IChessEngine engine, AIProfile profile,
-            AISearchSettings settings, int candidateRescoreMarginCp, out bool scoresExact, out int completedDepth)
+            AISearchSettings settings, int candidateRescoreMarginCp, out bool wholePassRan,
+            out int settledCount, out int completedDepth)
         {
             var search = new AlphaBetaSearch(engine, new BetrayalAwareEvaluator(EvaluationWeights.FromProfile(profile)));
             BoardState board = DepthWallPositions.QuietMidgame();
@@ -255,7 +266,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 enableInstabilityTimeManagement: true);
             stopwatch.Stop();
 
-            scoresExact = search.RootScoresExactForSelection;
+            wholePassRan = search.RootScoresExactForSelection;
+            settledCount = search.RootScoresExactCount;
             completedDepth = search.LastCompletedDepth;
             return stopwatch.ElapsedMilliseconds;
         }

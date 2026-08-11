@@ -221,17 +221,20 @@ namespace ChessTheBetrayal.AI
                     // ranked root-move output — still on THIS worker thread, before the result ever
                     // crosses to the main thread. rng == null (convenience ctor) or a fully zero-dial
                     // profile both skip this entirely, returning FindBestMove's own best move
-                    // unchanged. RootScoresExactForSelection guards the remaining case: a search
-                    // that spent its whole budget on the depth loop never got its candidate scores
-                    // rescored to exact values, and picking "near-best" moves from the leftover
-                    // alpha-beta bounds is how a time-capped tier ends up playing near-random moves —
-                    // personality dials only apply when the scores they read are real.
+                    // unchanged. RootScoresExactCount guards the remaining case: only the leading
+                    // candidates the rescore pass settled carry scores that can honestly be compared,
+                    // and picking "near-best" moves from the leftover alpha-beta bounds behind them is
+                    // how a time-capped tier ends up playing near-random moves. Selecting within that
+                    // count rather than refusing to select at all is what keeps a tier that cannot
+                    // afford the whole pass — which is every deep tier on a heavy position — from
+                    // playing with its dials silently switched off. A count of one leaves only the
+                    // search's own best move to pick, which is what not selecting would have returned.
                     if (_rng != null && (_profile.BlunderRate > 0f || _profile.TieBreakWindowCp > 0)
-                        && _search.RootScoresExactForSelection)
+                        && _search.RootScoresExactCount > 1)
                     {
                         best = _selectionPolicy.SelectFinalMove(
-                            _search.RootMoves, _search.RootScores, _search.RootMoveCount, _search.BestRootIndex,
-                            _profile, _rng);
+                            _search.RootMoves, _search.RootScores, _search.RootScoresExactCount,
+                            _search.BestRootIndex, _profile, _rng);
                     }
 
                     // A budget-expiry cancellation is the EXPECTED, successful outcome of iterative
