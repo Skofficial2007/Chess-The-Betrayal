@@ -86,13 +86,18 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
 
                 tiersChecked++;
 
-                // A tier whose depth loop alone outruns the soft budget never starts the pass. That
-                // is a depth-loop problem and nothing this rule can speak to.
-                if (loopOnly.ElapsedMs > settings.TimeBudget.SoftMs)
+                // A tier whose depth loop leaves nothing behind never starts the pass, and there is
+                // then no window for this rule to speak to. Decided on whether the pass actually
+                // settled anything rather than on the loop overrunning the soft budget: those agreed
+                // only while a loop that overran soft went on to eat the whole hard budget too. Once
+                // one tier's ceiling was lowered enough to finish inside its budget, its loop still
+                // ran past soft while leaving well over a second for a pass that settled nine moves
+                // - and the old wording announced that pass had never started.
+                if (turn.Settled <= 1)
                 {
                     TestContext.WriteLine(
-                        $"    {profile.Id}: depth loop alone outran the soft budget, so the pass never "
-                        + "started - nothing here can speak to its dials.");
+                        $"    {profile.Id}: the pass settled nothing beyond the best move, so there is no "
+                        + "window here to judge - its depth loop leaves the pass no room.");
                     continue;
                 }
 
