@@ -429,6 +429,15 @@ namespace ChessTheBetrayal.AI
         public ref SearchStats Stats => ref _tt.Stats;
 #endif
 
+        /// <summary>
+        /// Passed as FindBestMove's rescoreDeadlineMs to let the candidate rescore pass run as long
+        /// as it needs, which is what every caller does today. A finite value instead stops the pass
+        /// once that many milliseconds of the search have elapsed, trading how much of the root list
+        /// it settles for how long the caller waits — see RescoreBudgetTests for what that trade
+        /// costs, which depends entirely on how many moves are genuinely in contention.
+        /// </summary>
+        public const long NoRescoreDeadline = long.MaxValue;
+
         /// <summary>Ranked root moves from the most recent FindBestMove call, parallel to
         /// <see cref="RootScores"/> by index. Read only after FindBestMove returns and before the
         /// next call reuses the buffer — see MoveSelectionPolicy, the sole external consumer.</summary>
@@ -511,10 +520,14 @@ namespace ChessTheBetrayal.AI
         /// </summary>
         public MoveCommand FindBestMove(BoardState board, AISearchSettings settings, CancellationToken ct,
             int candidateRescoreMarginCp = 0, bool enableInstabilityTimeManagement = false,
-            bool enableAspirationWindows = false)
+            bool enableAspirationWindows = false, long rescoreDeadlineMs = NoRescoreDeadline)
         {
             Team rootTeam = board.CurrentTurn;
-            Stopwatch stopwatch = enableInstabilityTimeManagement ? Stopwatch.StartNew() : null;
+
+            // A clock is needed for either feature, and starting one the caller didn't ask for costs
+            // nothing it can observe — the instability logic below reads it only behind its own flag.
+            bool needsClock = enableInstabilityTimeManagement || rescoreDeadlineMs != NoRescoreDeadline;
+            Stopwatch stopwatch = needsClock ? Stopwatch.StartNew() : null;
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             // A telemetry-only clock start, always taken while telemetry is compiled in, so the
@@ -822,7 +835,8 @@ namespace ChessTheBetrayal.AI
             // nothing at all for most tiers — a window of one move stays a window of one move — and
             // a five-move window down to one for the tier that had one. Which of those a real game
             // looks like is not settled by a single position, so the pass stays whole until it is.
-            RescoreCandidatesWithFullWindow(board, rootTeam, _lastCompletedDepth, candidateRescoreMarginCp, ct);
+            RescoreCandidatesWithFullWindow(board, rootTeam, _lastCompletedDepth, candidateRescoreMarginCp, ct,
+                stopwatch, rescoreDeadlineMs);
 
             return bestMove;
         }
@@ -834,7 +848,7 @@ namespace ChessTheBetrayal.AI
         /// common case for zero-personality callers) or there's nothing to compare against.
         /// </summary>
         private void RescoreCandidatesWithFullWindow(BoardState board, Team rootTeam, int lastCompletedDepth,
-            int candidateRescoreMarginCp, CancellationToken ct)
+            int candidateRescoreMarginCp, CancellationToken ct, Stopwatch clock, long deadlineMs)
         {
             // The best move is exact by construction, so it counts as settled before the pass looks
             // at anything else — a caller that gets no further than this still has one valid move
@@ -842,6 +856,7 @@ namespace ChessTheBetrayal.AI
             RootScoresExactCount = _rootMoves.Count > 0 ? 1 : 0;
 
             if (candidateRescoreMarginCp <= 0 || _rootMoves.Count == 0 || lastCompletedDepth <= 0) return;
+
 
             int threshold = _rootScores[0] - candidateRescoreMarginCp; // BestRootIndex == 0
             for (int i = 1; i < _rootMoves.Count; i++) // index 0 is already exact-enough by construction
@@ -852,6 +867,11 @@ namespace ChessTheBetrayal.AI
                 // here with the token about to fire as a matter of course, not as an anomaly, and
                 // throwing away the candidates it did settle is what used to cost it its dials.
                 if (ct.IsCancellationRequested) return;
+
+                // Checked between candidates rather than inside one: a re-search reports nothing
+                // until it finishes, so stopping one part-way costs its work and settles nothing.
+                // The candidate already in flight when the deadline passes therefore runs to the end.
+                if (deadlineMs != NoRescoreDeadline && clock != null && clock.ElapsedMilliseconds >= deadlineMs) return;
 
                 // Below the margin the recorded score is an upper bound that is already too low, so
                 // the true score cannot climb back into range and nothing needs re-searching. The
