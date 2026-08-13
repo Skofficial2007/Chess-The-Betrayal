@@ -429,11 +429,13 @@ namespace ChessTheBetrayal.UI
         private void HandlePromotionRequiredChannel(ChessTheBetrayal.Events.Payloads.PromotionRequiredPayload payload) =>
             ShowPromotionUI();
 
-        public void TriggerGameOver(Team? winningTeam, bool byTimeout = false)
+        public void TriggerGameOver(Team? winningTeam, bool byTimeout = false,
+            ChessTheBetrayal.Events.Payloads.GameEndReason reason =
+                ChessTheBetrayal.Events.Payloads.GameEndReason.Checkmate)
         {
             if (gameOverUI != null)
             {
-                gameOverUI.SetWinnerText(winningTeam, byTimeout);
+                gameOverUI.SetWinnerText(winningTeam, byTimeout, reason);
                 gameOverUI.SetActive(true);
             }
 
@@ -449,7 +451,7 @@ namespace ChessTheBetrayal.UI
         public void HandleGameOver(ChessTheBetrayal.Events.Payloads.GameOverPayload payload)
         {
             // Unpack the struct and pass it to your existing method
-            TriggerGameOver(payload.WinningTeam, payload.IsTimeout);
+            TriggerGameOver(payload.WinningTeam, payload.IsTimeout, payload.Reason);
         }
 
         public void ConfigureHUDForMode(GameModeConfig config)

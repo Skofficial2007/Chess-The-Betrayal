@@ -409,6 +409,14 @@ namespace ChessTheBetrayal.Gameplay.Manager
                     EndGame(null); // Draw.
                     break;
 
+                case GameState.DrawByRepetition:
+                    EndGame(null, drawReason: ChessTheBetrayal.Events.Payloads.GameEndReason.Repetition);
+                    break;
+
+                case GameState.DrawByFiftyMoveRule:
+                    EndGame(null, drawReason: ChessTheBetrayal.Events.Payloads.GameEndReason.FiftyMoveRule);
+                    break;
+
                 case GameState.Check:
                     _checkDetectedChannel?.Raise();
                     _turnChangedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.TurnChangedPayload(
@@ -432,14 +440,20 @@ namespace ChessTheBetrayal.Gameplay.Manager
             }
         }
 
-        public void EndGame(Team? winner, bool byTimeout = false)
+        /// <param name="drawReason">Which kind of draw this is, when the game ended in one and the
+        /// board alone cannot say which. A drawn game used to be reported as a stalemate whatever
+        /// had actually happened, which was true while stalemate was the only draw there was.</param>
+        public void EndGame(Team? winner, bool byTimeout = false,
+            ChessTheBetrayal.Events.Payloads.GameEndReason? drawReason = null)
         {
             _board.IsGameOver = true;
             _board.Winner = winner;
 
             TransitionToPhase(TurnPhase.GameOver);
 
-            var reason = winner.HasValue ? ChessTheBetrayal.Events.Payloads.GameEndReason.Checkmate : ChessTheBetrayal.Events.Payloads.GameEndReason.Stalemate;
+            var reason = winner.HasValue
+                ? ChessTheBetrayal.Events.Payloads.GameEndReason.Checkmate
+                : drawReason ?? ChessTheBetrayal.Events.Payloads.GameEndReason.Stalemate;
             if (byTimeout) reason = ChessTheBetrayal.Events.Payloads.GameEndReason.Timeout;
 
             _gameOverChannel?.Raise(new ChessTheBetrayal.Events.Payloads.GameOverPayload(winner, reason, byTimeout));
