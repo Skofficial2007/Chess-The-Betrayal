@@ -38,11 +38,16 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
 
         /// <summary>
         /// The shallowest fully-completed depth each tier must reach within its budget on the
-        /// benchmark midgame, measured cold on the current desktop baseline with margin: easy and
-        /// normal complete their entire configured depth in a fraction of their budgets, and every
-        /// deeper tier completes depth 7 cold (8 warm) inside 3 seconds — so 6 leaves one full ply
-        /// of slack for slower machines while still proving the deep tiers genuinely out-search
+        /// benchmark midgame. easy and normal complete their entire configured depth in a fraction
+        /// of their budgets. The deeper tiers reach depth 7 on a cold search, so 6 asks for one ply
+        /// less than they manage from a standing start — enough to prove they genuinely out-search
         /// normal's depth 5 rather than burning their budget on a broken tree.
+        ///
+        /// Do not read the gap between 6 and 7 as spare room. Partway through a successive-turn run
+        /// the deepest tier has been seen finishing depth 6 and no more, its budget gone before the
+        /// next ply completed — the floor was reached exactly, not comfortably. A tier that starts
+        /// failing here is far more likely to have lost search speed than to have met a threshold
+        /// set too high, so measure before touching this number.
         /// </summary>
         private static int MinCompletedDepth(AIProfile profile) => profile.Id switch
         {

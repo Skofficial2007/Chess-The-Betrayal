@@ -141,6 +141,11 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             int gameCount = System.Math.Min(positionCount, CuratedPositionSuite.Count) * 2;
             float margin = TournamentStatistics.WinRateMargin95(gameCount);
 
+            // Reported whatever the verdict, the way the gate fixture reports its own: a pairing that
+            // clears the threshold used to print nothing at all, so a run that passed everywhere left
+            // no record of how well it passed and nothing to compare a later run against.
+            TestContext.WriteLine($"{strongerId} vs {weakerId}: {winRate:P1} +/-{margin:P1} over {gameCount} games");
+
             if (winRate < FloorWinRate)
             {
                 bool floorIsInsideConfidenceInterval = winRate + margin >= FloorWinRate;
