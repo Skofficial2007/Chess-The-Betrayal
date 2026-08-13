@@ -907,7 +907,25 @@ namespace ChessTheBetrayal.Core.Engine
             board.EnPassantFile = ComputeNewEnPassantFile(move);
             AdvanceBetrayalState(board, move);
             ApplyZobristMove(board, move, previousCastlingMask, previousEnPassantFile);
+
+            if (recordHistory) board.PushPosition(board.ZobristHash, IsIrreversible(move));
         }
+
+        /// <summary>
+        /// True for a move no amount of further play can undo, which is where a search for a repeated
+        /// position stops and where the fifty-move count starts again. A capture removes a piece and
+        /// a pawn only ever moves forward, so neither position can occur again.
+        ///
+        /// Castling and spending the Betrayal right are just as final, but both live in the position
+        /// hash, so a position from before one can never match a position from after it and no
+        /// separate guard is needed. A Defection counts anyway: it hands a piece to the other army,
+        /// which is the least reversible thing on the board, and leaving it out would let the
+        /// fifty-move count run through a genuine change of material.
+        /// </summary>
+        private static bool IsIrreversible(MoveCommand move) =>
+            move.IsCapture
+            || move.PieceType == ChessPieceType.Pawn
+            || move.Stage == BetrayalStage.Defection;
 
         /// <summary>
         /// Rolls back a move completely, restoring the board to exactly how it was before.
@@ -928,6 +946,8 @@ namespace ChessTheBetrayal.Core.Engine
 
             if (recordHistory)
             {
+                board.PopPosition();
+
                 if (board.MoveHistory.Count >= 2)
                 {
                     board.MoveHistory.RemoveAt(board.MoveHistory.Count - 1);

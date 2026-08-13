@@ -39,6 +39,14 @@ namespace ChessTheBetrayal.AI
         private const int Infinity = 1_000_000;
         private const int MateScore = 900_000;
 
+        /// <summary>
+        /// What a position worth nothing to either side scores. Dead level on purpose: a side that is
+        /// winning should find a repetition worse than the position it repeats, and a side that is
+        /// losing should find it better, and both of those fall out of scoring it at zero against
+        /// their own evaluation rather than out of any preference written in here.
+        /// </summary>
+        private const int DrawScore = 0;
+
         // How far below the exact MateScore constant a score still counts as "this is a mate,
         // just found some plies away from here" rather than an ordinary evaluation. A mate's score
         // is MateScore minus however many plies of remaining depth were searched at the moment it
@@ -997,6 +1005,23 @@ namespace ChessTheBetrayal.AI
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             _tt.Stats.NodesVisited++;
 #endif
+
+            // This position has already been on the board in this line, or earlier in the game, so
+            // playing on from here leads nowhere either side can improve on. Scored as a draw before
+            // any of the work below, which is what stops a winning side shuffling a piece back and
+            // forth: without it every repetition looks exactly as good as the position it repeats,
+            // and a side that is already winning has no reason to prefer making progress. One prior
+            // occurrence is enough to say so — a line that can reach the same position twice can
+            // reach it a third time, and neither side has to co-operate for that.
+            //
+            // Never after a null move. A null move hands the turn over without a move being played,
+            // so the position it produces was never really on the board; it shares its pieces with
+            // an earlier position and differs only in whose turn it is, which is exactly the shape
+            // that would match something it has no business matching.
+            if (!parentWasNull && board.CountPositionOccurrences(board.ZobristHash) > 1)
+            {
+                return DrawScore;
+            }
 
             // Terminal / horizon: drop into quiescence so we never evaluate mid-capture or,
             // critically, mid-Retribution (see Quiescence). Quiescence does not probe/store the TT
