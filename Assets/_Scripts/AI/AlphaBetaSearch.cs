@@ -6,9 +6,6 @@ using System.Threading;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 
-[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("ChessTheBetrayal.Tests.EditMode")]
-[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("ChessTheBetrayal.EditorTools")]
-
 namespace ChessTheBetrayal.AI
 {
     /// <summary>
