@@ -1,4 +1,4 @@
-namespace ChessTheBetrayal.AI
+namespace ChessTheBetrayal.AI.Profiles
 {
     /// <summary>
     /// The one rule every AIProfile must satisfy regardless of where it came from (a built-in

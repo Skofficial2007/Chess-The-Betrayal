@@ -1,4 +1,4 @@
-namespace ChessTheBetrayal.AI
+namespace ChessTheBetrayal.AI.Profiles
 {
     /// <summary>
     /// Resolution seam between a stored profile id (e.g. from PracticeMatchSettings.AiProfileId)

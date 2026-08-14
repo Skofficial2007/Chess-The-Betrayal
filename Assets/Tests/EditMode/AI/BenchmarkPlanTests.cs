@@ -1,5 +1,6 @@
 using NUnit.Framework;
 using ChessTheBetrayal.AI;
+using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.AI.Positions;
 using ChessTheBetrayal.AI.DeviceBenchmark;
 

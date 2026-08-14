@@ -1,3 +1,5 @@
+using ChessTheBetrayal.AI.Profiles;
+
 namespace ChessTheBetrayal.AI.Evaluation
 {
     /// <summary>

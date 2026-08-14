@@ -9,7 +9,7 @@ namespace ChessTheBetrayal.Core.Data
     /// BoardState.BetrayalRightAvailable, AiDefendOnly maps to AISearchSettings.BetrayalUsage (kept
     /// as a Core-safe bool here since Core.Data must not depend on ChessTheBetrayal.AI),
     /// RetributionSkipAllowed gates GameHUD's Skip button. AiProfileId is a stable lookup key
-    /// (e.g. "normal") resolved against ChessTheBetrayal.AI.AIProfileTable by AIMatchCoordinator —
+    /// (e.g. "normal") resolved against ChessTheBetrayal.AI.Profiles.AIProfileTable by AIMatchCoordinator —
     /// kept as a plain string here so Core stays AI-assembly-free.
     /// </summary>
     public readonly struct PracticeMatchSettings
@@ -28,7 +28,7 @@ namespace ChessTheBetrayal.Core.Data
         public readonly bool RetributionSkipAllowed;
 
         /// <summary>Stable AIProfile id (e.g. "easy"/"normal"/"hard"). Resolved by
-        /// ChessTheBetrayal.AI.IAIProfileProvider; an unknown id falls back to "normal" rather
+        /// ChessTheBetrayal.AI.Profiles.IAIProfileProvider; an unknown id falls back to "normal" rather
         /// than throwing.</summary>
         public readonly string AiProfileId;
 

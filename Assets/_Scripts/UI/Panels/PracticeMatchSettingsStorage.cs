@@ -1,5 +1,6 @@
 using UnityEngine;
 using ChessTheBetrayal.AI;
+using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.Core.Data;
 
 namespace ChessTheBetrayal.UI

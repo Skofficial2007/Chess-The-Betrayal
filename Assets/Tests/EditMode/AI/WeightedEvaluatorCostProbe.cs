@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Threading;
 using NUnit.Framework;
 using ChessTheBetrayal.AI;
+using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.AI.Evaluation;
 using ChessTheBetrayal.AI.Positions;
 using ChessTheBetrayal.Core.Data;

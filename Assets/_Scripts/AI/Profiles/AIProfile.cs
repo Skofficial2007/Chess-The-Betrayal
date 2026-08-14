@@ -1,4 +1,4 @@
-namespace ChessTheBetrayal.AI
+namespace ChessTheBetrayal.AI.Profiles
 {
     /// <summary>
     /// Data-driven behavioral tier for the AI: one row of this struct fully describes a

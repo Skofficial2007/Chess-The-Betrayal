@@ -1,6 +1,6 @@
 using System;
 
-namespace ChessTheBetrayal.AI
+namespace ChessTheBetrayal.AI.Profiles
 {
     /// <summary>
     /// A search's wall-clock allowance, expressed as a pair rather than a single number: SoftMs is

@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ChessTheBetrayal.AI.Evaluation;
 using ChessTheBetrayal.AI.OpeningBook;
+using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Core.Utils;

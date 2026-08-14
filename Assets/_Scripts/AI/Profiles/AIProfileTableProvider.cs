@@ -1,6 +1,6 @@
 using System;
 
-namespace ChessTheBetrayal.AI
+namespace ChessTheBetrayal.AI.Profiles
 {
     /// <summary>Resolves profile ids against the code-side <see cref="AIProfileTable.BuiltIn"/> roster.</summary>
     public sealed class AIProfileTableProvider : IAIProfileProvider

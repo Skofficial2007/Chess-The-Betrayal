@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace ChessTheBetrayal.AI
+namespace ChessTheBetrayal.AI.Profiles
 {
     /// <summary>
     /// Built-in fallback roster of <see cref="AIProfile"/> rows. Ships in the AI assembly so

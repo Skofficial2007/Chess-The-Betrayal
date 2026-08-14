@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Core.Utils;
 

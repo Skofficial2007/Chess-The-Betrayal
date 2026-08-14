@@ -2,6 +2,7 @@ using System.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
 using ChessTheBetrayal.AI;
+using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.AI.DeviceBenchmark;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI

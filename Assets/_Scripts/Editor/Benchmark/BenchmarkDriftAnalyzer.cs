@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using ChessTheBetrayal.AI.Profiles;
 
 namespace ChessTheBetrayal.EditorTools.Benchmark
 {
@@ -118,7 +119,7 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
                     }
                 }
 
-                AI.AIProfile profile = FindConfiguredProfile(tier.ProfileId);
+                AIProfile profile = FindConfiguredProfile(tier.ProfileId);
                 if (profile.Id != null && profile.BlunderRate > 0f)
                 {
                     float actuationDrift = tier.ObservedBlunderActuationRate - profile.BlunderRate;
@@ -151,9 +152,9 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
             return false;
         }
 
-        private static AI.AIProfile FindConfiguredProfile(string id)
+        private static AIProfile FindConfiguredProfile(string id)
         {
-            foreach (AI.AIProfile profile in AI.AIProfileTable.BuiltIn)
+            foreach (AIProfile profile in AIProfileTable.BuiltIn)
                 if (profile.Id == id) return profile;
             return default;
         }

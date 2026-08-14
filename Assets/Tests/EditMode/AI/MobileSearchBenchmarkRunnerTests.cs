@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using NUnit.Framework;
 using ChessTheBetrayal.AI;
+using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.AI.Positions;
 using ChessTheBetrayal.AI.Agent;
 using ChessTheBetrayal.AI.DeviceBenchmark;

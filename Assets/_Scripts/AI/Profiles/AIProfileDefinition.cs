@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace ChessTheBetrayal.AI
+namespace ChessTheBetrayal.AI.Profiles
 {
     /// <summary>
     /// Authoring-time mirror of <see cref="AIProfile"/>, one asset per tier. Nothing reads it at
