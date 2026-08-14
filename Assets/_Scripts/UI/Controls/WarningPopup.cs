@@ -43,8 +43,13 @@ namespace ChessTheBetrayal.UI.Controls
     /// The two button label fields are optional. Leave them empty and the buttons keep whatever the
     /// prefab says; assign them and a caller can rename the pair per question — "Continue/Back" for
     /// one, "Yes/No" or "Delete/Keep" for another — off the same prefab.
+    ///
+    /// Callers that reach this through <see cref="IConfirmationView"/> get it via
+    /// <see cref="ConfirmationGate"/> instead of holding it directly, which is what lets the rules
+    /// about when to ask be tested away from the scene. A screen that owns its own popup outright
+    /// (the device benchmark does) is welcome to keep calling it straight.
     /// </summary>
-    public class WarningPopup : MonoBehaviour
+    public class WarningPopup : MonoBehaviour, IConfirmationView
     {
         [Header("Panel")]
         [Tooltip("The box that scales. A child of this object, never this object — scaling the root would scale the backdrop with it.")]
