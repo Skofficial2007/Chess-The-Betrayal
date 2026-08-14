@@ -1,5 +1,6 @@
 using System;
 using ChessTheBetrayal.AI;
+using ChessTheBetrayal.AI.Evaluation;
 using ChessTheBetrayal.AI.Agent;
 using ChessTheBetrayal.AI.OpeningBook;
 using ChessTheBetrayal.Core.Data;

@@ -1,7 +1,7 @@
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 
-namespace ChessTheBetrayal.AI
+namespace ChessTheBetrayal.AI.Evaluation
 {
     /// <summary>
     /// Static evaluation from one team's point of view. Positive = good for forTeam.

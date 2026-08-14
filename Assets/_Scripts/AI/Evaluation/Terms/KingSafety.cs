@@ -1,6 +1,6 @@
 using ChessTheBetrayal.Core.Data;
 
-namespace ChessTheBetrayal.AI
+namespace ChessTheBetrayal.AI.Evaluation
 {
     /// <summary>
     /// Scores how exposed one team's king is: enemy pieces massing near it, files with no friendly

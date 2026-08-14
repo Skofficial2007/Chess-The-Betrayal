@@ -1,7 +1,7 @@
 using System;
 using ChessTheBetrayal.Core.Data;
 
-namespace ChessTheBetrayal.AI
+namespace ChessTheBetrayal.AI.Evaluation
 {
     /// <summary>
     /// Scores one team's pawns by file structure: doubled and isolated pawns are penalized, a pawn

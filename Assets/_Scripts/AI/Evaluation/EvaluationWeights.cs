@@ -1,4 +1,4 @@
-namespace ChessTheBetrayal.AI
+namespace ChessTheBetrayal.AI.Evaluation
 {
     /// <summary>
     /// Scales BetrayalAwareEvaluator's non-material terms so AIProfile.AttackDefenseBias/

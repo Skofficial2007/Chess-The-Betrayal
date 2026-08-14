@@ -1,6 +1,6 @@
 using ChessTheBetrayal.Core.Data;
 
-namespace ChessTheBetrayal.AI
+namespace ChessTheBetrayal.AI.Evaluation
 {
     /// <summary>
     /// Piece-square bonuses, one 64-entry midgame table and (for the King only) one endgame table

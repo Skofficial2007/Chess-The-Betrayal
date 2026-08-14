@@ -1,6 +1,6 @@
 using ChessTheBetrayal.Core.Data;
 
-namespace ChessTheBetrayal.AI
+namespace ChessTheBetrayal.AI.Evaluation
 {
     /// <summary>
     /// Rewards the attacking king closing the distance to a lone (or nearly lone) enemy king once
