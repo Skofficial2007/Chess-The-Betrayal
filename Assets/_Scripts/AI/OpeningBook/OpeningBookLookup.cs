@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using ChessTheBetrayal.AI.Search;
+using ChessTheBetrayal.AI.Moves;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Core.Utils;
@@ -100,7 +100,7 @@ namespace ChessTheBetrayal.AI.OpeningBook
         {
             foreach (MoveCommand candidate in legalMoves)
             {
-                if (AlphaBetaSearch.PackMove(candidate) == packedMove) return candidate;
+                if (PackedMove.Pack(candidate) == packedMove) return candidate;
             }
 
             return null;
