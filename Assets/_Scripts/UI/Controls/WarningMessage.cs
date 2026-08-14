@@ -3,8 +3,13 @@ using System.Text;
 namespace ChessTheBetrayal.UI.Controls
 {
     /// <summary>
-    /// Composes the text inside a <see cref="WarningPopup"/> so every question in the game reads
-    /// the same way, whatever raised it.
+    /// Composes the text of a warning raised on a tool screen — today, the device benchmark's
+    /// "you never saved that report" — so every one of them reads the same way.
+    ///
+    /// One of two shapes a warning can take, not the only one. A warning raised over the board
+    /// mid-match ends quietly instead (see <see cref="MatchWarningMessage"/>), because the question
+    /// there names both answers and they are directly below it. Here the thing that fixes the
+    /// problem is a button somewhere else on the screen, so the panel has to end by pointing at it.
     ///
     /// A warning is three things, and they are not equally important:
     ///
