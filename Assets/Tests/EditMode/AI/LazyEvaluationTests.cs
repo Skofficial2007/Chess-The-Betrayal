@@ -36,7 +36,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             // A window wider than MaxPositionalSwing on both sides can never be beaten by the cheap
             // score alone, so this always falls through to full evaluation regardless of how large
             // the pawn-structure term's swing gets.
-            BoardState board = SearchDepthProfileCaptureTests.QuietMidgame();
+            BoardState board = SearchProfilePositions.QuietMidgame();
             var search = NewSearch();
 
             int fullScore = new BetrayalAwareEvaluator().Evaluate(board, board.CurrentTurn);
@@ -53,7 +53,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             // identical to full now that a real term lives behind it, but it must always be within
             // MaxPositionalSwing of what full would have produced. That gap is exactly why the
             // window test itself subtracts/adds the swing before comparing.
-            BoardState board = SearchDepthProfileCaptureTests.QuietMidgame();
+            BoardState board = SearchProfilePositions.QuietMidgame();
             var search = NewSearch();
             Team perspective = board.CurrentTurn;
             var evaluator = new BetrayalAwareEvaluator();
@@ -263,7 +263,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             // AI-47/48 already established for the delta-pruning margin, not a soundness bug: the
             // cut's own per-node contract (bounded by MaxPositionalSwing) still held throughout.
             var settings = new AISearchSettings(maxDepth: 7, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
-            MoveCommand best = NewSearch().FindBestMove(SearchDepthProfileCaptureTests.QuietMidgame(), settings, CancellationToken.None);
+            MoveCommand best = NewSearch().FindBestMove(SearchProfilePositions.QuietMidgame(), settings, CancellationToken.None);
 
             Assert.That(best.StartPosition.x, Is.EqualTo(3));
             Assert.That(best.StartPosition.y, Is.EqualTo(0));
@@ -282,7 +282,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             // seam is actually wired into a real search, not just reachable from a unit test.
             var settings = new AISearchSettings(maxDepth: 6, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
             var search = NewSearch();
-            search.FindBestMove(SearchDepthProfileCaptureTests.QuietMidgame(), settings, CancellationToken.None);
+            search.FindBestMove(SearchProfilePositions.QuietMidgame(), settings, CancellationToken.None);
 
             Assert.That(search.Stats.LazyStandPatCuts, Is.GreaterThan(0));
         }

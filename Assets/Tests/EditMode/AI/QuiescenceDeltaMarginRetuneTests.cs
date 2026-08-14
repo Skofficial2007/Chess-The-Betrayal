@@ -61,7 +61,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         [Test]
         public void FindBestMove_QuietMidgame_MatchesThePreRetuneBestMoveAtDepthSeven()
         {
-            MoveCommand best = SearchAt(SearchDepthProfileCaptureTests.QuietMidgame(), 7);
+            MoveCommand best = SearchAt(SearchProfilePositions.QuietMidgame(), 7);
             Assert.That(best.StartPosition.x, Is.EqualTo(3));
             Assert.That(best.StartPosition.y, Is.EqualTo(0));
             Assert.That(best.EndPosition.x, Is.EqualTo(3));
@@ -72,7 +72,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         [Test]
         public void FindBestMove_SemiOpenMidgame_MatchesThePreRetuneBestMoveAtDepthSeven()
         {
-            MoveCommand best = SearchAt(SearchDepthProfileCaptureTests.SemiOpenMidgame(), 7);
+            MoveCommand best = SearchAt(SearchProfilePositions.SemiOpenMidgame(), 7);
             Assert.That(best.StartPosition.x, Is.EqualTo(5));
             Assert.That(best.StartPosition.y, Is.EqualTo(0));
             Assert.That(best.EndPosition.x, Is.EqualTo(5));
@@ -83,7 +83,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         [Test]
         public void FindBestMove_TacticalMidgame_MatchesThePreRetuneBestMoveAtDepthSeven()
         {
-            MoveCommand best = SearchAt(SearchDepthProfileCaptureTests.TacticalMidgame(), 7);
+            MoveCommand best = SearchAt(SearchProfilePositions.TacticalMidgame(), 7);
             Assert.That(best.StartPosition.x, Is.EqualTo(4));
             Assert.That(best.StartPosition.y, Is.EqualTo(0));
             Assert.That(best.EndPosition.x, Is.EqualTo(4));
@@ -94,7 +94,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         [Test]
         public void FindBestMove_BetrayalLiveMidgame_MatchesThePreRetuneBestMoveAtDepthSeven()
         {
-            MoveCommand best = SearchAt(SearchDepthProfileCaptureTests.BetrayalLiveMidgame(), 7);
+            MoveCommand best = SearchAt(SearchProfilePositions.BetrayalLiveMidgame(), 7);
             Assert.That(best.StartPosition.x, Is.EqualTo(3));
             Assert.That(best.StartPosition.y, Is.EqualTo(3));
             Assert.That(best.EndPosition.x, Is.EqualTo(2));
@@ -105,7 +105,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         [Test]
         public void FindBestMove_QuietEndgame_MatchesThePreRetuneBestMoveAtDepthSeven()
         {
-            MoveCommand best = SearchAt(SearchDepthProfileCaptureTests.QuietEndgame(), 7);
+            MoveCommand best = SearchAt(SearchProfilePositions.QuietEndgame(), 7);
             Assert.That(best.StartPosition.x, Is.EqualTo(3));
             Assert.That(best.StartPosition.y, Is.EqualTo(2));
             Assert.That(best.EndPosition.x, Is.EqualTo(3));

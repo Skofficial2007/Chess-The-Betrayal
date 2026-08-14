@@ -5,9 +5,9 @@ using ChessTheBetrayal.Core.Data;
 namespace ChessTheBetrayal.Tests.EditMode.AI
 {
     /// <summary>
-    /// Pins DepthWallPositions' two boards as literals. They used to be built only inside
-    /// SearchDepthProfileCaptureTests, an editor-only fixture the on-device benchmark cannot
-    /// reference; moving the builders into the shipping AI assembly risks the same thing collapsing
+    /// Pins DepthWallPositions' two boards as literals. They used to be built only inside an
+    /// editor-only test fixture the on-device benchmark cannot reference; moving the builders into
+    /// the shipping AI assembly risks the same thing collapsing
     /// StandardChessPosition guarded against — a hand-placed board that drifts by one square or one
     /// flag is still a legal board, so nothing would fail loudly. The hashes below were captured from
     /// the original editor-only builders before the move, so they prove the port changed neither.
@@ -33,11 +33,11 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
-        public void TheEditorOnlyFixtureStillHandsBackTheSameBoardsAfterDelegating()
+        public void TheSharedBuildersStillHandBackTheSameBoardsAfterDelegating()
         {
-            Assert.That(SearchDepthProfileCaptureTests.QuietMidgame().ZobristHash,
+            Assert.That(SearchProfilePositions.QuietMidgame().ZobristHash,
                 Is.EqualTo(GoldenQuietMidgameHash));
-            Assert.That(SearchDepthProfileCaptureTests.SemiOpenMidgame().ZobristHash,
+            Assert.That(SearchProfilePositions.SemiOpenMidgame().ZobristHash,
                 Is.EqualTo(GoldenSemiOpenMidgameHash));
         }
 

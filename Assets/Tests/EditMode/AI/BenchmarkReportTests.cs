@@ -177,20 +177,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             // real device report came back with every em-dash rendered as mojibake. A byte-order
             // mark helps a reader that looks for one; staying inside ASCII needs no reader to do
             // anything at all.
-            AssertPlainAscii(report.Render(TimeSpan.FromSeconds(30), ReportStyle.Plain, maxDetailLines: 2));
-        }
-
-        /// <summary>Compares code points rather than chars: NUnit's LessThan on a char argument does
-        /// not fail the way it reads, which let an em-dash through a green run of this very
-        /// check.</summary>
-        internal static void AssertPlainAscii(string text)
-        {
-            foreach (char c in text)
-            {
-                if (c < 128) continue;
-
-                Assert.Fail($"Non-ASCII character '{c}' (U+{(int)c:X4}) in:\n{text}");
-            }
+            ReportTextAssertions.AssertPlainAscii(report.Render(TimeSpan.FromSeconds(30), ReportStyle.Plain, maxDetailLines: 2));
         }
 
         [Test]

@@ -253,7 +253,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             telemetry.RecordMove(Searched(5, Team.White, elapsedMs: 36, depth: 2, SearchStopReason.MateFound));
             telemetry.RecordMove(Defection(7, Team.Black));
 
-            BenchmarkReportTests.AssertPlainAscii(telemetry.Render());
+            ReportTextAssertions.AssertPlainAscii(telemetry.Render());
         }
 
         [Test]

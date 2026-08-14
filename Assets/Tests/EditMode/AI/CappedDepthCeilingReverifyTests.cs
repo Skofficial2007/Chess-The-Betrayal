@@ -44,11 +44,11 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
 
         private static readonly (string name, System.Func<BoardState> build)[] Positions =
         {
-            ("quiet-midgame", SearchDepthProfileCaptureTests.QuietMidgame),
-            ("semi-open-midgame", SearchDepthProfileCaptureTests.SemiOpenMidgame),
-            ("tactical-midgame", SearchDepthProfileCaptureTests.TacticalMidgame),
-            ("betrayal-live-midgame", SearchDepthProfileCaptureTests.BetrayalLiveMidgame),
-            ("quiet-endgame", SearchDepthProfileCaptureTests.QuietEndgame),
+            ("quiet-midgame", SearchProfilePositions.QuietMidgame),
+            ("semi-open-midgame", SearchProfilePositions.SemiOpenMidgame),
+            ("tactical-midgame", SearchProfilePositions.TacticalMidgame),
+            ("betrayal-live-midgame", SearchProfilePositions.BetrayalLiveMidgame),
+            ("quiet-endgame", SearchProfilePositions.QuietEndgame),
             ("curated-0-italian", () => CuratedPositionSuite.Build(0)),
             ("curated-8-qgd", () => CuratedPositionSuite.Build(8)),
             ("curated-12-dutch", () => CuratedPositionSuite.Build(12)),

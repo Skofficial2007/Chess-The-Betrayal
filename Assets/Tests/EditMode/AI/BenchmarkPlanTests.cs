@@ -247,9 +247,9 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         [Test]
         public void Describe_ProducesNothingOutsidePlainAscii()
         {
-            BenchmarkReportTests.AssertPlainAscii(BenchmarkPlan.Tester().Describe());
-            BenchmarkReportTests.AssertPlainAscii(BenchmarkPlan.Thermal().Describe());
-            BenchmarkReportTests.AssertPlainAscii(BenchmarkPlan.Exhaustive().Describe());
+            ReportTextAssertions.AssertPlainAscii(BenchmarkPlan.Tester().Describe());
+            ReportTextAssertions.AssertPlainAscii(BenchmarkPlan.Thermal().Describe());
+            ReportTextAssertions.AssertPlainAscii(BenchmarkPlan.Exhaustive().Describe());
         }
 
         [Test]
