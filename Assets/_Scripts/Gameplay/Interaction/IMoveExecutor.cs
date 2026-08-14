@@ -23,6 +23,24 @@ namespace ChessTheBetrayal.Gameplay.Interaction
         void RequestPromotion(ChessPieceType type);
 
         /// <summary>
+        /// The player meant the Betrayal Act they asked for. The move is re-derived from the board
+        /// as it stands now rather than replayed from the moment it was requested — see
+        /// LocalMoveExecutor.ConfirmBetrayalAct for why that distinction matters.
+        ///
+        /// A network executor must authorize this exactly as it would any other move request: the
+        /// server independently re-confirms the Act is still legal on its own board before applying
+        /// it. A client saying "they pressed Continue" is not evidence the move is playable.
+        /// </summary>
+        void ConfirmBetrayalAct();
+
+        /// <summary>
+        /// The player backed out of the Betrayal Act. The parked move is dropped and nothing is
+        /// played. Deliberately not reported as a rejection — a rejection means the move was
+        /// illegal, and the visual layer answers one by snapping a piece back.
+        /// </summary>
+        void CancelBetrayalAct();
+
+        /// <summary>
         /// Player has a legal Retribution move available in RetributionPending but chooses not to
         /// use it — a voluntary Defection (rulebook 5B allows "cannot or chooses not to"). Sends
         /// intent only; the executor validates the phase before forwarding. A network executor
@@ -49,6 +67,18 @@ namespace ChessTheBetrayal.Gameplay.Interaction
         /// Visual layer listens to this to snap pieces back.
         /// </summary>
         event Action<Vector2Int, Vector2Int> OnMoveRejected;
+
+        /// <summary>
+        /// Fired when a requested move turns out to be a legal Betrayal Act, carrying the squares it
+        /// would run between. The move is held here, unplayed, until <see cref="ConfirmBetrayalAct"/>
+        /// or <see cref="CancelBetrayalAct"/> answers for it — an Act spends a right neither side
+        /// gets back, and one tap on a friendly piece is all it used to take.
+        ///
+        /// Whoever handles this must always answer. A subscriber that neither confirms nor cancels
+        /// leaves the executor holding a move and refusing every new one, which reads to the player
+        /// as a board that has stopped responding.
+        /// </summary>
+        event Action<Vector2Int, Vector2Int> OnBetrayalActConfirmationRequired;
 
         /// <summary>
         /// Fired when a pawn reaches the end and needs promotion.

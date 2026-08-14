@@ -77,6 +77,19 @@ namespace ChessTheBetrayal.App
         [SerializeField] private long _betrayalBountyRapidMs = 20_000L;  // Rapid 10|0
         [SerializeField] private long _betrayalBountyRapid15Ms = 30_000L;  // Rapid 15|10
 
+        // Both actions below are one tap away from something the rest of the match has to live with,
+        // and both land on squares a finger finds by accident. Off, each happens the moment it is
+        // tapped, exactly as it did before there was anything to ask.
+        //
+        // Here rather than in a settings screen because there is no settings screen yet. When there
+        // is, it drives the two properties below and nothing else about this changes.
+        [Header("Confirmations")]
+        [Tooltip("Ask before turning one of your own pieces — a right neither side gets back.")]
+        [SerializeField] private bool _warnBeforeBetrayalAct = true;
+
+        [Tooltip("Ask before declining the Retribution that is the only way to take the Betrayer back.")]
+        [SerializeField] private bool _warnBeforeRetributionSkip = true;
+
         [Header("Shared State")]
         [SerializeField] private ChessTheBetrayal.Events.SharedBoardStateSO _sharedBoardState;
         [SerializeField] private ChessTheBetrayal.Events.SharedClockStateSO _sharedClockState;
@@ -126,6 +139,20 @@ namespace ChessTheBetrayal.App
         /// True if a game is in progress. Used by UI and input scripts to know whether to respond to player actions.
         /// </summary>
         public bool IsGameActive => CurrentPhase != TurnPhase.GameOver;
+
+        /// <summary>Whether a Betrayal Act asks before it commits. A settings screen will drive this.</summary>
+        public bool WarnBeforeBetrayalAct
+        {
+            get => _warnBeforeBetrayalAct;
+            set => _warnBeforeBetrayalAct = value;
+        }
+
+        /// <summary>Whether skipping Retribution asks before it commits. A settings screen will drive this.</summary>
+        public bool WarnBeforeRetributionSkip
+        {
+            get => _warnBeforeRetributionSkip;
+            set => _warnBeforeRetributionSkip = value;
+        }
 
         #endregion
 
@@ -188,6 +215,16 @@ namespace ChessTheBetrayal.App
         // later lifecycle method, all of which run after every MonoBehaviour's Awake() (see
         // Bootstrap's doc comment for why no explicit execution order is required).
         private UIManager _uiManager;
+
+        // Puts the two questions above in front of the player and brings the answer back. Resolved
+        // in Start(); never left null, because every caller depends on always being answered.
+        private ChessTheBetrayal.UI.Controls.IConfirmationGate _confirmations;
+
+        // The answers, built once rather than per press. Assigned in Awake(), immediately after the
+        // collaborator they call into exists.
+        private System.Action _onBetrayalActConfirmed;
+        private System.Action _onBetrayalActCancelled;
+        private System.Action _onRetributionSkipConfirmed;
 
         #endregion
 
@@ -284,6 +321,7 @@ namespace ChessTheBetrayal.App
                 showAIMatchSettings: () => _uiManager.ShowAIMatchSettings(),
                 onExecutorMoveRejected: OnExecutorMoveRejected,
                 onExecutorPromotionRequired: OnExecutorPromotionRequired,
+                onExecutorBetrayalActConfirmationRequired: OnExecutorBetrayalActConfirmationRequired,
                 raiseGameModeConfigured: mode => _gameModeConfiguredChannel?.Raise(mode),
                 raiseGameStarted: () => _gameStartedChannel?.Raise(),
                 raiseBoardResyncRequired: () => _boardResyncRequiredChannel?.Raise(),
@@ -293,6 +331,10 @@ namespace ChessTheBetrayal.App
                 abandonQueuedMoves: _moveVisualPacingGate.Clear,
                 undoPlayback: _undoPlayback);
             _matchFlow.OpeningBook = _openingBook;
+
+            _onBetrayalActConfirmed = _matchFlow.ConfirmBetrayalAct;
+            _onBetrayalActCancelled = _matchFlow.CancelBetrayalAct;
+            _onRetributionSkipConfirmed = _matchFlow.RequestRetributionSkip;
 
             _gameOverChannel?.Register(OnGameOverRaised);
             _matchStartRequestedChannel?.Register(BeginPlay);
@@ -326,6 +368,15 @@ namespace ChessTheBetrayal.App
             _uiManager.OnPracticeMatchSettingsConfirmed += HandlePracticeMatchSettingsConfirmed;
             _uiManager.OnRetributionSkipRequested += RequestRetributionSkip;
             _uiManager.OnUndoRequested += HandleUndoRequested;
+
+            // Falls back to a gate with no panel behind it rather than to null. That one answers
+            // every question immediately and says so in the console — a scene missing its panel has
+            // to cost the confirmation, not the move, or the player simply cannot take their turn.
+            if (!ServiceLocator.Instance.TryResolve(out _confirmations))
+            {
+                Debug.LogError("[GameManager] No confirmation panel is registered, so nothing will be asked before a Betrayal.");
+                _confirmations = new ChessTheBetrayal.UI.Controls.ConfirmationGate(null);
+            }
 
             _uiManager.SetQAButtonVisible(enableQAButton && QAButtonPlatformAllowed);
 
@@ -441,6 +492,20 @@ namespace ChessTheBetrayal.App
             _promotionRequiredChannel?.Raise(new ChessTheBetrayal.Events.Payloads.PromotionRequiredPayload(from, to, isCapture));
         }
 
+        /// <summary>
+        /// A Betrayal Act is resolved and waiting on the player. The executor is holding it and will
+        /// not take another move until one of these two answers arrives — which is safe only because
+        /// the gate promises exactly one of them always does, even with warnings switched off or no
+        /// panel in the scene.
+        /// </summary>
+        private void OnExecutorBetrayalActConfirmationRequired(Vector2Int from, Vector2Int to)
+        {
+            if (logMoves) Debug.Log($"[GameManager] Betrayal Act {from} -> {to} is waiting on the player.");
+
+            _confirmations.Ask(_warnBeforeBetrayalAct, ChessTheBetrayal.UI.Controls.BetrayalPrompts.Act,
+                _onBetrayalActConfirmed, _onBetrayalActCancelled);
+        }
+
         #endregion
 
         #region Game Flow
@@ -534,11 +599,17 @@ namespace ChessTheBetrayal.App
         private void HandlePromotionChoice(ChessPieceType chosenType) => _matchFlow.HandlePromotionChoice(chosenType);
 
         /// <summary>
-        /// UI entry point for the HUD's Skip button (visible only during RetributionPending).
-        /// Sends intent to the executor, which validates the phase before forwarding to
+        /// UI entry point for the HUD's Skip button (visible only during RetributionPending). Asks
+        /// first, then sends intent to the executor, which validates the phase before forwarding to
         /// MatchDriver — GameManager never resolves the Betrayal sub-machine itself.
+        ///
+        /// Nothing is set aside while the question is up: backing out simply leaves the player where
+        /// they were, with the button still there to press again. That is why there is no answer for
+        /// the cancelling half.
         /// </summary>
-        public void RequestRetributionSkip() => _matchFlow.RequestRetributionSkip();
+        public void RequestRetributionSkip() =>
+            _confirmations.Ask(_warnBeforeRetributionSkip, ChessTheBetrayal.UI.Controls.BetrayalPrompts.SkipRetribution,
+                _onRetributionSkipConfirmed);
 
         /// <summary>
         /// UI entry point for the HUD's Undo button (visible only in AI practice matches). AI-only

@@ -3,6 +3,7 @@
   "references": [
     "ChessTheBetrayal.Core",
     "ChessTheBetrayal.Gameplay.Flow",
+    "ChessTheBetrayal.Gameplay.Interaction",
     "ChessTheBetrayal.Gameplay.Manager",
     "ChessTheBetrayal.AI",
     "ChessTheBetrayal.Events",

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
 using ChessTheBetrayal.AI;
@@ -46,6 +47,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         private int _showGameModeSelectionCount;
         private int _showAIMatchSettingsCount;
         private (Vector2Int from, Vector2Int to)? _rejectedMove;
+        private (Vector2Int from, Vector2Int to)? _betrayalActAwaitingConfirmation;
         private GameModeConfig? _raisedGameModeConfigured;
         private int _raisedGameStartedCount;
         private int _raisedBoardResyncRequiredCount;
@@ -75,6 +77,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             _showGameModeSelectionCount = 0;
             _showAIMatchSettingsCount = 0;
             _rejectedMove = null;
+            _betrayalActAwaitingConfirmation = null;
             _raisedGameModeConfigured = null;
             _raisedGameStartedCount = 0;
             _lastSetSharedBoardState = null;
@@ -91,6 +94,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
                 showAIMatchSettings: () => _showAIMatchSettingsCount++,
                 onExecutorMoveRejected: (from, to) => _rejectedMove = (from, to),
                 onExecutorPromotionRequired: (_, __, ___) => { },
+                onExecutorBetrayalActConfirmationRequired: (from, to) => _betrayalActAwaitingConfirmation = (from, to),
                 raiseGameModeConfigured: mode => _raisedGameModeConfigured = mode,
                 raiseGameStarted: () => _raisedGameStartedCount++,
                 raiseBoardResyncRequired: () => _raisedBoardResyncRequiredCount++,
@@ -212,6 +216,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
                 showAIMatchSettings: () => _showAIMatchSettingsCount++,
                 onExecutorMoveRejected: (from, to) => _rejectedMove = (from, to),
                 onExecutorPromotionRequired: (_, __, ___) => { },
+                onExecutorBetrayalActConfirmationRequired: (from, to) => _betrayalActAwaitingConfirmation = (from, to),
                 raiseGameModeConfigured: mode => _raisedGameModeConfigured = mode,
                 raiseGameStarted: () => _raisedGameStartedCount++,
                 raiseBoardResyncRequired: () => _raisedBoardResyncRequiredCount++,
@@ -399,5 +404,101 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             Assert.That(_matchFlow.SelectedMode.IsUnlimited, Is.True,
                 "AI sessions always force Unlimited mode, overriding whatever mode was previously selected.");
         }
+
+        #region Betrayal Act confirmation
+
+        // From the opening position, White's queen's knight attacks its own d2 pawn — the one
+        // Betrayal Act available before anybody has moved, and the shape of the accident this
+        // confirmation exists to catch.
+        private static readonly Vector2Int QueensKnight = new Vector2Int(1, 0);
+        private static readonly Vector2Int ItsOwnPawn = new Vector2Int(3, 1);
+
+        [Test]
+        public void RequestMove_ForABetrayalAct_ReachesNoBoardUntilItIsConfirmed()
+        {
+            var played = new List<MoveCommand>();
+            MatchFlowCoordinator matchFlow = StartedMatchRecordingPlayedMoves(played);
+
+            matchFlow.RequestMove(QueensKnight, ItsOwnPawn);
+
+            Assert.That(_betrayalActAwaitingConfirmation, Is.EqualTo((QueensKnight, ItsOwnPawn)));
+            Assert.That(played, Is.Empty, "The Act must not reach the board on the strength of the tap alone.");
+
+            matchFlow.ConfirmBetrayalAct();
+
+            Assert.That(played.Count, Is.EqualTo(1));
+            Assert.That(played[0].Stage, Is.EqualTo(BetrayalStage.Act));
+            Assert.That(played[0].EndPosition, Is.EqualTo(ItsOwnPawn));
+        }
+
+        [Test]
+        public void CancelBetrayalAct_LeavesTheBoardExactlyWhereItWas()
+        {
+            var played = new List<MoveCommand>();
+            MatchFlowCoordinator matchFlow = StartedMatchRecordingPlayedMoves(played);
+
+            matchFlow.RequestMove(QueensKnight, ItsOwnPawn);
+            matchFlow.CancelBetrayalAct();
+
+            Assert.That(played, Is.Empty);
+            Assert.That(_board.GetPiece(ItsOwnPawn.x, ItsOwnPawn.y).Type, Is.EqualTo(ChessPieceType.Pawn),
+                "Backing out must leave the piece that was nearly betrayed standing where it was.");
+            Assert.That(_board.BetrayalRightAvailable, Is.True,
+                "A Betrayal nobody went through with cannot have spent the once-per-match right.");
+        }
+
+        /// <summary>
+        /// A match ending underneath an open question is the one way the player can be asked
+        /// something the board will no longer accept an answer to. The move is dropped rather than
+        /// played, and — more importantly — the executor stops holding it.
+        /// </summary>
+        [Test]
+        public void ConfirmBetrayalAct_AfterTheMatchEnded_PlaysNothingAndStopsHoldingIt()
+        {
+            var played = new List<MoveCommand>();
+            MatchFlowCoordinator matchFlow = StartedMatchRecordingPlayedMoves(played);
+
+            matchFlow.RequestMove(QueensKnight, ItsOwnPawn);
+            _matchDriver.TransitionToPhase(TurnPhase.GameOver);
+
+            matchFlow.ConfirmBetrayalAct();
+
+            Assert.That(played, Is.Empty);
+        }
+
+        /// <summary>
+        /// Its own coordinator because the shared one plays straight onto the board, and these tests
+        /// need to see whether a move was handed over at all. Teams are not rolled: this reaches
+        /// ConfigureMatch directly and puts White to move, so the opening Act above is always the
+        /// legal move it is meant to be.
+        /// </summary>
+        private MatchFlowCoordinator StartedMatchRecordingPlayedMoves(List<MoveCommand> played)
+        {
+            var matchFlow = new MatchFlowCoordinator(
+                _board, new GameSetup(logMoves: false), _matchDriver, played.Add, new ChessEngineAdapter(),
+                _undoService, _aiCoordinator, _clockCoordinator,
+                _host, boardSizeX: 8, boardSizeY: 8, logMoves: false,
+                triggerTeamRoulette: team => _triggeredRouletteTeam = team,
+                showTeamSelection: () => _showTeamSelectionCount++,
+                showGameModeSelection: () => _showGameModeSelectionCount++,
+                showAIMatchSettings: () => _showAIMatchSettingsCount++,
+                onExecutorMoveRejected: (from, to) => _rejectedMove = (from, to),
+                onExecutorPromotionRequired: (_, __, ___) => { },
+                onExecutorBetrayalActConfirmationRequired: (from, to) => _betrayalActAwaitingConfirmation = (from, to),
+                raiseGameModeConfigured: mode => _raisedGameModeConfigured = mode,
+                raiseGameStarted: () => _raisedGameStartedCount++,
+                raiseBoardResyncRequired: () => _raisedBoardResyncRequiredCount++,
+                setSharedBoardState: board => _lastSetSharedBoardState = board,
+                clearSharedBoardState: () => _clearedSharedBoardStateCount++,
+                raiseGameReset: () => _raisedGameResetCount++);
+
+            matchFlow.ConfigureMatch(null);
+            _board.CurrentTurn = Team.White;
+            matchFlow.BeginPlay();
+
+            return matchFlow;
+        }
+
+        #endregion
     }
 }

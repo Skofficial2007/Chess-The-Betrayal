@@ -22,6 +22,9 @@ namespace ChessTheBetrayal.UI
         [SerializeField] private MainMenuUI mainMenuUI;
         [SerializeField] private GameHUD gameHUD;
 
+        [Tooltip("The panel every 'are you sure' in the match is asked on. One panel, many questions — the words come from whoever is asking.")]
+        [SerializeField] private ChessTheBetrayal.UI.Controls.WarningPopup warningPopup;
+
         [Header("Event Channels")]
         [SerializeField] private ChessTheBetrayal.Events.TeamSelectedEventChannel _teamSelectedChannel;
         [SerializeField] private ChessTheBetrayal.Events.PromotionRequiredEventChannel _promotionRequiredChannel;
@@ -41,12 +44,25 @@ namespace ChessTheBetrayal.UI
 
         private Team _assignedTeam;
 
+        // Anything in the game that needs an answer before it acts goes through this. Built here
+        // because this is where the panel it draws on is wired; the rules about when to ask, and the
+        // promise that every question is always answered, live in the gate itself.
+        private ChessTheBetrayal.UI.Controls.ConfirmationGate _confirmations;
+
         private void Awake()
         {
             ServiceLocator.Instance.Register(this);
             ServiceLocator.Instance.Register<IUiBlockingState>(this);
 
             ValidateRequiredFields();
+
+            // The Unity null check has to happen on the popup itself. An unassigned reference stored
+            // through an interface loses that check — the engine's own == overload is gone by then,
+            // and the field reads as a perfectly good object that turns out to be nothing.
+            _confirmations = new ChessTheBetrayal.UI.Controls.ConfirmationGate(
+                warningPopup != null ? warningPopup : null);
+            ServiceLocator.Instance.Register<ChessTheBetrayal.UI.Controls.IConfirmationGate>(_confirmations);
+
             RegisterPanelEvents();
 
             _promotionRequiredChannel?.Register(HandlePromotionRequiredChannel);
@@ -63,6 +79,7 @@ namespace ChessTheBetrayal.UI
             InspectorGuard.Require(gameOverUI, nameof(gameOverUI), this);
             InspectorGuard.Require(mainMenuUI, nameof(mainMenuUI), this);
             InspectorGuard.Require(gameHUD, nameof(gameHUD), this);
+            InspectorGuard.Require(warningPopup, nameof(warningPopup), this);
             InspectorGuard.Require(_teamSelectedChannel, nameof(_teamSelectedChannel), this);
             InspectorGuard.Require(_promotionRequiredChannel, nameof(_promotionRequiredChannel), this);
             InspectorGuard.Require(_gameOverChannel, nameof(_gameOverChannel), this);

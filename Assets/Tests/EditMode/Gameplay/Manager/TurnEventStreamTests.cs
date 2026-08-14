@@ -245,6 +245,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
                     showAIMatchSettings: () => { },
                     onExecutorMoveRejected: (_, __) => { },
                     onExecutorPromotionRequired: (_, __, ___) => { },
+                    onExecutorBetrayalActConfirmationRequired: (_, __) => { },
                     raiseGameModeConfigured: _ => fixture.RaisedGameModeConfiguredCount++,
                     raiseGameStarted: () => fixture.RaisedGameStartedCount++,
                     raiseBoardResyncRequired: () => fixture.RaisedBoardResyncRequiredCount++,

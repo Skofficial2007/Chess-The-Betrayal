@@ -48,6 +48,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
         private readonly Action _showAIMatchSettings;
         private readonly Action<Vector2Int, Vector2Int> _onExecutorMoveRejected;
         private readonly Action<Vector2Int, Vector2Int, bool> _onExecutorPromotionRequired;
+        private readonly Action<Vector2Int, Vector2Int> _onExecutorBetrayalActConfirmationRequired;
         private readonly Action<GameModeConfig> _raiseGameModeConfigured;
         private readonly Action _raiseGameStarted;
         private readonly Action _raiseBoardResyncRequired;
@@ -121,6 +122,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
             Action showAIMatchSettings,
             Action<Vector2Int, Vector2Int> onExecutorMoveRejected,
             Action<Vector2Int, Vector2Int, bool> onExecutorPromotionRequired,
+            Action<Vector2Int, Vector2Int> onExecutorBetrayalActConfirmationRequired,
             Action<GameModeConfig> raiseGameModeConfigured, Action raiseGameStarted, Action raiseBoardResyncRequired,
             Action<BoardState> setSharedBoardState, Action clearSharedBoardState, Action raiseGameReset,
             Action abandonQueuedMoves = null, UndoPlaybackSequencer undoPlayback = null)
@@ -145,6 +147,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
             _showAIMatchSettings = showAIMatchSettings;
             _onExecutorMoveRejected = onExecutorMoveRejected;
             _onExecutorPromotionRequired = onExecutorPromotionRequired;
+            _onExecutorBetrayalActConfirmationRequired = onExecutorBetrayalActConfirmationRequired;
             _raiseGameModeConfigured = raiseGameModeConfigured;
             _raiseGameStarted = raiseGameStarted;
             _raiseBoardResyncRequired = raiseBoardResyncRequired;
@@ -226,6 +229,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
                 _moveExecutor.OnMoveConfirmed -= _playMove;
                 _moveExecutor.OnMoveRejected -= _onExecutorMoveRejected;
                 _moveExecutor.OnPromotionRequired -= _onExecutorPromotionRequired;
+                _moveExecutor.OnBetrayalActConfirmationRequired -= _onExecutorBetrayalActConfirmationRequired;
                 _moveExecutor.OnRetributionSkipConfirmed -= _matchDriver.RequestRetributionSkip;
                 _moveExecutor = null;
             }
@@ -235,6 +239,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
             _moveExecutor.OnMoveConfirmed += _playMove;
             _moveExecutor.OnMoveRejected += _onExecutorMoveRejected;
             _moveExecutor.OnPromotionRequired += _onExecutorPromotionRequired;
+            _moveExecutor.OnBetrayalActConfirmationRequired += _onExecutorBetrayalActConfirmationRequired;
             _moveExecutor.OnRetributionSkipConfirmed += _matchDriver.RequestRetributionSkip;
 
             // Every match starts with no AI configured, unconditionally, before either branch
@@ -338,6 +343,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
                 _moveExecutor.OnMoveConfirmed -= _playMove;
                 _moveExecutor.OnMoveRejected -= _onExecutorMoveRejected;
                 _moveExecutor.OnPromotionRequired -= _onExecutorPromotionRequired;
+                _moveExecutor.OnBetrayalActConfirmationRequired -= _onExecutorBetrayalActConfirmationRequired;
                 _moveExecutor.OnRetributionSkipConfirmed -= _matchDriver.RequestRetributionSkip;
                 _moveExecutor = null;
             }
@@ -379,9 +385,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
 
         public void RequestMove(Vector2Int from, Vector2Int to)
         {
-            // Allow inputs during standard play, Retribution, and Forced Save phases.
-            if ((CurrentPhase != TurnPhase.Normal && CurrentPhase != TurnPhase.RetributionPending && CurrentPhase != TurnPhase.ForcedSave) || _board.IsGameOver
-                || IsShowingUndo)
+            if (!AcceptsPlayerInput)
             {
                 _onExecutorMoveRejected(from, to);
                 return;
@@ -389,6 +393,38 @@ namespace ChessTheBetrayal.Gameplay.Manager
 
             _moveExecutor?.RequestMove(from, to);
         }
+
+        /// <summary>
+        /// Whether anything the player does can reach the board right now: a phase that takes moves
+        /// (standard play, Retribution, Forced Save), a match still running, and no takeback playing
+        /// out — while one is, the position on screen is several plies behind the real one.
+        /// </summary>
+        private bool AcceptsPlayerInput =>
+            (CurrentPhase == TurnPhase.Normal
+                || CurrentPhase == TurnPhase.RetributionPending
+                || CurrentPhase == TurnPhase.ForcedSave)
+            && !_board.IsGameOver
+            && !IsShowingUndo;
+
+        /// <summary>
+        /// The player agreed to the Betrayal Act they were asked about. A question can sit on screen
+        /// for as long as they like, and a timed match can run out underneath it — so if the board
+        /// has stopped taking input in the meantime, the parked Act is dropped rather than played.
+        /// The executor checks the position again for itself either way.
+        /// </summary>
+        public void ConfirmBetrayalAct()
+        {
+            if (!AcceptsPlayerInput)
+            {
+                _moveExecutor?.CancelBetrayalAct();
+                return;
+            }
+
+            _moveExecutor?.ConfirmBetrayalAct();
+        }
+
+        /// <summary>The player backed out. Unconditional — dropping a move needs no permission.</summary>
+        public void CancelBetrayalAct() => _moveExecutor?.CancelBetrayalAct();
 
         /// <summary>
         /// Whether the human may select the piece at this square. Wraps MatchDriver's phase/turn/
