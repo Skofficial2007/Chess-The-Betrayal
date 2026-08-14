@@ -8,7 +8,7 @@ using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 
-namespace ChessTheBetrayal.AI
+namespace ChessTheBetrayal.AI.Search
 {
     /// <summary>
     /// Negamax + Alpha-Beta, running against OUR Core engine (make/unmake, GetAllLegalMoves,

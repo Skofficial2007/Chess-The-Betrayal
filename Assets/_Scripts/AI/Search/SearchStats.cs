@@ -1,4 +1,4 @@
-namespace ChessTheBetrayal.AI
+namespace ChessTheBetrayal.AI.Search
 {
     /// <summary>Why iterative deepening stopped where it did. The default, Unset, only ever shows up
     /// if telemetry is compiled out or a search somehow returns without taking any of the loop's exit

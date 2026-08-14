@@ -3,6 +3,7 @@ using System.Threading;
 using NUnit.Framework;
 using UnityEngine;
 using ChessTheBetrayal.AI;
+using ChessTheBetrayal.AI.Search;
 using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.AI.Evaluation;
 using ChessTheBetrayal.AI.OpeningBook;

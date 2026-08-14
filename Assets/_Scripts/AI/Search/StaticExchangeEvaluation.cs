@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 
-namespace ChessTheBetrayal.AI
+namespace ChessTheBetrayal.AI.Search
 {
     /// <summary>
     /// Static Exchange Evaluation: works out who wins a capture on one square once every piece

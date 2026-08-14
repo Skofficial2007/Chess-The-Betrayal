@@ -1,6 +1,7 @@
 using System;
 using NUnit.Framework;
 using ChessTheBetrayal.AI;
+using ChessTheBetrayal.AI.Search;
 using ChessTheBetrayal.AI.MatchTelemetry;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;

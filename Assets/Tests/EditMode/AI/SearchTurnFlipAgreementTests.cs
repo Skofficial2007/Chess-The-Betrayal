@@ -1,6 +1,7 @@
 using NUnit.Framework;
 using System.Collections.Generic;
 using ChessTheBetrayal.AI;
+using ChessTheBetrayal.AI.Search;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Tests.Utilities;

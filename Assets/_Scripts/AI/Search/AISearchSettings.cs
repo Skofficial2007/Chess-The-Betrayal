@@ -1,6 +1,6 @@
 using ChessTheBetrayal.AI.Profiles;
 
-namespace ChessTheBetrayal.AI
+namespace ChessTheBetrayal.AI.Search
 {
     /// <summary>
     /// How the AGENT is permitted to use the Betrayal mechanic. This is an agent policy, NOT a

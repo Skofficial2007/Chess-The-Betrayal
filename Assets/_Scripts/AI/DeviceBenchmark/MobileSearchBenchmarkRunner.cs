@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using ChessTheBetrayal.AI.Evaluation;
 using ChessTheBetrayal.AI.Positions;
 using ChessTheBetrayal.AI.Profiles;
+using ChessTheBetrayal.AI.Search;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 

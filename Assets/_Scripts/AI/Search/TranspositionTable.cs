@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace ChessTheBetrayal.AI
+namespace ChessTheBetrayal.AI.Search
 {
     /// <summary>Exact score, or a bound produced by an alpha/beta cutoff at the stored depth.</summary>
     public enum TTFlag : byte
