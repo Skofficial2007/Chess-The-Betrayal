@@ -1,12 +1,10 @@
-using ChessTheBetrayal.Core.Engine;
-
-namespace ChessTheBetrayal.AI.Moves
+namespace ChessTheBetrayal.Core.Engine
 {
     /// <summary>
     /// Squeezes a move down to nineteen bits — From(6) | To(6) | PromotedTo(4) | Stage(3) — so it
     /// can be compared, held in a transposition table slot or written into an opening book without
-    /// carrying a whole MoveCommand around. Both the search and the book need that, and neither
-    /// owns it, so the encoding sits on its own.
+    /// carrying a whole MoveCommand around. It reads nothing but the four fields that identify a
+    /// move, which is why it sits beside MoveCommand rather than beside any one of its callers.
     ///
     /// It is lossy on purpose and is never turned back into a MoveCommand. Everything that reads
     /// one matches it against the packed form of a freshly generated legal move, so a stale or
