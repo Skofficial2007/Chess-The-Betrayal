@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using ChessTheBetrayal.AI.Evaluation;
+using ChessTheBetrayal.AI.Moves;
 using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
@@ -2254,22 +2255,7 @@ namespace ChessTheBetrayal.AI.Search
             _killerMoves[plyFromRoot, 0] = packed;
         }
 
-        /// <summary>
-        /// Packs the fields OrderScore's TT-move comparison needs into 19 bits: From(6) | To(6) |
-        /// PromotedTo(4) | Stage(3). Never rehydrated back into a MoveCommand — a caller only ever
-        /// matches this against the packed form of a freshly generated legal move, so a
-        /// stale/collided value can mis-order a node (or miss an opening-book entry) but can never
-        /// inject an illegal move. Also used by the opening book compiler, which stores this same
-        /// packing alongside each position's Zobrist hash.
-        /// </summary>
-        internal static uint PackMove(MoveCommand m)
-        {
-            uint from = (uint)(m.StartPosition.y * 8 + m.StartPosition.x) & 0x3F;
-            uint to = (uint)(m.EndPosition.y * 8 + m.EndPosition.x) & 0x3F;
-            uint promo = (uint)m.PromotedTo & 0xF;
-            uint stage = (uint)m.Stage & 0x7;
-            return from | (to << 6) | (promo << 12) | (stage << 16);
-        }
+        internal static uint PackMove(MoveCommand m) => PackedMove.Pack(m);
 
         /// <summary>True once two consecutive completed depths agree closely enough that another
         /// depth is unlikely to change the answer — same best move AND a score within
