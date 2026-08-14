@@ -1,4 +1,5 @@
 using ChessTheBetrayal.AI;
+using ChessTheBetrayal.AI.Positions;
 using ChessTheBetrayal.Core.Data;
 
 namespace ChessTheBetrayal.Tests.Utilities

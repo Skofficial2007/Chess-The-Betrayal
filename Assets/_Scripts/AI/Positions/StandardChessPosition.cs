@@ -1,6 +1,6 @@
 using ChessTheBetrayal.Core.Data;
 
-namespace ChessTheBetrayal.AI
+namespace ChessTheBetrayal.AI.Positions
 {
     /// <summary>
     /// The one place the standard chess starting position is built.

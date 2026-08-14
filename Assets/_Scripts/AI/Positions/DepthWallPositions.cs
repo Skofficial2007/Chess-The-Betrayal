@@ -1,6 +1,6 @@
 using ChessTheBetrayal.Core.Data;
 
-namespace ChessTheBetrayal.AI
+namespace ChessTheBetrayal.AI.Positions
 {
     /// <summary>
     /// Two hand-placed, fully developed middlegames with no immediate tactic for either side —

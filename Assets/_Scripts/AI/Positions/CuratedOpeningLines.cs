@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 
-namespace ChessTheBetrayal.AI
+namespace ChessTheBetrayal.AI.Positions
 {
     /// <summary>
     /// A fixed set of early-middlegame positions, each reached by replaying a short line of real
