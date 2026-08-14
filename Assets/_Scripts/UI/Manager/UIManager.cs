@@ -261,6 +261,15 @@ namespace ChessTheBetrayal.UI
                 return true;
             }
 
+            // A question on screen has to stop the board reacting too. It already blocks anything
+            // drawn on this canvas, but a tap on the board is a raycast into the world that knows
+            // nothing about canvases — without this, tapping twice through the dimmed panel picks up
+            // a piece and lights its moves behind the very question asking about the last one.
+            if (_confirmations != null && _confirmations.IsOpen)
+            {
+                return true;
+            }
+
             return false;
         }
 
@@ -270,6 +279,8 @@ namespace ChessTheBetrayal.UI
 
         public void ShowMainMenu()
         {
+            DismissAnyQuestion();
+
             if (mainMenuUI != null)
             {
                 mainMenuUI.SetActive(true);
@@ -446,10 +457,20 @@ namespace ChessTheBetrayal.UI
         private void HandlePromotionRequiredChannel(ChessTheBetrayal.Events.Payloads.PromotionRequiredPayload payload) =>
             ShowPromotionUI();
 
+        /// <summary>
+        /// Takes down any question still on screen, telling whoever asked that it went unanswered.
+        /// The warning panel is the last thing on this canvas, so it draws over everything including
+        /// the Game Over screen — a match that ends underneath an open question would otherwise put
+        /// an opaque panel over the result and swallow every tap aimed at it.
+        /// </summary>
+        private void DismissAnyQuestion() => _confirmations?.Dismiss();
+
         public void TriggerGameOver(Team? winningTeam, bool byTimeout = false,
             ChessTheBetrayal.Events.Payloads.GameEndReason reason =
                 ChessTheBetrayal.Events.Payloads.GameEndReason.Checkmate)
         {
+            DismissAnyQuestion();
+
             if (gameOverUI != null)
             {
                 gameOverUI.SetWinnerText(winningTeam, byTimeout, reason);
