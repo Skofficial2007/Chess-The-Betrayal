@@ -1,6 +1,6 @@
 using ChessTheBetrayal.Core.Data;
 
-namespace ChessTheBetrayal.AI
+namespace ChessTheBetrayal.AI.Agent
 {
     /// <summary>
     /// Pure decision logic for whether an AI agent should request a move right now. Lives here

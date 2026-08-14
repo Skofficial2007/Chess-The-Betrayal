@@ -1,5 +1,6 @@
 using NUnit.Framework;
 using ChessTheBetrayal.AI;
+using ChessTheBetrayal.AI.Agent;
 using ChessTheBetrayal.Core.Data;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI

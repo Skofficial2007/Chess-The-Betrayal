@@ -6,7 +6,7 @@ using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Core.Utils;
 
-namespace ChessTheBetrayal.AI
+namespace ChessTheBetrayal.AI.Agent
 {
     /// <summary>
     /// IAIAgent implementation that runs Alpha-Beta on a BACKGROUND THREAD, then marshals the

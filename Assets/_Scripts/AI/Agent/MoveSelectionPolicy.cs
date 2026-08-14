@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Core.Utils;
 
-namespace ChessTheBetrayal.AI
+namespace ChessTheBetrayal.AI.Agent
 {
     /// <summary>
     /// Consumes AlphaBetaSearch's ranked root-move output (RootMoves/RootScores/BestRootIndex,

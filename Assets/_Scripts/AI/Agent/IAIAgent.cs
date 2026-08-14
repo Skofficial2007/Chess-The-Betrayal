@@ -3,7 +3,7 @@ using ChessTheBetrayal.Core.Engine;
 using System;
 using System.Threading;
 
-namespace ChessTheBetrayal.AI
+namespace ChessTheBetrayal.AI.Agent
 {
     /// <summary>
     /// Defines what any AI player needs to be able to do. Implement this if you want to add a new AI difficulty or strategy.
