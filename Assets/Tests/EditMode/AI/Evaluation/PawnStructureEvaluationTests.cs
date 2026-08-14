@@ -3,7 +3,7 @@ using ChessTheBetrayal.AI.Evaluation;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
 {
     /// <summary>
     /// Passed/isolated/doubled pawn scoring straddles the same attack/defense bucket boundary

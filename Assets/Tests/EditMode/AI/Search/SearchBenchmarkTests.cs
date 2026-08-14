@@ -12,7 +12,7 @@ using ChessTheBetrayal.Core.Utils;
 using ChessTheBetrayal.EditorTools.OpeningBook;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.Search
 {
     /// <summary>
     /// Times a raw (profile-free) search on a real midgame position under a production-style

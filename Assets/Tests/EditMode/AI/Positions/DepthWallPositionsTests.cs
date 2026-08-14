@@ -2,7 +2,7 @@ using NUnit.Framework;
 using ChessTheBetrayal.AI.Positions;
 using ChessTheBetrayal.Core.Data;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.Positions
 {
     /// <summary>
     /// Pins DepthWallPositions' two boards as literals. They used to be built only inside an

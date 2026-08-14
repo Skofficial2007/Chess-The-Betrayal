@@ -1,6 +1,6 @@
 using NUnit.Framework;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.Profiles
 {
     /// <summary>
     /// Pins the one invariant the Quick and Full strength-ladder tiers must hold: they differ ONLY
@@ -19,7 +19,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             // The whole point of the Quick tier is finishing faster than Full by sampling fewer
             // positions — if this ever stopped holding, Quick would just be a slower duplicate of
             // Full rather than the fast default the ticket asked for.
-            Assert.That(ChessTheBetrayal.Tests.EditMode.AI.StrengthLadder.QuickPositionCount,
+            Assert.That(StrengthLadder.QuickPositionCount,
                 Is.LessThan(ChessTheBetrayal.Tests.Utilities.CuratedPositionSuite.Count));
         }
 
@@ -28,7 +28,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         {
             // A sample too small to say anything at all isn't "quick," it's noise — four positions
             // (eight games both colors) is the same floor the fast per-commit gate already uses.
-            Assert.That(ChessTheBetrayal.Tests.EditMode.AI.StrengthLadder.QuickPositionCount, Is.GreaterThanOrEqualTo(4));
+            Assert.That(StrengthLadder.QuickPositionCount, Is.GreaterThanOrEqualTo(4));
         }
     }
 }

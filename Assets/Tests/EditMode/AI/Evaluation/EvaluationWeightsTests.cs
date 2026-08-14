@@ -4,7 +4,7 @@ using ChessTheBetrayal.AI.Evaluation;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
 {
     [TestFixture]
     public class EvaluationWeightsTests

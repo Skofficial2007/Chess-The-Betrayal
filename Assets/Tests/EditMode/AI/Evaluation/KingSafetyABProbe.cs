@@ -9,7 +9,7 @@ using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
 {
     /// <summary>
     /// One-off A/B strength measurement for the king-safety term: PreAI53Evaluator (a hand-copied

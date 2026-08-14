@@ -10,7 +10,7 @@ using ChessTheBetrayal.AI.Positions;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.MatchTelemetry
 {
     /// <summary>
     /// Reproductions for three behaviours a real human-vs-AI match surfaced that no existing suite

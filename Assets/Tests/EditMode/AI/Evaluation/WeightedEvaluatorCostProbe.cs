@@ -10,7 +10,7 @@ using ChessTheBetrayal.AI.Positions;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
 {
     /// <summary>
     /// Why the extreme tier reaches one ply less than impossible on the same position, the same

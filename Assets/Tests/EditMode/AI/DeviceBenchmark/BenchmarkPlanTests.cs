@@ -3,7 +3,7 @@ using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.AI.Positions;
 using ChessTheBetrayal.AI.DeviceBenchmark;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.DeviceBenchmark
 {
     /// <summary>
     /// The tester plan's duration is quoted to whoever is about to run the build, so it has to be a

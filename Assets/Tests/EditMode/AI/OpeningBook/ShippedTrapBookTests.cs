@@ -7,7 +7,7 @@ using ChessTheBetrayal.AI.OpeningBook;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.EditorTools.OpeningBook;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.OpeningBook
 {
     /// <summary>
     /// Guards the trap book the game actually ships against drifting from the source text a

@@ -7,7 +7,7 @@ using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.Agent
 {
     /// <summary>
     /// Whether the AI really picks what a promoting pawn becomes, or only ever takes a queen.

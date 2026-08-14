@@ -7,7 +7,7 @@ using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.Search
 {
     /// <summary>
     /// Verifies the three player-facing Betrayal configurations from the AI's point of view:

@@ -1,6 +1,6 @@
 using NUnit.Framework;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.Profiles
 {
     /// <summary>
     /// Finds the per-move budget at which the difficulty tiers actually separate, so the per-commit

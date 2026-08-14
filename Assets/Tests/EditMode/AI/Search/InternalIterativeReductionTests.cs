@@ -6,7 +6,7 @@ using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.Search
 {
     /// <summary>
     /// Proves internal iterative reduction actually fires on a TT-move-less deep node (seeding move

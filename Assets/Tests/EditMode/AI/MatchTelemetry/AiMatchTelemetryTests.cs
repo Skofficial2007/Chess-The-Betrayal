@@ -5,7 +5,7 @@ using ChessTheBetrayal.AI.MatchTelemetry;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.MatchTelemetry
 {
     /// <summary>
     /// AiMatchTelemetry touches no Unity API and holds no threading primitive of its own, so every

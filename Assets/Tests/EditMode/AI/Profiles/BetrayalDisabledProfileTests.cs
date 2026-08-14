@@ -11,7 +11,7 @@ using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Gameplay.Manager;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.Profiles
 {
     /// <summary>
     /// Confirms plain-chess mode (BoardState.BetrayalRightAvailable == false) is inert end to end,

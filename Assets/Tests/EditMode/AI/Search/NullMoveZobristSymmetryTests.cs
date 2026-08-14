@@ -5,7 +5,7 @@ using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.Search
 {
     /// <summary>
     /// Pins MakeNullMove/UndoNullMove's own make/unmake contract in isolation, independent of

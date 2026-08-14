@@ -8,7 +8,7 @@ using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.Profiles
 {
     /// <summary>
     /// Runs every built-in AIProfile tier (see AIProfileTable.BuiltIn) under the exact contract a

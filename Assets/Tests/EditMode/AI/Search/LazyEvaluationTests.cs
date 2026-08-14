@@ -6,7 +6,7 @@ using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.Search
 {
     /// <summary>
     /// The lazy-evaluation hatch must never fire while a Betrayer is pending (a Defection can swing

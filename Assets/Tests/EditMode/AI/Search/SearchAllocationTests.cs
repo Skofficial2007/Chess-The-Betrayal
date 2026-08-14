@@ -10,7 +10,7 @@ using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Gameplay.Manager;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.Search
 {
     /// <summary>
     /// Guards the search loop's no-allocation requirement: per-ply move buffers are sized once in the

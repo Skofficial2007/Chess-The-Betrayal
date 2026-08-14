@@ -1,7 +1,7 @@
 using NUnit.Framework;
 using ChessTheBetrayal.AI.Profiles;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.Profiles
 {
     /// <summary>
     /// Pins the shallow-search guardrail: a profile with MaxDepth below the threshold can't carry

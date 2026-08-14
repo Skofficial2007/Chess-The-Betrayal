@@ -6,7 +6,7 @@ using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
 {
     /// <summary>
     /// Answers the question this whole ticket exists to answer: does the AI, at its real search

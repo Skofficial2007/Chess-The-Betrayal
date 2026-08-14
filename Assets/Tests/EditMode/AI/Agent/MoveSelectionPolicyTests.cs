@@ -7,7 +7,7 @@ using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Core.Utils;
 using ChessTheBetrayal.Gameplay.Manager;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.Agent
 {
     /// <summary>
     /// MoveSelectionPolicy applies AIProfile's personality dials (blunder roll, tie-break window,

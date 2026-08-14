@@ -7,7 +7,7 @@ using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.EditorTools.Benchmark;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.Profiles
 {
     /// <summary>
     /// Per-commit ladder gate: short games per pairing, asserting only that no stronger tier is

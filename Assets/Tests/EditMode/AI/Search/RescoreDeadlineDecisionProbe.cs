@@ -10,7 +10,7 @@ using ChessTheBetrayal.AI.Positions;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.Search
 {
     /// <summary>
     /// Decides whether the candidate rescore pass should be stopped at the soft budget, by measuring

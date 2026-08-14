@@ -10,7 +10,7 @@ using ChessTheBetrayal.Core.Utils;
 using ChessTheBetrayal.EditorTools.OpeningBook;
 using ChessTheBetrayal.Gameplay.Manager;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.OpeningBook
 {
     /// <summary>
     /// Checks the positions the shipped book hands over to the search when its theory runs out.

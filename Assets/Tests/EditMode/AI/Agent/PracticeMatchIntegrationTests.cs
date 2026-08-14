@@ -9,7 +9,7 @@ using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Gameplay.Manager;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.Agent
 {
     /// <summary>
     /// Full scripted practice match, end to end: MatchDriver + UndoService + a real AsyncAIAgent

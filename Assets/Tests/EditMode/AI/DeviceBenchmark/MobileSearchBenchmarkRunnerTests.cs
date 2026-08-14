@@ -9,7 +9,7 @@ using ChessTheBetrayal.AI.Agent;
 using ChessTheBetrayal.AI.DeviceBenchmark;
 using ChessTheBetrayal.Core.Engine;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.DeviceBenchmark
 {
     /// <summary>
     /// This runner had no test coverage before now, even though it's genuinely Unity-free and never

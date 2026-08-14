@@ -3,7 +3,7 @@ using ChessTheBetrayal.AI.Evaluation;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
 {
     /// <summary>
     /// The King piece-square table now blends a midgame and an endgame value by MaterialPhase's

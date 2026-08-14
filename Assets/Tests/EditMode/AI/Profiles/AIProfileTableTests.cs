@@ -4,7 +4,7 @@ using NUnit.Framework;
 using ChessTheBetrayal.AI.Search;
 using ChessTheBetrayal.AI.Profiles;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.Profiles
 {
     /// <summary>
     /// Pins the "new tier = new data row, zero code change" contract: adding a difficulty must

@@ -2,7 +2,7 @@ using NUnit.Framework;
 using ChessTheBetrayal.AI.Agent;
 using ChessTheBetrayal.Core.Data;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.Agent
 {
     /// <summary>
     /// Pins AITurnGate's decision table — the guard GameManager.TryRequestAIMove uses to decide

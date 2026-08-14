@@ -8,7 +8,7 @@ using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.Search
 {
     /// <summary>
     /// The search has to see that a line returning to a position it has already been in is worth

@@ -11,7 +11,7 @@ using ChessTheBetrayal.EditorTools.OpeningBook;
 using ChessTheBetrayal.Tests.Utilities;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.OpeningBook
 {
     /// <summary>
     /// Every test compiles a real book from source text through OpeningBookCompiler (same as

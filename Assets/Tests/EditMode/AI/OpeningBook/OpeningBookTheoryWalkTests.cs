@@ -11,7 +11,7 @@ using ChessTheBetrayal.Core.Utils;
 using ChessTheBetrayal.EditorTools.OpeningBook;
 using ChessTheBetrayal.Gameplay.Manager;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.OpeningBook
 {
     /// <summary>
     /// Plays the shipped opening book the way a real match does — from the standard starting

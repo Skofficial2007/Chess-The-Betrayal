@@ -8,7 +8,7 @@ using ChessTheBetrayal.AI.OpeningBook;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.EditorTools.OpeningBook;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.OpeningBook
 {
     /// <summary>
     /// Checks that the opening book never recommends a move the trap book records as losing.

@@ -3,7 +3,7 @@ using System.IO;
 using NUnit.Framework;
 using ChessTheBetrayal.AI.DeviceBenchmark;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.DeviceBenchmark
 {
     /// <summary>
     /// Reports come back from several testers and land in one folder together, so the name has to

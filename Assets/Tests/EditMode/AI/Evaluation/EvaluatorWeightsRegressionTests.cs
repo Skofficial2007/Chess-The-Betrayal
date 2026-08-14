@@ -4,7 +4,7 @@ using ChessTheBetrayal.AI.Evaluation;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
 {
     /// <summary>
     /// BetrayalAwareEvaluator scales its non-material terms through an EvaluationWeights struct.

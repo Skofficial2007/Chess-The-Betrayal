@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 using NUnit.Framework;
 using ChessTheBetrayal.AI.Search;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.Search
 {
     /// <summary>
     /// Pins TranspositionTable's storage contract: blittability (no managed references, exactly 16

@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 using NUnit.Framework;
 using ChessTheBetrayal.AI.DeviceBenchmark;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.DeviceBenchmark
 {
     /// <summary>
     /// BenchmarkReport touches no Unity API and holds no threading primitive of its own, so every

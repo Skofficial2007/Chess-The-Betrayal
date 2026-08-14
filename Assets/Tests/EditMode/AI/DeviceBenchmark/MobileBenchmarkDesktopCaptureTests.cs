@@ -4,7 +4,7 @@ using UnityEngine;
 using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.AI.DeviceBenchmark;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.DeviceBenchmark
 {
     /// <summary>
     /// A recording harness, not a pass/fail gate. Runs the same plan a device runs, on this machine,

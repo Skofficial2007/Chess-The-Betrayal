@@ -3,7 +3,7 @@ using System.Linq;
 using NUnit.Framework;
 using ChessTheBetrayal.AI.DeviceBenchmark;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.DeviceBenchmark
 {
     /// <summary>
     /// The header block of a report that gets sent to other people. Pulled out of the MonoBehaviour

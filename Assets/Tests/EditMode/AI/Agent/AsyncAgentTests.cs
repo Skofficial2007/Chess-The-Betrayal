@@ -14,7 +14,7 @@ using ChessTheBetrayal.Gameplay.Manager;
 using ChessTheBetrayal.Tests.Utilities;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.Agent
 {
     /// <summary>
     /// Exercises AsyncAIAgent's threading contract: OnMoveDecided fires only from Tick() on the

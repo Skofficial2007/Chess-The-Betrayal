@@ -1,7 +1,7 @@
 using NUnit.Framework;
 using ChessTheBetrayal.AI.DeviceBenchmark;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.AI.DeviceBenchmark
 {
     /// <summary>
     /// The rule that keeps a finished benchmark report from being thrown away by the next press.
