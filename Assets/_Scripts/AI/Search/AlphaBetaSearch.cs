@@ -749,7 +749,7 @@ namespace ChessTheBetrayal.AI.Search
                         // Count how many depths in a row have kept the same best move. Compared
                         // against the previous completed depth's move BEFORE the bookkeeping below
                         // refreshes it. A change (or the very first depth) resets the streak to 0.
-                        if (hasPriorCompletedDepth && PackMove(bestMove) == PackMove(previousCompletedBestMove))
+                        if (hasPriorCompletedDepth && PackedMove.Pack(bestMove) == PackedMove.Pack(previousCompletedBestMove))
                             consecutiveStableDepths++;
                         else
                             consecutiveStableDepths = 0;
@@ -1437,7 +1437,7 @@ namespace ChessTheBetrayal.AI.Search
                 if (score > best)
                 {
                     best = score;
-                    bestPackedMove = PackMove(move);
+                    bestPackedMove = PackedMove.Pack(move);
                 }
                 if (best > alpha) alpha = best;
 
@@ -2112,7 +2112,7 @@ namespace ChessTheBetrayal.AI.Search
         /// state this predicate doesn't have.
         /// </summary>
         internal static bool IsReducibleMove(MoveCommand m, uint ttMove) =>
-            !m.IsCapture && !m.IsPromotion && m.Stage == BetrayalStage.None && PackMove(m) != ttMove;
+            !m.IsCapture && !m.IsPromotion && m.Stage == BetrayalStage.None && PackedMove.Pack(m) != ttMove;
 
         /// <summary>
         /// Concrete tier bands, ignoring killer/history (see the 3-arg overload below for the
@@ -2160,7 +2160,7 @@ namespace ChessTheBetrayal.AI.Search
         private static int OrderScoreCore(MoveCommand m, uint ttMove, out bool isQuiet)
         {
             isQuiet = false;
-            if (ttMove != 0 && PackMove(m) == ttMove) return 100_000;  // Tier 0: TT/PV move
+            if (ttMove != 0 && PackedMove.Pack(m) == ttMove) return 100_000;  // Tier 0: TT/PV move
 
             int capturedRank = PieceRank(m.CapturedType);
             int pieceRank = PieceRank(m.PieceType);
@@ -2195,7 +2195,7 @@ namespace ChessTheBetrayal.AI.Search
         /// </summary>
         private int QuietMoveOrderScore(MoveCommand m, int plyFromRoot)
         {
-            uint packed = PackMove(m);
+            uint packed = PackedMove.Pack(m);
             int killerBonus = 0;
             if (plyFromRoot >= 0 && plyFromRoot < _killerMoves.GetLength(0))
             {
@@ -2248,7 +2248,7 @@ namespace ChessTheBetrayal.AI.Search
 
             if (plyFromRoot < 0 || plyFromRoot >= _killerMoves.GetLength(0)) return;
 
-            uint packed = PackMove(move);
+            uint packed = PackedMove.Pack(move);
             if (packed == _killerMoves[plyFromRoot, 0]) return; // already the top killer here
 
             _killerMoves[plyFromRoot, 1] = _killerMoves[plyFromRoot, 0];
@@ -2264,7 +2264,7 @@ namespace ChessTheBetrayal.AI.Search
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static bool IsRootStable(int currentScore, int previousScore, MoveCommand currentBest, MoveCommand previousBest)
         {
-            bool sameBestMove = PackMove(currentBest) == PackMove(previousBest);
+            bool sameBestMove = PackedMove.Pack(currentBest) == PackedMove.Pack(previousBest);
             int scoreDelta = currentScore - previousScore;
             if (scoreDelta < 0) scoreDelta = -scoreDelta;
             return sameBestMove && scoreDelta <= StabilityThresholdCp;
@@ -2338,7 +2338,7 @@ namespace ChessTheBetrayal.AI.Search
 
             for (int i = 0; i < _rootMoves.Count; i++)
             {
-                if (PackMove(_rootMoves[i]) == packedMove)
+                if (PackedMove.Pack(_rootMoves[i]) == packedMove)
                 {
                     MoveToFront(i);
                     return;
