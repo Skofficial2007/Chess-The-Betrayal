@@ -13,7 +13,7 @@ namespace ChessTheBetrayal.Tests.Utilities
     ///
     /// Deliberately small, the same discipline YardstickSuite documents: one genuinely airtight KRK,
     /// KQK, and KPK position each, plus one Defection-specific case, is enough to answer the question
-    /// this ticket needs answered — a large suite nobody verified would be worse than none.
+    /// it exists to answer — a large suite nobody verified would be worse than none.
     /// </summary>
     public static class EndgameConversionSuite
     {

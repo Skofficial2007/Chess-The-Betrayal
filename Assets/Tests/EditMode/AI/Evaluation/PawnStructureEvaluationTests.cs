@@ -162,7 +162,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
         public void PawnlessPosition_ScoresIdenticallyBetweenCheapAndFull()
         {
             // No pawn term exists to add with no pawns on the board, so pawn structure alone
-            // contributes nothing here. King safety (also full-only, AI-53) is NOT automatically
+            // contributes nothing here. King safety (also full-only) is NOT automatically
             // zero on a pawnless board -- open files are about missing PAWNS specifically, and both
             // bare kings on this mirrored setup are equally exposed on all three of their own files,
             // so their king-safety deltas cancel by symmetry rather than by having nothing to add.

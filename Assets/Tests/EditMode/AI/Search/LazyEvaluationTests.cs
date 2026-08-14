@@ -260,7 +260,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // cuts full evaluation at enough quiescence nodes to change which line gets explored
             // deeply enough to matter, and the root move lands back on the original queen trade.
             // That is the same "a pruning lever can reorder root moves without being unsound" shape
-            // AI-47/48 already established for the delta-pruning margin, not a soundness bug: the
+            // already established for the delta-pruning margin, not a soundness bug: the
             // cut's own per-node contract (bounded by MaxPositionalSwing) still held throughout.
             var settings = new AISearchSettings(maxDepth: 7, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
             MoveCommand best = NewSearch().FindBestMove(SearchProfilePositions.QuietMidgame(), settings, CancellationToken.None);

@@ -93,7 +93,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         [Test]
         public void FindBestMove_PendingBetrayerPosition_SameMoveWithAndWithoutEffectiveQsearchTT()
         {
-            // The ADR's load-bearing correctness basis applies identically inside quiescence: the
+            // The same correctness basis the main search relies on applies inside quiescence: the
             // Zobrist hash already disambiguates the pending-Betrayer sub-state, so a qsearch TT
             // cutoff mid-Retribution is valid — this must not change the reported best move.
             BoardState boardTTOn = TestBoardSetupUtility.CreateEmpty()

@@ -99,7 +99,7 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
                 if (tier.MeanMsPerMove > DepthSevenTimingFailMs)
                 {
                     findings.Add(new DriftFinding(DriftSeverity.Fail,
-                        $"{tier.ProfileId}: mean {tier.MeanMsPerMove:F0}ms/move exceeds the {DepthSevenTimingFailMs:F0}ms search-performance DoD."));
+                        $"{tier.ProfileId}: mean {tier.MeanMsPerMove:F0}ms/move exceeds the {DepthSevenTimingFailMs:F0}ms a move is allowed."));
                 }
 
                 TierPerformance baselineTier = baseline?.FindTier(tier.ProfileId);

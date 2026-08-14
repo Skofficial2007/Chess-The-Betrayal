@@ -12,7 +12,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
     /// TT-on vs TT-off must choose the SAME best move on fixed positions — the transposition table
     /// changes exploration order and cutoff timing only, never move selection (mirrors OrderScore's
     /// "ordering only" contract). Covers a plain midgame position and a pending-Betrayer position,
-    /// since the ADR's load-bearing assumption is that TT cutoffs stay valid mid-Betrayal-sequence.
+    /// since the load-bearing assumption is that TT cutoffs stay valid mid-Betrayal-sequence.
     /// </summary>
     [TestFixture]
     public class SearchTTIntegrationTests
@@ -103,7 +103,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         public void FindBestMove_PoisonedTTEntry_OnlyMisordersNeverChangesResult()
         {
             // A stale entry from an unrelated position collides on this table's tiny index space.
-            // Per the ADR: a poisoned/mismatched entry can only mis-order a node (PackedBestMove is
+            // A poisoned or mismatched entry can only mis-order a node (PackedBestMove is
             // matched against the freshly generated legal list, never rehydrated), never inject an
             // illegal move or change which move the search ultimately reports as best.
             BoardState board = TestBoardSetupUtility.CreateEmpty()

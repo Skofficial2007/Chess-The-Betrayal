@@ -4,7 +4,7 @@ using ChessTheBetrayal.EditorTools.Benchmark;
 namespace ChessTheBetrayal.Tests.EditMode.Tooling.Tournament
 {
     /// <summary>
-    /// Pins the honesty rule this ticket added to the drift analyzer: a win rate below the hard
+    /// Pins the honesty rule the drift analyzer applies: a win rate below the hard
     /// floor is only reported as a real Fail when the sample is large enough that the floor sits
     /// outside its own 95% confidence interval. Below that sample size, the exact same shortfall
     /// reports Inconclusive instead — the instrument admitting it cannot yet tell a real regression

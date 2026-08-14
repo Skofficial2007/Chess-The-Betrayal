@@ -19,8 +19,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         private static readonly Vector2Int To = TestBoardSetupUtility.AlgebraicToVector("a3");
 
         // A distinct destination square for moves that must NOT pack-match the TT move under test —
-        // PackMove keys on From/To/PromotedTo/Stage only (not capture status, by design: see the
-        // ADR's PackedBestMove note), so a same-square capture and non-capture would otherwise
+        // PackMove keys on From/To/PromotedTo/Stage only, deliberately not on capture status,
+        // so a same-square capture and non-capture would otherwise
         // collide and falsely satisfy a TT-match check.
         private static readonly Vector2Int OtherTo = TestBoardSetupUtility.AlgebraicToVector("a4");
 

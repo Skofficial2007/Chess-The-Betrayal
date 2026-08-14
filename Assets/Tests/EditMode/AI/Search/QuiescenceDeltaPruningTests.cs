@@ -12,7 +12,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
     /// Regression for the depth-7 gate-check fix: quiescence previously explored every capture to
     /// exhaustion regardless of value, which is the classic quiescence explosion on a midgame
     /// position (many pieces, many possible captures) — the reason depth-7 took ~23s instead of the
-    /// ADR's 2-3s target. Delta pruning skips a capture only when even its best-case outcome can't
+    /// 2-3s a move is allowed. Delta pruning skips a capture only when even its best-case outcome can't
     /// raise alpha, so it must never change quiescence's final score/best-move, only how many
     /// hopeless lines it bothers exploring on the way there.
     /// </summary>

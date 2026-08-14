@@ -178,7 +178,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
             Assert.That(evaluator.Evaluate(ExtraQueen(), Team.White), Is.EqualTo(970));
             Assert.That(evaluator.Evaluate(ExtraQueen(), Team.Black), Is.EqualTo(-970));
 
-            // Rose from 300 to 336 when king safety landed (AI-53): Black's bare king has all three
+            // Rose from 300 to 336 when king safety landed: Black's bare king has all three
             // of its files fully open (no Black pawns anywhere), while White's three sheltering pawns
             // also close White's own king's files, so only Black's exposure is penalized (+36).
             Assert.That(evaluator.Evaluate(ShelteredKing(), Team.White), Is.EqualTo(336));
@@ -226,11 +226,11 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
         /// <summary>
         /// ShelteredKing now diverges cheap != full by design: its zero pawn-structure delta (three
         /// pawns all on their home rank, before the passed-pawn bonus ramps up) is unchanged from
-        /// AI-52, but AI-53's king-safety term adds a real, nonzero open-file penalty for Black's
-        /// completely bare king that White's own sheltering pawns spare White from. This pins that the
-        /// full-minus-cheap gap on this board is EXACTLY the king-safety contribution (36 from White's
-        /// perspective) and nothing else — proving the full path adds precisely what the two new terms
-        /// are supposed to add, not something else leaking in.
+        /// when pawn structure landed, but the king-safety term adds a real, nonzero open-file
+        /// penalty for Black's completely bare king that White's own sheltering pawns spare White
+        /// from. This pins that the full-minus-cheap gap on this board is EXACTLY the king-safety
+        /// contribution (36 from White's perspective) and nothing else — proving the full path adds
+        /// precisely what the two new terms are supposed to add, not something else leaking in.
         /// </summary>
         [Test]
         public void EvaluateCheap_MatchesFull_PlusKingSafety_OnShelteredKing()

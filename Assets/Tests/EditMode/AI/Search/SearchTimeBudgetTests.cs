@@ -70,7 +70,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         /// <summary>
         /// Plays several consecutive real turns (self-play: the same search instance answers for
         /// both sides, exactly like AsyncAIAgent would across a match) with a budget matching the
-        /// ADR's actual DoD target, and asserts EVERY turn individually stays within a small
+        /// real per-move target, and asserts EVERY turn individually stays within a small
         /// tolerance of that budget — not just the first move, which is all the old single-shot
         /// benchmark ever proved.
         /// </summary>

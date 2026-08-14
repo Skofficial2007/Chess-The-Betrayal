@@ -9,7 +9,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
 {
     /// <summary>
     /// Pins the killer-move heuristic: a quiet move that caused a beta cutoff at a given ply is
-    /// tried early the next time that same ply is reached. The DoD for this ticket is the
+    /// tried early the next time that same ply is reached. The case that matters most here is the
     /// sub-phase-ply-isolation case — killers are keyed by plyFromRoot rather than by whose turn it
     /// is, specifically so an Act at ply k and its forced Retribution at ply k+1 never share a
     /// killer slot, even though Betrayal doesn't flip the mover every ply the way ordinary chess does.

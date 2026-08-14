@@ -59,8 +59,8 @@ namespace ChessTheBetrayal.Tests.Utilities
         ///
         /// A profile plays against ITSELF (not against a different tier) because a Texel corpus needs
         /// positions labelled by realistic self-play outcomes at a coherent strength level, not
-        /// cross-tier mismatches — mirrors the ADR's own framing of self-play as the source of a
-        /// tuning corpus.
+        /// cross-tier mismatches. Self-play is the source a tuning corpus wants for exactly that
+        /// reason.
         /// </summary>
         public static TexelCorpusGenerationPlan Build(
             int runSeed, IReadOnlyList<AIProfile> profiles, int positionCount, int gamesPerPosition)

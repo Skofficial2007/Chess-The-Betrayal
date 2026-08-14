@@ -10,7 +10,7 @@ using UnityEngine;
 namespace ChessTheBetrayal.Tests.EditMode.Tooling.Texel
 {
     /// <summary>
-    /// AI-55's decisive measurement: does self-play at the highest BetrayalAggression dial produce
+    /// The decisive measurement: does self-play at the highest BetrayalAggression dial produce
     /// ANY quiet positions downstream of a real Defection? Natural Act rate measured at ~0.9% even at
     /// this dial (see the Betrayal Act valuation audit), and most Acts resolve by Retribution rather
     /// than Defection — so this is a genuinely open question, not a foregone conclusion either way.
@@ -37,7 +37,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.Texel
             List<TexelPositionRecord> records = ReadAllRecords(corpusDirectory).ToList();
             int postDefectionCount = records.Count(r => r.PostDefectionOccurred);
 
-            Debug.Log($"AI55-BETRAYAL-PROBE positions={positionCount} postDefection={postDefectionCount} " +
+            Debug.Log($"BETRAYAL-CORPUS-PROBE positions={positionCount} postDefection={postDefectionCount} " +
                 $"wallClockSeconds={stopwatch.Elapsed.TotalSeconds:F1} corpusDirectory={corpusDirectory}");
 
             Assert.That(positionCount, Is.GreaterThan(0), "the run must produce at least some quiet positions.");

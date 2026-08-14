@@ -121,7 +121,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         }
 
         [Test]
-        public void FindBestMove_ZeroRescoreMargin_MatchesPreAI24Behavior()
+        public void FindBestMove_ZeroRescoreMargin_MatchesBehaviourFromBeforeTheMarginExisted()
         {
             BoardState boardA = TestBoardSetupUtility.CreateStandard();
             BoardState boardB = TestBoardSetupUtility.CreateStandard();

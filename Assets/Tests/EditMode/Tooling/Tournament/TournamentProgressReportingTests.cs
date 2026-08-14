@@ -7,7 +7,7 @@ using ChessTheBetrayal.Tests.Utilities;
 namespace ChessTheBetrayal.Tests.EditMode.Tooling.Tournament
 {
     /// <summary>
-    /// Pins the enriched per-game logging this ticket added: a bare "N/total" counter proves a run
+    /// Pins the enriched per-game logging: a bare "N/total" counter proves a run
     /// is alive but says nothing about whether it's healthy, so TournamentGameLogger renders the
     /// pairing, the result, and a running score per pairing whenever a game finishes.
     /// </summary>

@@ -104,8 +104,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
         {
             // White's own Knight on f3 is the pending Betrayer, initiated by White itself, sitting
             // inside White's own king zone -- one Defection away from reappearing as a Black piece on
-            // that exact square with no time spent getting there. The crafted sign-change case the
-            // DoD requires: the SAME piece placement scores strictly worse for White once it is
+            // that exact square with no time spent getting there. The crafted sign-change case this
+            // pins: the SAME piece placement scores strictly worse for White once it is
             // flagged as a pending self-Betrayer than it does as an ordinary friendly Knight.
             BoardState withoutPending = ShieldedWhiteKing().WithPiece("f3", Team.White, ChessPieceType.Knight);
             BoardState withPending = ShieldedWhiteKing()

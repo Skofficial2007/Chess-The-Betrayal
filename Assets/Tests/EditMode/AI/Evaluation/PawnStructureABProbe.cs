@@ -12,18 +12,19 @@ using ChessTheBetrayal.Tests.Utilities;
 namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
 {
     /// <summary>
-    /// One-off A/B strength measurement for the pawn-structure terms: PreAI52Evaluator (a hand-copied
-    /// clone of BetrayalAwareEvaluator as it was before pawn structure existed -- material + PST +
-    /// king shelter + Betrayal option, nothing else) against the real, current BetrayalAwareEvaluator,
-    /// both under the "impossible" profile's weights (BlunderRate=0, TieBreakWindowCp=0, so
-    /// MoveSelectionPolicy never randomizes and the search's own best move is always what's played --
-    /// the least noisy possible read of an eval change). Color-swapped over all 20 curated positions
-    /// (N=40), a compressed per-move clock so the run finishes in minutes.
+    /// One-off A/B strength measurement for the pawn-structure terms: PrePawnStructureEvaluator (a
+    /// hand-copied clone of BetrayalAwareEvaluator as it was before pawn structure existed --
+    /// material + PST + king shelter + Betrayal option, nothing else) against the real, current
+    /// BetrayalAwareEvaluator, both under the "impossible" profile's weights (BlunderRate=0,
+    /// TieBreakWindowCp=0, so MoveSelectionPolicy never randomizes and the search's own best move
+    /// is always what's played -- the least noisy possible read of an eval change). Color-swapped
+    /// over all 20 curated positions (N=40), a compressed per-move clock so the run finishes in
+    /// minutes.
     ///
     /// [Explicit] because this is a measurement, not a correctness pin -- it produces a result to
-    /// read and record, not a pass/fail gate to run on every commit. Runs entirely off ITurnResolver
-    /// (never MatchDriver), since MatchDriver.PlayMove has a couple of unconditional Debug.Log calls
-    /// this harness has no reason to exercise.
+    /// read and record, not a pass/fail gate to run on every commit. Runs entirely off
+    /// ITurnResolver (never MatchDriver), since MatchDriver.PlayMove has a couple of unconditional
+    /// Debug.Log calls this harness has no reason to exercise.
     /// </summary>
     [TestFixture]
     [Explicit("One-off A/B measurement, not a per-commit gate. Run manually via -testFilter.")]
@@ -32,7 +33,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
         private const int MoveBudgetCapMs = 400;
         private const int PlyCap = 60;
 
-        private sealed class PreAI52Evaluator : IPositionEvaluator
+        private sealed class PrePawnStructureEvaluator : IPositionEvaluator
         {
             private const int PawnValue = 100;
             private const int KnightValue = 320;
@@ -44,7 +45,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
 
             private readonly EvaluationWeights _weights;
 
-            public PreAI52Evaluator(EvaluationWeights weights) => _weights = weights;
+            public PrePawnStructureEvaluator(EvaluationWeights weights) => _weights = weights;
 
             public int Evaluate(BoardState board, Team forTeam) => EvaluateCheap(board, forTeam);
 
@@ -126,7 +127,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
         public void RunABMeasurement()
         {
             string logPath = System.IO.Path.Combine(
-                System.IO.Path.GetTempPath(), "AI52_AB_progress.log");
+                System.IO.Path.GetTempPath(), "pawn-structure-ab-progress.log");
             using var log = new StreamWriter(logPath, append: false) { AutoFlush = true };
 
             void Log(string msg)
@@ -140,7 +141,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
             AIProfile impossible = profileProvider.Resolve("impossible");
             EvaluationWeights weights = EvaluationWeights.FromProfile(impossible);
 
-            var probe = new PreAI52Evaluator(EvaluationWeights.Identity);
+            var probe = new PrePawnStructureEvaluator(EvaluationWeights.Identity);
             int symmetricQueens = EvalGolden(probe, "e1:White:King,e8:Black:King,d1:White:Queen,d8:Black:Queen");
             int mirroredRookKnight = EvalGolden(probe, "e1:White:King,e8:Black:King,d1:White:Rook,a4:White:Knight");
             int extraQueen = EvalGolden(probe, "e1:White:King,e8:Black:King,d1:White:Queen");
@@ -194,7 +195,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
             TurnPhase phase = TurnPhase.Normal;
 
             IPositionEvaluator newEval = new BetrayalAwareEvaluator(weights);
-            IPositionEvaluator oldEval = new PreAI52Evaluator(weights);
+            IPositionEvaluator oldEval = new PrePawnStructureEvaluator(weights);
 
             IPositionEvaluator whiteEval = newEvalIsWhite ? newEval : oldEval;
             IPositionEvaluator blackEval = newEvalIsWhite ? oldEval : newEval;

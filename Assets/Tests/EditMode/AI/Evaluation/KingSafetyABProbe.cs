@@ -12,7 +12,7 @@ using ChessTheBetrayal.Tests.Utilities;
 namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
 {
     /// <summary>
-    /// One-off A/B strength measurement for the king-safety term: PreAI53Evaluator (a hand-copied
+    /// One-off A/B strength measurement for the king-safety term: PreKingSafetyEvaluator (a hand-copied
     /// clone of BetrayalAwareEvaluator as it was before king safety existed -- material + PST + king
     /// shelter + Betrayal option + pawn structure, nothing else) against the real, current
     /// BetrayalAwareEvaluator, both under the "impossible" profile's weights (BlunderRate=0,
@@ -32,11 +32,11 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
         private const int PlyCap = 60;
 
         /// <summary>
-        /// Reuses the real, unchanged PawnStructure class directly (AI-53 did not touch it) rather
-        /// than hand-copying its logic a second time -- only what actually predates AI-53 (king
-        /// safety) is missing from this clone.
+        /// Reuses the real, unchanged PawnStructure class directly (the king-safety work did not
+        /// touch it) rather than hand-copying its logic a second time -- king safety is the only
+        /// thing missing from this clone.
         /// </summary>
-        private sealed class PreAI53Evaluator : IPositionEvaluator
+        private sealed class PreKingSafetyEvaluator : IPositionEvaluator
         {
             private const int PawnValue = 100;
             private const int KnightValue = 320;
@@ -48,7 +48,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
 
             private readonly EvaluationWeights _weights;
 
-            public PreAI53Evaluator(EvaluationWeights weights) => _weights = weights;
+            public PreKingSafetyEvaluator(EvaluationWeights weights) => _weights = weights;
 
             public int Evaluate(BoardState board, Team forTeam)
             {
@@ -146,7 +146,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
         public void RunABMeasurement()
         {
             string logPath = System.IO.Path.Combine(
-                System.IO.Path.GetTempPath(), "AI53_AB_progress.log");
+                System.IO.Path.GetTempPath(), "king-safety-ab-progress.log");
             using var log = new StreamWriter(logPath, append: false) { AutoFlush = true };
 
             void Log(string msg)
@@ -160,11 +160,11 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
             AIProfile impossible = profileProvider.Resolve("impossible");
             EvaluationWeights weights = EvaluationWeights.FromProfile(impossible);
 
-            // Sanity gate: the clone must reproduce exactly the pre-AI-53 golden literals (the same
-            // numbers EvaluatorWeightsRegressionTests pinned before this ticket's commits) before any
-            // game is played -- ShelteredKing here is 300, NOT the post-AI-53 336, because this clone
-            // has no king-safety term at all.
-            var probe = new PreAI53Evaluator(EvaluationWeights.Identity);
+            // Sanity gate: the clone must reproduce exactly the golden literals from before king
+            // safety existed (the same numbers EvaluatorWeightsRegressionTests pinned then) before
+            // any game is played -- ShelteredKing here is 300, NOT the 336 the current evaluator
+            // gives, because this clone has no king-safety term at all.
+            var probe = new PreKingSafetyEvaluator(EvaluationWeights.Identity);
             int symmetricQueens = EvalGolden(probe, "e1:White:King,e8:Black:King,d1:White:Queen,d8:Black:Queen");
             int mirroredRookKnight = EvalGolden(probe, "e1:White:King,e8:Black:King,d1:White:Rook,a4:White:Knight");
             int extraQueen = EvalGolden(probe, "e1:White:King,e8:Black:King,d1:White:Queen");
@@ -218,7 +218,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
             TurnPhase phase = TurnPhase.Normal;
 
             IPositionEvaluator newEval = new BetrayalAwareEvaluator(weights);
-            IPositionEvaluator oldEval = new PreAI53Evaluator(weights);
+            IPositionEvaluator oldEval = new PreKingSafetyEvaluator(weights);
 
             IPositionEvaluator whiteEval = newEvalIsWhite ? newEval : oldEval;
             IPositionEvaluator blackEval = newEvalIsWhite ? oldEval : newEval;

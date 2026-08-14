@@ -11,7 +11,7 @@ using ChessTheBetrayal.Tests.Utilities;
 namespace ChessTheBetrayal.Tests.EditMode.Tooling.Texel
 {
     /// <summary>
-    /// The DoD suite for AI-55's corpus generator: reproducible under a fixed seed, every sampled
+    /// The acceptance suite for the corpus generator: reproducible under a fixed seed, every sampled
     /// position is genuinely quiet, and every position's label matches the game it came from. Runs
     /// against fast, shallow fixture profiles with a tight ply cap — the same reasoning
     /// TournamentSession's own tests use fixture profiles rather than AIProfileTable.BuiltIn, so this
