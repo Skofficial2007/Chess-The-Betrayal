@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using ChessTheBetrayal.AI;
 using ChessTheBetrayal.AI.Profiles;
 
 namespace ChessTheBetrayal.Tests.Utilities

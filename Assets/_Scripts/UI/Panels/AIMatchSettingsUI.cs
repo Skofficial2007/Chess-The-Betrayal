@@ -3,7 +3,6 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using PrimeTween;
-using ChessTheBetrayal.AI;
 using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Diagnostics;

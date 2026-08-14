@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using UnityEngine;
-using ChessTheBetrayal.AI;
 using ChessTheBetrayal.AI.Search;
 using ChessTheBetrayal.AI.DeviceBenchmark;
 using ChessTheBetrayal.Core.Data;

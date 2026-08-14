@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using System.Threading;
-using ChessTheBetrayal.AI;
 using ChessTheBetrayal.AI.Search;
 using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.AI.Evaluation;

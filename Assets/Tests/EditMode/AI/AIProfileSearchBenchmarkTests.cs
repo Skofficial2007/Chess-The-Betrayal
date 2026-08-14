@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Threading;
 using NUnit.Framework;
-using ChessTheBetrayal.AI;
 using ChessTheBetrayal.AI.Search;
 using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.AI.Evaluation;

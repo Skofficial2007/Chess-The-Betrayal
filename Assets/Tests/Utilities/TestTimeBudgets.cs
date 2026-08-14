@@ -1,4 +1,3 @@
-using ChessTheBetrayal.AI;
 using ChessTheBetrayal.AI.Profiles;
 
 namespace ChessTheBetrayal.Tests.Utilities

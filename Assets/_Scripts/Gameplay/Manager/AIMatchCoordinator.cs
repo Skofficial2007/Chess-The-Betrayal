@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using ChessTheBetrayal.AI;
 using ChessTheBetrayal.AI.Search;
 using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.AI.Evaluation;

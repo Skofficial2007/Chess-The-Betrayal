@@ -1,7 +1,6 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using ChessTheBetrayal.AI;
 using ChessTheBetrayal.Core.Data;
 
 namespace ChessTheBetrayal.Tests.Utilities

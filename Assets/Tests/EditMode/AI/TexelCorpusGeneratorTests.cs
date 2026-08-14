@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using NUnit.Framework;
-using ChessTheBetrayal.AI;
 using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;

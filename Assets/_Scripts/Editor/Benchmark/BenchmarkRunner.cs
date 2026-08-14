@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
-using ChessTheBetrayal.AI;
 using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.Tests.Utilities;
 

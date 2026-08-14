@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using ChessTheBetrayal.AI;
 using ChessTheBetrayal.AI.Positions;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;

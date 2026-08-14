@@ -1,5 +1,4 @@
 using NUnit.Framework;
-using ChessTheBetrayal.AI;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Tests.Utilities;
 
