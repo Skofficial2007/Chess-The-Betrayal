@@ -7,7 +7,7 @@ using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.EditorTools.OpeningBook;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.Tooling.BookImport
 {
     /// <summary>
     /// Covers the trap book source format and its compiler against inline text, so the format is

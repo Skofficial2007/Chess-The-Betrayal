@@ -1,7 +1,7 @@
 using NUnit.Framework;
 using ChessTheBetrayal.EditorTools.Benchmark;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.Tooling.Tournament
 {
     /// <summary>
     /// Pins the honesty rule this ticket added to the drift analyzer: a win rate below the hard

@@ -8,7 +8,7 @@ using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.EditorTools.Benchmark;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.Tooling.Texel
 {
     /// <summary>
     /// The DoD suite for AI-55's corpus generator: reproducible under a fixed seed, every sampled

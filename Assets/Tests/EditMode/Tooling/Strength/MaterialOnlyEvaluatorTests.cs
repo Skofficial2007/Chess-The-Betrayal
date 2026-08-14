@@ -2,7 +2,7 @@ using NUnit.Framework;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.Tooling.Strength
 {
     /// <summary>
     /// Pins the one property that makes MaterialOnlyEvaluator usable as a proof standard: it must

@@ -5,7 +5,7 @@ using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.Tooling.Strength
 {
     /// <summary>
     /// Proves the agreement harness measures what it claims to, before anything is measured with

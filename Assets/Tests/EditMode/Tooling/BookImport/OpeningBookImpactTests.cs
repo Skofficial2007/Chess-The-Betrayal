@@ -11,7 +11,7 @@ using ChessTheBetrayal.EditorTools.Benchmark;
 using ChessTheBetrayal.EditorTools.OpeningBook;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.Tooling.BookImport
 {
     /// <summary>
     /// Correctness guards for the opening-book measurement seam. Fast, always run.

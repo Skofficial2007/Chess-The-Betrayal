@@ -9,7 +9,7 @@ using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.EditorTools.Benchmark;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.Tooling.Tournament
 {
     /// <summary>
     /// The keystone correctness proof for ParallelTournamentExecutor: playing a tournament across

@@ -4,7 +4,7 @@ using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.EditorTools.Benchmark;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.Tooling.Benchmark
 {
     /// <summary>
     /// Pins the benchmark artifact's shape and reproducibility, plus each drift-threshold rule in

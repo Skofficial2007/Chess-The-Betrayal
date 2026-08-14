@@ -3,7 +3,7 @@ using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.Tooling.Match
 {
     /// <summary>
     /// Pins MatchAdjudicator's own decision logic in isolation from any real search or engine —

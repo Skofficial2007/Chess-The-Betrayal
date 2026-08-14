@@ -4,7 +4,7 @@ using UnityEngine.TestTools;
 using ChessTheBetrayal.EditorTools.Benchmark;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.Tooling.Tournament
 {
     /// <summary>
     /// Pins the enriched per-game logging this ticket added: a bare "N/total" counter proves a run

@@ -7,7 +7,7 @@ using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Gameplay.Manager;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.Tooling.Match
 {
     /// <summary>
     /// Pins MatchSimulator's own contract (determinism, seed independence, adjudication) rather

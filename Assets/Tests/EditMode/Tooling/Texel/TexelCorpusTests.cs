@@ -7,7 +7,7 @@ using NUnit.Framework;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.Tooling.Texel
 {
     /// <summary>
     /// Pins the corpus building blocks below the EditorTools generator: the board codec's round-trip

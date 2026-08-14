@@ -4,7 +4,7 @@ using NUnit.Framework;
 using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.Tooling.Strength
 {
     /// <summary>
     /// The absolute strength signal: does the top tier find the provably correct move on every

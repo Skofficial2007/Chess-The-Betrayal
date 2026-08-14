@@ -7,7 +7,7 @@ using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.EditorTools.Benchmark;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.Tooling.Tournament
 {
     /// <summary>
     /// Pins the whole point of the persistence layer: a tournament run that gets killed midway

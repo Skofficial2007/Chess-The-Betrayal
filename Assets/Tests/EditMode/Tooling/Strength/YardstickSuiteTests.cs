@@ -3,7 +3,7 @@ using NUnit.Framework;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.Tooling.Strength
 {
     /// <summary>
     /// Shape checks on YardstickSuite itself, distinct from YardstickPositionProofTests' deep

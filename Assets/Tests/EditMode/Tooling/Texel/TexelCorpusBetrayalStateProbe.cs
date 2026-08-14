@@ -7,7 +7,7 @@ using ChessTheBetrayal.EditorTools.Benchmark;
 using ChessTheBetrayal.Tests.Utilities;
 using UnityEngine;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.Tooling.Texel
 {
     /// <summary>
     /// AI-55's decisive measurement: does self-play at the highest BetrayalAggression dial produce

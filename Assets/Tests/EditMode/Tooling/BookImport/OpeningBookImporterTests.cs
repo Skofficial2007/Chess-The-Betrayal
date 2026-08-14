@@ -7,7 +7,7 @@ using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.EditorTools.OpeningBook;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.Tooling.BookImport
 {
     /// <summary>
     /// Every test here compiles real source text through the real engine — no hand-computed

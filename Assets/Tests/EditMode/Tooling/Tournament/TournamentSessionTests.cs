@@ -5,7 +5,7 @@ using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.EditorTools.Benchmark;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.Tooling.Tournament
 {
     /// <summary>
     /// Pins TournamentSession's own contract — event counts, partial-report correctness, and

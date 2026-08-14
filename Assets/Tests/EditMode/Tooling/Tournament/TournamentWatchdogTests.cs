@@ -3,7 +3,7 @@ using System.Threading;
 using NUnit.Framework;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI
+namespace ChessTheBetrayal.Tests.EditMode.Tooling.Tournament
 {
     /// <summary>
     /// Pins TournamentWatchdog's core promise: it trips only on genuine stall (no progress for
