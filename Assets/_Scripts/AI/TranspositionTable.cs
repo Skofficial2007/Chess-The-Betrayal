@@ -11,12 +11,13 @@ namespace ChessTheBetrayal.AI
     }
 
     /// <summary>
-    /// One transposition table slot. Two 64-bit lanes, blittable and NativeArray-ready (see the
-    /// ADR's Burst-deferral note) — KeyLane stores the Zobrist hash XORed with DataLane (the Hyatt
-    /// lockless scheme), so a single XOR on probe verifies index collisions, key mismatches, AND
-    /// torn writes all at once. DataLane packs everything else needed to resume the search at this
-    /// node: the score, the best move found (for ordering), the depth it was searched to, the
-    /// bound type, and a generation stamp for replacement.
+    /// One transposition table slot. Two 64-bit lanes, and deliberately blittable — there is no
+    /// reference type in here, so the table could later move into a NativeArray and be read from
+    /// Burst-compiled code without the entry itself changing shape. KeyLane stores the Zobrist hash
+    /// XORed with DataLane (the Hyatt lockless scheme), so a single XOR on probe verifies index
+    /// collisions, key mismatches, AND torn writes all at once. DataLane packs everything else
+    /// needed to resume the search at this node: the score, the best move found (for ordering), the
+    /// depth it was searched to, the bound type, and a generation stamp for replacement.
     /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     public struct TTEntry

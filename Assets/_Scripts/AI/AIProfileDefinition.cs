@@ -3,10 +3,10 @@ using UnityEngine;
 namespace ChessTheBetrayal.AI
 {
     /// <summary>
-    /// Authoring-time mirror of <see cref="AIProfile"/>. One asset per tier. Not yet consulted by
-    /// the runtime resolution path — <see cref="AIProfileTableProvider"/> reads the code-side
-    /// <see cref="AIProfileTable.BuiltIn"/> roster this ticket. This asset type exists so a later
-    /// ticket can redirect the provider at authored assets without shape changes.
+    /// Authoring-time mirror of <see cref="AIProfile"/>, one asset per tier. Nothing reads it at
+    /// runtime today — <see cref="AIProfileTableProvider"/> resolves ids against the code-side
+    /// <see cref="AIProfileTable.BuiltIn"/> roster instead. It exists so that pointing the provider
+    /// at authored assets later is a change of source rather than a change of shape.
     ///
     /// PROVISIONAL — every asset of this type mirrors a row in <see cref="AIProfileTable.BuiltIn"/>,
     /// which is itself pre-validation. See that class's doc comment for what "validated" means here.
