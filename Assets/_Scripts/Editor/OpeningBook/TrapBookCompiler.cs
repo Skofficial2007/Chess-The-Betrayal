@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using ChessTheBetrayal.AI.Search;
+using ChessTheBetrayal.AI.Moves;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 
@@ -132,14 +132,14 @@ namespace ChessTheBetrayal.EditorTools.OpeningBook
             MoveCommand blunder = Require(line, legalMoves, line.BlunderMove, "avoid");
             MoveCommand best = Require(line, legalMoves, line.BestMove, "best");
 
-            if (AlphaBetaSearch.PackMove(blunder) == AlphaBetaSearch.PackMove(best))
+            if (PackedMove.Pack(blunder) == PackedMove.Pack(best))
             {
                 throw new TrapBookParseException(
                     line.SourceLineNumber,
                     "The move to avoid and the move to play instead are the same move.");
             }
 
-            return (board.ZobristHash, AlphaBetaSearch.PackMove(blunder), AlphaBetaSearch.PackMove(best));
+            return (board.ZobristHash, PackedMove.Pack(blunder), PackedMove.Pack(best));
         }
 
         private static MoveCommand Require(
