@@ -2,7 +2,7 @@ using NUnit.Framework;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Logic;
 
-namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
+namespace ChessTheBetrayal.Tests.EditMode.Core.Logic
 {
     /// <summary>
     /// Validates the Time Bounty system and its interaction with standard chess clocks.
