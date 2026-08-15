@@ -4,7 +4,7 @@ using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.Core.Movement
+namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Movement
 {
     [TestFixture]
     public class KnightMovementTests

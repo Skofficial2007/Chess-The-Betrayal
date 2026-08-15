@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 
-namespace ChessTheBetrayal.Core.Movement
+namespace ChessTheBetrayal.Core.Engine.Movement
 {
     /// <summary>
     /// Movement strategy for the King piece.

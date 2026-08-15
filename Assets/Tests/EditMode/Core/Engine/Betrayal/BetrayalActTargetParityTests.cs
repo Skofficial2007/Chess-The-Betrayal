@@ -2,7 +2,7 @@ using NUnit.Framework;
 using System.Collections.Generic;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
-using ChessTheBetrayal.Core.Movement;
+using ChessTheBetrayal.Core.Engine.Movement;
 using ChessTheBetrayal.Tests.Utilities;
 
 namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal

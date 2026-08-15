@@ -2,10 +2,10 @@ using NUnit.Framework;
 using System.Collections.Generic;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
-using ChessTheBetrayal.Core.Movement;
+using ChessTheBetrayal.Core.Engine.Movement;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.Core.Movement
+namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Movement
 {
     /// <summary>
     /// Pins the IPieceMovement.GetAttackedSquares attack-map primitive per piece type. "Attacked"

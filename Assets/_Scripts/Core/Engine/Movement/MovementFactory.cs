@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using ChessTheBetrayal.Core.Data;
 
-namespace ChessTheBetrayal.Core.Movement
+namespace ChessTheBetrayal.Core.Engine.Movement
 {
     /// <summary>
     /// Hands out the right movement rules for any piece type. Because each AI thread needs its own copy to work safely in parallel, we use [ThreadStatic] to give every thread its own private set.

@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 using ChessTheBetrayal.Core.Data;
-using ChessTheBetrayal.Core.Movement;
+using ChessTheBetrayal.Core.Engine.Movement;
 using ChessTheBetrayal.Core.Diagnostics;
 
 namespace ChessTheBetrayal.Core.Engine
