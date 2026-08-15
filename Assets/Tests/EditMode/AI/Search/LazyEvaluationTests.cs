@@ -288,6 +288,63 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
 
             Assert.That(search.Stats.LazyStandPatCuts, Is.GreaterThan(0));
         }
+
+        [Test]
+        public void FindBestMove_TheCutObeysTheBoundTheEvaluatorDeclares()
+        {
+            // Every score in both arms comes from the same evaluator, so the only thing that differs
+            // is the bound each one declares — which makes any difference in how often the cut fires
+            // attributable to the search having read that bound, and nothing else.
+            //
+            // Worth having because a search that ignored the declared bound entirely, or kept a
+            // constant of its own, passed every other test in this fixture: the worst-case tests
+            // compare cheap against full without ever building a search, and the liveness test above
+            // is satisfied more easily by a too-small bound, not less.
+            //
+            // Stated as a comparison between two arms rather than a recorded number of cuts, because
+            // a pinned count would have to be rewritten every time anything upstream of quiescence
+            // changed, and would eventually be relaxed rather than investigated.
+            var settings = new AISearchSettings(maxDepth: 6, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
+
+            long cutsAtRealBound = LazyCutsWithDeclaredSwing(new BetrayalAwareEvaluator().MaxCheapToFullSwing, settings);
+            long cutsAtUnreachableBound = LazyCutsWithDeclaredSwing(UnreachableSwing, settings);
+
+            Assert.That(cutsAtRealBound, Is.GreaterThan(0),
+                "The real bound has to leave the cut able to fire, or the arms below prove nothing.");
+            Assert.That(cutsAtUnreachableBound, Is.Zero,
+                "No cheap score can sit a million centipawns clear of its window, so a search reading " +
+                "the declared bound can never take the lazy path here. Firing anyway means the cut is " +
+                "using some bound of its own rather than the one the evaluator declared.");
+        }
+
+        // Wide enough that no cheap score can ever clear a search window by this much, so the cut
+        // can never fire; small enough that subtracting it from a score cannot overflow.
+        private const int UnreachableSwing = 1_000_000;
+
+        private long LazyCutsWithDeclaredSwing(int swing, AISearchSettings settings)
+        {
+            var search = new AlphaBetaSearch(_engine, new DeclaredSwingEvaluator(swing),
+                transpositionTable: new TranspositionTable(log2Size: 20));
+
+            search.FindBestMove(SearchProfilePositions.QuietMidgame(), settings, CancellationToken.None);
+
+            return search.Stats.LazyStandPatCuts;
+        }
+
+        /// <summary>Scores exactly like the real evaluator, but declares whatever cheap-to-full
+        /// swing it is handed, so a test can vary the bound without moving a single score.</summary>
+        private sealed class DeclaredSwingEvaluator : IPositionEvaluator
+        {
+            private readonly BetrayalAwareEvaluator _inner = new BetrayalAwareEvaluator();
+
+            public DeclaredSwingEvaluator(int swing) => MaxCheapToFullSwing = swing;
+
+            public int MaxCheapToFullSwing { get; }
+
+            public int Evaluate(BoardState board, Team forTeam) => _inner.Evaluate(board, forTeam);
+
+            public int EvaluateCheap(BoardState board, Team forTeam) => _inner.EvaluateCheap(board, forTeam);
+        }
 #endif
     }
 }
