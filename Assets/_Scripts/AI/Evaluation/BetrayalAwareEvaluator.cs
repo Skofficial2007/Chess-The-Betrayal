@@ -37,6 +37,23 @@ namespace ChessTheBetrayal.AI.Evaluation
         // of the existing king-safety table, not a competing dominant term.
         private const int KingShelterBonusPerPawn = 10;
 
+        // The most the full-only terms can move a score away from the one EvaluateCheap returns,
+        // which is what lets a caller skip the full evaluation once its cheap score already sits
+        // further outside the search window than this. Four terms live behind the full path:
+        // PawnStructure clamps each side's passed-pawn bonus to at most MaxPassedBonusPerSide and
+        // its doubled/isolated penalty to at most MaxPenaltyPerSide; KingSafety clamps each side's
+        // total exposure (zone attackers, open files, a pending self-Betrayer near the king) to at
+        // most MaxKingSafetyPerSide; EndgameKingApproach clamps the bonus for closing in on a
+        // confined lone enemy king to at most MaxKingApproachPerSide. The attack/defense scaling can
+        // multiply any bucket by as much as 2 (the documented ceiling on AttackDefenseBias in
+        // EvaluationWeights, not just today's table values) — so the worst possible gap, one side
+        // maxed on every bonus and the other maxed on every penalty with both fully scaled, is the
+        // sum of all four ceilings times that same factor. Pinned by a dedicated worst-case probe
+        // test; raise it again, with the same reasoning, whenever a new full-only term is added.
+        internal const int MaxPositionalSwing =
+            (PawnStructure.MaxPassedBonusPerSide + PawnStructure.MaxPenaltyPerSide
+                + KingSafety.MaxKingSafetyPerSide + EndgameKingApproach.MaxKingApproachPerSide) * 2;
+
         private readonly EvaluationWeights _weights;
 
         public BetrayalAwareEvaluator() : this(EvaluationWeights.Identity)
