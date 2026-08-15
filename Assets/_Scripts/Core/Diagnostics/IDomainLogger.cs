@@ -61,6 +61,7 @@ namespace ChessTheBetrayal.Core.Diagnostics
         // ── Board State ───────────────────────────────────────────────────────
         Board_PieceSetOutOfBounds       = 2001,
         Board_ZobristDesync             = 2002,
+        Board_UnsupportedDimensions     = 2003,
 
         // ── Special Mechanics ─────────────────────────────────────────────────
         Betrayal_RightAlreadyConsumed   = 3001,

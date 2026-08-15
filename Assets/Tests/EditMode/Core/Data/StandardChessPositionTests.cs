@@ -1,5 +1,6 @@
 using NUnit.Framework;
 using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.Core.Diagnostics;
 using ChessTheBetrayal.Tests.Utilities;
 
 namespace ChessTheBetrayal.Tests.EditMode.Core.Data
@@ -78,6 +79,22 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Data
                 "A board that reports plies already played would put the opening book past a tier's " +
                 "allowance before the first move.");
             Assert.That(board.IsGameOver, Is.False);
+        }
+
+        [Test]
+        public void PlacingOnABoardThatIsNotAChessboardSaysSoInsteadOfHalfFillingIt()
+        {
+            // Before there was a guard, a narrower board quietly received a partial back rank and
+            // played on as if it were a legal setup, and a wider one died on an array index with
+            // nothing naming the cause. Both are worse than refusing.
+            var wrongSize = new BoardState(6, 6);
+            wrongSize.Clear();
+
+            var thrown = Assert.Throws<DomainException>(() => StandardChessPosition.PlacePieces(wrongSize));
+
+            Assert.That(thrown.Code, Is.EqualTo(DomainEventCode.Board_UnsupportedDimensions));
+            Assert.That(thrown.Message, Does.Contain("6x6"),
+                "The message has to name the size it was actually handed, or it cannot be acted on.");
         }
 
         [Test]

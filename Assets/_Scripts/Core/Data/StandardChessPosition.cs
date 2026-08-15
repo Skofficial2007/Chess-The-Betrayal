@@ -1,3 +1,5 @@
+using ChessTheBetrayal.Core.Diagnostics;
+
 namespace ChessTheBetrayal.Core.Data
 {
     /// <summary>
@@ -13,6 +15,13 @@ namespace ChessTheBetrayal.Core.Data
     /// </summary>
     public static class StandardChessPosition
     {
+        /// <summary>Files a to h. A chessboard's width is a rule of the game, not a setting, so
+        /// every caller that needs to size a board for it reads it from here.</summary>
+        public const int Files = 8;
+
+        /// <summary>Ranks 1 to 8. See <see cref="Files"/>.</summary>
+        public const int Ranks = 8;
+
         /// <summary>
         /// Back rank from file a to h. Static so building a position does not allocate an array every
         /// call — the search harnesses build thousands of these across a benchmark run, and the game
@@ -38,24 +47,48 @@ namespace ChessTheBetrayal.Core.Data
         /// </summary>
         public static BoardState Create(bool betrayalRightAvailable)
         {
-            var board = new BoardState(8, 8);
+            var board = new BoardState(Files, Ranks);
 
             // Also resets turn to White, castling to all rights, en passant to none, and clears move
             // history — so nothing below has to restate the parts of a fresh board that are already
             // the starting position by definition.
             board.Clear();
 
-            for (int x = 0; x < 8; x++)
-            {
-                board.SetPiece(new PieceData(Team.White, BackRank[x], 1, 0), x, 0);
-                board.SetPiece(new PieceData(Team.White, ChessPieceType.Pawn, 1, 1), x, 1);
-                board.SetPiece(new PieceData(Team.Black, ChessPieceType.Pawn, -1, 6), x, 6);
-                board.SetPiece(new PieceData(Team.Black, BackRank[x], -1, 7), x, 7);
-            }
+            PlacePieces(board);
 
             board.BetrayalRightAvailable = betrayalRightAvailable;
             board.ComputeFullZobristHash();
             return board;
+        }
+
+        /// <summary>
+        /// Puts the opening thirty-two pieces on an already-cleared board. Separate from
+        /// <see cref="Create"/> because a match reuses one board across games rather than building a
+        /// new one each time, and where the pieces start is a rule of chess that both paths have to
+        /// agree on exactly — the opening book is keyed by position hash, so two placements that
+        /// differ anywhere would leave the book quietly never matching.
+        ///
+        /// Leaves the hash alone. The caller decides when to compute it, because it also decides
+        /// what else about the board it still has to set first.
+        /// </summary>
+        public static void PlacePieces(BoardState board)
+        {
+            if (board.TileCountX != Files || board.TileCountY != Ranks)
+            {
+                throw new DomainException(
+                    DomainEventCode.Board_UnsupportedDimensions,
+                    $"The standard chess position needs a {Files}x{Ranks} board, not " +
+                    $"{board.TileCountX}x{board.TileCountY}. A position on a board of another size " +
+                    "is a different position and needs its own source.");
+            }
+
+            for (int x = 0; x < Files; x++)
+            {
+                board.SetPiece(new PieceData(Team.White, BackRank[x], 1, 0), x, 0);
+                board.SetPiece(new PieceData(Team.White, ChessPieceType.Pawn, 1, 1), x, 1);
+                board.SetPiece(new PieceData(Team.Black, ChessPieceType.Pawn, -1, Ranks - 2), x, Ranks - 2);
+                board.SetPiece(new PieceData(Team.Black, BackRank[x], -1, Ranks - 1), x, Ranks - 1);
+            }
         }
     }
 }
