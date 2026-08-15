@@ -1,10 +1,7 @@
 using System;
 using System.IO;
-using System.Runtime.CompilerServices;
 using System.Text;
 using UnityEngine;
-
-[assembly: InternalsVisibleTo("ChessTheBetrayal.Tests.EditMode")]
 
 namespace ChessTheBetrayal.Infrastructure
 {
