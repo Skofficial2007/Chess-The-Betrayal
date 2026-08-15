@@ -1,21 +1,15 @@
-using ChessTheBetrayal.Core.Data;
-
-namespace ChessTheBetrayal.AI.Positions
+namespace ChessTheBetrayal.Core.Data
 {
     /// <summary>
-    /// The one place the standard chess starting position is built.
+    /// Where the search, its tooling and its tests get the standard chess starting position.
     ///
-    /// It had grown four independent copies — the curated opening lines, the test board utility, the
-    /// opening book compiler and the book impact runner — all placing the same thirty-two pieces with
-    /// the same arguments and differing only in whether the Betrayal right starts live. Four copies of
-    /// the rules of chess is four chances for one of them to drift, and a board that differs by a
-    /// single flag still measures perfectly well; it just measures something else. The opening book is
-    /// keyed by position hash, so a drifted copy would silently stop matching the book rather than
-    /// fail.
-    ///
-    /// This belongs in Core, next to BoardState, since it is a rule of the game rather than anything
-    /// to do with the AI. It lives here because Core is held read-only for the current run of work —
-    /// move it down if that ever changes, and the callers will not notice.
+    /// That setup had grown four independent copies — the curated opening lines, the test board
+    /// utility, the opening book compiler and the book impact runner — all placing the same
+    /// thirty-two pieces with the same arguments and differing only in whether the Betrayal right
+    /// starts live. Four copies of the rules of chess is four chances for one of them to drift, and
+    /// a board that differs by a single flag still measures perfectly well; it just measures
+    /// something else. The opening book is keyed by position hash, so a drifted copy would silently
+    /// stop matching the book rather than fail.
     /// </summary>
     public static class StandardChessPosition
     {
