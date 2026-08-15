@@ -183,18 +183,13 @@ namespace ChessTheBetrayal.Gameplay.Manager
             {
                 result = _engine.Advance(_board, move);
             }
-            catch (BetrayalRuleViolationException ex)
-            {
-                // A Betrayal rule was violated — this is a bug at the call site.
-                // Log it, reject the move visually, and recover gracefully.
-                Debug.LogException(ex);
-                _moveRejectedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveRejectedPayload(move.StartPosition, move.EndPosition));
-                return;
-            }
             catch (DomainException ex)
             {
-                // Any other hard domain invariant violation.
+                // The board broke one of its own invariants partway through applying the move. The
+                // piece has already been lifted off its square by the visuals, so putting it back is
+                // part of failing here — otherwise the board is left showing a move nobody made.
                 Debug.LogException(ex);
+                _moveRejectedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveRejectedPayload(move.StartPosition, move.EndPosition));
                 return;
             }
             // Don't catch (Exception) here — genuine CLR crashes must surface.

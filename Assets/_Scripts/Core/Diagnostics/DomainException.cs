@@ -16,15 +16,4 @@ namespace ChessTheBetrayal.Core.Diagnostics
             Code = code;
         }
     }
-
-    /// <summary>
-    /// Thrown when an operation violates a hard mechanic invariant.
-    /// Invariants include: King cannot be a Betrayer, King cannot be a Victim,
-    /// and special mechanic rights cannot be consumed more than once per match.
-    /// </summary>
-    public sealed class BetrayalRuleViolationException : DomainException
-    {
-        public BetrayalRuleViolationException(DomainEventCode code, string message)
-            : base(code, message) { }
-    }
 }
