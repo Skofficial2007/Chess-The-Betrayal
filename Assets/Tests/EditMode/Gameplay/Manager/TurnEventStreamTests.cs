@@ -238,7 +238,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
 
                 fixture.MatchFlow = new MatchFlowCoordinator(
                     board, deterministicSetup, matchDriver, matchDriver.PlayMove, engine, undoService, fixture._aiCoordinator, clockCoordinator,
-                    fixture._host, boardSizeX: 8, boardSizeY: 8, logMoves: false,
+                    fixture._host, logMoves: false,
                     triggerTeamRoulette: _ => { },
                     showTeamSelection: () => { },
                     showGameModeSelection: () => { },

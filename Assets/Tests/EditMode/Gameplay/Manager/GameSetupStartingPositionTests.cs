@@ -27,7 +27,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             // Exactly what MatchFlowCoordinator.ConfigureMatch does: clear the reused board, then
             // let GameSetup fill it.
             board.Clear();
-            new GameSetup(logMoves: false).PlaceStandardPieces(board, Files, Ranks);
+            new GameSetup(logMoves: false).PlaceStandardPieces(board);
 
             return board;
         }

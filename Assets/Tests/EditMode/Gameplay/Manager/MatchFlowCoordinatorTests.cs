@@ -87,7 +87,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
 
             _matchFlow = new MatchFlowCoordinator(
                 _board, new GameSetup(logMoves: false), _matchDriver, _matchDriver.PlayMove, engine, _undoService, _aiCoordinator, _clockCoordinator,
-                _host, boardSizeX: 8, boardSizeY: 8, logMoves: false,
+                _host, logMoves: false,
                 triggerTeamRoulette: team => _triggeredRouletteTeam = team,
                 showTeamSelection: () => _showTeamSelectionCount++,
                 showGameModeSelection: () => _showGameModeSelectionCount++,
@@ -209,7 +209,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             var deterministicSetup = new GameSetup(logMoves: false, new FixedRandomSource(nextBool: true), new RandomFirstMoverPolicy());
             var matchFlow = new MatchFlowCoordinator(
                 _board, deterministicSetup, _matchDriver, _matchDriver.PlayMove, new ChessEngineAdapter(), _undoService, _aiCoordinator, _clockCoordinator,
-                _host, boardSizeX: 8, boardSizeY: 8, logMoves: false,
+                _host, logMoves: false,
                 triggerTeamRoulette: team => _triggeredRouletteTeam = team,
                 showTeamSelection: () => _showTeamSelectionCount++,
                 showGameModeSelection: () => _showGameModeSelectionCount++,
@@ -477,7 +477,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             var matchFlow = new MatchFlowCoordinator(
                 _board, new GameSetup(logMoves: false), _matchDriver, played.Add, new ChessEngineAdapter(),
                 _undoService, _aiCoordinator, _clockCoordinator,
-                _host, boardSizeX: 8, boardSizeY: 8, logMoves: false,
+                _host, logMoves: false,
                 triggerTeamRoulette: team => _triggeredRouletteTeam = team,
                 showTeamSelection: () => _showTeamSelectionCount++,
                 showGameModeSelection: () => _showGameModeSelectionCount++,

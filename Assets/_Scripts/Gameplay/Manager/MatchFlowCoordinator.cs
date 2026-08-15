@@ -38,8 +38,6 @@ namespace ChessTheBetrayal.Gameplay.Manager
         private readonly ClockCoordinator _clockCoordinator;
         private readonly GameObject _clockHost;
 
-        private readonly int _boardSizeX;
-        private readonly int _boardSizeY;
         private readonly bool _logMoves;
 
         private readonly Action<Team> _triggerTeamRoulette;
@@ -117,7 +115,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
         public MatchFlowCoordinator(
             BoardState board, GameSetup setup, MatchDriver matchDriver, Action<MoveCommand> playMove, IChessEngine engine,
             UndoService undoService, AIMatchCoordinator aiCoordinator, ClockCoordinator clockCoordinator,
-            GameObject clockHost, int boardSizeX, int boardSizeY, bool logMoves,
+            GameObject clockHost, bool logMoves,
             Action<Team> triggerTeamRoulette, Action showTeamSelection, Action showGameModeSelection,
             Action showAIMatchSettings,
             Action<Vector2Int, Vector2Int> onExecutorMoveRejected,
@@ -137,8 +135,6 @@ namespace ChessTheBetrayal.Gameplay.Manager
             _clockCoordinator = clockCoordinator;
             _clockHost = clockHost;
 
-            _boardSizeX = boardSizeX;
-            _boardSizeY = boardSizeY;
             _logMoves = logMoves;
 
             _triggerTeamRoulette = triggerTeamRoulette;
@@ -217,7 +213,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
         public void ConfigureMatch(PracticeMatchSettings? settings)
         {
             _board.Clear();
-            _setup.PlaceStandardPieces(_board, _boardSizeX, _boardSizeY);
+            _setup.PlaceStandardPieces(_board);
             _matchDriver.MoveLog.Clear();
             _matchDriver.ResetTurnAccumulator();
             _undoService?.Clear();

@@ -314,7 +314,7 @@ namespace ChessTheBetrayal.App
 
             _matchFlow = new MatchFlowCoordinator(
                 LiveBoard, _setup, _matchDriver, _moveVisualPacingGate.Enqueue, _engine, _undoService, _aiCoordinator, _clockCoordinator,
-                gameObject, boardSizeX, boardSizeY, logMoves,
+                gameObject, logMoves,
                 triggerTeamRoulette: team => _uiManager.TriggerTeamRoulette(team),
                 showTeamSelection: () => _uiManager.ShowTeamSelection(),
                 showGameModeSelection: () => _uiManager.ShowGameModeSelection(),

@@ -64,7 +64,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
         /// this method's own business. Does not spawn any GameObjects — that's BoardVisuals' job
         /// when it receives OnGameStarted.
         /// </summary>
-        public void PlaceStandardPieces(BoardState board, int boardSizeX, int boardSizeY)
+        public void PlaceStandardPieces(BoardState board)
         {
             StandardChessPosition.PlacePieces(board);
 
