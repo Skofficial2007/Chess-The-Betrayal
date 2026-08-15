@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using PrimeTween;
 using UnityEngine;
 using ChessTheBetrayal.Core.Data;
-using ChessTheBetrayal.Core.Diagnostics;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.Infrastructure;

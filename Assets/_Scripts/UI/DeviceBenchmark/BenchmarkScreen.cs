@@ -5,7 +5,6 @@ using UnityEngine.SceneManagement;
 using UnityEngine.Serialization;
 using UnityEngine.UI;
 using ChessTheBetrayal.AI.DeviceBenchmark;
-using ChessTheBetrayal.Core.Diagnostics;
 using ChessTheBetrayal.Infrastructure;
 using ChessTheBetrayal.UI.Controls;
 

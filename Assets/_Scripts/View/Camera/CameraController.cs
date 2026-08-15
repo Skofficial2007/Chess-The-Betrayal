@@ -5,7 +5,6 @@ using Unity.Cinemachine;
 using ChessTheBetrayal.Infrastructure;
 using ChessTheBetrayal.UI;
 using ChessTheBetrayal.Core.Data;
-using ChessTheBetrayal.Core.Diagnostics;
 
 namespace ChessTheBetrayal.View
 {

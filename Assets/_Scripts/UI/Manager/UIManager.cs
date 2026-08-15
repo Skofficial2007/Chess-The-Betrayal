@@ -2,7 +2,6 @@ using System;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using ChessTheBetrayal.Core.Data;
-using ChessTheBetrayal.Core.Diagnostics;
 using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.Infrastructure;
 

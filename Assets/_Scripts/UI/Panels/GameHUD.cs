@@ -3,7 +3,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using PrimeTween;
 using ChessTheBetrayal.Core.Data;
-using ChessTheBetrayal.Core.Diagnostics;
+using ChessTheBetrayal.Infrastructure;
 using ChessTheBetrayal.Events.Payloads;
 
 namespace ChessTheBetrayal.UI

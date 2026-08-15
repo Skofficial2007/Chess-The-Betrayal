@@ -5,7 +5,7 @@ using TMPro;
 using PrimeTween;
 using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.Core.Data;
-using ChessTheBetrayal.Core.Diagnostics;
+using ChessTheBetrayal.Infrastructure;
 
 namespace ChessTheBetrayal.UI
 {

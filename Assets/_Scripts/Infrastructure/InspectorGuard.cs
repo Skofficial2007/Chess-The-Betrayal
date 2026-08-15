@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace ChessTheBetrayal.Core.Diagnostics
+namespace ChessTheBetrayal.Infrastructure
 {
     /// <summary>
     /// Turns a missing [SerializeField] Inspector reference into a click-to-select console error
