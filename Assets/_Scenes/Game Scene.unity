@@ -19522,8 +19522,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f41df7142a73d4b489067ecdf2253996, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GameManager
-  boardSizeX: 8
-  boardSizeY: 8
   logMoves: 1
   enableQAButton: 1
   _openingBook: {fileID: 11400000, guid: b3ce5f2087b4e8343ac2986ee8b65488, type: 2}

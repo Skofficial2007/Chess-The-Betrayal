@@ -48,10 +48,6 @@ namespace ChessTheBetrayal.App
     {
         #region Inspector Fields
 
-        [Header("Board Configuration")]
-        [SerializeField, Min(2)] private int boardSizeX = 8;
-        [SerializeField, Min(2)] private int boardSizeY = 8;
-
         [Header("Debug")]
         [SerializeField] private bool logMoves = true;
 
@@ -244,7 +240,7 @@ namespace ChessTheBetrayal.App
 
             ValidateRequiredFields();
 
-            LiveBoard = new BoardState(boardSizeX, boardSizeY);
+            LiveBoard = new BoardState(StandardChessPosition.Files, StandardChessPosition.Ranks);
             _setup = new GameSetup(logMoves);
 
             // Construct and inject the domain logger before any engine method fires.
