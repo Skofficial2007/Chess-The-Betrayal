@@ -276,10 +276,12 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         [Test]
         public void FindBestMove_QuietMidgame_LazyStandPatCutsFireAtLeastOnce()
         {
-            // With MaxPositionalSwing == 0 the cut is a no-op for VALUE but still an observable
-            // BRANCH -- it should still take the lazy path whenever a stand-pat already clears the
-            // window on the cheap score alone, which is common. This is a liveness check that the
-            // seam is actually wired into a real search, not just reachable from a unit test.
+            // The cut has to be reachable from a real search, not only from a test calling
+            // EvaluateStandPatForTest directly, and a stand-pat clearing its window on the cheap
+            // score alone is common enough that it should happen many times over in one search.
+            // That is the whole of what this establishes: the lazy path gets taken. It says nothing
+            // about the bound being the right one — a search using a far too small bound takes that
+            // path more often, not less, and sails through here.
             var settings = new AISearchSettings(maxDepth: 6, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
             var search = NewSearch();
             search.FindBestMove(SearchProfilePositions.QuietMidgame(), settings, CancellationToken.None);
