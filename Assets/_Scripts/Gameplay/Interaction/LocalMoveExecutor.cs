@@ -313,10 +313,11 @@ namespace ChessTheBetrayal.Gameplay.Interaction
                 return;
             }
 
-            _legalMoves.Clear();
+            DomainResult<MoveCommand> resolved;
             try
             {
-                _engine.GetLegalMoves(_board, from, _legalMoves);
+                resolved = MoveRequest.Resolve(
+                    _engine, _board, from, to, BetrayalStage.Act, scratch: _legalMoves);
             }
             catch (DomainException ex)
             {
@@ -325,23 +326,22 @@ namespace ChessTheBetrayal.Gameplay.Interaction
                 return;
             }
 
-            for (int i = 0; i < _legalMoves.Count; i++)
+            if (!resolved.IsSuccess)
             {
-                MoveCommand candidate = _legalMoves[i];
-                if (candidate.Stage != BetrayalStage.Act || candidate.EndPosition != to) continue;
-
-                // Stamped now, not when the question went up — the time spent deciding is the
-                // player's own, and the move has to say so.
-                ClockState? clockSnapshot = _clockSource?.Current;
-                if (clockSnapshot.HasValue) candidate = candidate.WithClockSnapshot(clockSnapshot.Value);
-
-                if (_logMoves) Debug.Log($"[LocalMoveExecutor] Betrayal Act confirmed: {candidate}");
-                OnMoveConfirmed?.Invoke(candidate);
+                if (_logMoves) Debug.Log($"[LocalMoveExecutor] Betrayal Act rejected: {resolved.ErrorDetail}");
+                OnMoveRejected?.Invoke(from, to);
                 return;
             }
 
-            if (_logMoves) Debug.Log($"[LocalMoveExecutor] Betrayal Act rejected: {from} -> {to} is no longer legal");
-            OnMoveRejected?.Invoke(from, to);
+            MoveCommand act = resolved.Value;
+
+            // Stamped now, not when the question went up — the time spent deciding is the
+            // player's own, and the move has to say so.
+            ClockState? clockSnapshot = _clockSource?.Current;
+            if (clockSnapshot.HasValue) act = act.WithClockSnapshot(clockSnapshot.Value);
+
+            if (_logMoves) Debug.Log($"[LocalMoveExecutor] Betrayal Act confirmed: {act}");
+            OnMoveConfirmed?.Invoke(act);
         }
 
         /// <summary>
