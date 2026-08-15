@@ -1,5 +1,6 @@
 {
   "name": "ChessTheBetrayal.Core",
+  "rootNamespace": "ChessTheBetrayal.Core",
   "references": [],
   "includePlatforms": [],
   "excludePlatforms": [],
