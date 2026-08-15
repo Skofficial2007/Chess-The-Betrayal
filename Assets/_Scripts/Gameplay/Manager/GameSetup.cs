@@ -21,14 +21,6 @@ namespace ChessTheBetrayal.Gameplay.Manager
     /// </summary>
     public sealed class GameSetup
     {
-        // The standard piece order for the back rank, left to right.
-        private static readonly ChessPieceType[] StandardBackRank =
-        {
-            ChessPieceType.Rook,   ChessPieceType.Knight, ChessPieceType.Bishop,
-            ChessPieceType.Queen,  ChessPieceType.King,   ChessPieceType.Bishop,
-            ChessPieceType.Knight, ChessPieceType.Rook
-        };
-
         private readonly bool _logMoves;
         private readonly IRandomSource _rng;
         private readonly IFirstMoverPolicy _firstMoverPolicy;
@@ -66,23 +58,15 @@ namespace ChessTheBetrayal.Gameplay.Manager
         }
 
         /// <summary>
-        /// Fills the board with pieces in the standard starting configuration and recomputes its
-        /// Zobrist hash from scratch. Does not spawn any GameObjects — that's BoardVisuals' job
+        /// Puts the board into the standard starting configuration and recomputes its Zobrist hash
+        /// from scratch. Where the pieces go is Core's rule, shared with the board the search and
+        /// the opening book are built against; what a new match then has to reset around them is
+        /// this method's own business. Does not spawn any GameObjects — that's BoardVisuals' job
         /// when it receives OnGameStarted.
         /// </summary>
         public void PlaceStandardPieces(BoardState board, int boardSizeX, int boardSizeY)
         {
-            for (int x = 0; x < boardSizeX; x++)
-            {
-                board.SetPiece(new PieceData(Team.White, StandardBackRank[x], moveDirection: 1, startRow: 0), x, 0);
-                board.SetPiece(new PieceData(Team.White, ChessPieceType.Pawn, moveDirection: 1, startRow: 1), x, 1);
-            }
-
-            for (int x = 0; x < boardSizeX; x++)
-            {
-                board.SetPiece(new PieceData(Team.Black, ChessPieceType.Pawn, moveDirection: -1, startRow: boardSizeY - 2), x, boardSizeY - 2);
-                board.SetPiece(new PieceData(Team.Black, StandardBackRank[x], moveDirection: -1, startRow: boardSizeY - 1), x, boardSizeY - 1);
-            }
+            StandardChessPosition.PlacePieces(board);
 
             board.ComputeFullZobristHash();
 
