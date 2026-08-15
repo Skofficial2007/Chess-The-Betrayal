@@ -47,6 +47,10 @@ namespace ChessTheBetrayal.Tests.Utilities
         /// </summary>
         public int EvaluateCheap(BoardState board, Team forTeam) => Evaluate(board, forTeam);
 
+        /// <summary>Nothing sits behind a full path here — the cheap score is the whole score — so
+        /// there is no gap for a caller to allow for.</summary>
+        public int MaxCheapToFullSwing => 0;
+
         private static int MaterialFor(BoardState board, Team team)
         {
             int material = 0;

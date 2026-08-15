@@ -16,5 +16,14 @@ namespace ChessTheBetrayal.AI.Evaluation
         /// this couldn't have bounded.
         /// </summary>
         int EvaluateCheap(BoardState board, Team forTeam);
+
+        /// <summary>
+        /// The most Evaluate's result can differ from EvaluateCheap's, on any position. A caller
+        /// whose cheap score already sits further outside its window than this can skip the full
+        /// evaluation and trust the cheap one. Reporting this too low is not a speed tradeoff — it
+        /// makes that caller keep a score the full evaluation would have contradicted, so an
+        /// evaluator whose cheap path already is its full path reports zero.
+        /// </summary>
+        int MaxCheapToFullSwing { get; }
     }
 }

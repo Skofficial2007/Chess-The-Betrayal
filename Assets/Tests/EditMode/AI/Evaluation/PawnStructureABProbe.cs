@@ -49,6 +49,10 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
 
             public int Evaluate(BoardState board, Team forTeam) => EvaluateCheap(board, forTeam);
 
+            // This is the evaluator from before pawn structure existed, so nothing sits behind a
+            // full path and the cheap score is already the whole score.
+            public int MaxCheapToFullSwing => 0;
+
             public int EvaluateCheap(BoardState board, Team forTeam)
             {
                 int phaseWeight = MaterialPhase.Weight(board);

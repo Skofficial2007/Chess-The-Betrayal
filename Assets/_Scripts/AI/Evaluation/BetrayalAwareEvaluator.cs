@@ -54,6 +54,8 @@ namespace ChessTheBetrayal.AI.Evaluation
             (PawnStructure.MaxPassedBonusPerSide + PawnStructure.MaxPenaltyPerSide
                 + KingSafety.MaxKingSafetyPerSide + EndgameKingApproach.MaxKingApproachPerSide) * 2;
 
+        public int MaxCheapToFullSwing => MaxPositionalSwing;
+
         private readonly EvaluationWeights _weights;
 
         public BetrayalAwareEvaluator() : this(EvaluationWeights.Identity)

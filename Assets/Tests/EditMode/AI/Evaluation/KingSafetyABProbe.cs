@@ -57,6 +57,12 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
                 return forTeam == Team.White ? score + pawnScore : score - pawnScore;
             }
 
+            // Pawn structure is the only term this one keeps behind its full path — it predates
+            // king safety, and king approach came later still — so its worst-case gap is that one
+            // term's ceilings, composed the same way the production evaluator composes its four.
+            public int MaxCheapToFullSwing =>
+                (PawnStructure.MaxPassedBonusPerSide + PawnStructure.MaxPenaltyPerSide) * 2;
+
             private int PawnStructureDelta(BoardState board)
             {
                 PawnStructure.Score(board, Team.White, out int whiteAttack, out int whiteDefense);
