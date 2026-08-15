@@ -6,8 +6,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Profiles
     /// <summary>
     /// Pins the shallow-search guardrail: a profile with MaxDepth below the threshold can't carry
     /// a strong AttackDefenseBias/BetrayalAggression, because a shallow search can't vet a
-    /// reshaped evaluator before acting on it. Covers both the raw clamp math and its two call
-    /// sites (AIProfileTableProvider.Resolve, AIProfileDefinition.ToProfile).
+    /// reshaped evaluator before acting on it. Covers both the raw clamp math and the call site
+    /// that applies it, AIProfileTableProvider.Resolve.
     /// </summary>
     [TestFixture]
     public class AIProfileGuardrailTests

@@ -2,9 +2,8 @@ namespace ChessTheBetrayal.AI.Profiles
 {
     /// <summary>
     /// Data-driven behavioral tier for the AI: one row of this struct fully describes a
-    /// difficulty/personality preset. Adding a new tier is adding a new row to
-    /// <see cref="AIProfileTable"/> (or a new <see cref="AIProfileDefinition"/> asset later) —
-    /// never a code change.
+    /// difficulty/personality preset. Adding a new tier is adding a row to
+    /// <see cref="AIProfileTable"/>, which is where every tier the game ships is defined.
     ///
     /// <see cref="MaxDepth"/>/<see cref="TimeBudget"/> shape the search itself (via
     /// AISearchSettings.FromProfile); <see cref="BlunderRate"/>/<see cref="BlunderMarginCp"/>/
