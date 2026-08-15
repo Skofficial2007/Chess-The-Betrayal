@@ -2,7 +2,7 @@ using NUnit.Framework;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.AI.Positions
+namespace ChessTheBetrayal.Tests.EditMode.Core.Data
 {
     /// <summary>
     /// Pins the standard starting position as literals.
