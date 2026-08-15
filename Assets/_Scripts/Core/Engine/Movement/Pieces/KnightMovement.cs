@@ -9,7 +9,7 @@ namespace ChessTheBetrayal.Core.Engine.Movement
     /// Knights move in an "L" shape: 2 squares in one direction, 1 square perpendicular.
     /// Knights can jump over other pieces.
     /// </summary>
-    public class KnightMovement : IPieceMovement
+    internal sealed class KnightMovement : IPieceMovement
     {
         // All 8 possible L-shaped moves relative to current position
         private static readonly int[,] KnightOffsets = new int[,]

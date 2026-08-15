@@ -9,7 +9,7 @@ namespace ChessTheBetrayal.Core.Engine.Movement
     /// Rooks move in straight lines: horizontally or vertically, any distance.
     /// Cannot jump over pieces - stops when encountering any piece.
     /// </summary>
-    public class RookMovement : IPieceMovement
+    internal sealed class RookMovement : IPieceMovement
     {
         // Straight directions: Up, Down, Right, Left
         private static readonly int[,] Directions = new int[,]

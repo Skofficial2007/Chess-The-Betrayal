@@ -10,7 +10,7 @@ namespace ChessTheBetrayal.Core.Engine.Movement
     /// Cannot jump over pieces - stops when encountering any piece.
     /// Most powerful piece in standard chess.
     /// </summary>
-    public class QueenMovement : IPieceMovement
+    internal sealed class QueenMovement : IPieceMovement
     {
         // All 8 directions combined (4 straight + 4 diagonal)
         private static readonly int[,] Directions = new int[,]
