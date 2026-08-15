@@ -1,4 +1,4 @@
-namespace ChessTheBetrayal.Core.Utils
+namespace ChessTheBetrayal.Core.Randomness
 {
     /// <summary>
     /// A Unity-free source of randomness for domain logic. Core never calls UnityEngine.Random

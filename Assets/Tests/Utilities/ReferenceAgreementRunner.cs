@@ -6,7 +6,7 @@ using ChessTheBetrayal.AI.Evaluation;
 using ChessTheBetrayal.AI.Agent;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
-using ChessTheBetrayal.Core.Utils;
+using ChessTheBetrayal.Core.Randomness;
 using ChessTheBetrayal.Gameplay.Manager;
 
 namespace ChessTheBetrayal.Tests.Utilities

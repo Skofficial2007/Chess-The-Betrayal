@@ -5,7 +5,7 @@ using UnityEngine;
 using ChessTheBetrayal.AI.OpeningBook;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
-using ChessTheBetrayal.Core.Utils;
+using ChessTheBetrayal.Core.Randomness;
 using ChessTheBetrayal.EditorTools.OpeningBook;
 using ChessTheBetrayal.Tests.Utilities;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;

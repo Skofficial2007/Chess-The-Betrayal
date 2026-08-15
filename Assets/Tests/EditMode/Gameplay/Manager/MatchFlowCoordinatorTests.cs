@@ -5,7 +5,7 @@ using ChessTheBetrayal.AI.Search;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Core.Match;
-using ChessTheBetrayal.Core.Utils;
+using ChessTheBetrayal.Core.Randomness;
 using ChessTheBetrayal.Gameplay.Manager;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 

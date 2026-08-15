@@ -2,7 +2,7 @@ using UnityEngine;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Logic;
 using ChessTheBetrayal.Core.Match;
-using ChessTheBetrayal.Core.Utils;
+using ChessTheBetrayal.Core.Randomness;
 
 namespace ChessTheBetrayal.Gameplay.Manager
 {

@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
-using ChessTheBetrayal.Core.Utils;
+using ChessTheBetrayal.Core.Randomness;
 
 namespace ChessTheBetrayal.AI.OpeningBook
 {

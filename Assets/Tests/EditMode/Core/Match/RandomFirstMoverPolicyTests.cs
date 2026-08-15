@@ -1,6 +1,6 @@
 using NUnit.Framework;
 using ChessTheBetrayal.Core.Match;
-using ChessTheBetrayal.Core.Utils;
+using ChessTheBetrayal.Core.Randomness;
 
 namespace ChessTheBetrayal.Tests.EditMode.Core.Match
 {
