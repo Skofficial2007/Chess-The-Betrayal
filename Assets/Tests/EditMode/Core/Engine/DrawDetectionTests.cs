@@ -4,7 +4,7 @@ using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.EditMode.Core
+namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
 {
     /// <summary>
     /// The rules half of ending a game nobody is getting anywhere in. A real match ran twenty-nine
