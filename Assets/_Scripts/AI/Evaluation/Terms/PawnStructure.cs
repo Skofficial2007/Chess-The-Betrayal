@@ -24,9 +24,10 @@ namespace ChessTheBetrayal.AI.Evaluation
         private static readonly int[] PassedBonusByAdvance = { 0, 0, 10, 20, 35, 60, 100 };
 
         // Hard per-side ceilings so the maximum possible gap between the two sides' pawn scores has
-        // a provable closed form (see AlphaBetaSearch.MaxPositionalSwing) instead of depending on an
-        // argument about which board shapes are "realistic." However many passed pawns or however
-        // penalized a side's structure gets, its contribution never exceeds these bounds — a side
+        // a provable closed form (see BetrayalAwareEvaluator.MaxPositionalSwing) instead of
+        // depending on an argument about which board shapes are "realistic." However many passed
+        // pawns or however penalized a side's structure gets, its contribution never exceeds these
+        // bounds — a side
         // that would score more just gets scaled back down to the ceiling, proportionally across its
         // own attack/defense split so the bucketing stays internally consistent.
         internal const int MaxPassedBonusPerSide = 250;

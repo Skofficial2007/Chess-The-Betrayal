@@ -170,13 +170,6 @@ namespace ChessTheBetrayal.AI.Search
         // forced-Defection loop once did — if we ever hit it we stand pat rather than recurse forever.
         private const int MaxQuiescencePly = 64;
 
-        // The largest amount the evaluator's full-only terms could possibly move a score away from
-        // its cheap partial score, so the stand-pat lazy cut below can skip real work whenever the
-        // cheap score is already outside the search window by more than this much — no full-only
-        // term could still pull the result back to the other side. The figure is the evaluator's to
-        // derive, since only it knows which of its terms sit behind the cheap/full split.
-        internal const int MaxPositionalSwing = BetrayalAwareEvaluator.MaxPositionalSwing;
-
         // A node deep enough to matter but with no TT move at all gets a cheap shallower probe first,
         // purely to seed move ordering for the real search that follows. Below this depth the node is
         // already cheap enough that skipping straight to the real search costs less than the probe would.
@@ -248,6 +241,10 @@ namespace ChessTheBetrayal.AI.Search
 
         private readonly IChessEngine _engine;
         private readonly IPositionEvaluator _evaluator;
+
+        // Read once here rather than through the interface on every stand-pat, since that sits in
+        // the hottest loop in the search.
+        private readonly int _maxCheapToFullSwing;
         private readonly TranspositionTable _tt;
         private readonly int _maxSupportedDepth;
 
@@ -366,6 +363,7 @@ namespace ChessTheBetrayal.AI.Search
         {
             _engine = engine;
             _evaluator = evaluator;
+            _maxCheapToFullSwing = evaluator.MaxCheapToFullSwing;
             _tt = transpositionTable ?? new TranspositionTable(log2Size: 16);
             _maxSupportedDepth = maxSupportedDepth;
             _moveBuffers = new List<MoveCommand>[maxSupportedDepth + 1];
@@ -958,9 +956,10 @@ namespace ChessTheBetrayal.AI.Search
         /// <summary>
         /// Quiescence's stand-pat score, computed through the cheap/full lazy hatch: the cheap
         /// score is always cheap enough to just compute, and if it already sits far enough outside
-        /// (alpha, beta) that nothing the full evaluator could still add or subtract
-        /// (MaxPositionalSwing) would pull it back into the window, the full evaluation would only
-        /// have confirmed what the cheap score already decided — so it's skipped. Never used
+        /// (alpha, beta) that nothing the full evaluator could still add or subtract — bounded by
+        /// the swing the evaluator itself declares — would pull it back into the window, the full
+        /// evaluation would only have confirmed what the cheap score already decided, so it's
+        /// skipped. Never used
         /// anywhere a Betrayer is mid-sequence: the caller only reaches this once both Retribution
         /// and ForcedSave obligations have already resolved, but the explicit guard below keeps
         /// that true even if a future change to the caller ever stopped guaranteeing it.</summary>
@@ -970,7 +969,7 @@ namespace ChessTheBetrayal.AI.Search
                 return EvaluateTimed(board, perspectiveTeam);
 
             int cheap = _evaluator.EvaluateCheap(board, perspectiveTeam);
-            if (cheap - MaxPositionalSwing >= beta || cheap + MaxPositionalSwing <= alpha)
+            if (cheap - _maxCheapToFullSwing >= beta || cheap + _maxCheapToFullSwing <= alpha)
             {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                 _tt.Stats.LazyStandPatCuts++;

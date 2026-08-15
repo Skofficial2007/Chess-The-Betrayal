@@ -21,8 +21,9 @@ namespace ChessTheBetrayal.AI.Evaluation
         private const int DefectorTempoDanger = 30;
 
         // Hard per-side ceiling so the maximum possible king-safety swing has a provable closed form
-        // (see AlphaBetaSearch.MaxPositionalSwing), exactly like PawnStructure's own ceilings. The
-        // term never scores below -MaxKingSafetyPerSide however many attackers/open files it finds.
+        // (see BetrayalAwareEvaluator.MaxPositionalSwing), exactly like PawnStructure's own
+        // ceilings. The term never scores below -MaxKingSafetyPerSide however many attackers/open
+        // files it finds.
         internal const int MaxKingSafetyPerSide = 100;
 
         /// <summary>

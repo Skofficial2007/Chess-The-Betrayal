@@ -64,7 +64,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             int standPat = search.EvaluateStandPatForTest(board, perspective, alpha: cheapScore - 500, beta: cheapScore - 100);
 
             Assert.That(standPat, Is.EqualTo(cheapScore), "A narrow-enough window must take the lazy branch and return the cheap score.");
-            Assert.That(System.Math.Abs(fullScore - cheapScore), Is.LessThanOrEqualTo(AlphaBetaSearch.MaxPositionalSwing),
+            Assert.That(System.Math.Abs(fullScore - cheapScore), Is.LessThanOrEqualTo(evaluator.MaxCheapToFullSwing),
                 "The gap between cheap and full must never exceed the bound the cut relies on to stay sound.");
         }
 
@@ -93,7 +93,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             int cheapScore = evaluator.EvaluateCheap(board, Team.White);
             int fullScore = evaluator.Evaluate(board, Team.White);
 
-            Assert.That(System.Math.Abs(fullScore - cheapScore), Is.LessThanOrEqualTo(AlphaBetaSearch.MaxPositionalSwing));
+            Assert.That(System.Math.Abs(fullScore - cheapScore), Is.LessThanOrEqualTo(evaluator.MaxCheapToFullSwing));
         }
 
         [Test]
@@ -129,7 +129,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             int cheapScore = evaluator.EvaluateCheap(board, Team.White);
             int fullScore = evaluator.Evaluate(board, Team.White);
 
-            Assert.That(System.Math.Abs(fullScore - cheapScore), Is.LessThanOrEqualTo(AlphaBetaSearch.MaxPositionalSwing));
+            Assert.That(System.Math.Abs(fullScore - cheapScore), Is.LessThanOrEqualTo(evaluator.MaxCheapToFullSwing));
         }
 
         [Test]
@@ -153,7 +153,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             int cheapScore = evaluator.EvaluateCheap(board, Team.White);
             int fullScore = evaluator.Evaluate(board, Team.White);
 
-            Assert.That(System.Math.Abs(fullScore - cheapScore), Is.LessThanOrEqualTo(AlphaBetaSearch.MaxPositionalSwing));
+            Assert.That(System.Math.Abs(fullScore - cheapScore), Is.LessThanOrEqualTo(evaluator.MaxCheapToFullSwing));
         }
 
         [Test]
