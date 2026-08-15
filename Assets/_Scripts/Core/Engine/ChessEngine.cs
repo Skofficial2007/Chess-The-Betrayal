@@ -3,7 +3,6 @@ using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Movement;
 using System.Runtime.CompilerServices;
 using ChessTheBetrayal.Core.Diagnostics;
-using MoveCommand = ChessTheBetrayal.Core.Engine.MoveCommand;
 
 [assembly: InternalsVisibleTo("ChessTheBetrayal.Tests.EditMode")]
 
