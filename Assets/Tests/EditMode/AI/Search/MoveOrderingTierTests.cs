@@ -19,7 +19,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         private static readonly Vector2Int To = TestBoardSetupUtility.AlgebraicToVector("a3");
 
         // A distinct destination square for moves that must NOT pack-match the TT move under test —
-        // PackMove keys on From/To/PromotedTo/Stage only, deliberately not on capture status,
+        // the packing keys on From/To/PromotedTo/Stage only, deliberately not on capture status,
         // so a same-square capture and non-capture would otherwise
         // collide and falsely satisfy a TT-match check.
         private static readonly Vector2Int OtherTo = TestBoardSetupUtility.AlgebraicToVector("a4");
@@ -54,7 +54,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         public void TTMove_AlwaysSortsFirst_RegardlessOfShape()
         {
             MoveCommand ttMatch = StandardMove(ChessPieceType.Pawn); // otherwise a Tier-4 quiet move
-            uint ttPacked = AlphaBetaSearch.PackMove(ttMatch);
+            uint ttPacked = PackedMove.Pack(ttMatch);
 
             // Distinct destination square so this winning capture can't pack-match the TT move by
             // coincidence — capture status alone isn't part of the packed key (see StandardMove's note).

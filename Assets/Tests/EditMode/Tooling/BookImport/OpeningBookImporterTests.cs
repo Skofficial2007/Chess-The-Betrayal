@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
-using ChessTheBetrayal.AI.Search;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.EditorTools.OpeningBook;
@@ -38,7 +37,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.BookImport
             // ply order — locate the e2e4 entry by its hash rather than assuming it's first.
             int e2e4Index = System.Array.IndexOf(keys, hashBeforeE2E4);
             Assert.That(e2e4Index, Is.GreaterThanOrEqualTo(0));
-            Assert.That(packedMoves[e2e4Index], Is.EqualTo(AlphaBetaSearch.PackMove(e2e4)));
+            Assert.That(packedMoves[e2e4Index], Is.EqualTo(PackedMove.Pack(e2e4)));
             Assert.That(weights[e2e4Index], Is.EqualTo(1));
         }
 
@@ -102,7 +101,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.BookImport
             engine.GetAllLegalMovesIncludingBetrayal(board, board.CurrentTurn, legalMoves);
             MoveCommand nf3 = legalMoves.Single(m =>
                 m.StartPosition == new Vector2Int(6, 0) && m.EndPosition == new Vector2Int(5, 2));
-            uint nf3Packed = AlphaBetaSearch.PackMove(nf3);
+            uint nf3Packed = PackedMove.Pack(nf3);
 
             var matchingRows = Enumerable.Range(0, keys.Length)
                 .Where(i => keys[i] == hashBeforeNf3 && packedMoves[i] == nf3Packed)
@@ -188,7 +187,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.BookImport
             var entries = OpeningBookCompiler.ReplayLine(line, engine, board).ToList();
 
             Assert.That(entries.Count, Is.EqualTo(1));
-            Assert.That(entries[0].PackedMove, Is.EqualTo(AlphaBetaSearch.PackMove(queenPromotion)));
+            Assert.That(entries[0].PackedMove, Is.EqualTo(PackedMove.Pack(queenPromotion)));
         }
 
         private static void PlayToken(IChessEngine engine, BoardState board, string token)

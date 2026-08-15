@@ -238,7 +238,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             const int ply = 4;
 
             search.RecordQuietCutoffForTest(killer, depth: 7, plyFromRoot: ply);
-            uint ttPacked = AlphaBetaSearch.PackMove(ttMove);
+            uint ttPacked = PackedMove.Pack(ttMove);
 
             int killerScore = search.OrderScoreForTest(killer, ttPacked, plyFromRoot: ply);
             int ttScore = search.OrderScoreForTest(ttMove, ttPacked, plyFromRoot: ply);

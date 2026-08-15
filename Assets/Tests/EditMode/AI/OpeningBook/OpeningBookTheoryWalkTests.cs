@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
 using UnityEditor;
-using ChessTheBetrayal.AI.Search;
 using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.AI.OpeningBook;
 using ChessTheBetrayal.Core.Data;
@@ -87,7 +86,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.OpeningBook
                 // position actually on the board — the property that matters to a real match.
                 legalMoves.Clear();
                 _engine.GetAllLegalMovesIncludingBetrayal(board, board.CurrentTurn, legalMoves);
-                Assert.That(legalMoves.Any(m => AlphaBetaSearch.PackMove(m) == AlphaBetaSearch.PackMove(move)), Is.True,
+                Assert.That(legalMoves.Any(m => PackedMove.Pack(m) == PackedMove.Pack(move)), Is.True,
                     $"The book returned {ToToken(move)} at ply {ply + 1}, which is not legal in that position.");
                 Assert.That(move.Stage, Is.EqualTo(BetrayalStage.None),
                     $"The book returned a Betrayal move ({ToToken(move)}) at ply {ply + 1}; it only covers ordinary theory.");

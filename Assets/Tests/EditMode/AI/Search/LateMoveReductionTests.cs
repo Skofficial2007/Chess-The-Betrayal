@@ -90,7 +90,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         public void TTMove_IsNeverReducible_EvenIfOtherwiseQuiet()
         {
             MoveCommand quiet = QuietMove();
-            uint ttPacked = AlphaBetaSearch.PackMove(quiet);
+            uint ttPacked = PackedMove.Pack(quiet);
 
             Assert.That(AlphaBetaSearch.IsReducibleMove(quiet, ttPacked), Is.False);
         }
@@ -99,7 +99,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         public void QuietMove_NotMatchingTTMove_StillReducible()
         {
             MoveCommand quiet = QuietMove();
-            uint unrelatedTTMove = AlphaBetaSearch.PackMove(QuietMove(to: OtherTo));
+            uint unrelatedTTMove = PackedMove.Pack(QuietMove(to: OtherTo));
 
             Assert.That(AlphaBetaSearch.IsReducibleMove(quiet, unrelatedTTMove), Is.True);
         }

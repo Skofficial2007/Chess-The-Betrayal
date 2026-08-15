@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
-using ChessTheBetrayal.AI.Search;
 using ChessTheBetrayal.AI.OpeningBook;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
@@ -67,7 +66,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.OpeningBook
             MoveCommand? result = OpeningBookLookup.TryGetBookMove(book, board, _engine, new ZeroRandomSource());
 
             Assert.That(result, Is.Not.Null);
-            Assert.That(AlphaBetaSearch.PackMove(result.Value), Is.EqualTo(AlphaBetaSearch.PackMove(e2e4)));
+            Assert.That(PackedMove.Pack(result.Value), Is.EqualTo(PackedMove.Pack(e2e4)));
         }
 
         [Test]
@@ -159,7 +158,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.OpeningBook
 
             Assert.That(lowRollResult, Is.Not.Null);
             Assert.That(highRollResult, Is.Not.Null);
-            Assert.That(AlphaBetaSearch.PackMove(lowRollResult.Value), Is.Not.EqualTo(AlphaBetaSearch.PackMove(highRollResult.Value)),
+            Assert.That(PackedMove.Pack(lowRollResult.Value), Is.Not.EqualTo(PackedMove.Pack(highRollResult.Value)),
                 "A zero-roll and a max-roll RNG must land on different candidates when a run has more than one entry.");
         }
 

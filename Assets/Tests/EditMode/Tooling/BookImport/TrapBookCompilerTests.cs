@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
-using ChessTheBetrayal.AI.Search;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.EditorTools.OpeningBook;
@@ -52,8 +51,8 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.BookImport
             var legal = new List<MoveCommand>();
             new ChessEngineAdapter().GetAllLegalMovesIncludingBetrayal(board, board.CurrentTurn, legal);
 
-            MoveCommand blunder = legal.Single(m => AlphaBetaSearch.PackMove(m) == blunders[0]);
-            MoveCommand best = legal.Single(m => AlphaBetaSearch.PackMove(m) == bests[0]);
+            MoveCommand blunder = legal.Single(m => PackedMove.Pack(m) == blunders[0]);
+            MoveCommand best = legal.Single(m => PackedMove.Pack(m) == bests[0]);
 
             Assert.That(blunder.StartPosition, Is.EqualTo(new Vector2Int(7, 4)), "avoid should be the bishop on h5");
             Assert.That(blunder.EndPosition, Is.EqualTo(new Vector2Int(3, 0)), "avoid should capture on d1");
