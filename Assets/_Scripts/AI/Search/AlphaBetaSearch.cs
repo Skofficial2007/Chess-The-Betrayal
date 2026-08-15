@@ -2254,8 +2254,6 @@ namespace ChessTheBetrayal.AI.Search
             _killerMoves[plyFromRoot, 0] = packed;
         }
 
-        internal static uint PackMove(MoveCommand m) => PackedMove.Pack(m);
-
         /// <summary>True once two consecutive completed depths agree closely enough that another
         /// depth is unlikely to change the answer — same best move AND a score within
         /// StabilityThresholdCp of each other. Neither signal alone is trustworthy on its own (see
