@@ -4,8 +4,6 @@ using System.Linq;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 
-[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("ChessTheBetrayal.Tests.EditMode")]
-
 namespace ChessTheBetrayal.EditorTools.OpeningBook
 {
     /// <summary>
