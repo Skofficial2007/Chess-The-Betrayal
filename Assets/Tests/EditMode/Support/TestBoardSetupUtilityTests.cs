@@ -1,8 +1,9 @@
 using System;
 using NUnit.Framework;
 using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.Tests.Utilities;
 
-namespace ChessTheBetrayal.Tests.Utilities
+namespace ChessTheBetrayal.Tests.EditMode.Support
 {
     /// <summary>
     /// Unit tests for TestBoardSetupUtility.
