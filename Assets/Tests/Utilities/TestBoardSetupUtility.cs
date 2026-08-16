@@ -84,7 +84,8 @@ namespace ChessTheBetrayal.Tests.Utilities
 
         /// <summary>
         /// Convenience overload: extracts all EndPosition values from a list of
-        /// MoveCommands and returns them as a HashSet for O(1) containment checks.
+        /// MoveCommands into a set, so a test can ask whether a square is among them
+        /// without walking the list to find out.
         /// </summary>
         public static HashSet<Vector2Int> GetDestinations(IEnumerable<MoveCommand> moves)
         {

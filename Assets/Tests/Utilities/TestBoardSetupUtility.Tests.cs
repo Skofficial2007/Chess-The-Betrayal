@@ -85,7 +85,8 @@ namespace ChessTheBetrayal.Tests.Utilities
             Assert.That(board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("e8")).Type, Is.EqualTo(ChessPieceType.King));
             Assert.That(board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("e8")).Team, Is.EqualTo(Team.Black));
 
-            // Verify total piece counts via the O(N) index lists
+            // Counted from the board's own per-team index lists, which also checks that they
+            // agree with what is actually on the squares.
             int whiteCount = board.GetPieceIndices(Team.White).Count;
             int blackCount = board.GetPieceIndices(Team.Black).Count;
 
