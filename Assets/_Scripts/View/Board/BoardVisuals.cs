@@ -7,7 +7,7 @@ using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.Infrastructure;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
-namespace ChessTheBetrayal.View
+namespace ChessTheBetrayal.View.Board
 {
     /// <summary>
     /// The eyes of the game. Spawns and moves piece GameObjects, highlights tiles, and plays animations.

@@ -1,7 +1,7 @@
 using NUnit.Framework;
 using UnityEngine;
 using ChessTheBetrayal.Core.Data;
-using ChessTheBetrayal.View;
+using ChessTheBetrayal.View.Board;
 
 namespace ChessTheBetrayal.Tests.EditMode.View
 {

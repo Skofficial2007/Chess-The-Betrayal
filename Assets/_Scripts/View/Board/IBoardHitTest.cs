@@ -1,7 +1,7 @@
 using UnityEngine;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
-namespace ChessTheBetrayal.View
+namespace ChessTheBetrayal.View.Board
 {
     /// <summary>
     /// The narrow hover/hit-test surface pointer input needs from the board's visual layer.

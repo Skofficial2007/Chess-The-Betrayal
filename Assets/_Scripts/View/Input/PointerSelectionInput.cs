@@ -4,6 +4,7 @@ using ChessTheBetrayal.UI;
 using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.Gameplay.Interaction;
 using ChessTheBetrayal.Infrastructure;
+using ChessTheBetrayal.View.Board;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
 namespace ChessTheBetrayal.View

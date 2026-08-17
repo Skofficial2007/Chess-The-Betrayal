@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
-using ChessTheBetrayal.View;
+using ChessTheBetrayal.View.Board;
 
 namespace ChessTheBetrayal.Tests.EditMode.View
 {

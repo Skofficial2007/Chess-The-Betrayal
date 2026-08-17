@@ -3,7 +3,7 @@ using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.Events.Payloads;
 using ChessTheBetrayal.Infrastructure;
 
-namespace ChessTheBetrayal.View
+namespace ChessTheBetrayal.View.Board
 {
     /// <summary>
     /// Highlights legal destination tiles on PieceSelected and clears them on SelectionCleared.

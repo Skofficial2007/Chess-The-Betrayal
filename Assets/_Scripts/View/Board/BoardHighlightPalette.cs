@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace ChessTheBetrayal.View
+namespace ChessTheBetrayal.View.Board
 {
     /// <summary>
     /// Every colour and dimension the board's square markers use, in one asset you can edit while
