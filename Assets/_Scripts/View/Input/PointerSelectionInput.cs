@@ -7,7 +7,7 @@ using ChessTheBetrayal.Infrastructure;
 using ChessTheBetrayal.View.Board;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
-namespace ChessTheBetrayal.View
+namespace ChessTheBetrayal.View.Input
 {
     /// <summary>
     /// Mouse- and touch-driven ISelectionInput. Raises OnTileActivated on pointer-up as a tap:

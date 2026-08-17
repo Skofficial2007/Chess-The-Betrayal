@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-namespace ChessTheBetrayal.View
+namespace ChessTheBetrayal.View.Input
 {
     /// <summary>
     /// Reads the engine's mouse and touchscreen. Nothing here can run in a test — there is no

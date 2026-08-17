@@ -1,6 +1,6 @@
 using NUnit.Framework;
 using UnityEngine;
-using ChessTheBetrayal.View;
+using ChessTheBetrayal.View.Input;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
 namespace ChessTheBetrayal.Tests.EditMode.View

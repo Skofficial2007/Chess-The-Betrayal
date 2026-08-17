@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace ChessTheBetrayal.View
+namespace ChessTheBetrayal.View.Input
 {
     /// <summary>
     /// One frame's worth of raw pointer facts, whatever hardware produced them. Deliberately

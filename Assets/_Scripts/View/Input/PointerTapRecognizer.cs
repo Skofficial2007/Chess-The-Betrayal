@@ -1,6 +1,6 @@
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
-namespace ChessTheBetrayal.View
+namespace ChessTheBetrayal.View.Input
 {
     /// <summary>
     /// Turns a stream of per-frame pointer facts into tap events. A tap is a press and a release
