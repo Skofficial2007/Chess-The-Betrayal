@@ -3,7 +3,6 @@ using PrimeTween;
 using UnityEngine;
 using Unity.Cinemachine;
 using ChessTheBetrayal.Infrastructure;
-using ChessTheBetrayal.UI;
 using ChessTheBetrayal.Core.Data;
 
 namespace ChessTheBetrayal.View
