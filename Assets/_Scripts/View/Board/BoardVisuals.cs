@@ -6,6 +6,7 @@ using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.Infrastructure;
 using ChessTheBetrayal.View.Camera;
+using ChessTheBetrayal.View.Pieces;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
 namespace ChessTheBetrayal.View.Board

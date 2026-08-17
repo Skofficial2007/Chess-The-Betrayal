@@ -1,7 +1,7 @@
 using NUnit.Framework;
 using PrimeTween;
 using ChessTheBetrayal.Core.Match;
-using ChessTheBetrayal.View;
+using ChessTheBetrayal.View.Pieces;
 
 namespace ChessTheBetrayal.Tests.EditMode.View
 {
