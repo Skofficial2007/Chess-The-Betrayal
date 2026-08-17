@@ -33,7 +33,9 @@ namespace ChessTheBetrayal.View
 
         public event Action<Vector2Int> OnTileActivated;
 
-        private Camera mainCamera;
+        // Spelled out in full because this assembly has a Camera namespace of its own, which sits
+        // closer than the UnityEngine import and would otherwise be what the bare name finds.
+        private UnityEngine.Camera mainCamera;
         private IUiBlockingState _uiBlockingState;
         private IBoardQuery _gameManager;
         private IBoardHitTest _boardHitTest;
@@ -43,7 +45,7 @@ namespace ChessTheBetrayal.View
 
         private void Awake()
         {
-            mainCamera = Camera.main;
+            mainCamera = UnityEngine.Camera.main;
             if (mainCamera == null)
             {
                 Debug.LogError("[PointerSelectionInput] No main camera found!");

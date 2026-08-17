@@ -1,4 +1,4 @@
-namespace ChessTheBetrayal.View
+namespace ChessTheBetrayal.View.Camera
 {
     /// <summary>
     /// Knocks the camera when something on the board hits hard enough to be felt.
