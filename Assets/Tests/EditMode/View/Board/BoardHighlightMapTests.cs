@@ -3,7 +3,7 @@ using NUnit.Framework;
 using ChessTheBetrayal.View.Board;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
-namespace ChessTheBetrayal.Tests.EditMode.View
+namespace ChessTheBetrayal.Tests.EditMode.View.Board
 {
     /// <summary>
     /// Which marker a square shows used to be decided inline while assigning render layers inside a

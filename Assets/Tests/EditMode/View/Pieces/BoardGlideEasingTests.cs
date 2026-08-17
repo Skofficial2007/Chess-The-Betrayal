@@ -3,7 +3,7 @@ using PrimeTween;
 using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.View.Pieces;
 
-namespace ChessTheBetrayal.Tests.EditMode.View
+namespace ChessTheBetrayal.Tests.EditMode.View.Pieces
 {
     /// <summary>
     /// A duration on its own says nothing about how fast a piece gets. The easing decides that: the

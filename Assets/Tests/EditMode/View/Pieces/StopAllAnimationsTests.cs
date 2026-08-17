@@ -7,7 +7,7 @@ using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.View.Pieces;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
-namespace ChessTheBetrayal.Tests.EditMode.View
+namespace ChessTheBetrayal.Tests.EditMode.View.Pieces
 {
     /// <summary>
     /// Tearing a piece down while it is still animating.

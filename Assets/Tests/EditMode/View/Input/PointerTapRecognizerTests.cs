@@ -3,7 +3,7 @@ using UnityEngine;
 using ChessTheBetrayal.View.Input;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
-namespace ChessTheBetrayal.Tests.EditMode.View
+namespace ChessTheBetrayal.Tests.EditMode.View.Input
 {
     /// <summary>
     /// A finger and a mouse produce different frames, and the difference is easy to miss because

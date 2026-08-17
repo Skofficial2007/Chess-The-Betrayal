@@ -3,7 +3,7 @@ using UnityEngine;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.View.Board;
 
-namespace ChessTheBetrayal.Tests.EditMode.View
+namespace ChessTheBetrayal.Tests.EditMode.View.Board
 {
     /// <summary>
     /// The death piles used to be a pair of private lists inside a MonoBehaviour, so the ordering

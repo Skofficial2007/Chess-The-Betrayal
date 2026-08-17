@@ -3,7 +3,7 @@ using UnityEngine;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.View.Pieces;
 
-namespace ChessTheBetrayal.Tests.EditMode.View
+namespace ChessTheBetrayal.Tests.EditMode.View.Pieces
 {
     /// <summary>
     /// The walk a promoting pawn takes onto the last rank before it changes into anything.

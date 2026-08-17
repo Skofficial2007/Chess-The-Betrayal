@@ -4,7 +4,7 @@ using UnityEditor;
 using UnityEngine;
 using ChessTheBetrayal.View.Board;
 
-namespace ChessTheBetrayal.Tests.EditMode.View
+namespace ChessTheBetrayal.Tests.EditMode.View.Board
 {
     /// <summary>
     /// Whether the shaders this project writes will actually be in a player build.
