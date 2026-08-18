@@ -4,7 +4,7 @@ using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Events.Payloads;
 using ChessTheBetrayal.UI.Controls;
 
-namespace ChessTheBetrayal.Tests.EditMode.UI
+namespace ChessTheBetrayal.Tests.EditMode.UI.Controls
 {
     /// <summary>
     /// The one line a player reads when the game stops. Worth pinning rather than eyeballing:

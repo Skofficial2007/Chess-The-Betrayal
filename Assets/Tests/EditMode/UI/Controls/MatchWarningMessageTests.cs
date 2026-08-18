@@ -1,7 +1,7 @@
 using NUnit.Framework;
 using ChessTheBetrayal.UI.Controls;
 
-namespace ChessTheBetrayal.Tests.EditMode.UI
+namespace ChessTheBetrayal.Tests.EditMode.UI.Controls
 {
     /// <summary>
     /// The shape of a warning raised over the board. Worth pinning rather than eyeballing: the

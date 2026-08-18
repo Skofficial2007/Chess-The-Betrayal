@@ -2,7 +2,7 @@ using NUnit.Framework;
 using UnityEngine;
 using ChessTheBetrayal.UI.SafeArea;
 
-namespace ChessTheBetrayal.Tests.EditMode.UI
+namespace ChessTheBetrayal.Tests.EditMode.UI.SafeArea
 {
     /// <summary>
     /// Pins the safe-area conversion against the inputs that used to break it. The whole calculation

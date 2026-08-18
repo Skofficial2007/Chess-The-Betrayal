@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 using NUnit.Framework;
 using ChessTheBetrayal.UI.Controls;
 
-namespace ChessTheBetrayal.Tests.EditMode.UI
+namespace ChessTheBetrayal.Tests.EditMode.UI.Controls
 {
     /// <summary>
     /// The exact words the game puts in front of someone about to spend something they cannot get

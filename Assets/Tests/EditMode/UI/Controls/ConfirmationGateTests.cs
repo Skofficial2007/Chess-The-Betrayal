@@ -4,7 +4,7 @@ using UnityEngine;
 using UnityEngine.TestTools;
 using ChessTheBetrayal.UI.Controls;
 
-namespace ChessTheBetrayal.Tests.EditMode.UI
+namespace ChessTheBetrayal.Tests.EditMode.UI.Controls
 {
     /// <summary>
     /// The gate's whole reason to exist is that a caller can set something aside — a move it has

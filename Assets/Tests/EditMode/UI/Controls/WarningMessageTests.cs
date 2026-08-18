@@ -1,7 +1,7 @@
 using NUnit.Framework;
 using ChessTheBetrayal.UI.Controls;
 
-namespace ChessTheBetrayal.Tests.EditMode.UI
+namespace ChessTheBetrayal.Tests.EditMode.UI.Controls
 {
     /// <summary>
     /// The house style for a confirmation panel's text. Worth pinning rather than eyeballing: the
