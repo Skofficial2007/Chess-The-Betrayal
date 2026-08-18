@@ -7,7 +7,6 @@
     "ChessTheBetrayal.Infrastructure",
     "ChessTheBetrayal.Gameplay.Flow",
     "ChessTheBetrayal.Gameplay.Manager",
-    "ChessTheBetrayal.Gameplay.Interaction",
     "ChessTheBetrayal.UI"
   ],
   "includePlatforms": [],
