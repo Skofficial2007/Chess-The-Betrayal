@@ -8,7 +8,7 @@ using ChessTheBetrayal.AI.DeviceBenchmark;
 using ChessTheBetrayal.Infrastructure;
 using ChessTheBetrayal.UI.Controls;
 
-namespace ChessTheBetrayal.UI
+namespace ChessTheBetrayal.UI.DeviceBenchmark
 {
     /// <summary>
     /// The on-screen face of the device benchmark: two buttons that each start a different run, a
