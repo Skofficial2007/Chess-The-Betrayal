@@ -4,7 +4,7 @@ using UnityEngine.UI;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Infrastructure;
 
-namespace ChessTheBetrayal.UI
+namespace ChessTheBetrayal.UI.Panels
 {
     /// <summary>
     /// Manages the custom 2-column UI for Game Mode selection.

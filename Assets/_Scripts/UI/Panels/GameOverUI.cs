@@ -7,7 +7,7 @@ using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.Infrastructure;
 using ChessTheBetrayal.UI.Controls;
 
-namespace ChessTheBetrayal.UI
+namespace ChessTheBetrayal.UI.Panels
 {
     /// <summary>
     /// Handles the game-over panel UI (winner text, replay and exit actions), plus an optional

@@ -4,6 +4,7 @@ using UnityEngine.SceneManagement;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.Infrastructure;
+using ChessTheBetrayal.UI.Panels;
 
 namespace ChessTheBetrayal.UI
 {

@@ -6,7 +6,7 @@ using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Infrastructure;
 using ChessTheBetrayal.Events.Payloads;
 
-namespace ChessTheBetrayal.UI
+namespace ChessTheBetrayal.UI.Panels
 {
     /// <summary>
     /// Manages the in-game heads-up display, including clock visibility, exit controls, and the

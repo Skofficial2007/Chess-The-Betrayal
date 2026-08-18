@@ -7,7 +7,7 @@ using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Infrastructure;
 
-namespace ChessTheBetrayal.UI
+namespace ChessTheBetrayal.UI.Panels
 {
     /// <summary>
     /// Manages the Practice Match Setup panel: Betrayal / Defend Only / Skip Retribution toggle

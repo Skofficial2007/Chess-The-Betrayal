@@ -6,7 +6,7 @@ using PrimeTween;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Infrastructure;
 
-namespace ChessTheBetrayal.UI
+namespace ChessTheBetrayal.UI.Panels
 {
     /// <summary>
     /// The View component for team assignment.

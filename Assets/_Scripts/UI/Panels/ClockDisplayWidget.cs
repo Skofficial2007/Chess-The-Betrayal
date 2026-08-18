@@ -4,7 +4,7 @@ using TMPro;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Logic;
 
-namespace ChessTheBetrayal.UI
+namespace ChessTheBetrayal.UI.Panels
 {
     /// <summary>
     /// Shows the remaining time for each side on the clock HUD.

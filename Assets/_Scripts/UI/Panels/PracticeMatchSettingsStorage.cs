@@ -2,7 +2,7 @@ using UnityEngine;
 using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.Core.Data;
 
-namespace ChessTheBetrayal.UI
+namespace ChessTheBetrayal.UI.Panels
 {
     /// <summary>
     /// Persists the player's Practice Match Setup choices across sessions via PlayerPrefs. Kept as

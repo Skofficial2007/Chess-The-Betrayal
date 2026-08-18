@@ -3,7 +3,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using ChessTheBetrayal.Core.Data;
 
-namespace ChessTheBetrayal.UI
+namespace ChessTheBetrayal.UI.Panels
 {
     /// <summary>
     /// Presents promotion choices to the player and forwards the selection.
