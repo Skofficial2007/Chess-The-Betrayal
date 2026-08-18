@@ -1,6 +1,5 @@
 using System;
 using UnityEngine;
-using ChessTheBetrayal.UI;
 using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.Gameplay.Interaction;
 using ChessTheBetrayal.Infrastructure;
