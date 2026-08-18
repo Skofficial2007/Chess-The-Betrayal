@@ -6,7 +6,7 @@ using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.Infrastructure;
 using ChessTheBetrayal.UI.Panels;
 
-namespace ChessTheBetrayal.UI
+namespace ChessTheBetrayal.UI.Manager
 {
     /// <summary>
     /// The traffic controller for all UI panels. It knows which panels should be open at any given time and listens to UI events to pass player choices (team selection, promotions) up to GameManager.

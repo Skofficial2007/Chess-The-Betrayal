@@ -8,7 +8,7 @@ using ChessTheBetrayal.Core.Logic;
 using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.Gameplay.Flow;
 using ChessTheBetrayal.Gameplay.Manager;
-using ChessTheBetrayal.UI;
+using ChessTheBetrayal.UI.Manager;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 using ChessTheBetrayal.Core.Diagnostics;
 using ChessTheBetrayal.Infrastructure;
