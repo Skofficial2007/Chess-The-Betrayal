@@ -25,5 +25,20 @@ namespace ChessTheBetrayal.EditorTools.Events
                 .Where(channel => channel != null)
                 .OrderBy(channel => channel.name)
                 .ToList();
+
+        /// <summary>Turns tracing on or off across a whole set of channels at once, which beats
+        /// hunting for the one that is misbehaving when you do not yet know which it is.</summary>
+        public static void SetTraceOnAll(IEnumerable<EventChannelBase> channels, bool enabled)
+        {
+            if (channels == null) return;
+
+            foreach (EventChannelBase channel in channels)
+            {
+                if (channel == null) continue;
+
+                channel.DebugTrace = enabled;
+                EditorUtility.SetDirty(channel);
+            }
+        }
     }
 }

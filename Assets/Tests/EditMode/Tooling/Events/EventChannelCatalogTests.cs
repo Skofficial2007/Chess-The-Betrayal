@@ -1,5 +1,7 @@
+using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
+using UnityEngine;
 using ChessTheBetrayal.EditorTools.Events;
 using ChessTheBetrayal.Events.Channels;
 
@@ -65,5 +67,66 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.Events
 
             Assert.That(names, Is.Ordered, "the window draws them in the order it is given");
         }
+
+        [Test]
+        public void Turning_tracing_on_reaches_both_channel_shapes()
+        {
+            var channels = TwoOfEachShape();
+            try
+            {
+                EventChannelCatalog.SetTraceOnAll(channels, true);
+
+                Assert.That(channels.Select(c => c.DebugTrace), Is.All.True);
+            }
+            finally
+            {
+                foreach (var c in channels) Object.DestroyImmediate(c);
+            }
+        }
+
+        [Test]
+        public void Turning_tracing_off_reaches_both_channel_shapes()
+        {
+            var channels = TwoOfEachShape();
+            try
+            {
+                // Set directly rather than through the method under test: turning them on with
+                // the same call would let a version that reaches only one shape leave the other
+                // at its default of false, and the assertion below would pass on that.
+                foreach (var c in channels) c.DebugTrace = true;
+
+                EventChannelCatalog.SetTraceOnAll(channels, false);
+
+                Assert.That(channels.Select(c => c.DebugTrace), Is.All.False);
+            }
+            finally
+            {
+                foreach (var c in channels) Object.DestroyImmediate(c);
+            }
+        }
+
+        [Test]
+        public void A_gap_in_the_list_does_not_stop_the_rest()
+        {
+            var channels = new List<EventChannelBase> { null, ScriptableObject.CreateInstance<GameEventChannel>() };
+            try
+            {
+                Assert.DoesNotThrow(() => EventChannelCatalog.SetTraceOnAll(channels, true));
+
+                Assert.That(channels[1].DebugTrace, Is.True);
+            }
+            finally
+            {
+                Object.DestroyImmediate(channels[1]);
+            }
+        }
+
+        /// <summary>One channel of each shape, because reaching only one of them is the whole
+        /// defect this fixture exists for.</summary>
+        private static List<EventChannelBase> TwoOfEachShape() => new List<EventChannelBase>
+        {
+            ScriptableObject.CreateInstance<GameEventChannel>(),
+            ScriptableObject.CreateInstance<TeamSelectedEventChannel>(),
+        };
     }
 }

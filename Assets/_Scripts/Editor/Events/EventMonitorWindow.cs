@@ -35,6 +35,10 @@ namespace ChessTheBetrayal.EditorTools.Events
             if (GUILayout.Button("Refresh", EditorStyles.toolbarButton)) RefreshChannelList();
             if (GUILayout.Button("Clear All Logs", EditorStyles.toolbarButton))
                 _channels?.ForEach(c => c.ClearDebugLog());
+            if (GUILayout.Button("Trace All", EditorStyles.toolbarButton))
+                EventChannelCatalog.SetTraceOnAll(_channels, true);
+            if (GUILayout.Button("Trace None", EditorStyles.toolbarButton))
+                EventChannelCatalog.SetTraceOnAll(_channels, false);
             GUILayout.FlexibleSpace();
             EditorGUILayout.EndHorizontal();
 
