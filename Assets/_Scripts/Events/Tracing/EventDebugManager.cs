@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace ChessTheBetrayal.Events.Debug
+namespace ChessTheBetrayal.Events.Tracing
 {
     /// <summary>
     /// Global debug configuration and registry for the Event Bus.
