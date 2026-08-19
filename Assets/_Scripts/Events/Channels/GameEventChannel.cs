@@ -9,24 +9,18 @@ namespace ChessTheBetrayal.Events.Channels
     /// Listeners register at runtime; this asset holds no MonoBehaviour references.
     /// </summary>
     [CreateAssetMenu(menuName = "Chess/Events/Game Event (Void)", fileName = "NewGameEvent")]
-    public class GameEventChannel : ScriptableObject
+    public class GameEventChannel : EventChannelBase
     {
-        [Header("Debug")]
-        [Tooltip("Log every Raise() call to the Console while in Play Mode.")]
-        public bool DebugTrace = false;
-
-        [SerializeField] private List<string> _debugLog = new List<string>(8);
-
         private readonly List<System.Action> _listeners = new List<System.Action>(4);
 
         // ScriptableObjects persist across play sessions when Domain Reload is disabled.
-        // We MUST wipe the listener lists on enable/disable to purge "zombie" delegates 
+        // We MUST wipe the listener lists on enable/disable to purge "zombie" delegates
         // from objects that failed to unregister correctly during teardown.
 
         protected virtual void OnEnable()
         {
             _listeners.Clear();
-            _debugLog.Clear();
+            ClearDebugLog();
         }
 
         protected virtual void OnDisable()
@@ -55,19 +49,15 @@ namespace ChessTheBetrayal.Events.Channels
         public void Unregister(System.Action listener) =>
             _listeners.Remove(listener);
 
-        /// <summary>Listener count. Available to editor tooling during Play Mode.</summary>
-        public int ListenerCount => _listeners.Count;
+        public override int ListenerCount => _listeners.Count;
 
         private void RecordDebugTrace()
         {
             if (!DebugTrace) return;
             string entry = $"{System.DateTime.Now:HH:mm:ss.fff} | Listeners: {_listeners.Count}";
-            if (_debugLog.Count >= 8) _debugLog.RemoveAt(0);
-            _debugLog.Add(entry);
+            AppendTrace(entry);
             Debug.Log($"[EventChannel] {name} raised. {entry}", this);
         }
-
-        public void ClearDebugLog() => _debugLog.Clear();
 
         [ContextMenu("Raise (Debug — Play Mode only)")]
         private void RaiseFromEditor()
@@ -87,20 +77,14 @@ namespace ChessTheBetrayal.Events.Channels
     /// and ensures that one listener cannot accidentally mutate data read by another.
     /// Subclass this with [CreateAssetMenu] for each distinct event type.
     /// </summary>
-    public abstract class GameEventChannel<T> : ScriptableObject where T : struct
+    public abstract class GameEventChannel<T> : EventChannelBase where T : struct
     {
-        [Header("Debug")]
-        public bool DebugTrace = false;
-
-        [SerializeField]
-        private List<string> _debugLog = new List<string>(8);
-
         private readonly List<System.Action<T>> _listeners = new List<System.Action<T>>(4);
 
         protected virtual void OnEnable()
         {
             _listeners.Clear();
-            _debugLog.Clear();
+            ClearDebugLog();
         }
 
         protected virtual void OnDisable()
@@ -128,17 +112,14 @@ namespace ChessTheBetrayal.Events.Channels
         public void Unregister(System.Action<T> listener) =>
             _listeners.Remove(listener);
 
-        public int ListenerCount => _listeners.Count;
+        public override int ListenerCount => _listeners.Count;
 
         private void RecordDebugTrace(T payload)
         {
             if (!DebugTrace) return;
             string entry = $"{System.DateTime.Now:HH:mm:ss.fff} | {payload} | Listeners: {_listeners.Count}";
-            if (_debugLog.Count >= 8) _debugLog.RemoveAt(0);
-            _debugLog.Add(entry);
+            AppendTrace(entry);
             Debug.Log($"[EventChannel<{typeof(T).Name}>] {name} raised. Payload: {payload}", this);
         }
-
-        public void ClearDebugLog() => _debugLog.Clear();
     }
 }

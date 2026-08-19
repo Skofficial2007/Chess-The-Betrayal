@@ -115,6 +115,13 @@ namespace ChessTheBetrayal.Tests.EditMode.Events.Channels
         }
 
         [Test]
+        public void Is_reachable_through_the_common_channel_base()
+        {
+            Assert.That(_channel, Is.InstanceOf<EventChannelBase>(),
+                "editor tooling lists channels by this base, so one outside it goes unseen");
+        }
+
+        [Test]
         public void Tracing_is_off_until_someone_turns_it_on()
         {
             Assert.That(_channel.DebugTrace, Is.False);
