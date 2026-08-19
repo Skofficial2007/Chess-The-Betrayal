@@ -1,7 +1,7 @@
 using UnityEngine;
 using ChessTheBetrayal.Core.Data;
 
-namespace ChessTheBetrayal.Events
+namespace ChessTheBetrayal.Events.State
 {
     /// <summary>
     /// Holds a reference to the current live BoardState.

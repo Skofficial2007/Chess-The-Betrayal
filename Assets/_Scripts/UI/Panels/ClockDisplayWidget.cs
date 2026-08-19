@@ -23,7 +23,7 @@ namespace ChessTheBetrayal.UI.Panels
         [SerializeField] private long _lowTimeFlashThresholdMs = 10_000L;
 
         [Header("Data Source")]
-        [SerializeField] private ChessTheBetrayal.Events.SharedClockStateSO _sharedClockState;
+        [SerializeField] private ChessTheBetrayal.Events.State.SharedClockStateSO _sharedClockState;
 
         // Reused each frame so the per-frame time update does not build a new string.
         private readonly StringBuilder _sb = new StringBuilder(8);

@@ -62,7 +62,7 @@ namespace ChessTheBetrayal.View.Board
         [SerializeField] private Transform blackPiecesParent;
 
         [Header("Data Source")]
-        [SerializeField] private ChessTheBetrayal.Events.SharedBoardStateSO _sharedBoardState;
+        [SerializeField] private ChessTheBetrayal.Events.State.SharedBoardStateSO _sharedBoardState;
 
         [Header("Event Channels")]
         [SerializeField] private ChessTheBetrayal.Events.Channels.GameEventChannel _gameStartedChannel;

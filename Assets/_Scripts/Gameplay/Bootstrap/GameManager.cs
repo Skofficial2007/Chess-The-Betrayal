@@ -87,8 +87,8 @@ namespace ChessTheBetrayal.App
         [SerializeField] private bool _warnBeforeRetributionSkip = true;
 
         [Header("Shared State")]
-        [SerializeField] private ChessTheBetrayal.Events.SharedBoardStateSO _sharedBoardState;
-        [SerializeField] private ChessTheBetrayal.Events.SharedClockStateSO _sharedClockState;
+        [SerializeField] private ChessTheBetrayal.Events.State.SharedBoardStateSO _sharedBoardState;
+        [SerializeField] private ChessTheBetrayal.Events.State.SharedClockStateSO _sharedClockState;
 
         [Header("Event Channels")]
         [SerializeField] private ChessTheBetrayal.Events.Channels.GameEventChannel _gameStartedChannel;
