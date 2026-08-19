@@ -1,7 +1,7 @@
 using NUnit.Framework;
 using ChessTheBetrayal.Infrastructure.ReportSharing;
 
-namespace ChessTheBetrayal.Tests.EditMode.Infrastructure
+namespace ChessTheBetrayal.Tests.EditMode.Infrastructure.ReportSharing
 {
     /// <summary>
     /// The Android JNI itself can only be proven on a device, but which layer it starts from is

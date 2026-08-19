@@ -3,7 +3,7 @@ using System.Text;
 using NUnit.Framework;
 using ChessTheBetrayal.Infrastructure.ReportSharing;
 
-namespace ChessTheBetrayal.Tests.EditMode.Infrastructure
+namespace ChessTheBetrayal.Tests.EditMode.Infrastructure.ReportSharing
 {
     /// <summary>
     /// Covers the bytes a report actually reaches disk as. The write is deliberately exercised
