@@ -22,12 +22,12 @@ namespace ChessTheBetrayal.UI.Panels
         [SerializeField] private ClockDisplayWidget _clockWidget;
 
         [Header("Event Channels")]
-        [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _checkDetectedChannel;
-        [SerializeField] private ChessTheBetrayal.Events.TurnChangedEventChannel _turnChangedChannel;
-        [SerializeField] private ChessTheBetrayal.Events.LowTimeAlertEventChannel _lowTimeAlertChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.GameEventChannel _checkDetectedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.TurnChangedEventChannel _turnChangedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.LowTimeAlertEventChannel _lowTimeAlertChannel;
 
         [Header("Retribution Skip")]
-        [SerializeField] private ChessTheBetrayal.Events.BetrayalEventChannel _betrayalChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.BetrayalEventChannel _betrayalChannel;
         [SerializeField] private RectTransform skipButtonRoot;
         [SerializeField] private Button skipButton;
         [SerializeField] private float _skipShowScale = 1f;

@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using NUnit.Framework;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
-using ChessTheBetrayal.Events;
+using ChessTheBetrayal.Events.Channels;
 using ChessTheBetrayal.Events.Payloads;
 using ChessTheBetrayal.Gameplay.Manager;
 using ChessTheBetrayal.Tests.Utilities;

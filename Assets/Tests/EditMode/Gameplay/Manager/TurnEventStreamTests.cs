@@ -28,7 +28,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             var board = TestBoardSetupUtility.CreateStandard();
 
             var seenPlyIndexes = new List<int>();
-            var moveExecutedChannel = ScriptableObject.CreateInstance<ChessTheBetrayal.Events.MoveExecutedEventChannel>();
+            var moveExecutedChannel = ScriptableObject.CreateInstance<ChessTheBetrayal.Events.Channels.MoveExecutedEventChannel>();
             moveExecutedChannel.Register(payload => seenPlyIndexes.Add(payload.PlyIndex));
 
             var matchDriver = new MatchDriver(engine, board, logMoves: false, domainLogger: null,
@@ -69,7 +69,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             board.ComputeFullZobristHash();
 
             var seenPlyIndexes = new List<int>();
-            var moveExecutedChannel = ScriptableObject.CreateInstance<ChessTheBetrayal.Events.MoveExecutedEventChannel>();
+            var moveExecutedChannel = ScriptableObject.CreateInstance<ChessTheBetrayal.Events.Channels.MoveExecutedEventChannel>();
             moveExecutedChannel.Register(payload => seenPlyIndexes.Add(payload.PlyIndex));
 
             var matchDriver = new MatchDriver(engine, board, logMoves: false, domainLogger: null,
@@ -206,7 +206,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         private sealed class MatchFlowFixture
         {
             public MatchFlowCoordinator MatchFlow;
-            public ChessTheBetrayal.Events.MoveExecutedEventChannel MoveExecutedChannel;
+            public ChessTheBetrayal.Events.Channels.MoveExecutedEventChannel MoveExecutedChannel;
             public int RaisedGameModeConfiguredCount;
             public int RaisedGameStartedCount;
             public int RaisedBoardResyncRequiredCount;
@@ -222,7 +222,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
 
                 var engine = new ChessEngineAdapter();
                 var board = new BoardState(8, 8);
-                fixture.MoveExecutedChannel = ScriptableObject.CreateInstance<ChessTheBetrayal.Events.MoveExecutedEventChannel>();
+                fixture.MoveExecutedChannel = ScriptableObject.CreateInstance<ChessTheBetrayal.Events.Channels.MoveExecutedEventChannel>();
 
                 var matchDriver = new MatchDriver(engine, board, logMoves: false, domainLogger: null,
                     gameOverChannel: null, turnChangedChannel: null, moveExecutedChannel: fixture.MoveExecutedChannel,

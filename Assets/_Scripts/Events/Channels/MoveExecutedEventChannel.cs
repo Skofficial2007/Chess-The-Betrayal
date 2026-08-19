@@ -1,7 +1,7 @@
 using ChessTheBetrayal.Events.Payloads;
 using UnityEngine;
 
-namespace ChessTheBetrayal.Events
+namespace ChessTheBetrayal.Events.Channels
 {
     [CreateAssetMenu(menuName = "Chess/Events/Move Executed", fileName = "MoveExecutedEvent")]
     public sealed class MoveExecutedEventChannel : GameEventChannel<MoveExecutedPayload>

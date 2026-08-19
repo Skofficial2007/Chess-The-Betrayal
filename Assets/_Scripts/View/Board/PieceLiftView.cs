@@ -15,8 +15,8 @@ namespace ChessTheBetrayal.View.Board
         [SerializeField] private BoardVisuals boardVisuals;
 
         [Header("Event Channels")]
-        [SerializeField] private ChessTheBetrayal.Events.PieceSelectedEventChannel _pieceSelectedChannel;
-        [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _selectionClearedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.PieceSelectedEventChannel _pieceSelectedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.GameEventChannel _selectionClearedChannel;
 
         // SelectionClearedEvent carries no payload, so we remember what we lifted.
         private Vector2Int _liftedTile = Vector2Int.Invalid;

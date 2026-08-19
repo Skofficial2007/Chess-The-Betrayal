@@ -2,7 +2,7 @@ using ChessTheBetrayal.Events.Payloads;
 using ChessTheBetrayal.Core.Data;
 using UnityEngine;
 
-namespace ChessTheBetrayal.Events
+namespace ChessTheBetrayal.Events.Channels
 {
     [CreateAssetMenu(menuName = "Chess/Events/Game Over", fileName = "GameOverEvent")]
     public sealed class GameOverEventChannel : GameEventChannel<GameOverPayload>

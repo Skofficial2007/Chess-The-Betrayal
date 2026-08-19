@@ -26,9 +26,9 @@ namespace ChessTheBetrayal.Gameplay.Interaction
         [SerializeField] private MonoBehaviour selectionInputBehaviour;
 
         [Header("Event Channels")]
-        [SerializeField] private ChessTheBetrayal.Events.PieceSelectedEventChannel _pieceSelectedChannel;
-        [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _selectionClearedChannel;
-        [SerializeField] private ChessTheBetrayal.Events.SelectionRejectedEventChannel _selectionRejectedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.PieceSelectedEventChannel _pieceSelectedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.GameEventChannel _selectionClearedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.SelectionRejectedEventChannel _selectionRejectedChannel;
 
         private ISelectionInput _selectionInput;
         private IBoardQuery _gameManager;

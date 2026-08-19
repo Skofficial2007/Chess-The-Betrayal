@@ -1,7 +1,7 @@
 using ChessTheBetrayal.Core.Data;
 using UnityEngine;
 
-namespace ChessTheBetrayal.Events
+namespace ChessTheBetrayal.Events.Channels
 {
     [CreateAssetMenu(menuName = "Chess/Events/Game Mode Configured", fileName = "GameModeConfiguredEvent")]
     public sealed class GameModeConfiguredEventChannel : GameEventChannel<GameModeConfig>

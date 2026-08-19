@@ -26,10 +26,10 @@ namespace ChessTheBetrayal.UI.Manager
         [SerializeField] private ChessTheBetrayal.UI.Controls.WarningPopup warningPopup;
 
         [Header("Event Channels")]
-        [SerializeField] private ChessTheBetrayal.Events.TeamSelectedEventChannel _teamSelectedChannel;
-        [SerializeField] private ChessTheBetrayal.Events.PromotionRequiredEventChannel _promotionRequiredChannel;
-        [SerializeField] private ChessTheBetrayal.Events.GameOverEventChannel _gameOverChannel;
-        [SerializeField] private ChessTheBetrayal.Events.GameModeConfiguredEventChannel _gameModeConfiguredChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.TeamSelectedEventChannel _teamSelectedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.PromotionRequiredEventChannel _promotionRequiredChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.GameOverEventChannel _gameOverChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.GameModeConfiguredEventChannel _gameModeConfiguredChannel;
 
         // Events
         public event Action<GameModeConfig> OnGameModeSelected;

@@ -3,7 +3,7 @@ using ChessTheBetrayal.Core.Data;
 using UnityEngine;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
-namespace ChessTheBetrayal.Events
+namespace ChessTheBetrayal.Events.Channels
 {
     [CreateAssetMenu(menuName = "Chess/Events/Selection Rejected", fileName = "SelectionRejectedEvent")]
     public sealed class SelectionRejectedEventChannel : GameEventChannel<SelectionRejectedPayload>

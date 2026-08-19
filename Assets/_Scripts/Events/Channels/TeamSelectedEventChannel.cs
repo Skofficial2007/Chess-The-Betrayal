@@ -1,7 +1,7 @@
 using ChessTheBetrayal.Core.Data;
 using UnityEngine;
 
-namespace ChessTheBetrayal.Events
+namespace ChessTheBetrayal.Events.Channels
 {
     [CreateAssetMenu(menuName = "Chess/Events/Team Selected", fileName = "TeamSelectedEvent")]
     public sealed class TeamSelectedEventChannel : GameEventChannel<Team>

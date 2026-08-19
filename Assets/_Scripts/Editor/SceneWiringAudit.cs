@@ -7,7 +7,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.Events;
-using ChessTheBetrayal.Events;
+using ChessTheBetrayal.Events.Channels;
 
 namespace ChessTheBetrayal.EditorTools
 {

@@ -38,9 +38,9 @@ namespace ChessTheBetrayal.View.Camera
         [SerializeField] private float introBlendTime = 2f;
 
         [Header("Event Channels")]
-        [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _matchStartRequestedChannel;
-        [SerializeField] private ChessTheBetrayal.Events.TeamSelectedEventChannel _teamSelectedChannel;
-        [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _gameResetChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.GameEventChannel _matchStartRequestedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.TeamSelectedEventChannel _teamSelectedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.GameEventChannel _gameResetChannel;
 
         private void Awake()
         {

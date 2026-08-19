@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace ChessTheBetrayal.Events
+namespace ChessTheBetrayal.Events.Channels
 {
     /// <summary>
     /// A ScriptableObject acting as a typed publish/subscribe hub with no payload.

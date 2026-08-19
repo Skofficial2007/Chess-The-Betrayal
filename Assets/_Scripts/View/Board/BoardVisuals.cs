@@ -65,16 +65,16 @@ namespace ChessTheBetrayal.View.Board
         [SerializeField] private ChessTheBetrayal.Events.SharedBoardStateSO _sharedBoardState;
 
         [Header("Event Channels")]
-        [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _gameStartedChannel;
-        [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _gameResetChannel;
-        [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _boardResyncRequiredChannel;
-        [SerializeField] private ChessTheBetrayal.Events.MoveExecutedEventChannel _moveExecutedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.GameEventChannel _gameStartedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.GameEventChannel _gameResetChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.GameEventChannel _boardResyncRequiredChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.MoveExecutedEventChannel _moveExecutedChannel;
         [Tooltip("Carries each ply of a takeback as it comes back off the board, so the move can be played in reverse. Must be the same asset GameManager raises on. Leave unassigned and undo falls back to rebuilding the position instead.")]
-        [SerializeField] private ChessTheBetrayal.Events.MoveUndoneEventChannel _moveUndoneChannel;
-        [SerializeField] private ChessTheBetrayal.Events.MoveRejectedEventChannel _moveRejectedChannel;
-        [SerializeField] private ChessTheBetrayal.Events.SelectionRejectedEventChannel _selectionRejectedChannel;
-        [SerializeField] private ChessTheBetrayal.Events.PromotionRequiredEventChannel _promotionRequiredChannel;
-        [SerializeField] private ChessTheBetrayal.Events.BetrayalEventChannel _betrayalChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.MoveUndoneEventChannel _moveUndoneChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.MoveRejectedEventChannel _moveRejectedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.SelectionRejectedEventChannel _selectionRejectedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.PromotionRequiredEventChannel _promotionRequiredChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.BetrayalEventChannel _betrayalChannel;
 
         #endregion
 
