@@ -1,5 +1,6 @@
 {
   "name": "ChessTheBetrayal.Gameplay.Flow",
+  "rootNamespace": "ChessTheBetrayal.Gameplay.Flow",
   "references": [
     "ChessTheBetrayal.Core"
   ],

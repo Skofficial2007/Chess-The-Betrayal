@@ -1,5 +1,6 @@
 {
   "name": "ChessTheBetrayal.Gameplay.Interaction",
+  "rootNamespace": "ChessTheBetrayal.Gameplay.Interaction",
   "references": [
     "ChessTheBetrayal.Core",
     "ChessTheBetrayal.Events",
