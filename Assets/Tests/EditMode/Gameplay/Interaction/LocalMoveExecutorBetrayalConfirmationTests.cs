@@ -22,13 +22,6 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Interaction
     [TestFixture]
     public class LocalMoveExecutorBetrayalConfirmationTests
     {
-        /// <summary>Hands back whatever the test last set, so a test can let time pass mid-question.</summary>
-        private sealed class StubClock : IClockSnapshotSource
-        {
-            public ClockState State;
-            public ClockState? Current => State;
-        }
-
         private static readonly Vector2Int D1 = TestBoardSetupUtility.AlgebraicToVector("d1");
         private static readonly Vector2Int D2 = TestBoardSetupUtility.AlgebraicToVector("d2");
         private static readonly Vector2Int C1 = TestBoardSetupUtility.AlgebraicToVector("c1");

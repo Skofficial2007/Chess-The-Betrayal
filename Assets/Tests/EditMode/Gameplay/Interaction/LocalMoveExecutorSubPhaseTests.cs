@@ -23,12 +23,6 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Interaction
     [TestFixture]
     public class LocalMoveExecutorSubPhaseTests
     {
-        private sealed class StubClock : IClockSnapshotSource
-        {
-            public ClockState State;
-            public ClockState? Current => State;
-        }
-
         private static Vector2Int Sq(string algebraic) => TestBoardSetupUtility.AlgebraicToVector(algebraic);
 
         private BoardState _board;
