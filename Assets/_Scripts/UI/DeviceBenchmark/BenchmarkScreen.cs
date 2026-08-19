@@ -6,6 +6,7 @@ using UnityEngine.Serialization;
 using UnityEngine.UI;
 using ChessTheBetrayal.AI.DeviceBenchmark;
 using ChessTheBetrayal.Infrastructure;
+using ChessTheBetrayal.Infrastructure.ReportSharing;
 using ChessTheBetrayal.UI.Controls;
 
 namespace ChessTheBetrayal.UI.DeviceBenchmark

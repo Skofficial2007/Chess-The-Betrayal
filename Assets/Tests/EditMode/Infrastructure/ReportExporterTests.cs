@@ -1,7 +1,7 @@
 using System.IO;
 using System.Text;
 using NUnit.Framework;
-using ChessTheBetrayal.Infrastructure;
+using ChessTheBetrayal.Infrastructure.ReportSharing;
 
 namespace ChessTheBetrayal.Tests.EditMode.Infrastructure
 {

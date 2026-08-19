@@ -5,6 +5,7 @@ using TMPro;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.Infrastructure;
+using ChessTheBetrayal.Infrastructure.ReportSharing;
 using ChessTheBetrayal.UI.Controls;
 
 namespace ChessTheBetrayal.UI.Panels
