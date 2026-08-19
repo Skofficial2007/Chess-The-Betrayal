@@ -1,5 +1,6 @@
 {
   "name": "ChessTheBetrayal.Events",
+  "rootNamespace": "ChessTheBetrayal.Events",
   "references": [
     "ChessTheBetrayal.Core"
   ],
