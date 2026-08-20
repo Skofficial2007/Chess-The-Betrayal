@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using NUnit.Framework;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Tooling;
+using ChessTheBetrayal.Tooling.Strength;
 
 namespace ChessTheBetrayal.Tests.EditMode.Tooling.Strength
 {

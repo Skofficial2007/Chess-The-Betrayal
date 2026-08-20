@@ -10,6 +10,8 @@ using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.EditorTools.Benchmark;
 using ChessTheBetrayal.EditorTools.OpeningBook;
 using ChessTheBetrayal.Tooling;
+using ChessTheBetrayal.Tooling.Agreement;
+using ChessTheBetrayal.Tooling.Match;
 
 namespace ChessTheBetrayal.Tests.EditMode.Tooling.BookImport
 {

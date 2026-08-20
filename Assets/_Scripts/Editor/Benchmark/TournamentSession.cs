@@ -4,6 +4,9 @@ using System.Linq;
 using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Tooling;
+using ChessTheBetrayal.Tooling.Match;
+using ChessTheBetrayal.Tooling.Strength;
+using ChessTheBetrayal.Tooling.Tournament;
 
 namespace ChessTheBetrayal.EditorTools.Benchmark
 {

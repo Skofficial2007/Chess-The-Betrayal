@@ -3,6 +3,7 @@ using UnityEngine;
 using UnityEngine.TestTools;
 using ChessTheBetrayal.EditorTools.Benchmark;
 using ChessTheBetrayal.Tooling;
+using ChessTheBetrayal.Tooling.Match;
 
 namespace ChessTheBetrayal.Tests.EditMode.Tooling.Tournament
 {

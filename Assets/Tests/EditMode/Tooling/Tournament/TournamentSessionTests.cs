@@ -4,6 +4,9 @@ using NUnit.Framework;
 using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.EditorTools.Benchmark;
 using ChessTheBetrayal.Tooling;
+using ChessTheBetrayal.Tooling.Match;
+using ChessTheBetrayal.Tooling.Strength;
+using ChessTheBetrayal.Tooling.Tournament;
 
 namespace ChessTheBetrayal.Tests.EditMode.Tooling.Tournament
 {

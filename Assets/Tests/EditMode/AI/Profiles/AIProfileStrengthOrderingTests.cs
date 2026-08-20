@@ -6,6 +6,7 @@ using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.EditorTools.Benchmark;
 using ChessTheBetrayal.Tooling;
+using ChessTheBetrayal.Tooling.Strength;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI.Profiles
 {

@@ -4,6 +4,8 @@ using System.IO;
 using System.Threading;
 using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.Tooling;
+using ChessTheBetrayal.Tooling.Match;
+using ChessTheBetrayal.Tooling.Tournament;
 
 namespace ChessTheBetrayal.EditorTools.Benchmark
 {

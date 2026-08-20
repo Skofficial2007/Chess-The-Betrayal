@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using NUnit.Framework;
 using ChessTheBetrayal.Tooling;
+using ChessTheBetrayal.Tooling.Tournament;
 
 namespace ChessTheBetrayal.Tests.EditMode.Tooling.Tournament
 {

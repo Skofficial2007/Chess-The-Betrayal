@@ -6,6 +6,8 @@ using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.EditorTools.Benchmark;
 using ChessTheBetrayal.Tooling;
 using UnityEngine;
+using ChessTheBetrayal.Tooling.Strength;
+using ChessTheBetrayal.Tooling.Texel;
 
 namespace ChessTheBetrayal.Tests.EditMode.Tooling.Texel
 {

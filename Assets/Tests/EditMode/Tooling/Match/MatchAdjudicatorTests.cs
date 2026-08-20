@@ -2,6 +2,7 @@ using NUnit.Framework;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Tooling;
+using ChessTheBetrayal.Tooling.Match;
 
 namespace ChessTheBetrayal.Tests.EditMode.Tooling.Match
 {

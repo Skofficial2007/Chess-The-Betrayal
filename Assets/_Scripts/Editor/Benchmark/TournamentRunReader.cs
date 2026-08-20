@@ -2,6 +2,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using ChessTheBetrayal.Tooling;
+using ChessTheBetrayal.Tooling.Match;
+using ChessTheBetrayal.Tooling.Tournament;
 
 namespace ChessTheBetrayal.EditorTools.Benchmark
 {

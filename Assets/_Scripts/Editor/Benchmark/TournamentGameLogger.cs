@@ -39,11 +39,11 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
             score.SubjectId = subjectId;
             score.OpponentId = opponentId;
             bool subjectWon = record.SubjectIsWhite
-                ? record.Result.Result.Outcome == ChessTheBetrayal.Tooling.MatchOutcome.WhiteWon
-                : record.Result.Result.Outcome == ChessTheBetrayal.Tooling.MatchOutcome.BlackWon;
+                ? record.Result.Result.Outcome == ChessTheBetrayal.Tooling.Match.MatchOutcome.WhiteWon
+                : record.Result.Result.Outcome == ChessTheBetrayal.Tooling.Match.MatchOutcome.BlackWon;
             bool opponentWon = record.SubjectIsWhite
-                ? record.Result.Result.Outcome == ChessTheBetrayal.Tooling.MatchOutcome.BlackWon
-                : record.Result.Result.Outcome == ChessTheBetrayal.Tooling.MatchOutcome.WhiteWon;
+                ? record.Result.Result.Outcome == ChessTheBetrayal.Tooling.Match.MatchOutcome.BlackWon
+                : record.Result.Result.Outcome == ChessTheBetrayal.Tooling.Match.MatchOutcome.WhiteWon;
 
             if (subjectWon) score.Wins++;
             else if (opponentWon) score.Losses++;

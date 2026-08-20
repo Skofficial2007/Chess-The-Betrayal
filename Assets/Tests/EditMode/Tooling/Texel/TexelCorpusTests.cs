@@ -6,6 +6,9 @@ using System.Threading.Tasks;
 using NUnit.Framework;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Tooling;
+using ChessTheBetrayal.Tooling.Match;
+using ChessTheBetrayal.Tooling.Texel;
+using ChessTheBetrayal.Tooling.Tournament;
 
 namespace ChessTheBetrayal.Tests.EditMode.Tooling.Texel
 {

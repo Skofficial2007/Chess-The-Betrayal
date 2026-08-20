@@ -20,7 +20,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Profiles
             // positions — if this ever stopped holding, Quick would just be a slower duplicate of
             // Full rather than the fast default the ticket asked for.
             Assert.That(StrengthLadder.QuickPositionCount,
-                Is.LessThan(ChessTheBetrayal.Tooling.CuratedPositionSuite.Count));
+                Is.LessThan(ChessTheBetrayal.Tooling.Strength.CuratedPositionSuite.Count));
         }
 
         [Test]

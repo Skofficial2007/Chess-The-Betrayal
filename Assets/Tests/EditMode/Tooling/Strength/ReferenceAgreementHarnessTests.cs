@@ -4,6 +4,8 @@ using NUnit.Framework;
 using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Tooling;
+using ChessTheBetrayal.Tooling.Agreement;
+using ChessTheBetrayal.Tooling.Strength;
 
 namespace ChessTheBetrayal.Tests.EditMode.Tooling.Strength
 {
