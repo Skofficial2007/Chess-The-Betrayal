@@ -2,7 +2,6 @@ using System.Threading;
 using NUnit.Framework;
 using ChessTheBetrayal.AI.Search;
 using ChessTheBetrayal.AI.Evaluation;
-using ChessTheBetrayal.AI.Positions;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Tooling;

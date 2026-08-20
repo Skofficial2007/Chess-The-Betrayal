@@ -4,7 +4,6 @@ using ChessTheBetrayal.AI.Search;
 using ChessTheBetrayal.AI.DeviceBenchmark;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
-using ChessTheBetrayal.Core.Logic;
 using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.Gameplay.Flow;
 using ChessTheBetrayal.Gameplay.Manager;

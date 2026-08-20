@@ -7,7 +7,6 @@ using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.AI.Evaluation;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
-using ChessTheBetrayal.Tooling;
 using ChessTheBetrayal.Tooling.Match;
 using ChessTheBetrayal.Tooling.Strength;
 

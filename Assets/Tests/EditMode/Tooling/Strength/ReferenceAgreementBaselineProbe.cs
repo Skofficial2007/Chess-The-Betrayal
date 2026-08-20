@@ -4,7 +4,6 @@ using NUnit.Framework;
 using UnityEngine;
 using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.Core.Data;
-using ChessTheBetrayal.Tooling;
 using ChessTheBetrayal.Tooling.Agreement;
 using ChessTheBetrayal.Tooling.Strength;
 

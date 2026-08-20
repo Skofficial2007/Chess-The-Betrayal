@@ -3,7 +3,6 @@ using System.Linq;
 using NUnit.Framework;
 using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.Core.Data;
-using ChessTheBetrayal.Tooling;
 using ChessTheBetrayal.Tooling.Agreement;
 using ChessTheBetrayal.Tooling.Strength;
 

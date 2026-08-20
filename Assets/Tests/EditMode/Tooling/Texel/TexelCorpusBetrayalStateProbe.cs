@@ -4,7 +4,6 @@ using System.Linq;
 using NUnit.Framework;
 using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.EditorTools.Benchmark;
-using ChessTheBetrayal.Tooling;
 using UnityEngine;
 using ChessTheBetrayal.Tooling.Strength;
 using ChessTheBetrayal.Tooling.Texel;

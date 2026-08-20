@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using ChessTheBetrayal.Core.Data;
-using ChessTheBetrayal.Core.Engine;
 
 namespace ChessTheBetrayal.Tooling.Strength
 {

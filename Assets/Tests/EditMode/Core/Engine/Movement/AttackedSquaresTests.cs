@@ -1,7 +1,6 @@
 using NUnit.Framework;
 using System.Collections.Generic;
 using ChessTheBetrayal.Core.Data;
-using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Core.Engine.Movement;
 using ChessTheBetrayal.Tooling;
 

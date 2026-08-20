@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using UnityEngine;
 using ChessTheBetrayal.AI.Search;
 using ChessTheBetrayal.Core.Data;
-using ChessTheBetrayal.Core.Diagnostics;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.Gameplay.Interaction;

@@ -6,9 +6,7 @@ using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.EditorTools.Benchmark;
-using ChessTheBetrayal.Tooling;
 using ChessTheBetrayal.Tooling.Texel;
-using ChessTheBetrayal.Tooling.Tournament;
 
 namespace ChessTheBetrayal.Tests.EditMode.Tooling.Texel
 {

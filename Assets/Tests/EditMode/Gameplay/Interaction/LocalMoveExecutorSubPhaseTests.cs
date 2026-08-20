@@ -3,7 +3,6 @@ using NUnit.Framework;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Diagnostics;
 using ChessTheBetrayal.Core.Engine;
-using ChessTheBetrayal.Core.Logic;
 using ChessTheBetrayal.Gameplay.Interaction;
 using ChessTheBetrayal.Tooling;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;

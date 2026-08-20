@@ -5,7 +5,6 @@ using NUnit.Framework;
 using ChessTheBetrayal.AI.Search;
 using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.AI.Positions;
-using ChessTheBetrayal.AI.Agent;
 using ChessTheBetrayal.AI.DeviceBenchmark;
 using ChessTheBetrayal.Core.Engine;
 

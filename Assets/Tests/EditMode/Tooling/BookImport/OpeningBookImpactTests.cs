@@ -9,7 +9,6 @@ using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.EditorTools.OpeningBook;
 using ChessTheBetrayal.Tooling.Benchmark;
-using ChessTheBetrayal.Tooling;
 using ChessTheBetrayal.Tooling.Agreement;
 using ChessTheBetrayal.Tooling.Match;
 

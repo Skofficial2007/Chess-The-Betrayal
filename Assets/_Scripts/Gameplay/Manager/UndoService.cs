@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
-using ChessTheBetrayal.Core.Match;
 
 namespace ChessTheBetrayal.Gameplay.Manager
 {

@@ -1,9 +1,7 @@
 using NUnit.Framework;
 using UnityEngine;
-using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
-using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.Gameplay.Manager;
 
 namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager

@@ -5,7 +5,6 @@ using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
 using ChessTheBetrayal.AI.OpeningBook;
-using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.EditorTools.OpeningBook;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI.OpeningBook

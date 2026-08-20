@@ -1,5 +1,4 @@
 using ChessTheBetrayal.Core.Data;
-using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Tooling.Match;
 
 namespace ChessTheBetrayal.Tooling.Agreement
