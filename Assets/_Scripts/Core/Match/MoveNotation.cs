@@ -113,6 +113,6 @@ namespace ChessTheBetrayal.Core.Match
             _ => '?'
         };
 
-        private static string Square(Vector2Int pos) => $"{(char)('a' + pos.x)}{pos.y + 1}";
+        private static string Square(Vector2Int pos) => SquareNotation.ToAlgebraic(pos);
     }
 }

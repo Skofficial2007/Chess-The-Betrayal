@@ -67,19 +67,10 @@ namespace ChessTheBetrayal.Tooling
         /// </summary>
         public static Vector2Int AlgebraicToVector(string algebraic)
         {
-            if (string.IsNullOrEmpty(algebraic) || algebraic.Length != 2)
-                throw new ArgumentException($"Invalid algebraic notation: '{algebraic}'. Expected format like 'e4'.");
+            if (!SquareNotation.TryParse(algebraic, out Vector2Int square))
+                throw new ArgumentException($"Invalid square: '{algebraic}'. Expected a1 through h8.");
 
-            char fileChar = char.ToLower(algebraic[0]);
-            char rankChar = algebraic[1];
-
-            if (fileChar < 'a' || fileChar > 'h' || rankChar < '1' || rankChar > '8')
-                throw new ArgumentException($"Coordinate out of bounds: '{algebraic}'. Must be between a1 and h8.");
-
-            int x = fileChar - 'a';
-            int y = rankChar - '1';
-
-            return new Vector2Int(x, y);
+            return square;
         }
 
         /// <summary>
