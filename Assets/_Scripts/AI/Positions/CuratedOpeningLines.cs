@@ -80,10 +80,12 @@ namespace ChessTheBetrayal.AI.Positions
 
             foreach (string token in tokens)
             {
-                int fromFile = FileOf(token, 0);
-                int fromRank = RankOf(token, 1);
-                int toFile = FileOf(token, 2);
-                int toRank = RankOf(token, 3);
+                if (!SquareNotation.TryParse(token[0], token[1], out Vector2Int from)
+                    || !SquareNotation.TryParse(token[2], token[3], out Vector2Int to))
+                {
+                    throw new InvalidOperationException(
+                        $"Curated opening line {index}: '{token}' is not a pair of squares.");
+                }
 
                 legalMoves.Clear();
                 engine.GetAllLegalMovesIncludingBetrayal(board, board.CurrentTurn, legalMoves);
@@ -92,8 +94,7 @@ namespace ChessTheBetrayal.AI.Positions
                 for (int i = 0; i < legalMoves.Count; i++)
                 {
                     MoveCommand candidate = legalMoves[i];
-                    if (candidate.StartPosition.x == fromFile && candidate.StartPosition.y == fromRank
-                        && candidate.EndPosition.x == toFile && candidate.EndPosition.y == toRank)
+                    if (candidate.StartPosition == from && candidate.EndPosition == to)
                     {
                         match = candidate;
                         break;
@@ -111,9 +112,5 @@ namespace ChessTheBetrayal.AI.Positions
 
             return board;
         }
-
-        private static int FileOf(string token, int offset) => token[offset] - 'a';
-
-        private static int RankOf(string token, int offset) => token[offset] - '1';
     }
 }

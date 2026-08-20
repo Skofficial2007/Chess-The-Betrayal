@@ -1,3 +1,4 @@
+using System;
 using ChessTheBetrayal.Core.Data;
 
 namespace ChessTheBetrayal.AI.Positions
@@ -97,11 +98,13 @@ namespace ChessTheBetrayal.AI.Positions
 
         private static void Place(BoardState board, string algebraic, Team team, ChessPieceType type)
         {
-            int file = algebraic[0] - 'a';
-            int rank = algebraic[1] - '1';
+            if (!SquareNotation.TryParse(algebraic, out Vector2Int square))
+                throw new ArgumentException(
+                    $"Invalid square: '{algebraic}'. Expected a1 through h8.", nameof(algebraic));
+
             int moveDir = team == Team.White ? 1 : -1;
             int startRow = type == ChessPieceType.Pawn ? (team == Team.White ? 1 : 6) : 0;
-            board.SetPiece(new PieceData(team, type, moveDir, startRow), file, rank);
+            board.SetPiece(new PieceData(team, type, moveDir, startRow), square.x, square.y);
         }
     }
 }
