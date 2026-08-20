@@ -6,7 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
 using ChessTheBetrayal.AI.Profiles;
-using ChessTheBetrayal.EditorTools.Benchmark;
+using ChessTheBetrayal.Tooling.Benchmark;
 using ChessTheBetrayal.Tooling;
 using ChessTheBetrayal.Tooling.Match;
 using ChessTheBetrayal.Tooling.Tournament;
@@ -151,7 +151,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.Tournament
         /// <summary>Fires ReportGameCompleted like a real sink, but lets the caller run arbitrary
         /// code (stall, inspect state) on a specific completion count -- same shape as
         /// BlockOneGameProgress below, generalized to take the count.</summary>
-        private sealed class StallingProgress : ChessTheBetrayal.EditorTools.Benchmark.ITournamentProgress
+        private sealed class StallingProgress : ChessTheBetrayal.Tooling.Benchmark.ITournamentProgress
         {
             private readonly Action<int> _onReport;
             public StallingProgress(Action<int> onReport) => _onReport = onReport;
@@ -249,7 +249,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.Tournament
 
         /// <summary>Thread-safe test double — ReportGameCompleted fires from worker threads, out
         /// of order, exactly like the real sinks must tolerate.</summary>
-        private sealed class RecordingProgress : ChessTheBetrayal.EditorTools.Benchmark.ITournamentProgress
+        private sealed class RecordingProgress : ChessTheBetrayal.Tooling.Benchmark.ITournamentProgress
         {
             private int _callCount;
             private int _lastReportedCompleted;
@@ -320,7 +320,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.Tournament
 
         /// <summary>Fires ReportGameCompleted like a real sink, but lets the caller stall one
         /// specific call — used to force a hole to appear mid-array rather than only at the tail.</summary>
-        private sealed class BlockOneGameProgress : ChessTheBetrayal.EditorTools.Benchmark.ITournamentProgress
+        private sealed class BlockOneGameProgress : ChessTheBetrayal.Tooling.Benchmark.ITournamentProgress
         {
             private readonly System.Action _onReport;
             public BlockOneGameProgress(System.Action onReport) => _onReport = onReport;

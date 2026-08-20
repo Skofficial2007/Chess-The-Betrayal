@@ -1,5 +1,6 @@
 using NUnit.Framework;
-using ChessTheBetrayal.EditorTools.Benchmark;
+using ChessTheBetrayal.Tooling.Benchmark;
+using ChessTheBetrayal.Tooling.Tournament;
 
 namespace ChessTheBetrayal.Tests.EditMode.Tooling.Tournament
 {

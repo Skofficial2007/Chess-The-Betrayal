@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 using NUnit.Framework;
 using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.Core.Data;
-using ChessTheBetrayal.EditorTools.Benchmark;
+using ChessTheBetrayal.Tooling.Tournament;
 using ChessTheBetrayal.Tooling;
 using ChessTheBetrayal.Tooling.Strength;
 

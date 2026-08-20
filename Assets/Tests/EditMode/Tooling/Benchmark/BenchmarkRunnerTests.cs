@@ -1,7 +1,8 @@
 using System.Collections.Generic;
 using NUnit.Framework;
 using ChessTheBetrayal.AI.Profiles;
-using ChessTheBetrayal.EditorTools.Benchmark;
+using ChessTheBetrayal.Tooling.Benchmark;
+using ChessTheBetrayal.Tooling.Tournament;
 using ChessTheBetrayal.Tooling;
 using ChessTheBetrayal.Tooling.Match;
 

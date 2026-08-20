@@ -1,7 +1,7 @@
 using System.IO;
 using UnityEngine;
 
-namespace ChessTheBetrayal.EditorTools.Benchmark
+namespace ChessTheBetrayal.Tooling.Benchmark
 {
     /// <summary>
     /// Reads/writes BenchmarkReport as the committed Docs/Benchmarks/baseline.json artifact. Plain

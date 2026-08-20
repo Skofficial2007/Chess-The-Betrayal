@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace ChessTheBetrayal.EditorTools.Benchmark
+namespace ChessTheBetrayal.Tooling.Benchmark
 {
     /// <summary>
     /// Reports tournament progress via Debug.Log so a slow run's Editor.log shows real, timestamped

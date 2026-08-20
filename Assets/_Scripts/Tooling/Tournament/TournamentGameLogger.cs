@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace ChessTheBetrayal.EditorTools.Benchmark
+namespace ChessTheBetrayal.Tooling.Tournament
 {
     /// <summary>
     /// Logs one readable line per finished game — pairing, result, running score for that pairing,

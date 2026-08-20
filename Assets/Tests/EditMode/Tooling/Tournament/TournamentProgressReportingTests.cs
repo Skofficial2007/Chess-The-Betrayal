@@ -1,7 +1,8 @@
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
-using ChessTheBetrayal.EditorTools.Benchmark;
+using ChessTheBetrayal.Tooling.Benchmark;
+using ChessTheBetrayal.Tooling.Tournament;
 using ChessTheBetrayal.Tooling;
 using ChessTheBetrayal.Tooling.Match;
 

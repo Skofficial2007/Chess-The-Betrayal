@@ -3,12 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.Core.Data;
-using ChessTheBetrayal.Tooling;
+using ChessTheBetrayal.Tooling.Benchmark;
 using ChessTheBetrayal.Tooling.Match;
 using ChessTheBetrayal.Tooling.Strength;
-using ChessTheBetrayal.Tooling.Tournament;
 
-namespace ChessTheBetrayal.EditorTools.Benchmark
+namespace ChessTheBetrayal.Tooling.Tournament
 {
     /// <summary>One finished tournament game, as announced to OnGameCompleted subscribers.</summary>
     public sealed class TournamentGameRecord

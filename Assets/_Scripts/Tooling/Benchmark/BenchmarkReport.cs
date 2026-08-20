@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace ChessTheBetrayal.EditorTools.Benchmark
+namespace ChessTheBetrayal.Tooling.Benchmark
 {
     /// <summary>How much of the tournament matrix a run covers.</summary>
     public enum BenchmarkMode

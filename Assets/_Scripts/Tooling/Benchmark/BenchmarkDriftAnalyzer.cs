@@ -1,7 +1,8 @@
 using System.Collections.Generic;
 using ChessTheBetrayal.AI.Profiles;
+using ChessTheBetrayal.Tooling.Tournament;
 
-namespace ChessTheBetrayal.EditorTools.Benchmark
+namespace ChessTheBetrayal.Tooling.Benchmark
 {
     public enum DriftSeverity
     {

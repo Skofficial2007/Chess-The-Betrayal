@@ -5,11 +5,10 @@ using System.Threading.Tasks;
 using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.AI.OpeningBook;
 using ChessTheBetrayal.Core.Data;
-using ChessTheBetrayal.Tooling;
 using ChessTheBetrayal.Tooling.Match;
 using ChessTheBetrayal.Tooling.Tournament;
 
-namespace ChessTheBetrayal.EditorTools.Benchmark
+namespace ChessTheBetrayal.Tooling.Benchmark
 {
     /// <summary>What playing from the opening book was worth to one difficulty tier.</summary>
     public sealed class BookImpactResult

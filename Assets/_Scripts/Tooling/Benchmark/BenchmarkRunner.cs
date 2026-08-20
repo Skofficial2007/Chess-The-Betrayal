@@ -3,11 +3,10 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using ChessTheBetrayal.AI.Profiles;
-using ChessTheBetrayal.Tooling;
 using ChessTheBetrayal.Tooling.Match;
 using ChessTheBetrayal.Tooling.Tournament;
 
-namespace ChessTheBetrayal.EditorTools.Benchmark
+namespace ChessTheBetrayal.Tooling.Benchmark
 {
     /// <summary>Thrown when a run's TournamentWatchdog trips — no game finished for longer than the
     /// derived stall window, meaning the run is almost certainly deadlocked rather than merely

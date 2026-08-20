@@ -1,11 +1,10 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using ChessTheBetrayal.Tooling;
+using ChessTheBetrayal.Tooling.Benchmark;
 using ChessTheBetrayal.Tooling.Match;
-using ChessTheBetrayal.Tooling.Tournament;
 
-namespace ChessTheBetrayal.EditorTools.Benchmark
+namespace ChessTheBetrayal.Tooling.Tournament
 {
     /// <summary>One completed run directory read back from disk, distinguishing a finished run from
     /// one that was killed partway through by a single fact: whether report.json exists. Nothing

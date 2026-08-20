@@ -1,6 +1,7 @@
 using System.Text;
+using ChessTheBetrayal.Tooling.Tournament;
 
-namespace ChessTheBetrayal.EditorTools.Benchmark
+namespace ChessTheBetrayal.Tooling.Benchmark
 {
     /// <summary>
     /// Renders a BenchmarkReport as human-readable text — one implementation shared by the console

@@ -1,5 +1,5 @@
 using NUnit.Framework;
-using ChessTheBetrayal.EditorTools.Benchmark;
+using ChessTheBetrayal.Tooling.Benchmark;
 
 namespace ChessTheBetrayal.Tests.EditMode
 {

@@ -1,4 +1,4 @@
-namespace ChessTheBetrayal.EditorTools.Benchmark
+namespace ChessTheBetrayal.Tooling.Benchmark
 {
     /// <summary>
     /// Reports live progress out of a tournament/benchmark run — the fix for the exact failure

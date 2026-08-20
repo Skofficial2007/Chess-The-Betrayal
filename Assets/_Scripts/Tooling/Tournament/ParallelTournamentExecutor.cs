@@ -2,11 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using ChessTheBetrayal.Tooling;
+using ChessTheBetrayal.Tooling.Benchmark;
 using ChessTheBetrayal.Tooling.Match;
-using ChessTheBetrayal.Tooling.Tournament;
 
-namespace ChessTheBetrayal.EditorTools.Benchmark
+namespace ChessTheBetrayal.Tooling.Tournament
 {
     /// <summary>
     /// Plays a TournamentSession's remaining games across several worker threads instead of one at
