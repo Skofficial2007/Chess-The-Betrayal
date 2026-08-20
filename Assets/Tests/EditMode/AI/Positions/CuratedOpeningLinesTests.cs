@@ -1,7 +1,6 @@
 using NUnit.Framework;
 using ChessTheBetrayal.AI.Positions;
 using ChessTheBetrayal.Core.Data;
-using ChessTheBetrayal.Tests.Utilities;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI.Positions
 {
