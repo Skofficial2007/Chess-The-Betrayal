@@ -1,5 +1,6 @@
 {
   "name": "ChessTheBetrayal.Tests.EditMode",
+  "rootNamespace": "ChessTheBetrayal.Tests.EditMode",
   "references": [
     "ChessTheBetrayal.Core",
     "ChessTheBetrayal.Gameplay.Flow",
