@@ -137,13 +137,13 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
 
             /// <summary>The window's moves, best true score first. Only meaningful on a reference run,
             /// where every score is real.</summary>
-            public readonly List<ulong> WindowByScore;
+            public readonly List<uint> WindowByScore;
 
             /// <summary>Every move this run settled, by identity, so an arm can be asked whether it
             /// settled a particular move without relying on where that move sat in its list.</summary>
-            public readonly HashSet<ulong> SettledMoves;
+            public readonly HashSet<uint> SettledMoves;
 
-            public Arm(long elapsedMs, int settled, List<ulong> windowByScore, HashSet<ulong> settledMoves)
+            public Arm(long elapsedMs, int settled, List<uint> windowByScore, HashSet<uint> settledMoves)
             {
                 ElapsedMs = elapsedMs;
                 Settled = settled;
@@ -152,12 +152,6 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
                 InWindowTotal = windowByScore.Count;
             }
         }
-
-        /// <summary>Identifies a root move well enough to recognise it in another run's list.</summary>
-        private static ulong KeyOf(MoveCommand move) =>
-            ((ulong)(uint)move.StartPosition.x << 40) | ((ulong)(uint)move.StartPosition.y << 32)
-            | ((ulong)(uint)move.EndPosition.x << 24) | ((ulong)(uint)move.EndPosition.y << 16)
-            | ((ulong)(uint)move.PromotedTo << 8) | (ulong)(uint)move.Stage;
 
         private static Arm Run(IChessEngine engine, AIProfile profile, AISearchSettings settings,
             BoardState board, int margin, bool underBudget, long deadlineMs)
@@ -176,25 +170,25 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
                 rescoreDeadlineMs: deadlineMs);
             stopwatch.Stop();
 
-            var settledMoves = new HashSet<ulong>();
+            var settledMoves = new HashSet<uint>();
             for (int i = 0; i < search.RootScoresExactCount && i < search.RootMoveCount; i++)
             {
-                settledMoves.Add(KeyOf(search.RootMoves[i]));
+                settledMoves.Add(PackedMove.Pack(search.RootMoves[i]));
             }
 
-            var window = new List<(ulong Key, int Score)>();
+            var window = new List<(uint Key, int Score)>();
             if (search.RootMoveCount > 0)
             {
                 int threshold = search.RootScores[search.BestRootIndex] - profile.TieBreakWindowCp;
                 for (int i = 0; i < search.RootMoveCount; i++)
                 {
                     if (search.RootScores[i] >= threshold)
-                        window.Add((KeyOf(search.RootMoves[i]), search.RootScores[i]));
+                        window.Add((PackedMove.Pack(search.RootMoves[i]), search.RootScores[i]));
                 }
             }
 
             window.Sort((a, b) => b.Score.CompareTo(a.Score));
-            var windowByScore = new List<ulong>(window.Count);
+            var windowByScore = new List<uint>(window.Count);
             for (int i = 0; i < window.Count; i++) windowByScore.Add(window[i].Key);
 
             return new Arm(stopwatch.ElapsedMilliseconds, search.RootScoresExactCount, windowByScore, settledMoves);
