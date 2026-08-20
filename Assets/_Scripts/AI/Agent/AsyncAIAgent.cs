@@ -177,9 +177,9 @@ namespace ChessTheBetrayal.AI.Agent
             // enough to never need a worker thread or a clone. A hit skips FindBestMove entirely.
             // OpeningBookPolicy gates it because a tier is allowed to stop trusting the book part
             // way through the opening even while the book still knows the position.
-            if (_openingBook != null && OpeningBook.OpeningBookPolicy.ShouldConsult(_profile, board))
+            if (_openingBook != null && OpeningBookPolicy.ShouldConsult(_profile, board))
             {
-                MoveCommand? bookMove = OpeningBook.OpeningBookLookup.TryGetBookMove(_openingBook, board, _engine, _rng);
+                MoveCommand? bookMove = OpeningBookLookup.TryGetBookMove(_openingBook, board, _engine, _rng);
                 if (bookMove != null)
                 {
                     _pendingResult = bookMove.Value;
