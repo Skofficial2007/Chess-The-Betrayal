@@ -17,9 +17,9 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
     [TestFixture]
     public class HistoryHeuristicTests
     {
-        private static readonly Vector2Int From = TestBoardSetupUtility.AlgebraicToVector("a2");
-        private static readonly Vector2Int To = TestBoardSetupUtility.AlgebraicToVector("a3");
-        private static readonly Vector2Int OtherTo = TestBoardSetupUtility.AlgebraicToVector("a4");
+        private static readonly Vector2Int From = BoardSetup.AlgebraicToVector("a2");
+        private static readonly Vector2Int To = BoardSetup.AlgebraicToVector("a3");
+        private static readonly Vector2Int OtherTo = BoardSetup.AlgebraicToVector("a4");
 
         private static AlphaBetaSearch NewSearch() =>
             new AlphaBetaSearch(new ChessEngineAdapter(), new BetrayalAwareEvaluator());

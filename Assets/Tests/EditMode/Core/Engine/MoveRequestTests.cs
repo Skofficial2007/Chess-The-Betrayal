@@ -23,7 +23,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void Setup() => _engine = new ChessEngineAdapter();
 
         private static Vector2Int Square(string algebraic) =>
-            TestBoardSetupUtility.AlgebraicToVector(algebraic);
+            BoardSetup.AlgebraicToVector(algebraic);
 
         private DomainResult<MoveCommand> Ask(
             BoardState board, string from, string to,
@@ -33,7 +33,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
 
         private static BoardState TwoKingsAnd(params (string Square, Team Team, ChessPieceType Type)[] pieces)
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithPiece("h8", Team.Black, ChessPieceType.King);
 

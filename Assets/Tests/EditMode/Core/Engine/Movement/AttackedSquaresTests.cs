@@ -24,7 +24,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Movement
 
         private HashSet<Vector2Int> AttackedBy(BoardState board, string square)
         {
-            Vector2Int pos = TestBoardSetupUtility.AlgebraicToVector(square);
+            Vector2Int pos = BoardSetup.AlgebraicToVector(square);
             PieceData piece = board.GetPiece(pos);
             IPieceMovement strategy = MovementFactory.GetStrategy(piece.Type);
 
@@ -34,14 +34,14 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Movement
         }
 
         private bool Attacks(BoardState board, string from, string target) =>
-            AttackedBy(board, from).Contains(TestBoardSetupUtility.AlgebraicToVector(target));
+            AttackedBy(board, from).Contains(BoardSetup.AlgebraicToVector(target));
 
         #region Sliders — up to and INCLUDING the first blocker, of either team
 
         [Test]
         public void Rook_AttacksEmptySquaresAndFirstBlocker_RegardlessOfBlockerTeam()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.Rook)
                 .WithPiece("a4", Team.White, ChessPieceType.Pawn)   // friendly blocker up-ray
                 .WithPiece("d1", Team.Black, ChessPieceType.Pawn);  // enemy blocker right-ray
@@ -49,22 +49,22 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Movement
             var attacked = AttackedBy(board, "a1");
 
             // Up-ray: a2, a3 empty then a4 (friendly) is attacked; a5+ is not.
-            Assert.That(attacked.Contains(TestBoardSetupUtility.AlgebraicToVector("a2")), Is.True);
-            Assert.That(attacked.Contains(TestBoardSetupUtility.AlgebraicToVector("a3")), Is.True);
-            Assert.That(attacked.Contains(TestBoardSetupUtility.AlgebraicToVector("a4")), Is.True,
+            Assert.That(attacked.Contains(BoardSetup.AlgebraicToVector("a2")), Is.True);
+            Assert.That(attacked.Contains(BoardSetup.AlgebraicToVector("a3")), Is.True);
+            Assert.That(attacked.Contains(BoardSetup.AlgebraicToVector("a4")), Is.True,
                 "The first blocker square is attacked even when a friendly piece sits there.");
-            Assert.That(attacked.Contains(TestBoardSetupUtility.AlgebraicToVector("a5")), Is.False,
+            Assert.That(attacked.Contains(BoardSetup.AlgebraicToVector("a5")), Is.False,
                 "Nothing past the blocker is attacked.");
 
             // Right-ray: b1, c1 empty then d1 (enemy) is attacked; e1+ is not.
-            Assert.That(attacked.Contains(TestBoardSetupUtility.AlgebraicToVector("d1")), Is.True);
-            Assert.That(attacked.Contains(TestBoardSetupUtility.AlgebraicToVector("e1")), Is.False);
+            Assert.That(attacked.Contains(BoardSetup.AlgebraicToVector("d1")), Is.True);
+            Assert.That(attacked.Contains(BoardSetup.AlgebraicToVector("e1")), Is.False);
         }
 
         [Test]
         public void Bishop_StopsAtFirstBlockerPerDiagonal()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("c1", Team.White, ChessPieceType.Bishop)
                 .WithPiece("e3", Team.White, ChessPieceType.Knight); // blocker on the up-right diagonal
 
@@ -76,7 +76,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Movement
         [Test]
         public void Queen_CombinesOrthogonalAndDiagonalRays()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("d4", Team.White, ChessPieceType.Queen);
 
             var attacked = AttackedBy(board, "d4");
@@ -92,7 +92,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Movement
         [Test]
         public void Knight_AttacksAllInBoundsOffsets_EvenThroughBlockers()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("d4", Team.White, ChessPieceType.Knight)
                 // Surround it fully — a jumper is unaffected by adjacent blockers.
                 .WithPiece("d5", Team.White, ChessPieceType.Pawn)
@@ -107,7 +107,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Movement
         [Test]
         public void Knight_OffBoardOffsetsExcluded()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.Knight);
 
             Assert.That(AttackedBy(board, "a1").Count, Is.EqualTo(2), "A corner knight attacks only b3 and c2.");
@@ -120,15 +120,15 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Movement
         {
             // A King with intact castling rights and a clear path must still NOT attack the castling
             // landing square — castling is a move, never a capture, so it has no place in an attack map.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("h1", Team.White, ChessPieceType.Rook);
 
             var attacked = AttackedBy(board, "e1");
 
             Assert.That(attacked.Count, Is.EqualTo(5), "Back-rank king attacks its 5 in-bounds neighbours.");
-            Assert.That(attacked.Contains(TestBoardSetupUtility.AlgebraicToVector("f1")), Is.True);
-            Assert.That(attacked.Contains(TestBoardSetupUtility.AlgebraicToVector("g1")), Is.False,
+            Assert.That(attacked.Contains(BoardSetup.AlgebraicToVector("f1")), Is.True);
+            Assert.That(attacked.Contains(BoardSetup.AlgebraicToVector("g1")), Is.False,
                 "The kingside castling landing square is not an attacked square.");
         }
 
@@ -139,51 +139,51 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Movement
         [Test]
         public void WhitePawn_AttacksBothForwardDiagonals_EvenWhenEmpty()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e4", Team.White, ChessPieceType.Pawn);
 
             var attacked = AttackedBy(board, "e4");
 
             Assert.That(attacked.Count, Is.EqualTo(2));
-            Assert.That(attacked.Contains(TestBoardSetupUtility.AlgebraicToVector("d5")), Is.True);
-            Assert.That(attacked.Contains(TestBoardSetupUtility.AlgebraicToVector("f5")), Is.True);
+            Assert.That(attacked.Contains(BoardSetup.AlgebraicToVector("d5")), Is.True);
+            Assert.That(attacked.Contains(BoardSetup.AlgebraicToVector("f5")), Is.True);
         }
 
         [Test]
         public void WhitePawn_NeverAttacksForwardPushSquares()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e2", Team.White, ChessPieceType.Pawn); // unmoved — double push available as a MOVE
 
             var attacked = AttackedBy(board, "e2");
 
-            Assert.That(attacked.Contains(TestBoardSetupUtility.AlgebraicToVector("e3")), Is.False, "Single push is a move, not an attack.");
-            Assert.That(attacked.Contains(TestBoardSetupUtility.AlgebraicToVector("e4")), Is.False, "Double push is a move, not an attack.");
+            Assert.That(attacked.Contains(BoardSetup.AlgebraicToVector("e3")), Is.False, "Single push is a move, not an attack.");
+            Assert.That(attacked.Contains(BoardSetup.AlgebraicToVector("e4")), Is.False, "Double push is a move, not an attack.");
         }
 
         [Test]
         public void BlackPawn_AttacksDownwardDiagonals()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e5", Team.Black, ChessPieceType.Pawn);
 
             var attacked = AttackedBy(board, "e5");
 
             Assert.That(attacked.Count, Is.EqualTo(2));
-            Assert.That(attacked.Contains(TestBoardSetupUtility.AlgebraicToVector("d4")), Is.True);
-            Assert.That(attacked.Contains(TestBoardSetupUtility.AlgebraicToVector("f4")), Is.True);
+            Assert.That(attacked.Contains(BoardSetup.AlgebraicToVector("d4")), Is.True);
+            Assert.That(attacked.Contains(BoardSetup.AlgebraicToVector("f4")), Is.True);
         }
 
         [Test]
         public void EdgePawn_OnlyOneDiagonalInBounds()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("a4", Team.White, ChessPieceType.Pawn);
 
             var attacked = AttackedBy(board, "a4");
 
             Assert.That(attacked.Count, Is.EqualTo(1), "An a-file pawn attacks only b5.");
-            Assert.That(attacked.Contains(TestBoardSetupUtility.AlgebraicToVector("b5")), Is.True);
+            Assert.That(attacked.Contains(BoardSetup.AlgebraicToVector("b5")), Is.True);
         }
 
         #endregion

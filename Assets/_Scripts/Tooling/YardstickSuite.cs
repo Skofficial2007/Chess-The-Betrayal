@@ -17,7 +17,7 @@ namespace ChessTheBetrayal.Tooling
     /// </summary>
     public static class YardstickSuite
     {
-        private static Vector2Int At(string algebraic) => TestBoardSetupUtility.AlgebraicToVector(algebraic);
+        private static Vector2Int At(string algebraic) => BoardSetup.AlgebraicToVector(algebraic);
 
         public static IReadOnlyList<YardstickPosition> All { get; } = new List<YardstickPosition>
         {
@@ -25,7 +25,7 @@ namespace ChessTheBetrayal.Tooling
                 "BackRankMateInOne",
                 YardstickProofClass.ForcedMate,
                 "Black's own pawns wall the king in on the back rank — a rook on the open file mates immediately.",
-                () => TestBoardSetupUtility.CreateEmpty()
+                () => BoardSetup.CreateEmpty()
                     .WithPiece("d1", Team.White, ChessPieceType.Rook)
                     .WithPiece("h1", Team.White, ChessPieceType.King)
                     .WithPiece("g8", Team.Black, ChessPieceType.King)
@@ -40,7 +40,7 @@ namespace ChessTheBetrayal.Tooling
                 "BackRankMateInOneOtherCorner",
                 YardstickProofClass.ForcedMate,
                 "A second walled-in back-rank mate, mirroring the first one's proven shape from the opposite side of the board — deliberately NOT a bare king-and-rook endgame technique, where several different first moves can all lead to eventual forced mate and score misleadingly close to each other.",
-                () => TestBoardSetupUtility.CreateEmpty()
+                () => BoardSetup.CreateEmpty()
                     .WithPiece("h5", Team.White, ChessPieceType.Rook)
                     .WithPiece("g4", Team.White, ChessPieceType.King)
                     .WithPiece("b8", Team.Black, ChessPieceType.King)
@@ -55,7 +55,7 @@ namespace ChessTheBetrayal.Tooling
                 "OnlyCleanCaptureWinsAPiece",
                 YardstickProofClass.ForcedMaterialGain,
                 "A rook can take an undefended knight cleanly; every other legal move leaves the knight escaping or the rook hanging instead.",
-                () => TestBoardSetupUtility.CreateEmpty()
+                () => BoardSetup.CreateEmpty()
                     .WithPiece("a1", Team.White, ChessPieceType.King)
                     .WithPiece("a5", Team.White, ChessPieceType.Rook)
                     .WithPiece("h8", Team.Black, ChessPieceType.King)
@@ -68,7 +68,7 @@ namespace ChessTheBetrayal.Tooling
                 "OnlyCleanCaptureWinsTheBishop",
                 YardstickProofClass.ForcedMaterialGain,
                 "A different geometry from the knight-vs-rook case above: a bishop takes an undefended enemy bishop cleanly, with kings far enough apart that no alternative move comes close to matching it.",
-                () => TestBoardSetupUtility.CreateEmpty()
+                () => BoardSetup.CreateEmpty()
                     .WithPiece("a1", Team.White, ChessPieceType.King)
                     .WithPiece("b2", Team.White, ChessPieceType.Bishop)
                     .WithPiece("h8", Team.Black, ChessPieceType.King)

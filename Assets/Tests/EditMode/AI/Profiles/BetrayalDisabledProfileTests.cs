@@ -29,7 +29,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Profiles
         public void FullMatch_BetrayalDisabled_AggressiveProfile_NeverProducesAnActMove()
         {
             var engine = new ChessEngineAdapter();
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             board.CurrentTurn = Team.White;
             board.BetrayalRightAvailable = false;
 
@@ -89,7 +89,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Profiles
         [Test]
         public void Evaluate_BetrayalDisabled_ScoreIsIdenticalAcrossEveryBetrayalOptionScale()
         {
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             board.BetrayalRightAvailable = false;
 
             var evaluatorAtHalf = new BetrayalAwareEvaluator(new EvaluationWeights(1f, 1f, 0.5f));

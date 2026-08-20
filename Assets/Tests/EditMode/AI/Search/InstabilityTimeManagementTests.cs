@@ -30,7 +30,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         /// tactics — the best move is obvious from a shallow depth on and stays obvious as the
         /// search goes deeper, so this is the "settled root" control case.</summary>
         private static BoardState QuietPosition() =>
-            TestBoardSetupUtility.CreateEmpty()
+            BoardSetup.CreateEmpty()
                 .WithPiece("g1", Team.White, ChessPieceType.King)
                 .WithPiece("g8", Team.Black, ChessPieceType.King)
                 .WithPiece("d1", Team.White, ChessPieceType.Queen)
@@ -70,7 +70,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         /// being trapped, so a shallow search and a deeper search disagree about which move is best
         /// (and by how much), giving the between-depths check real instability to react to.</summary>
         private static BoardState UnstablePosition() =>
-            TestBoardSetupUtility.CreateEmpty()
+            BoardSetup.CreateEmpty()
                 .WithPiece("g1", Team.White, ChessPieceType.King)
                 .WithPiece("g8", Team.Black, ChessPieceType.King)
                 .WithPiece("d1", Team.White, ChessPieceType.Queen)

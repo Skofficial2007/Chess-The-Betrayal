@@ -26,7 +26,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         public void Setup()
         {
             _engine = new ChessEngineAdapter();
-            _board = TestBoardSetupUtility.CreateEmpty()
+            _board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithTurn(Team.White);
@@ -52,7 +52,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             _matchDriver.OnBetrayalMoveRequired += team => owedBy = team;
 
             var actMoves = new List<MoveCommand>();
-            ChessEngine.GetBetrayalTargets(_board, TestBoardSetupUtility.AlgebraicToVector("b1"), actMoves);
+            ChessEngine.GetBetrayalTargets(_board, BoardSetup.AlgebraicToVector("b1"), actMoves);
             _matchDriver.PlayMove(actMoves[0]);
 
             Assert.That(_matchDriver.CurrentPhase, Is.EqualTo(TurnPhase.RetributionPending));
@@ -72,10 +72,10 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             _matchDriver.OnBetrayalMoveRequired += _ => fired = true;
 
             MoveCommand push = MoveCommand.CreateStandardMove(
-                TestBoardSetupUtility.AlgebraicToVector("a2"),
-                TestBoardSetupUtility.AlgebraicToVector("a3"),
-                _board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("a2")),
-                _board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("a3")),
+                BoardSetup.AlgebraicToVector("a2"),
+                BoardSetup.AlgebraicToVector("a3"),
+                _board.GetPiece(BoardSetup.AlgebraicToVector("a2")),
+                _board.GetPiece(BoardSetup.AlgebraicToVector("a3")),
                 _board);
             _matchDriver.PlayMove(push);
 
@@ -97,7 +97,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             _matchDriver.OnBetrayalMoveRequired += _ => fireCount++;
 
             var actMoves = new List<MoveCommand>();
-            ChessEngine.GetBetrayalTargets(_board, TestBoardSetupUtility.AlgebraicToVector("b1"), actMoves);
+            ChessEngine.GetBetrayalTargets(_board, BoardSetup.AlgebraicToVector("b1"), actMoves);
             _matchDriver.PlayMove(actMoves[0]);
 
             var retMoves = new List<MoveCommand>();
@@ -131,7 +131,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             };
 
             var actMoves = new List<MoveCommand>();
-            ChessEngine.GetBetrayalTargets(_board, TestBoardSetupUtility.AlgebraicToVector("b1"), actMoves);
+            ChessEngine.GetBetrayalTargets(_board, BoardSetup.AlgebraicToVector("b1"), actMoves);
             _matchDriver.PlayMove(actMoves[0]);
 
             Assert.That(defection.HasValue, Is.True, "A resolved Defection must be announced.");
@@ -161,7 +161,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             _matchDriver.OnPlyApplied += (_, plyNumber) => announced.Add(plyNumber);
 
             var actMoves = new List<MoveCommand>();
-            ChessEngine.GetBetrayalTargets(_board, TestBoardSetupUtility.AlgebraicToVector("b1"), actMoves);
+            ChessEngine.GetBetrayalTargets(_board, BoardSetup.AlgebraicToVector("b1"), actMoves);
             _matchDriver.PlayMove(actMoves[0]);
 
             var retMoves = new List<MoveCommand>();
@@ -186,7 +186,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             _matchDriver.OnDefectionResolved += (_, _) => fired = true;
 
             var actMoves = new List<MoveCommand>();
-            ChessEngine.GetBetrayalTargets(_board, TestBoardSetupUtility.AlgebraicToVector("b1"), actMoves);
+            ChessEngine.GetBetrayalTargets(_board, BoardSetup.AlgebraicToVector("b1"), actMoves);
             _matchDriver.PlayMove(actMoves[0]);
 
             Assert.That(fired, Is.False,

@@ -25,7 +25,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         public void PlyIndex_PlainMoves_IncrementsOncePerPly()
         {
             var engine = new ChessEngineAdapter();
-            var board = TestBoardSetupUtility.CreateStandard();
+            var board = BoardSetup.CreateStandard();
 
             var seenPlyIndexes = new List<int>();
             var moveExecutedChannel = ScriptableObject.CreateInstance<ChessTheBetrayal.Events.Channels.MoveExecutedEventChannel>();
@@ -37,13 +37,13 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             matchDriver.TransitionToPhase(TurnPhase.Normal);
 
             MoveCommand whitePush = MoveCommand.CreateStandardMove(
-                TestBoardSetupUtility.AlgebraicToVector("e2"), TestBoardSetupUtility.AlgebraicToVector("e4"),
-                board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("e2")), PieceData.Empty, board);
+                BoardSetup.AlgebraicToVector("e2"), BoardSetup.AlgebraicToVector("e4"),
+                board.GetPiece(BoardSetup.AlgebraicToVector("e2")), PieceData.Empty, board);
             matchDriver.PlayMove(whitePush);
 
             MoveCommand blackPush = MoveCommand.CreateStandardMove(
-                TestBoardSetupUtility.AlgebraicToVector("e7"), TestBoardSetupUtility.AlgebraicToVector("e5"),
-                board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("e7")), PieceData.Empty, board);
+                BoardSetup.AlgebraicToVector("e7"), BoardSetup.AlgebraicToVector("e5"),
+                board.GetPiece(BoardSetup.AlgebraicToVector("e7")), PieceData.Empty, board);
             matchDriver.PlayMove(blackPush);
 
             Assert.That(seenPlyIndexes, Is.EqualTo(new[] { 1, 2 }),
@@ -58,7 +58,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             // PlyIndex must increment on EVERY applied ply, including the Act/Retribution pair of
             // a Betrayal sub-sequence, where the turn does not flip between the two.
             var engine = new ChessEngineAdapter();
-            var board = TestBoardSetupUtility.CreateEmpty()
+            var board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("b1", Team.White, ChessPieceType.Knight)
@@ -78,7 +78,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             matchDriver.TransitionToPhase(TurnPhase.Normal);
 
             var actMoves = new List<MoveCommand>();
-            ChessEngine.GetBetrayalTargets(board, TestBoardSetupUtility.AlgebraicToVector("b1"), actMoves);
+            ChessEngine.GetBetrayalTargets(board, BoardSetup.AlgebraicToVector("b1"), actMoves);
             matchDriver.PlayMove(actMoves[0]);
 
             var retMoves = new List<MoveCommand>();

@@ -35,7 +35,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // White Acted the Knight onto its own Pawn; Rook on a1 can execute Retribution. If any
             // forward-pruning member fired here it would evaluate/skip mid-sequence, corrupting
             // movegen exactly like an unguarded null move would.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("a1", Team.White, ChessPieceType.Rook)
@@ -60,7 +60,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // Rook on e4 is the pending Betrayer with no legal Executioner; if it defects it will
             // check its own former King on e1 (ForcedSave). Pending state + non-flip must hold
             // through the forward-pruning family just as it does through NMP and ordinary search.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("e4", Team.White, ChessPieceType.Rook)
@@ -83,7 +83,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // White king in check from the Black rook on e-file — the shared forwardPruningAllowed
             // guard must block every pruning member here; a check position is exactly the case a
             // static eval can't safely stand in for real search.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.Rook)
                 .WithPiece("a8", Team.Black, ChessPieceType.King)
@@ -106,7 +106,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // General regression guard on full material: reverse futility, move-count pruning, and
             // frontier futility are all live at shallow depths in a normal position — this proves
             // they coexist with TT/NMP/LMR/PVS without corrupting the incremental Zobrist hash.
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             ulong hashBefore = board.ZobristHash;
             var settings = new AISearchSettings(maxDepth: 5, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
@@ -124,7 +124,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // Retribution/Defection/ForcedSave sub-phase (as NullMovePruningSafetyTests' sibling
             // suite already proves for NMP), rather than a forward-pruning member anywhere on the
             // path short-circuiting a node that still needs quiescence resolution.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("a1", Team.White, ChessPieceType.Rook)

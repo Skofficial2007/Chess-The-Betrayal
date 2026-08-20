@@ -35,7 +35,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // White is down a queen for nothing and can only recapture a pawn — the capture cannot
             // plausibly raise alpha given how far behind White already is, so delta pruning should
             // skip exploring it, and quiescence must still resolve cleanly to a stand-pat score.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("d4", Team.White, ChessPieceType.Pawn)
@@ -61,7 +61,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // A genuinely winning capture (pawn takes an undefended queen) must NOT be pruned —
             // its optimistic gain easily clears any reasonable alpha, so quiescence must still find
             // and report the material swing.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("d4", Team.White, ChessPieceType.Pawn)
@@ -73,7 +73,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
 
             // Same position minus the hanging queen: the quiescence score must be meaningfully lower
             // than the capture case, proving the capture was actually explored and credited.
-            BoardState boardNoQueen = TestBoardSetupUtility.CreateEmpty()
+            BoardState boardNoQueen = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("d4", Team.White, ChessPieceType.Pawn)
@@ -90,7 +90,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         {
             // Full-search regression: a hanging queen must still be the reported best capture at a
             // normal search depth even with quiescence delta pruning enabled everywhere below it.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("d4", Team.White, ChessPieceType.Rook)
@@ -103,8 +103,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             var settings = new AISearchSettings(maxDepth: 4, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
             MoveCommand best = _search.FindBestMove(board, settings, CancellationToken.None);
 
-            Assert.That(best.StartPosition, Is.EqualTo(TestBoardSetupUtility.AlgebraicToVector("d4")));
-            Assert.That(best.EndPosition, Is.EqualTo(TestBoardSetupUtility.AlgebraicToVector("d8")));
+            Assert.That(best.StartPosition, Is.EqualTo(BoardSetup.AlgebraicToVector("d4")));
+            Assert.That(best.EndPosition, Is.EqualTo(BoardSetup.AlgebraicToVector("d8")));
         }
     }
 }

@@ -16,11 +16,11 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
         [Test]
         public void BareEnemyKing_CloserAttackingKing_ScoresHigherThanFarther()
         {
-            BoardState far = TestBoardSetupUtility.CreateEmpty()
+            BoardState far = BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithPiece("b3", Team.White, ChessPieceType.Queen)
                 .WithPiece("e5", Team.Black, ChessPieceType.King);
-            BoardState close = TestBoardSetupUtility.CreateEmpty()
+            BoardState close = BoardSetup.CreateEmpty()
                 .WithPiece("d4", Team.White, ChessPieceType.King)
                 .WithPiece("b3", Team.White, ChessPieceType.Queen)
                 .WithPiece("e5", Team.Black, ChessPieceType.King);
@@ -36,7 +36,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
             // in a real game, even though MaxKingApproachPerSide (the clamp used for
             // MaxPositionalSwing's bound) is deliberately the theoretical distance-0 ceiling, never
             // reached in practice. The bound only needs to be an upper limit, not a tight one.
-            BoardState adjacent = TestBoardSetupUtility.CreateEmpty()
+            BoardState adjacent = BoardSetup.CreateEmpty()
                 .WithPiece("d4", Team.White, ChessPieceType.King)
                 .WithPiece("a1", Team.White, ChessPieceType.Queen)
                 .WithPiece("d5", Team.Black, ChessPieceType.King); // Chebyshev distance 1
@@ -44,7 +44,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
             int score = EndgameKingApproach.Score(adjacent, Team.White);
             Assert.That(score, Is.LessThanOrEqualTo(EndgameKingApproach.MaxKingApproachPerSide));
             Assert.That(score, Is.GreaterThan(EndgameKingApproach.Score(
-                TestBoardSetupUtility.CreateEmpty()
+                BoardSetup.CreateEmpty()
                     .WithPiece("a1", Team.White, ChessPieceType.King)
                     .WithPiece("b3", Team.White, ChessPieceType.Queen)
                     .WithPiece("e5", Team.Black, ChessPieceType.King), // farther apart
@@ -57,7 +57,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
             // Both sides still have real material on the board -- this is an ordinary middlegame-
             // shaped position, not a bare-king mating scenario, so the term must stay silent even
             // though White's own king happens to be close to Black's.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("d4", Team.White, ChessPieceType.King)
                 .WithPiece("a1", Team.White, ChessPieceType.Queen)
                 .WithPiece("d5", Team.Black, ChessPieceType.King)
@@ -73,7 +73,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
             // the other king, since neither side holds mating material to finish a chase with -- the
             // relevant lever there is pawn promotion, not king proximity, and this term must not
             // interfere with it.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("a5", Team.White, ChessPieceType.Pawn)
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithPiece("h8", Team.Black, ChessPieceType.King);
@@ -87,12 +87,12 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
             // The rook started on Black's side of a spent Betrayal right and DefectPiece flipped it
             // to White mid-setup -- the term must read live team membership, not a cached/original
             // army, the same correctness bar every other Defection-aware term in this codebase holds.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("d4", Team.White, ChessPieceType.King)
                 .WithPiece("b3", Team.Black, ChessPieceType.Rook)
                 .WithPiece("d5", Team.Black, ChessPieceType.King)
                 .WithBetrayalRight(false);
-            board.DefectPiece(TestBoardSetupUtility.AlgebraicToVector("b3"));
+            board.DefectPiece(BoardSetup.AlgebraicToVector("b3"));
             board.ComputeFullZobristHash();
 
             Assert.That(EndgameKingApproach.Score(board, Team.White), Is.GreaterThan(0),
@@ -104,7 +104,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
         [Test]
         public void Score_KingNotFound_ReturnsZero()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("a1", Team.Black, ChessPieceType.Queen);
 

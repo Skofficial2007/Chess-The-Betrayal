@@ -17,7 +17,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
         // Fully shields all three of the White king's files (f/g/h) so open-file danger is zero in
         // every board below unless a test explicitly removes a pawn to expose one.
         private static BoardState ShieldedWhiteKing() =>
-            TestBoardSetupUtility.CreateEmpty()
+            BoardSetup.CreateEmpty()
                 .WithPiece("g1", Team.White, ChessPieceType.King)
                 .WithPiece("f2", Team.White, ChessPieceType.Pawn)
                 .WithPiece("g2", Team.White, ChessPieceType.Pawn)
@@ -76,7 +76,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
         public void OpenFile_KingWithNoPawnCover_ScoresLowerThanAShieldedKing()
         {
             BoardState shielded = ShieldedWhiteKing();
-            BoardState bare = TestBoardSetupUtility.CreateEmpty()
+            BoardState bare = BoardSetup.CreateEmpty()
                 .WithPiece("g1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King);
 
@@ -88,10 +88,10 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
         {
             // A friendly pawn far from the king's own file/adjacent-files (a-file) does nothing for
             // g1's own exposure on f/g/h.
-            BoardState bare = TestBoardSetupUtility.CreateEmpty()
+            BoardState bare = BoardSetup.CreateEmpty()
                 .WithPiece("g1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King);
-            BoardState irrelevantPawn = TestBoardSetupUtility.CreateEmpty()
+            BoardState irrelevantPawn = BoardSetup.CreateEmpty()
                 .WithPiece("g1", Team.White, ChessPieceType.King)
                 .WithPiece("a2", Team.White, ChessPieceType.Pawn)
                 .WithPiece("e8", Team.Black, ChessPieceType.King);
@@ -152,7 +152,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
         {
             // Defensive floor: a board with no king for the requested team (never happens in a real
             // game, but the term must not throw or misbehave if TryFindKing ever fails).
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e8", Team.Black, ChessPieceType.King);
 
             Assert.That(KingSafety.Score(board, Team.White), Is.EqualTo(0));

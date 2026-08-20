@@ -28,7 +28,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         /// (maxDepth 6) that the score has room to drift a little between depths without any single
         /// depth being trivial, a reasonable stand-in for "an ordinary position in a real game."</summary>
         private static BoardState QuietPosition() =>
-            TestBoardSetupUtility.CreateEmpty()
+            BoardSetup.CreateEmpty()
                 .WithPiece("g1", Team.White, ChessPieceType.King)
                 .WithPiece("g8", Team.Black, ChessPieceType.King)
                 .WithPiece("d1", Team.White, ChessPieceType.Queen)
@@ -72,7 +72,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         /// existing, proven way in this codebase to force a real depth-to-depth score swing large
         /// enough to blow past a 50cp aspiration window.</summary>
         private static BoardState VolatilePosition() =>
-            TestBoardSetupUtility.CreateEmpty()
+            BoardSetup.CreateEmpty()
                 .WithPiece("g1", Team.White, ChessPieceType.King)
                 .WithPiece("g8", Team.Black, ChessPieceType.King)
                 .WithPiece("d1", Team.White, ChessPieceType.Queen)

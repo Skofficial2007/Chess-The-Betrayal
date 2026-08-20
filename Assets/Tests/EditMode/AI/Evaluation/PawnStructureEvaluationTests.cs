@@ -24,12 +24,12 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
         [Test]
         public void PassedPawn_CloserToPromotion_ScoresHigherThanFurtherBack()
         {
-            BoardState earlyPassedPawn = TestBoardSetupUtility.CreateEmpty()
+            BoardState earlyPassedPawn = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("e3", Team.White, ChessPieceType.Pawn);
 
-            BoardState advancedPassedPawn = TestBoardSetupUtility.CreateEmpty()
+            BoardState advancedPassedPawn = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("e6", Team.White, ChessPieceType.Pawn);
@@ -43,13 +43,13 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
         [Test]
         public void PassedPawn_BlockedByAnEnemyPawnOnItsOwnFileAhead_IsNotRewarded()
         {
-            BoardState blocked = TestBoardSetupUtility.CreateEmpty()
+            BoardState blocked = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("e6", Team.White, ChessPieceType.Pawn)
                 .WithPiece("e7", Team.Black, ChessPieceType.Pawn);
 
-            BoardState clear = TestBoardSetupUtility.CreateEmpty()
+            BoardState clear = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("e6", Team.White, ChessPieceType.Pawn);
@@ -64,13 +64,13 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
         [Test]
         public void PassedPawn_BlockedByAnEnemyPawnOnAnAdjacentFileAhead_IsNotRewarded()
         {
-            BoardState blockedByAdjacentFile = TestBoardSetupUtility.CreateEmpty()
+            BoardState blockedByAdjacentFile = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("e6", Team.White, ChessPieceType.Pawn)
                 .WithPiece("f7", Team.Black, ChessPieceType.Pawn);
 
-            BoardState blockedDirectly = TestBoardSetupUtility.CreateEmpty()
+            BoardState blockedDirectly = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("e6", Team.White, ChessPieceType.Pawn)
@@ -84,12 +84,12 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
         [Test]
         public void IsolatedPawn_ScoresLowerThanTheSamePawnWithAFriendlyNeighbor()
         {
-            BoardState isolated = TestBoardSetupUtility.CreateEmpty()
+            BoardState isolated = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("c2", Team.White, ChessPieceType.Pawn);
 
-            BoardState notIsolated = TestBoardSetupUtility.CreateEmpty()
+            BoardState notIsolated = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("c2", Team.White, ChessPieceType.Pawn)
@@ -97,7 +97,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
 
             // c2's own contribution only: subtract d3's contribution (computed independently on a
             // board where d3 is alone, so it carries no isolation/doubling interaction with c2).
-            BoardState d3Alone = TestBoardSetupUtility.CreateEmpty()
+            BoardState d3Alone = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("d3", Team.White, ChessPieceType.Pawn);
@@ -115,13 +115,13 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
         [Test]
         public void DoubledPawns_ScoreLowerThanTheSameCountSpreadAcrossFiles()
         {
-            BoardState doubled = TestBoardSetupUtility.CreateEmpty()
+            BoardState doubled = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("c2", Team.White, ChessPieceType.Pawn)
                 .WithPiece("c3", Team.White, ChessPieceType.Pawn);
 
-            BoardState spread = TestBoardSetupUtility.CreateEmpty()
+            BoardState spread = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("c2", Team.White, ChessPieceType.Pawn)
@@ -138,7 +138,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
             // pawn anywhere near the d/e/f files). Defect it to White mid-test and confirm the very
             // next evaluation call scores it on WHITE's structure — proving pawn membership is read
             // live off the board every call, never from a structure snapshot taken before the flip.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("e5", Team.Black, ChessPieceType.Pawn)
@@ -167,7 +167,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
             // bare kings on this mirrored setup are equally exposed on all three of their own files,
             // so their king-safety deltas cancel by symmetry rather than by having nothing to add.
             // KingSafetyEvaluationTests covers the asymmetric case where they do NOT cancel.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("d1", Team.White, ChessPieceType.Queen);

@@ -21,7 +21,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
 
         /// <summary>Two kings and two rooks, all with room to shuffle and nothing to capture.</summary>
         private static BoardState ShufflingEndgame() =>
-            TestBoardSetupUtility.CreateEmpty()
+            BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithPiece("h1", Team.White, ChessPieceType.Rook)
                 .WithPiece("a8", Team.Black, ChessPieceType.King)
@@ -32,8 +32,8 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
 
         private void Play(BoardState board, string from, string to)
         {
-            Vector2Int fromSquare = TestBoardSetupUtility.AlgebraicToVector(from);
-            Vector2Int toSquare = TestBoardSetupUtility.AlgebraicToVector(to);
+            Vector2Int fromSquare = BoardSetup.AlgebraicToVector(from);
+            Vector2Int toSquare = BoardSetup.AlgebraicToVector(to);
 
             var legal = new List<MoveCommand>();
             _engine.GetLegalMoves(board, fromSquare, legal);
@@ -90,7 +90,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
             board.PushPosition(board.ZobristHash, irreversible: false);
             board.PushPosition(board.ZobristHash, irreversible: false);
 
-            BoardState mated = TestBoardSetupUtility.CreateEmpty()
+            BoardState mated = BoardSetup.CreateEmpty()
                 .WithPiece("a8", Team.Black, ChessPieceType.King)
                 .WithPiece("b6", Team.White, ChessPieceType.King)
                 .WithPiece("h8", Team.White, ChessPieceType.Rook)
@@ -167,12 +167,12 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
 
             int beforeTheLastMove = board.PositionCount;
             var legal = new List<MoveCommand>();
-            _engine.GetLegalMoves(board, TestBoardSetupUtility.AlgebraicToVector("g8"), legal);
+            _engine.GetLegalMoves(board, BoardSetup.AlgebraicToVector("g8"), legal);
 
             MoveCommand closing = default;
             for (int i = 0; i < legal.Count; i++)
             {
-                if (legal[i].EndPosition == TestBoardSetupUtility.AlgebraicToVector("h8")) closing = legal[i];
+                if (legal[i].EndPosition == BoardSetup.AlgebraicToVector("h8")) closing = legal[i];
             }
 
             _engine.Advance(board, closing);

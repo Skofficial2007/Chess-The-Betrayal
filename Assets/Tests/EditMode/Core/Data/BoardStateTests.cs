@@ -12,7 +12,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Data
         public void BoardState_CloneForSnapshot_IsDeepCopy_ModifyingCloneDoesNotAffectOriginal()
         {
             // Arrange
-            BoardState original = TestBoardSetupUtility.CreateStandard();
+            BoardState original = BoardSetup.CreateStandard();
 
             // Act
             BoardState clone = original.CloneForSnapshot();
@@ -29,7 +29,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Data
         public void BoardState_CloneForSnapshot_ZobristHashIsCopied()
         {
             // Arrange
-            BoardState original = TestBoardSetupUtility.CreateStandard();
+            BoardState original = BoardSetup.CreateStandard();
             // CreateStandard already computes the hash, but we explicitly compute to be safe
             original.ComputeFullZobristHash();
 
@@ -45,7 +45,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Data
         public void BoardState_CloneForSnapshot_MoveHistoryIsDeepCopied_NotSharedList()
         {
             // Arrange
-            BoardState original = TestBoardSetupUtility.CreateStandard();
+            BoardState original = BoardSetup.CreateStandard();
             original.MoveHistory.Add(new Vector2Int(0, 0)); // Add 1 dummy position
 
             // Act
@@ -61,7 +61,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Data
         public void BoardState_GetPieceIndices_ReturnsCorrectCountForEachTeam()
         {
             // Arrange
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
 
             // Act
             var whiteIndices = board.GetPieceIndices(Team.White);
@@ -76,7 +76,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Data
         public void BoardState_GetPieceIndices_AfterCapture_CountDecremented()
         {
             // Arrange
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
 
             // Verify initial state
             Assert.That(board.GetPieceIndices(Team.Black).Count, Is.EqualTo(16));

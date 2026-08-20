@@ -51,7 +51,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void Perft_StandardPosition_Depth1_Returns20Moves()
         {
             // Arrange: Standard chess opening position
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
 
             // Act: Count all legal moves at depth 1
             ulong nodeCount = Perft(board, 1);
@@ -67,7 +67,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void Perft_StandardPosition_Depth2_Returns400Nodes()
         {
             // Arrange: Standard chess opening position
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
 
             // Act: Count all move paths at depth 2
             ulong nodeCount = Perft(board, 2);
@@ -83,7 +83,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void Perft_StandardPosition_Depth3_Returns8902Nodes()
         {
             // Arrange: Standard chess opening position
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
 
             // Act: Count all move paths at depth 3
             ulong nodeCount = Perft(board, 3);

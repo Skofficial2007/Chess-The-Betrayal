@@ -47,7 +47,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         public void Setup()
         {
             _engine = new ChessEngineAdapter();
-            _board = TestBoardSetupUtility.CreateStandard();
+            _board = BoardSetup.CreateStandard();
             _lastPlayedMove = null;
             _pliesLanded = 0;
 
@@ -374,7 +374,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             // This one applies the move the way MatchDriver does and announces the ply that
             // resulted, so the recorded number reflects something real.
             var engine = new ChessEngineAdapter();
-            var board = TestBoardSetupUtility.CreateStandard();
+            var board = BoardSetup.CreateStandard();
             board.CurrentTurn = Team.Black;
             AIMatchCoordinator coordinator = null;
             coordinator = new AIMatchCoordinator(
@@ -418,7 +418,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         public void NotePliesUnmade_RemovesTheRecordsForPliesATakebackTookOffTheBoard()
         {
             var engine = new ChessEngineAdapter();
-            var board = TestBoardSetupUtility.CreateStandard();
+            var board = BoardSetup.CreateStandard();
             board.CurrentTurn = Team.Black;
             AIMatchCoordinator coordinator = null;
             coordinator = new AIMatchCoordinator(
@@ -486,7 +486,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             // decided. Reading the board at decision time recorded those a ply short, and they are
             // the only ones a real match ever got wrong.
             var engine = new ChessEngineAdapter();
-            var board = TestBoardSetupUtility.CreateStandard();
+            var board = BoardSetup.CreateStandard();
             board.CurrentTurn = Team.Black;
 
             MoveCommand? held = null;
@@ -537,7 +537,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             // agrees with the announced number, so none of them can tell the two apart — this one
             // makes them disagree on purpose.
             var engine = new ChessEngineAdapter();
-            var board = TestBoardSetupUtility.CreateStandard();
+            var board = BoardSetup.CreateStandard();
             board.CurrentTurn = Team.Black;
 
             MoveCommand? held = null;
@@ -572,7 +572,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         public void NotePlyApplied_ForSomeoneElsesMove_LeavesTheHeldRecordAlone()
         {
             var engine = new ChessEngineAdapter();
-            var board = TestBoardSetupUtility.CreateStandard();
+            var board = BoardSetup.CreateStandard();
             board.CurrentTurn = Team.Black;
 
             MoveCommand? held = null;
@@ -613,7 +613,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         public void CancelInFlightSearch_DropsAMoveThatWasStillWaitingToReachTheBoard()
         {
             var engine = new ChessEngineAdapter();
-            var board = TestBoardSetupUtility.CreateStandard();
+            var board = BoardSetup.CreateStandard();
             board.CurrentTurn = Team.Black;
 
             MoveCommand? held = null;

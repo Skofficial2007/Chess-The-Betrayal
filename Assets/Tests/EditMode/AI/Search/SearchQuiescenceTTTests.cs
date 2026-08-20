@@ -27,7 +27,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         }
 
         private static BoardState CaptureRichMidgamePosition() =>
-            TestBoardSetupUtility.CreateEmpty()
+            BoardSetup.CreateEmpty()
                 .WithPiece("g1", Team.White, ChessPieceType.King)
                 .WithPiece("g8", Team.Black, ChessPieceType.King)
                 .WithPiece("d1", Team.White, ChessPieceType.Queen)
@@ -96,7 +96,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // The same correctness basis the main search relies on applies inside quiescence: the
             // Zobrist hash already disambiguates the pending-Betrayer sub-state, so a qsearch TT
             // cutoff mid-Retribution is valid — this must not change the reported best move.
-            BoardState boardTTOn = TestBoardSetupUtility.CreateEmpty()
+            BoardState boardTTOn = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("a1", Team.White, ChessPieceType.Rook)
@@ -104,7 +104,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
                 .WithTurn(Team.Black)
                 .WithPendingBetrayer("d4", Team.Black)
                 .WithComputedHash();
-            BoardState boardTTOff = TestBoardSetupUtility.CreateEmpty()
+            BoardState boardTTOff = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("a1", Team.White, ChessPieceType.Rook)
@@ -137,7 +137,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // plyFromRoot (0, since RunQuiescenceForTest always enters at root) must reproduce the
             // identical score, proving the stored/retrieved mate adjustment round-trips correctly
             // rather than drifting on a second probe.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("h1", Team.White, ChessPieceType.King)
                 .WithPiece("a8", Team.Black, ChessPieceType.King)
                 .WithPiece("b7", Team.Black, ChessPieceType.Pawn)

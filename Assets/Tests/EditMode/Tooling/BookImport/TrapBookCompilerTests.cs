@@ -168,7 +168,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.BookImport
             // Reaching a Betrayal-eligible position through ordinary opening moves would take far
             // more plies than is practical here, so the position is built directly: White's queen
             // attacks its own knight, a textbook legal Act target.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("d1", Team.White, ChessPieceType.Queen)

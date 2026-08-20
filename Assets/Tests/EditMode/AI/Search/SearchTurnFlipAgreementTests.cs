@@ -29,7 +29,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         [Test]
         public void ActThenRetribution_TurnFlipsOnlyOnRetribution()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("b1", Team.White, ChessPieceType.Knight)
@@ -40,7 +40,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
 
             board.ComputeFullZobristHash();
 
-            ChessEngine.GetBetrayalTargets(board, TestBoardSetupUtility.AlgebraicToVector("b1"), _moveBuffer);
+            ChessEngine.GetBetrayalTargets(board, BoardSetup.AlgebraicToVector("b1"), _moveBuffer);
             MoveCommand actMove = _moveBuffer[0];
             Team turnBeforeAct = board.CurrentTurn;
 
@@ -71,7 +71,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         [Test]
         public void ActThenForcedDefection_TurnFlipsOnlyAfterForcedSave()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e4", Team.White, ChessPieceType.Rook)
                 .WithPiece("e8", Team.Black, ChessPieceType.Rook)
@@ -83,9 +83,9 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             board.ComputeFullZobristHash();
 
             MoveCommand actMove = MoveCommand.CreateStandardMove(
-                TestBoardSetupUtility.AlgebraicToVector("e3"), TestBoardSetupUtility.AlgebraicToVector("d3"),
-                board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("e3")),
-                board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("d3")), board)
+                BoardSetup.AlgebraicToVector("e3"), BoardSetup.AlgebraicToVector("d3"),
+                board.GetPiece(BoardSetup.AlgebraicToVector("e3")),
+                board.GetPiece(BoardSetup.AlgebraicToVector("d3")), board)
                 .WithStage(BetrayalStage.Act);
 
             Team turnBeforeAct = board.CurrentTurn;

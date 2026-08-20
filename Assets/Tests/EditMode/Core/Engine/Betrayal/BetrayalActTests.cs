@@ -24,7 +24,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
 
         private bool BufferContainsDestination(string algebraicCoordinate)
         {
-            Vector2Int target = TestBoardSetupUtility.AlgebraicToVector(algebraicCoordinate);
+            Vector2Int target = BoardSetup.AlgebraicToVector(algebraicCoordinate);
             for (int i = 0; i < _moveBuffer.Count; i++)
             {
                 if (_moveBuffer[i].EndPosition == target) return true;
@@ -37,14 +37,14 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
         [Test]
         public void GetBetrayalTargets_PawnStraightPush_ReturnsEmpty()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.King) // FIX: King required for check validation
                 .WithPiece("e4", Team.White, ChessPieceType.Pawn)
                 .WithPiece("e5", Team.White, ChessPieceType.Pawn)
                 .WithTurn(Team.White)
                 .WithBetrayalRight(true);
 
-            ChessEngine.GetBetrayalTargets(board, TestBoardSetupUtility.AlgebraicToVector("e4"), _moveBuffer);
+            ChessEngine.GetBetrayalTargets(board, BoardSetup.AlgebraicToVector("e4"), _moveBuffer);
 
             Assert.That(_moveBuffer.Count, Is.EqualTo(0), "A straight pawn push is a movement-only action, never a capture pattern.");
         }
@@ -52,7 +52,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
         [Test]
         public void GetBetrayalTargets_PawnDiagonalCapture_IdentifiesFriendlyTargets()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.King) // FIX: King required
                 .WithPiece("e4", Team.White, ChessPieceType.Pawn)
                 .WithPiece("d5", Team.White, ChessPieceType.Rook)
@@ -60,7 +60,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
                 .WithTurn(Team.White)
                 .WithBetrayalRight(true);
 
-            ChessEngine.GetBetrayalTargets(board, TestBoardSetupUtility.AlgebraicToVector("e4"), _moveBuffer);
+            ChessEngine.GetBetrayalTargets(board, BoardSetup.AlgebraicToVector("e4"), _moveBuffer);
 
             Assert.That(_moveBuffer.Count, Is.EqualTo(2), "Pawn must target friendly pieces on diagonal capture squares.");
             Assert.That(BufferContainsDestination("d5"), Is.True);
@@ -70,7 +70,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
         [Test]
         public void GetBetrayalTargets_BlackPawn_RespectsForwardDirection()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e8", Team.Black, ChessPieceType.King) // FIX: Black King required
                 .WithPiece("e5", Team.Black, ChessPieceType.Pawn)
                 .WithPiece("e4", Team.Black, ChessPieceType.Pawn)
@@ -79,7 +79,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
                 .WithTurn(Team.Black)
                 .WithBetrayalRight(true);
 
-            ChessEngine.GetBetrayalTargets(board, TestBoardSetupUtility.AlgebraicToVector("e5"), _moveBuffer);
+            ChessEngine.GetBetrayalTargets(board, BoardSetup.AlgebraicToVector("e5"), _moveBuffer);
 
             Assert.That(_moveBuffer.Count, Is.EqualTo(2), "Black pawn must only target diagonal squares in its forward (-1 y) direction.");
             Assert.That(BufferContainsDestination("d4"), Is.True);
@@ -89,14 +89,14 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
         [Test]
         public void GetBetrayalTargets_PawnDoublePush_ReturnsEmpty()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.King) // FIX: King required
                 .WithPiece("e2", Team.White, ChessPieceType.Pawn, hasMoved: false)
                 .WithPiece("e4", Team.White, ChessPieceType.Pawn)
                 .WithTurn(Team.White)
                 .WithBetrayalRight(true);
 
-            ChessEngine.GetBetrayalTargets(board, TestBoardSetupUtility.AlgebraicToVector("e2"), _moveBuffer);
+            ChessEngine.GetBetrayalTargets(board, BoardSetup.AlgebraicToVector("e2"), _moveBuffer);
 
             Assert.That(_moveBuffer.Count, Is.EqualTo(0), "A pawn's initial double push is not a valid capture geometry.");
         }
@@ -104,7 +104,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
         [Test]
         public void GetBetrayalTargets_EnPassant_FriendlyPawnIgnored()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.King) // FIX: King required
                 .WithPiece("d5", Team.White, ChessPieceType.Pawn)
                 .WithPiece("e5", Team.White, ChessPieceType.Pawn)
@@ -112,7 +112,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
                 .WithTurn(Team.White)
                 .WithBetrayalRight(true);
 
-            ChessEngine.GetBetrayalTargets(board, TestBoardSetupUtility.AlgebraicToVector("d5"), _moveBuffer);
+            ChessEngine.GetBetrayalTargets(board, BoardSetup.AlgebraicToVector("d5"), _moveBuffer);
 
             Assert.That(_moveBuffer.Count, Is.EqualTo(0), "En passant logic requires an enemy pawn; friendlies cannot be targeted via en passant.");
         }
@@ -120,14 +120,14 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
         [Test]
         public void GetBetrayalTargets_PawnOnPenultimateRank_GeneratesStandardMoveWithoutPromotion()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.King) // FIX: King required
                 .WithPiece("b7", Team.White, ChessPieceType.Pawn)
                 .WithPiece("c8", Team.White, ChessPieceType.Rook)
                 .WithTurn(Team.White)
                 .WithBetrayalRight(true);
 
-            ChessEngine.GetBetrayalTargets(board, TestBoardSetupUtility.AlgebraicToVector("b7"), _moveBuffer);
+            ChessEngine.GetBetrayalTargets(board, BoardSetup.AlgebraicToVector("b7"), _moveBuffer);
 
             Assert.That(_moveBuffer.Count, Is.EqualTo(1), "Pawn should target the piece without duplicating for promotion variants.");
 
@@ -144,7 +144,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
         [Test]
         public void GetBetrayalTargets_Knight_TargetsAllValidOffsetsAndIgnoresBlockers()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.King) // FIX: King required
                 .WithPiece("d4", Team.White, ChessPieceType.Knight)
                 .WithPiece("d5", Team.White, ChessPieceType.Pawn).WithPiece("d3", Team.White, ChessPieceType.Pawn)
@@ -158,7 +158,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
                 .WithTurn(Team.White)
                 .WithBetrayalRight(true);
 
-            ChessEngine.GetBetrayalTargets(board, TestBoardSetupUtility.AlgebraicToVector("d4"), _moveBuffer);
+            ChessEngine.GetBetrayalTargets(board, BoardSetup.AlgebraicToVector("d4"), _moveBuffer);
 
             Assert.That(_moveBuffer.Count, Is.EqualTo(8), "Knight should target all 8 friendlies, jumping over adjacent blockers.");
         }
@@ -170,7 +170,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
         [Test]
         public void GetBetrayalTargets_Bishop_LineOfSightStopsAtFirstPiece()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.King) // FIX: King required
                 .WithPiece("c1", Team.White, ChessPieceType.Bishop)
                 .WithPiece("d2", Team.White, ChessPieceType.Pawn)
@@ -178,16 +178,16 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
                 .WithTurn(Team.White)
                 .WithBetrayalRight(true);
 
-            ChessEngine.GetBetrayalTargets(board, TestBoardSetupUtility.AlgebraicToVector("c1"), _moveBuffer);
+            ChessEngine.GetBetrayalTargets(board, BoardSetup.AlgebraicToVector("c1"), _moveBuffer);
 
             Assert.That(_moveBuffer.Count, Is.EqualTo(1));
-            Assert.That(_moveBuffer[0].EndPosition, Is.EqualTo(TestBoardSetupUtility.AlgebraicToVector("d2")), "Bishop stops at the first friendly piece encountered.");
+            Assert.That(_moveBuffer[0].EndPosition, Is.EqualTo(BoardSetup.AlgebraicToVector("d2")), "Bishop stops at the first friendly piece encountered.");
         }
 
         [Test]
         public void GetBetrayalTargets_Rook_LineOfSightStopsAtFirstPiece()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e8", Team.White, ChessPieceType.King) // FIX: King required
                 .WithPiece("a1", Team.White, ChessPieceType.Rook)
                 .WithPiece("a2", Team.White, ChessPieceType.Pawn)
@@ -195,16 +195,16 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
                 .WithTurn(Team.White)
                 .WithBetrayalRight(true);
 
-            ChessEngine.GetBetrayalTargets(board, TestBoardSetupUtility.AlgebraicToVector("a1"), _moveBuffer);
+            ChessEngine.GetBetrayalTargets(board, BoardSetup.AlgebraicToVector("a1"), _moveBuffer);
 
             Assert.That(_moveBuffer.Count, Is.EqualTo(1));
-            Assert.That(_moveBuffer[0].EndPosition, Is.EqualTo(TestBoardSetupUtility.AlgebraicToVector("a2")), "Rook stops at the first friendly piece encountered.");
+            Assert.That(_moveBuffer[0].EndPosition, Is.EqualTo(BoardSetup.AlgebraicToVector("a2")), "Rook stops at the first friendly piece encountered.");
         }
 
         [Test]
         public void GetBetrayalTargets_Queen_CombinesOrthogonalAndDiagonalLineOfSight()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.King) // FIX: King required
                 .WithPiece("d4", Team.White, ChessPieceType.Queen)
                 .WithPiece("d5", Team.White, ChessPieceType.Pawn)
@@ -214,7 +214,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
                 .WithTurn(Team.White)
                 .WithBetrayalRight(true);
 
-            ChessEngine.GetBetrayalTargets(board, TestBoardSetupUtility.AlgebraicToVector("d4"), _moveBuffer);
+            ChessEngine.GetBetrayalTargets(board, BoardSetup.AlgebraicToVector("d4"), _moveBuffer);
 
             Assert.That(_moveBuffer.Count, Is.EqualTo(2), "Queen should find exactly one target per valid unblocked direction.");
         }
@@ -226,13 +226,13 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
         [Test]
         public void GetBetrayalTargets_KingAsBetrayer_ReturnsEmpty()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e2", Team.White, ChessPieceType.Pawn)
                 .WithTurn(Team.White)
                 .WithBetrayalRight(true);
 
-            ChessEngine.GetBetrayalTargets(board, TestBoardSetupUtility.AlgebraicToVector("e1"), _moveBuffer);
+            ChessEngine.GetBetrayalTargets(board, BoardSetup.AlgebraicToVector("e1"), _moveBuffer);
 
             Assert.That(_moveBuffer.Count, Is.EqualTo(0), "The King is strictly immune from acting as a Betrayer.");
         }
@@ -240,13 +240,13 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
         [Test]
         public void GetBetrayalTargets_FriendlyKingAsVictim_ReturnsEmpty()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("d1", Team.White, ChessPieceType.Queen)
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithTurn(Team.White)
                 .WithBetrayalRight(true);
 
-            ChessEngine.GetBetrayalTargets(board, TestBoardSetupUtility.AlgebraicToVector("d1"), _moveBuffer);
+            ChessEngine.GetBetrayalTargets(board, BoardSetup.AlgebraicToVector("d1"), _moveBuffer);
 
             Assert.That(_moveBuffer.Count, Is.EqualTo(0), "The King is strictly immune from being targeted as a Victim.");
         }
@@ -258,14 +258,14 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
         [Test]
         public void GetBetrayalTargets_GlobalRightExhausted_ReturnsEmpty()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.King) // FIX: King required
                 .WithPiece("e4", Team.White, ChessPieceType.Rook)
                 .WithPiece("e5", Team.White, ChessPieceType.Pawn)
                 .WithTurn(Team.White)
                 .WithBetrayalRight(false);
 
-            ChessEngine.GetBetrayalTargets(board, TestBoardSetupUtility.AlgebraicToVector("e4"), _moveBuffer);
+            ChessEngine.GetBetrayalTargets(board, BoardSetup.AlgebraicToVector("e4"), _moveBuffer);
 
             Assert.That(_moveBuffer.Count, Is.EqualTo(0), "Cannot initiate Betrayal if the global right for the current match is exhausted.");
         }
@@ -273,7 +273,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
         [Test]
         public void GetBetrayalTargets_MoveExposingOwnKingToCheck_ExcludedFromResults()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e4", Team.White, ChessPieceType.Rook) // Pinned to the King
                 .WithPiece("e8", Team.Black, ChessPieceType.Rook) // Enemy pinning piece
@@ -281,7 +281,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
                 .WithTurn(Team.White)
                 .WithBetrayalRight(true);
 
-            ChessEngine.GetBetrayalTargets(board, TestBoardSetupUtility.AlgebraicToVector("e4"), _moveBuffer);
+            ChessEngine.GetBetrayalTargets(board, BoardSetup.AlgebraicToVector("e4"), _moveBuffer);
 
             Assert.That(_moveBuffer.Count, Is.EqualTo(0), "A pinned piece cannot initiate an action that breaks the pin and exposes the King.");
         }

@@ -31,7 +31,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         [Test]
         public void FindBestMove_AnyPosition_NodesVisitedIsPositive()
         {
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             var settings = new AISearchSettings(maxDepth: 3, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             _search.FindBestMove(board, settings, CancellationToken.None);
@@ -42,7 +42,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         [Test]
         public void FindBestMove_SecondShallowerCall_DoesNotAccumulateFromFirstCall()
         {
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             var deepSettings = new AISearchSettings(maxDepth: 4, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
             var shallowSettings = new AISearchSettings(maxDepth: 1, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
@@ -120,7 +120,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // a smoke test that the counters are wired into the real code paths, not a precise
             // node-count assertion (those are brittle to evaluator/ordering tuning and belong to a
             // benchmark suite, not a unit test).
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             var settings = new AISearchSettings(maxDepth: 5, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             _search.FindBestMove(board, settings, CancellationToken.None);
@@ -135,7 +135,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // A position with immediate captures available must drive the search into quiescence at
             // the horizon, so QNodesVisited must be positive. This is the number that reveals how
             // much of the total search cost is the quiescence tail rather than the main tree.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("d4", Team.White, ChessPieceType.Queen)
@@ -155,7 +155,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // NodesAfterDepthN is a running cumulative total (NodesVisited + QNodesVisited) sampled at
             // each completed depth — a deeper completed iteration can never report fewer total nodes
             // than a shallower one.
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             var settings = new AISearchSettings(maxDepth: 4, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             _search.FindBestMove(board, settings, CancellationToken.None);
@@ -173,10 +173,10 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // Re-confirms SearchAllocationTests' contract now that every telemetry increment lives
             // on the hot path (gated behind UNITY_EDITOR||DEVELOPMENT_BUILD, which IS defined for
             // this EditMode test assembly) — plain long field writes must not introduce boxing/GC.
-            BoardState warmup = TestBoardSetupUtility.CreateStandard();
+            BoardState warmup = BoardSetup.CreateStandard();
             _search.FindBestMove(warmup, new AISearchSettings(2, TestTimeBudgets.Generous, BetrayalUsage.Full), CancellationToken.None);
 
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             var settings = new AISearchSettings(maxDepth: 3, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             GC.Collect();

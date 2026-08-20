@@ -36,7 +36,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         /// before the search could tell that shuffling goes nowhere.
         /// </summary>
         private static BoardState WonEndgameWithAShufflingRook() =>
-            TestBoardSetupUtility.CreateEmpty()
+            BoardSetup.CreateEmpty()
                 .WithPiece("c3", Team.White, ChessPieceType.King)
                 .WithPiece("h1", Team.White, ChessPieceType.Rook)
                 .WithPiece("e7", Team.White, ChessPieceType.Pawn)
@@ -199,7 +199,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         /// as it is - which is what stops material explaining anything the search decides here.
         /// </summary>
         private static BoardState LosingSideCanRepeat() =>
-            TestBoardSetupUtility.CreateEmpty()
+            BoardSetup.CreateEmpty()
                 .WithPiece("g1", Team.White, ChessPieceType.King)
                 .WithPiece("d1", Team.White, ChessPieceType.Queen)
                 .WithPiece("c1", Team.White, ChessPieceType.Rook)
@@ -211,8 +211,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
 
         private MoveCommand FindMoveBetween(BoardState board, string from, string to)
         {
-            Vector2Int fromSquare = TestBoardSetupUtility.AlgebraicToVector(from);
-            Vector2Int toSquare = TestBoardSetupUtility.AlgebraicToVector(to);
+            Vector2Int fromSquare = BoardSetup.AlgebraicToVector(from);
+            Vector2Int toSquare = BoardSetup.AlgebraicToVector(to);
 
             var legal = new List<MoveCommand>();
             _engine.GetLegalMoves(board, fromSquare, legal);

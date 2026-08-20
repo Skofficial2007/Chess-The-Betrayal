@@ -46,7 +46,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Profiles
 
         private static BoardState CraftedPosition()
         {
-            return TestBoardSetupUtility.CreateEmpty()
+            return BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("d4", Team.White, ChessPieceType.Knight)

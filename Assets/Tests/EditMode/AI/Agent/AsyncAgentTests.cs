@@ -49,7 +49,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Agent
         [Test]
         public void RequestBestMove_ThenPumpTick_FiresOnMoveDecidedWithALegalMove()
         {
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             MoveCommand? delivered = null;
 
             _agent.OnMoveDecided += move => delivered = move;
@@ -64,7 +64,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Agent
         [Test]
         public void RequestBestMove_AfterDelivery_ExposesTheCompletedSearchsDepthAndStopReason()
         {
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             bool delivered = false;
             _agent.OnMoveDecided += _ => delivered = true;
 
@@ -84,7 +84,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Agent
             // Tick()" — UndoService relies on exactly this to decide pop-1 vs pop-2. If it stayed
             // true after delivery, every Undo pressed after the AI's first reply would incorrectly
             // read as "search still in flight."
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             bool delivered = false;
             _agent.OnMoveDecided += _ => delivered = true;
 
@@ -103,7 +103,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Agent
             // The worker publishes its result via a volatile flag; only Tick() may raise the event.
             // Give the worker ample time to finish and simply never call Tick() — if the worker
             // fired the event directly, this would already have failed by the time we assert.
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             bool fired = false;
             _agent.OnMoveDecided += _ => fired = true;
 
@@ -124,7 +124,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Agent
 
             try
             {
-                BoardState board = TestBoardSetupUtility.CreateStandard();
+                BoardState board = BoardSetup.CreateStandard();
                 bool fired = false;
                 slowAgent.OnMoveDecided += _ => fired = true;
 
@@ -166,7 +166,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Agent
 
             try
             {
-                BoardState board = TestBoardSetupUtility.CreateStandard();
+                BoardState board = BoardSetup.CreateStandard();
                 MoveCommand? delivered = null;
                 budgetedAgent.OnMoveDecided += move => delivered = move;
 
@@ -201,7 +201,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Agent
 
             try
             {
-                BoardState board = TestBoardSetupUtility.CreateStandard();
+                BoardState board = BoardSetup.CreateStandard();
                 int fireCount = 0;
                 slowAgent.OnMoveDecided += _ => fireCount++;
 
@@ -226,7 +226,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Agent
             // RequestBestMove clones the board once on the calling thread; the search must only
             // ever touch that isolated clone. The live board's hash must be identical before and
             // after the background search runs, regardless of what the search explored.
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             ulong hashBefore = board.ZobristHash;
             bool delivered = false;
 
@@ -254,7 +254,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Agent
                 profile,
                 new SystemRandomSource(seed: 7));
 
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             MoveCommand? delivered = null;
 
             try
@@ -315,8 +315,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Agent
             var legalMoves = new System.Collections.Generic.List<MoveCommand>();
             engine.GetAllLegalMovesIncludingBetrayal(board, board.CurrentTurn, legalMoves);
 
-            Vector2Int start = TestBoardSetupUtility.AlgebraicToVector(from);
-            Vector2Int end = TestBoardSetupUtility.AlgebraicToVector(to);
+            Vector2Int start = BoardSetup.AlgebraicToVector(from);
+            Vector2Int end = BoardSetup.AlgebraicToVector(to);
 
             foreach (MoveCommand candidate in legalMoves)
             {

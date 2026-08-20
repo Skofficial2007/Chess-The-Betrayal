@@ -53,7 +53,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.Strength
         [Test]
         public void EveryPosition_HasComputedZobristHash()
         {
-            // Every position is built via TestBoardSetupUtility.WithComputedHash() — a missing hash
+            // Every position is built via BoardSetup.WithComputedHash() — a missing hash
             // would desync search/TT lookups in a way that's silent until something else breaks.
             foreach (YardstickPosition position in YardstickSuite.All)
             {

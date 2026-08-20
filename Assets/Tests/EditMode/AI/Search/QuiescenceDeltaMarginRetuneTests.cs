@@ -119,7 +119,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // Regression re-check of QuiescenceDeltaPruningTests' own winning-capture case — a
             // genuinely winning capture must still clear whatever margin is currently configured,
             // which is the invariant that has to survive any future retune in either direction.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("d4", Team.White, ChessPieceType.Pawn)
@@ -130,7 +130,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
 
             int scoreWithCapture = search.RunQuiescenceForTest(board, Team.White, CancellationToken.None);
 
-            BoardState boardNoQueen = TestBoardSetupUtility.CreateEmpty()
+            BoardState boardNoQueen = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("d4", Team.White, ChessPieceType.Pawn)

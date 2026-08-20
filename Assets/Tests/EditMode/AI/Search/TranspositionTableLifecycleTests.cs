@@ -51,7 +51,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         {
             var tt = new TranspositionTable(log2Size: 12);
             var search = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator(), transpositionTable: tt);
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             var settings = new AISearchSettings(maxDepth: 3, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
             ulong childHash = HashAfterFirstLegalMove(board);
 
@@ -68,7 +68,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         {
             var tt = new TranspositionTable(log2Size: 12);
             var search = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator(), transpositionTable: tt);
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             var settings = new AISearchSettings(maxDepth: 3, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
             ulong childHash = HashAfterFirstLegalMove(board);
 

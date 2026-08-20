@@ -125,7 +125,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.OpeningBook
             // entry, since it only ever covers plain opening theory (see OpeningBookCompiler's own
             // rejection of Act moves at compile time).
             OpeningBookAsset book = AssetFrom("e2e4 e7e5");
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("d1", Team.White, ChessPieceType.Queen)

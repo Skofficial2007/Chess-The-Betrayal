@@ -37,7 +37,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         [Test]
         public void FindBestMove_BackRankMateInOne_SameMoveWithAndWithoutEffectiveTT()
         {
-            BoardState boardTTOn = TestBoardSetupUtility.CreateEmpty()
+            BoardState boardTTOn = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("a1", Team.White, ChessPieceType.Rook)
                 .WithPiece("g8", Team.Black, ChessPieceType.King)
@@ -46,7 +46,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
                 .WithPiece("h7", Team.Black, ChessPieceType.Pawn)
                 .WithTurn(Team.White)
                 .WithComputedHash();
-            BoardState boardTTOff = TestBoardSetupUtility.CreateEmpty()
+            BoardState boardTTOff = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("a1", Team.White, ChessPieceType.Rook)
                 .WithPiece("g8", Team.Black, ChessPieceType.King)
@@ -72,7 +72,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // a1) — exercises TT probe/store while the hash's Betrayal contribution is live. If the
             // pending-Betrayer state were missing from the hash, two genuinely different positions
             // would collide on one entry and the search could return a move from the wrong one.
-            BoardState boardTTOn = TestBoardSetupUtility.CreateEmpty()
+            BoardState boardTTOn = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("a1", Team.White, ChessPieceType.Rook)
@@ -80,7 +80,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
                 .WithTurn(Team.Black)
                 .WithPendingBetrayer("d4", Team.Black)
                 .WithComputedHash();
-            BoardState boardTTOff = TestBoardSetupUtility.CreateEmpty()
+            BoardState boardTTOff = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("a1", Team.White, ChessPieceType.Rook)
@@ -106,7 +106,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // A poisoned or mismatched entry can only mis-order a node (PackedBestMove is
             // matched against the freshly generated legal list, never rehydrated), never inject an
             // illegal move or change which move the search ultimately reports as best.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("a1", Team.White, ChessPieceType.Rook)
                 .WithPiece("g8", Team.Black, ChessPieceType.King)
@@ -128,8 +128,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
 
             MoveCommand best = search.FindBestMove(board, settings, CancellationToken.None);
 
-            Assert.That(best.StartPosition, Is.EqualTo(TestBoardSetupUtility.AlgebraicToVector("a1")));
-            Assert.That(best.EndPosition, Is.EqualTo(TestBoardSetupUtility.AlgebraicToVector("a8")));
+            Assert.That(best.StartPosition, Is.EqualTo(BoardSetup.AlgebraicToVector("a1")));
+            Assert.That(best.EndPosition, Is.EqualTo(BoardSetup.AlgebraicToVector("a8")));
         }
     }
 }

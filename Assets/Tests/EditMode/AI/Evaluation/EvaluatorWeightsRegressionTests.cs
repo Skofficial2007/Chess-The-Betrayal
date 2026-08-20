@@ -26,27 +26,27 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
     public class EvaluatorWeightsRegressionTests
     {
         private static BoardState SymmetricQueens() =>
-            TestBoardSetupUtility.CreateEmpty()
+            BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("d1", Team.White, ChessPieceType.Queen)
                 .WithPiece("d8", Team.Black, ChessPieceType.Queen);
 
         private static BoardState MirroredRookKnight() =>
-            TestBoardSetupUtility.CreateEmpty()
+            BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("d1", Team.White, ChessPieceType.Rook)
                 .WithPiece("a4", Team.White, ChessPieceType.Knight);
 
         private static BoardState ExtraQueen() =>
-            TestBoardSetupUtility.CreateEmpty()
+            BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("d1", Team.White, ChessPieceType.Queen);
 
         private static BoardState ShelteredKing() =>
-            TestBoardSetupUtility.CreateEmpty()
+            BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("d2", Team.White, ChessPieceType.Pawn)
@@ -64,7 +64,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
         /// closest to what an opening move actually looks like.
         /// </summary>
         private static BoardState FullMaterialAsymmetricOpening() =>
-            TestBoardSetupUtility.CreateEmpty()
+            BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.Rook)
                 .WithPiece("b1", Team.White, ChessPieceType.Knight)
                 .WithPiece("c1", Team.White, ChessPieceType.Bishop)

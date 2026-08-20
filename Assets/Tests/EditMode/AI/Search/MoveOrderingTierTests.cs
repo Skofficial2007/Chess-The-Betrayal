@@ -15,14 +15,14 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
     [TestFixture]
     public class MoveOrderingTierTests
     {
-        private static readonly Vector2Int From = TestBoardSetupUtility.AlgebraicToVector("a2");
-        private static readonly Vector2Int To = TestBoardSetupUtility.AlgebraicToVector("a3");
+        private static readonly Vector2Int From = BoardSetup.AlgebraicToVector("a2");
+        private static readonly Vector2Int To = BoardSetup.AlgebraicToVector("a3");
 
         // A distinct destination square for moves that must NOT pack-match the TT move under test —
         // the packing keys on From/To/PromotedTo/Stage only, deliberately not on capture status,
         // so a same-square capture and non-capture would otherwise
         // collide and falsely satisfy a TT-match check.
-        private static readonly Vector2Int OtherTo = TestBoardSetupUtility.AlgebraicToVector("a4");
+        private static readonly Vector2Int OtherTo = BoardSetup.AlgebraicToVector("a4");
 
         private static MoveCommand StandardMove(ChessPieceType pieceType, ChessPieceType capturedType = ChessPieceType.None, Vector2Int? to = null)
         {

@@ -20,11 +20,11 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void UndoMoveOnBoard_StandardMove_RestoresOriginalPosition()
         {
             // Arrange
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e2", Team.White, ChessPieceType.Pawn, hasMoved: false);
 
-            Vector2Int from = TestBoardSetupUtility.AlgebraicToVector("e2");
-            Vector2Int to = TestBoardSetupUtility.AlgebraicToVector("e4");
+            Vector2Int from = BoardSetup.AlgebraicToVector("e2");
+            Vector2Int to = BoardSetup.AlgebraicToVector("e4");
             PieceData pawn = board.GetPiece(from);
             MoveCommand move = MoveCommand.CreateStandardMove(from, to, pawn, default, board);
 
@@ -42,11 +42,11 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void UndoMoveOnBoard_StandardMove_RestoresHasMovedFlag()
         {
             // Arrange: Piece that has already moved
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("d5", Team.White, ChessPieceType.Knight, hasMoved: true);
 
-            Vector2Int from = TestBoardSetupUtility.AlgebraicToVector("d5");
-            Vector2Int to = TestBoardSetupUtility.AlgebraicToVector("f6");
+            Vector2Int from = BoardSetup.AlgebraicToVector("d5");
+            Vector2Int to = BoardSetup.AlgebraicToVector("f6");
             PieceData knight = board.GetPiece(from);
             MoveCommand move = MoveCommand.CreateStandardMove(from, to, knight, default, board);
 
@@ -67,12 +67,12 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void UndoMoveOnBoard_CaptureMove_RestoresBothPieces()
         {
             // Arrange
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e4", Team.White, ChessPieceType.Queen, hasMoved: false)
                 .WithPiece("e5", Team.Black, ChessPieceType.Pawn, hasMoved: true);
 
-            Vector2Int from = TestBoardSetupUtility.AlgebraicToVector("e4");
-            Vector2Int to = TestBoardSetupUtility.AlgebraicToVector("e5");
+            Vector2Int from = BoardSetup.AlgebraicToVector("e4");
+            Vector2Int to = BoardSetup.AlgebraicToVector("e5");
             PieceData queen = board.GetPiece(from);
             PieceData capturedPawn = board.GetPiece(to);
             MoveCommand move = MoveCommand.CreateStandardMove(from, to, queen, capturedPawn, board);
@@ -95,14 +95,14 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void UndoMoveOnBoard_MultipleCaptures_GraveyardOrderMaintained()
         {
             // Arrange: Two sequential captures
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("d4", Team.White, ChessPieceType.Queen)
                 .WithPiece("d5", Team.Black, ChessPieceType.Knight)
                 .WithPiece("d6", Team.Black, ChessPieceType.Rook);
 
-            Vector2Int queenStart = TestBoardSetupUtility.AlgebraicToVector("d4");
-            Vector2Int knightPos = TestBoardSetupUtility.AlgebraicToVector("d5");
-            Vector2Int rookPos = TestBoardSetupUtility.AlgebraicToVector("d6");
+            Vector2Int queenStart = BoardSetup.AlgebraicToVector("d4");
+            Vector2Int knightPos = BoardSetup.AlgebraicToVector("d5");
+            Vector2Int rookPos = BoardSetup.AlgebraicToVector("d6");
 
             PieceData queen = board.GetPiece(queenStart);
             PieceData knight = board.GetPiece(knightPos);
@@ -134,11 +134,11 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void UndoMoveOnBoard_Promotion_RestoresPawn()
         {
             // Arrange
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e7", Team.White, ChessPieceType.Pawn, hasMoved: true);
 
-            Vector2Int from = TestBoardSetupUtility.AlgebraicToVector("e7");
-            Vector2Int to = TestBoardSetupUtility.AlgebraicToVector("e8");
+            Vector2Int from = BoardSetup.AlgebraicToVector("e7");
+            Vector2Int to = BoardSetup.AlgebraicToVector("e8");
             PieceData pawn = board.GetPiece(from);
             MoveCommand move = MoveCommand.CreatePromotionMove(from, to, pawn, ChessPieceType.Queen, default, board);
 
@@ -158,12 +158,12 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void UndoMoveOnBoard_PromotionCapture_RestoresBothPiecesCorrectly()
         {
             // Arrange: DESIGN SMELL-001 canonical example
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e7", Team.White, ChessPieceType.Pawn, hasMoved: true)
                 .WithPiece("f8", Team.Black, ChessPieceType.Rook, hasMoved: false);
 
-            Vector2Int from = TestBoardSetupUtility.AlgebraicToVector("e7");
-            Vector2Int to = TestBoardSetupUtility.AlgebraicToVector("f8");
+            Vector2Int from = BoardSetup.AlgebraicToVector("e7");
+            Vector2Int to = BoardSetup.AlgebraicToVector("f8");
             PieceData pawn = board.GetPiece(from);
             PieceData rook = board.GetPiece(to);
             MoveCommand move = MoveCommand.CreatePromotionMove(from, to, pawn, ChessPieceType.Queen, rook, board);
@@ -195,15 +195,15 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void UndoMoveOnBoard_Castling_RestoresBothKingAndRook()
         {
             // Arrange: White Kingside castling
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King, hasMoved: false)
                 .WithPiece("h1", Team.White, ChessPieceType.Rook, hasMoved: false)
                 .WithCastlingRights(BoardState.CastlingWhiteKingside);
 
-            Vector2Int kingStart = TestBoardSetupUtility.AlgebraicToVector("e1");
-            Vector2Int kingEnd = TestBoardSetupUtility.AlgebraicToVector("g1");
-            Vector2Int rookStart = TestBoardSetupUtility.AlgebraicToVector("h1");
-            Vector2Int rookEnd = TestBoardSetupUtility.AlgebraicToVector("f1");
+            Vector2Int kingStart = BoardSetup.AlgebraicToVector("e1");
+            Vector2Int kingEnd = BoardSetup.AlgebraicToVector("g1");
+            Vector2Int rookStart = BoardSetup.AlgebraicToVector("h1");
+            Vector2Int rookEnd = BoardSetup.AlgebraicToVector("f1");
 
             PieceData king = board.GetPiece(kingStart);
             MoveCommand move = MoveCommand.CreateCastlingMove(kingStart, kingEnd, king, rookStart, rookEnd, board);
@@ -232,15 +232,15 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void UndoMoveOnBoard_CastlingBlackQueenside_RestoresCorrectly()
         {
             // Arrange: Black Queenside castling
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e8", Team.Black, ChessPieceType.King, hasMoved: false)
                 .WithPiece("a8", Team.Black, ChessPieceType.Rook, hasMoved: false)
                 .WithCastlingRights(BoardState.CastlingBlackQueenside);
 
-            Vector2Int kingStart = TestBoardSetupUtility.AlgebraicToVector("e8");
-            Vector2Int kingEnd = TestBoardSetupUtility.AlgebraicToVector("c8");
-            Vector2Int rookStart = TestBoardSetupUtility.AlgebraicToVector("a8");
-            Vector2Int rookEnd = TestBoardSetupUtility.AlgebraicToVector("d8");
+            Vector2Int kingStart = BoardSetup.AlgebraicToVector("e8");
+            Vector2Int kingEnd = BoardSetup.AlgebraicToVector("c8");
+            Vector2Int rookStart = BoardSetup.AlgebraicToVector("a8");
+            Vector2Int rookEnd = BoardSetup.AlgebraicToVector("d8");
 
             PieceData king = board.GetPiece(kingStart);
             MoveCommand move = MoveCommand.CreateCastlingMove(kingStart, kingEnd, king, rookStart, rookEnd, board);
@@ -265,14 +265,14 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void UndoMoveOnBoard_EnPassant_RestoresCapturedPawnToCorrectSquare()
         {
             // Arrange: White pawn captures Black pawn en passant
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e5", Team.White, ChessPieceType.Pawn, hasMoved: true)
                 .WithPiece("d5", Team.Black, ChessPieceType.Pawn, hasMoved: true)
                 .WithEnPassantFile(3); // d-file
 
-            Vector2Int from = TestBoardSetupUtility.AlgebraicToVector("e5");
-            Vector2Int to = TestBoardSetupUtility.AlgebraicToVector("d6");
-            Vector2Int capturePos = TestBoardSetupUtility.AlgebraicToVector("d5");
+            Vector2Int from = BoardSetup.AlgebraicToVector("e5");
+            Vector2Int to = BoardSetup.AlgebraicToVector("d6");
+            Vector2Int capturePos = BoardSetup.AlgebraicToVector("d5");
 
             PieceData whitePawn = board.GetPiece(from);
             PieceData blackPawn = board.GetPiece(capturePos);
@@ -307,12 +307,12 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void UndoMoveOnBoard_CastlingRights_RestoredCorrectly()
         {
             // Arrange: King move revokes all castling rights for that team
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King, hasMoved: false)
                 .WithCastlingRights(BoardState.CastlingAllRights);
 
-            Vector2Int from = TestBoardSetupUtility.AlgebraicToVector("e1");
-            Vector2Int to = TestBoardSetupUtility.AlgebraicToVector("e2");
+            Vector2Int from = BoardSetup.AlgebraicToVector("e1");
+            Vector2Int to = BoardSetup.AlgebraicToVector("e2");
             PieceData king = board.GetPiece(from);
             MoveCommand move = MoveCommand.CreateStandardMove(from, to, king, default, board);
 
@@ -333,12 +333,12 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void UndoMoveOnBoard_EnPassantFile_RestoredCorrectly()
         {
             // Arrange: Non-double-pawn-push clears en passant
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e4", Team.White, ChessPieceType.Knight)
                 .WithEnPassantFile(4); // e-file was available
 
-            Vector2Int from = TestBoardSetupUtility.AlgebraicToVector("e4");
-            Vector2Int to = TestBoardSetupUtility.AlgebraicToVector("f6");
+            Vector2Int from = BoardSetup.AlgebraicToVector("e4");
+            Vector2Int to = BoardSetup.AlgebraicToVector("f6");
             PieceData knight = board.GetPiece(from);
             MoveCommand move = MoveCommand.CreateStandardMove(from, to, knight, default, board);
 
@@ -356,12 +356,12 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void UndoMoveOnBoard_ZobristHash_RestoredCorrectly()
         {
             // Arrange
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             board.ComputeFullZobristHash();
             ulong originalHash = board.ZobristHash;
 
-            Vector2Int from = TestBoardSetupUtility.AlgebraicToVector("e2");
-            Vector2Int to = TestBoardSetupUtility.AlgebraicToVector("e4");
+            Vector2Int from = BoardSetup.AlgebraicToVector("e2");
+            Vector2Int to = BoardSetup.AlgebraicToVector("e4");
             PieceData pawn = board.GetPiece(from);
             MoveCommand move = MoveCommand.CreateStandardMove(from, to, pawn, default, board);
 
@@ -384,7 +384,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void UndoMoveOnBoard_CapturePromotion_BoardAndHashFullyRestored()
         {
             // Arrange: Most complex move type - pawn captures and promotes
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e7", Team.White, ChessPieceType.Pawn, hasMoved: true)
                 .WithPiece("f8", Team.Black, ChessPieceType.Rook, hasMoved: false)
                 .WithPiece("a1", Team.White, ChessPieceType.King)
@@ -394,8 +394,8 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
             ulong originalHash = board.ZobristHash;
             int originalGraveyardCount = board.BlackCaptured.Count;
 
-            Vector2Int from = TestBoardSetupUtility.AlgebraicToVector("e7");
-            Vector2Int to = TestBoardSetupUtility.AlgebraicToVector("f8");
+            Vector2Int from = BoardSetup.AlgebraicToVector("e7");
+            Vector2Int to = BoardSetup.AlgebraicToVector("f8");
             PieceData pawn = board.GetPiece(from);
             PieceData rook = board.GetPiece(to);
             MoveCommand move = MoveCommand.CreatePromotionMove(from, to, pawn, ChessPieceType.Queen, rook, board);

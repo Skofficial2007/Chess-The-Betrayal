@@ -20,9 +20,9 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
     [TestFixture]
     public class LateMoveReductionTests
     {
-        private static readonly Vector2Int From = TestBoardSetupUtility.AlgebraicToVector("a2");
-        private static readonly Vector2Int To = TestBoardSetupUtility.AlgebraicToVector("a3");
-        private static readonly Vector2Int OtherTo = TestBoardSetupUtility.AlgebraicToVector("a4");
+        private static readonly Vector2Int From = BoardSetup.AlgebraicToVector("a2");
+        private static readonly Vector2Int To = BoardSetup.AlgebraicToVector("a3");
+        private static readonly Vector2Int OtherTo = BoardSetup.AlgebraicToVector("a4");
 
         private static MoveCommand QuietMove(Vector2Int? to = null)
         {
@@ -137,7 +137,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // Same back-rank mate-in-one fixture as SearchCorrectnessTests, but at a depth deep
             // enough (>=3) and with enough quiet sibling moves for LMR to actually fire — proves a
             // reduced-then-refuted quiet move doesn't cause the search to miss the real best line.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("a1", Team.White, ChessPieceType.Rook)
                 .WithPiece("b2", Team.White, ChessPieceType.Pawn)
@@ -156,8 +156,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
 
             MoveCommand best = search.FindBestMove(board, settings, CancellationToken.None);
 
-            Assert.That(best.StartPosition, Is.EqualTo(TestBoardSetupUtility.AlgebraicToVector("a1")));
-            Assert.That(best.EndPosition, Is.EqualTo(TestBoardSetupUtility.AlgebraicToVector("a8")));
+            Assert.That(best.StartPosition, Is.EqualTo(BoardSetup.AlgebraicToVector("a1")));
+            Assert.That(best.EndPosition, Is.EqualTo(BoardSetup.AlgebraicToVector("a8")));
         }
 
         [Test]
@@ -166,7 +166,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // A pending-Betrayer node must never reduce any child (nodeAllowsReduction guard) — this
             // is a regression guard that the search still completes and the hash stays consistent
             // even at a depth where LMR would otherwise be eligible to fire.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("a1", Team.White, ChessPieceType.Rook)

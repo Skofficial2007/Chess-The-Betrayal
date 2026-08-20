@@ -22,10 +22,10 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Interaction
     [TestFixture]
     public class LocalMoveExecutorBetrayalConfirmationTests
     {
-        private static readonly Vector2Int D1 = TestBoardSetupUtility.AlgebraicToVector("d1");
-        private static readonly Vector2Int D2 = TestBoardSetupUtility.AlgebraicToVector("d2");
-        private static readonly Vector2Int C1 = TestBoardSetupUtility.AlgebraicToVector("c1");
-        private static readonly Vector2Int G4 = TestBoardSetupUtility.AlgebraicToVector("g4");
+        private static readonly Vector2Int D1 = BoardSetup.AlgebraicToVector("d1");
+        private static readonly Vector2Int D2 = BoardSetup.AlgebraicToVector("d2");
+        private static readonly Vector2Int C1 = BoardSetup.AlgebraicToVector("c1");
+        private static readonly Vector2Int G4 = BoardSetup.AlgebraicToVector("g4");
 
         private BoardState _board;
         private LocalMoveExecutor _executor;
@@ -42,7 +42,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Interaction
         /// made to wait. Kings on both sides because every move is checked against them.
         /// </summary>
         private static BoardState QueenCanBetrayHerOwnPawn() =>
-            TestBoardSetupUtility.CreateEmpty()
+            BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithPiece("h8", Team.Black, ChessPieceType.King)
                 .WithPiece("d1", Team.White, ChessPieceType.Queen)
@@ -113,7 +113,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Interaction
         {
             // The rook on b1 is all that stands between the black rook on h1 and the white king.
             // Betraying the pawn on b5 would take it off the back rank.
-            UseBoard(TestBoardSetupUtility.CreateEmpty()
+            UseBoard(BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithPiece("h8", Team.Black, ChessPieceType.King)
                 .WithPiece("b1", Team.White, ChessPieceType.Rook)
@@ -122,8 +122,8 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Interaction
                 .WithTurn(Team.White)
                 .WithBetrayalRight(true));
 
-            Vector2Int b1 = TestBoardSetupUtility.AlgebraicToVector("b1");
-            Vector2Int b5 = TestBoardSetupUtility.AlgebraicToVector("b5");
+            Vector2Int b1 = BoardSetup.AlgebraicToVector("b1");
+            Vector2Int b5 = BoardSetup.AlgebraicToVector("b5");
 
             _executor.RequestMove(b1, b5);
 

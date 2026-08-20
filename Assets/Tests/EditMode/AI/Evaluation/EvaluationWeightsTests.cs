@@ -57,7 +57,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
             var skewed = new EvaluationWeights(attackScale: 2.0f, defenseScale: 0.3f, betrayalOptionScale: 1f);
             var evaluator = new BetrayalAwareEvaluator(skewed);
 
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("d1", Team.White, ChessPieceType.Rook)
@@ -75,7 +75,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
             // A bare two-king board has zero material (King's BaseValue is 0 by design) and its
             // PST contributions cancel by symmetry of an otherwise-empty board — proving material
             // truly bypasses the weight multipliers, not merely "happens to look symmetric."
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King);
 

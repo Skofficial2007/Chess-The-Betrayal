@@ -37,7 +37,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // White king on a1 in check from a Black rook on a8 along the a-file. Of the king's
             // three adjacent non-a-file squares (b1, b2 — a2 stays on the checking file), b2 is
             // additionally covered by a second Black rook on h2, leaving b1 as the ONLY legal move.
-            return TestBoardSetupUtility.CreateEmpty()
+            return BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithPiece("a8", Team.Black, ChessPieceType.Rook)
                 .WithPiece("h2", Team.Black, ChessPieceType.Rook)

@@ -29,7 +29,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         [Test]
         public void MakeThenUndo_NoEnPassantRight_RestoresHashTurnAndEnPassantExactly()
         {
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             ulong hashBefore = board.ZobristHash;
             Team turnBefore = board.CurrentTurn;
 
@@ -50,7 +50,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         [Test]
         public void MakeThenUndo_WithEnPassantRight_RestoresHashTurnAndEnPassantExactly()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("d4", Team.White, ChessPieceType.Pawn)

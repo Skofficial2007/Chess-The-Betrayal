@@ -40,7 +40,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         /// search goes deeper, so a generous soft/hard gap lets the settle-early logic fire well
         /// before either budget edge.</summary>
         private static BoardState QuietPosition() =>
-            TestBoardSetupUtility.CreateEmpty()
+            BoardSetup.CreateEmpty()
                 .WithPiece("g1", Team.White, ChessPieceType.King)
                 .WithPiece("g8", Team.Black, ChessPieceType.King)
                 .WithPiece("d1", Team.White, ChessPieceType.Queen)
@@ -105,7 +105,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         /// <summary>Black King boxed in on g8 by its own pawns; White Rook on a1 delivers Ra1-a8#
         /// as a genuine forced mate.</summary>
         private static BoardState BackRankMateInOne() =>
-            TestBoardSetupUtility.CreateEmpty()
+            BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("a1", Team.White, ChessPieceType.Rook)
                 .WithPiece("g8", Team.Black, ChessPieceType.King)

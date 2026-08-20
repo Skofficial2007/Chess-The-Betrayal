@@ -20,7 +20,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.Texel
         [Test]
         public void TexelBoardCodec_StandardStartingPosition_RoundTripsEveryPiece()
         {
-            BoardState original = TestBoardSetupUtility.CreateStandard();
+            BoardState original = BoardSetup.CreateStandard();
 
             string encoded = TexelBoardCodec.Encode(original);
             BoardState decoded = TexelBoardCodec.Decode(encoded);
@@ -46,7 +46,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.Texel
         [Test]
         public void TexelBoardCodec_SparseCustomBoard_RoundTripsExactly()
         {
-            BoardState original = TestBoardSetupUtility.CreateEmpty()
+            BoardState original = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("a8", Team.White, ChessPieceType.Rook)
                 .WithPiece("g8", Team.Black, ChessPieceType.King)
@@ -82,7 +82,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.Texel
         [Test]
         public void TexelPositionRecord_ToLineThenTryParse_RoundTripsEveryField()
         {
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             var original = new TexelPositionRecord(
                 TexelBoardCodec.Encode(board), Team.Black, betrayalRightAvailable: true,
                 postDefectionOccurred: true, label: 0.5);
@@ -110,7 +110,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.Texel
         [Test]
         public void TexelPositionRecord_ToBoardState_RestoresSideToMoveAndBetrayalRight()
         {
-            BoardState original = TestBoardSetupUtility.CreateStandard();
+            BoardState original = BoardSetup.CreateStandard();
             var record = new TexelPositionRecord(
                 TexelBoardCodec.Encode(original), Team.Black, betrayalRightAvailable: false,
                 postDefectionOccurred: false, label: 1.0);
@@ -128,7 +128,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.Texel
             // available); ToBoardState then overrides both from the record. Without recomputing, the
             // hash would silently disagree with the board it claims to describe on every record where
             // either override actually changes something from that default.
-            BoardState original = TestBoardSetupUtility.CreateStandard();
+            BoardState original = BoardSetup.CreateStandard();
             var record = new TexelPositionRecord(
                 TexelBoardCodec.Encode(original), Team.Black, betrayalRightAvailable: false,
                 postDefectionOccurred: false, label: 1.0);
@@ -146,7 +146,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.Texel
             {
                 var writer = new TexelCorpusWriter(tempDir, TexelCorpusWriter.BuildHeaderLine(1, runSeed: 1, DateTime.UtcNow));
                 var sampler = new TexelCorpusSampler(writer);
-                BoardState board = TestBoardSetupUtility.CreateStandard();
+                BoardState board = BoardSetup.CreateStandard();
 
                 sampler.OnQuietPosition(board, Team.White, ply: 0, postDefectionOccurred: false);
                 sampler.OnQuietPosition(board, Team.Black, ply: 1, postDefectionOccurred: false);
@@ -178,7 +178,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.Texel
 
                 using (var writer = new TexelCorpusWriter(tempDir, TexelCorpusWriter.BuildHeaderLine(1, runSeed: 1, DateTime.UtcNow)))
                 {
-                    BoardState board = TestBoardSetupUtility.CreateStandard();
+                    BoardState board = BoardSetup.CreateStandard();
                     string encoded = TexelBoardCodec.Encode(board);
 
                     Parallel.For(0, producers, producerIndex =>

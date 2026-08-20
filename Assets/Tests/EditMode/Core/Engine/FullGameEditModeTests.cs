@@ -32,8 +32,8 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         /// </summary>
         private MoveCommand FindMove(BoardState board, string from, string to)
         {
-            Vector2Int fromPos = TestBoardSetupUtility.AlgebraicToVector(from);
-            Vector2Int toPos = TestBoardSetupUtility.AlgebraicToVector(to);
+            Vector2Int fromPos = BoardSetup.AlgebraicToVector(from);
+            Vector2Int toPos = BoardSetup.AlgebraicToVector(to);
 
             _moveBuffer.Clear();
             _engine.GetLegalMoves(board, fromPos, _moveBuffer);
@@ -47,7 +47,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
             }
 
             Assert.Fail($"No legal move found from {from} to {to}. Legal destinations: " +
-                string.Join(", ", TestBoardSetupUtility.GetDestinations(_moveBuffer)));
+                string.Join(", ", BoardSetup.GetDestinations(_moveBuffer)));
             return default;
         }
 
@@ -56,7 +56,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         {
             // Fool's Mate: the fastest checkmate in chess. Drives four half-moves purely through
             // IChessEngine.Advance/GetLegalMoves/EvaluateGameState — no GameManager, no scene.
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
 
             // 1. f3
             TurnAdvanceResult r1 = _engine.Advance(board, FindMove(board, "f2", "f3"));
@@ -98,7 +98,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
             // No other White piece exists, so no Retribution executioner can possibly exist — the
             // engine must resolve Defection on its own. Once the Rook defects on e3, it directly
             // checks the King on e1 along the open e-file, so a Forced Save is required.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e5", Team.White, ChessPieceType.Rook)  // Betrayer
                 .WithPiece("e3", Team.White, ChessPieceType.Pawn)  // Victim
@@ -119,7 +119,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
             Assert.That(afterAct.RequiresForcedSave, Is.True);
             Assert.That(afterAct.TurnPassedToOpponent, Is.False, "Turn must not pass until the Forced Save move completes it.");
             Assert.That(afterAct.DefectionMove, Is.Not.Null, "AI/server undo stacks need this to unmake the Defection.");
-            Assert.That(board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("e3")).Team, Is.EqualTo(Team.Black), "Rook must have defected to Black.");
+            Assert.That(board.GetPiece(BoardSetup.AlgebraicToVector("e3")).Team, Is.EqualTo(Team.Black), "Rook must have defected to Black.");
             Assert.That(board.CurrentTurn, Is.EqualTo(Team.White), "Still White's turn — the Forced Save has not been played yet.");
             Assert.DoesNotThrow(() => board.AssertZobristConsistency(), "Hash must remain consistent through Act + inline Defection.");
 
@@ -147,7 +147,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
             //
             // White Knight at b1 (Betrayer) betrays the White Pawn at a3.
             // White Rook at a1 can execute the Betrayer at a3 (Retribution succeeds).
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("b1", Team.White, ChessPieceType.Knight)

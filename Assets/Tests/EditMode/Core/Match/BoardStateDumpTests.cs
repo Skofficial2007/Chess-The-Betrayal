@@ -57,7 +57,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Match
         [Test]
         public void ToAscii_WhenTheOptionalStateIsSet_PrintsItInsteadOfNone()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithTurn(Team.Black)

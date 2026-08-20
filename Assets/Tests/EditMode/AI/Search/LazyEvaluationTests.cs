@@ -75,7 +75,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // White gets several advanced, unopposed (passed) pawns; Black gets a cluster of
             // doubled/isolated pawns with no passed-pawn credit. This is the kind of board the
             // MaxPositionalSwing bound has to survive, not just an ordinary midgame.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("a6", Team.White, ChessPieceType.Pawn)
@@ -107,7 +107,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // its own zone, so its king-safety score is exactly zero -- maximizing the gap between the
             // two sides exactly the way the bound's derivation assumes (one side clamped at its
             // ceiling, the other at zero).
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("d2", Team.White, ChessPieceType.Knight)
                 .WithPiece("c1", Team.Black, ChessPieceType.Queen)
@@ -141,7 +141,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // has no mating material of its own, so its own approach score is exactly zero --
             // maximizing the gap the same way the pawn-structure and king-safety worst-case probes
             // above do (one side clamped at its ceiling, the other at zero).
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("d4", Team.White, ChessPieceType.King)
                 .WithPiece("a1", Team.White, ChessPieceType.Queen)
                 .WithPiece("d5", Team.Black, ChessPieceType.King)
@@ -163,7 +163,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // Betrayer must never see the stand-pat lazy cut at all -- confirmed here by pinning
             // that the guard alone (not the window) decides the branch: even a window the cheap
             // score would trivially clear still routes through EvaluateTimed (full).
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("a1", Team.White, ChessPieceType.Rook)
@@ -188,7 +188,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // Full quiescence entry, not just the stand-pat helper in isolation: a pending
             // Retribution must still resolve via GetRetributionMoves and reflect the lost piece,
             // never the lazy cut (or any stand-pat) short-circuiting mid-sequence.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("a1", Team.White, ChessPieceType.Rook)
@@ -210,7 +210,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // Rook on e4 is the pending Betrayer with no legal Executioner; defecting checks its
             // own former King on e1 (ForcedSave). Same guarantee as Retribution: the lazy hatch
             // must never intercept a forced-Betrayal leaf.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("e4", Team.White, ChessPieceType.Rook)
@@ -231,7 +231,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // Fresh board per search, never a reused mutable instance (BoardState.SetPiece can
             // permute a team's piece-index order after a capture/undo cycle, which would make two
             // "independent" searches over one shared board not actually independent).
-            BoardState board() => TestBoardSetupUtility.CreateEmpty()
+            BoardState board() => BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("a1", Team.White, ChessPieceType.Rook)

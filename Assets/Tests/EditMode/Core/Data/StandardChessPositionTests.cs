@@ -116,7 +116,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Data
         {
             // Eighty-odd fixtures reach the shared builder through this call rather than directly, so
             // this is the pin that keeps those fixtures on the board they were written against.
-            Assert.That(TestBoardSetupUtility.CreateStandard().ZobristHash,
+            Assert.That(BoardSetup.CreateStandard().ZobristHash,
                 Is.EqualTo(GoldenHashWithBetrayalSpent));
         }
     }

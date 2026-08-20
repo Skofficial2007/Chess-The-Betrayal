@@ -19,7 +19,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
         [Test]
         public void Evaluate_EqualMaterialSymmetricPosition_ScoresZeroForBothTeams()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("d1", Team.White, ChessPieceType.Queen)
@@ -35,7 +35,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
             // A vertically mirrored position (White's setup reflected onto Black's ranks) must
             // score identically for the side it favors regardless of which color that is —
             // Evaluate(board, White) == -Evaluate(board, Black) always, by construction.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("d1", Team.White, ChessPieceType.Rook)
@@ -50,7 +50,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
         [Test]
         public void Evaluate_ExtraQueen_StronglyFavorsThatTeam()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("d1", Team.White, ChessPieceType.Queen);
@@ -62,12 +62,12 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
         [Test]
         public void Evaluate_KnightOnRimVsCenter_PrefersCenter()
         {
-            BoardState rimBoard = TestBoardSetupUtility.CreateEmpty()
+            BoardState rimBoard = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("a1", Team.White, ChessPieceType.Knight);
 
-            BoardState centerBoard = TestBoardSetupUtility.CreateEmpty()
+            BoardState centerBoard = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("d4", Team.White, ChessPieceType.Knight);
@@ -82,13 +82,13 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
         [Test]
         public void Evaluate_BetrayalRightAvailable_CreditsSideToMove()
         {
-            BoardState boardWithRight = TestBoardSetupUtility.CreateEmpty()
+            BoardState boardWithRight = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithTurn(Team.White)
                 .WithBetrayalRight(true);
 
-            BoardState boardWithoutRight = TestBoardSetupUtility.CreateEmpty()
+            BoardState boardWithoutRight = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithTurn(Team.White)
@@ -104,7 +104,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
         [Test]
         public void Evaluate_BetrayalRightAvailable_PenalizesOpponentOfSideToMove()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithTurn(Team.White)

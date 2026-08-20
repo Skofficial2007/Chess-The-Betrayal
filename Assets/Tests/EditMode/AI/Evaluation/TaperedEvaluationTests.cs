@@ -27,13 +27,13 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
             // (defense bucket), which would measure the personality dial, not the taper.
             var evaluator = new BetrayalAwareEvaluator();
 
-            BoardState backRankKing = TestBoardSetupUtility.CreateEmpty()
+            BoardState backRankKing = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("a2", Team.White, ChessPieceType.Pawn)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("a7", Team.Black, ChessPieceType.Pawn);
 
-            BoardState centralizedKing = TestBoardSetupUtility.CreateEmpty()
+            BoardState centralizedKing = BoardSetup.CreateEmpty()
                 .WithPiece("d4", Team.White, ChessPieceType.King)
                 .WithPiece("a2", Team.White, ChessPieceType.Pawn)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
@@ -54,7 +54,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
             // always applying the endgame table.
             var evaluator = new BetrayalAwareEvaluator();
 
-            BoardState backRankKing = TestBoardSetupUtility.CreateEmpty()
+            BoardState backRankKing = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("a1", Team.White, ChessPieceType.Rook)
                 .WithPiece("h1", Team.White, ChessPieceType.Rook)
@@ -72,7 +72,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
                 .WithPiece("f8", Team.Black, ChessPieceType.Bishop)
                 .WithPiece("d8", Team.Black, ChessPieceType.Queen);
 
-            BoardState centralizedKing = TestBoardSetupUtility.CreateEmpty()
+            BoardState centralizedKing = BoardSetup.CreateEmpty()
                 .WithPiece("d4", Team.White, ChessPieceType.King)
                 .WithPiece("a1", Team.White, ChessPieceType.Rook)
                 .WithPiece("h1", Team.White, ChessPieceType.Rook)

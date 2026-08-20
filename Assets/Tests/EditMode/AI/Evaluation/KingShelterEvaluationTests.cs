@@ -14,7 +14,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
         // f2/g2/h2 sums to +25, a genuinely nonzero (and positive) defense-bucket contribution
         // that actually grows with DefenseScale, which is what the proportionality test needs.
         private static BoardState ShelteredKingBoard() =>
-            TestBoardSetupUtility.CreateEmpty()
+            BoardSetup.CreateEmpty()
                 .WithPiece("g1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("f2", Team.White, ChessPieceType.Pawn)
@@ -22,7 +22,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
                 .WithPiece("h2", Team.White, ChessPieceType.Pawn);
 
         private static BoardState BareKingBoard() =>
-            TestBoardSetupUtility.CreateEmpty()
+            BoardSetup.CreateEmpty()
                 .WithPiece("g1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King);
 

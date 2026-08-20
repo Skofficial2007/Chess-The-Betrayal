@@ -36,7 +36,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // for IIR to act on (confirmed by instrumenting the production code directly - every
             // depth>=4 probe already carried a non-zero TT move there). This position's wider,
             // less-transposing branching gives IIR real TT-move-less nodes to seed instead.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("d1", Team.White, ChessPieceType.Queen)
@@ -66,7 +66,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         {
             // Below the minimum depth threshold, every node is already cheap enough that the extra
             // probe search would cost more than it saves - IIR must stay off entirely down there.
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
 
             var settings = new AISearchSettings(maxDepth: 3, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
             _search.FindBestMove(board, settings, CancellationToken.None);
@@ -85,7 +85,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // dependence), running the exact same position through two independent, freshly
             // constructed searches - each starting from an empty table so IIR gets the same chances
             // to fire both times - must land on the identical best move every time.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("d1", Team.White, ChessPieceType.Queen)

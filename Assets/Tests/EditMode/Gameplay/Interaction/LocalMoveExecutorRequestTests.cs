@@ -19,7 +19,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Interaction
     [TestFixture]
     public class LocalMoveExecutorRequestTests
     {
-        private static Vector2Int Sq(string algebraic) => TestBoardSetupUtility.AlgebraicToVector(algebraic);
+        private static Vector2Int Sq(string algebraic) => BoardSetup.AlgebraicToVector(algebraic);
 
         private BoardState _board;
         private IChessEngine _engine;
@@ -54,7 +54,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Interaction
 
         /// <summary>White's pawn on e7 is one step from the last rank, with the square ahead empty.</summary>
         private static BoardState APawnOneStepFromTheLastRank() =>
-            TestBoardSetupUtility.CreateEmpty()
+            BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithPiece("a8", Team.Black, ChessPieceType.King)
                 .WithPiece("e7", Team.White, ChessPieceType.Pawn)
@@ -86,7 +86,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Interaction
         /// up on the wrong side of the board rather than the request being refused.
         /// </summary>
         private static BoardState BothCastlesAvailable() =>
-            TestBoardSetupUtility.CreateEmpty()
+            BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King, hasMoved: false)
                 .WithPiece("a1", Team.White, ChessPieceType.Rook, hasMoved: false)
                 .WithPiece("h1", Team.White, ChessPieceType.Rook, hasMoved: false)
@@ -136,7 +136,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Interaction
         /// a piece at all. Neither request survives being asked on White's turn.
         /// </summary>
         private static BoardState BlackHasARookAndItIsWhitesTurn() =>
-            TestBoardSetupUtility.CreateEmpty()
+            BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithPiece("h8", Team.Black, ChessPieceType.King)
                 .WithPiece("d8", Team.Black, ChessPieceType.Rook)

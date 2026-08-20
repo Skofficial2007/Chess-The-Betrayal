@@ -37,7 +37,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // it must still never fire: this position is deliberately the most inviting one, so a
             // future change that quietly re-enables the extension (and its measured node-count
             // cost) fails here instead of only showing up as a slow benchmark.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("b1", Team.White, ChessPieceType.Knight)
@@ -63,7 +63,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // A position with BetrayalRight unavailable can never Act, so the extension must never
             // fire regardless of depth — a control case proving the guard is actually gating on a
             // real staged Retribution, not firing unconditionally.
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
 
             var settings = new AISearchSettings(maxDepth: 3, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
             _search.FindBestMove(board, settings, CancellationToken.None);
@@ -85,7 +85,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // sanity check that a generous supply of extension opportunities completes promptly and
             // leaves the board and hash exactly as it found them, the same proof-of-restraint
             // NullMovePruningSafetyTests uses for the null-move guard.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("b1", Team.White, ChessPieceType.Knight)
@@ -120,7 +120,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // granted for the Act that staged it. Directly exercises the position from the
             // "ExtensionFires" test above but asserts the count stays proportionate rather than
             // growing per Retribution ply explored.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("b1", Team.White, ChessPieceType.Knight)

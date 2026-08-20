@@ -26,10 +26,10 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Match
 
         private static MoveCommand StandardMove(string from, string to, Team team, ChessPieceType type)
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty().WithPiece(from, team, type);
-            PieceData piece = board.GetPiece(TestBoardSetupUtility.AlgebraicToVector(from));
+            BoardState board = BoardSetup.CreateEmpty().WithPiece(from, team, type);
+            PieceData piece = board.GetPiece(BoardSetup.AlgebraicToVector(from));
             return MoveCommand.CreateStandardMove(
-                TestBoardSetupUtility.AlgebraicToVector(from), TestBoardSetupUtility.AlgebraicToVector(to), piece, default, board);
+                BoardSetup.AlgebraicToVector(from), BoardSetup.AlgebraicToVector(to), piece, default, board);
         }
 
         [Test]
@@ -59,11 +59,11 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Match
         [Test]
         public void Record_CheckmatingMove_AppendsHashInNotation()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("h5", Team.White, ChessPieceType.Queen)
                 .WithPiece("f7", Team.Black, ChessPieceType.Pawn);
-            Vector2Int from = TestBoardSetupUtility.AlgebraicToVector("h5");
-            Vector2Int to = TestBoardSetupUtility.AlgebraicToVector("f7");
+            Vector2Int from = BoardSetup.AlgebraicToVector("h5");
+            Vector2Int to = BoardSetup.AlgebraicToVector("f7");
             PieceData queen = board.GetPiece(from);
             PieceData victim = board.GetPiece(to);
             MoveCommand move = MoveCommand.CreateStandardMove(from, to, queen, victim, board);

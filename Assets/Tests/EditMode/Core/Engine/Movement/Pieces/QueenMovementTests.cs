@@ -18,12 +18,12 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Movement
         public void GetLegalMoves_QueenInCentre_ReturnsTwentySevenMoves()
         {
             // Arrange
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("d4", Team.White, ChessPieceType.Queen)
                 .WithPiece("a2", Team.White, ChessPieceType.King); // FIX: Moved King off the diagonal
 
             // Act
-            ChessEngine.GetLegalMoves(board, TestBoardSetupUtility.AlgebraicToVector("d4"), _outputBuffer);
+            ChessEngine.GetLegalMoves(board, BoardSetup.AlgebraicToVector("d4"), _outputBuffer);
 
             // Assert
             Assert.That(_outputBuffer.Count, Is.EqualTo(27), "Queen on d4 should have exactly 27 legal moves (14 straight + 13 diagonal).");

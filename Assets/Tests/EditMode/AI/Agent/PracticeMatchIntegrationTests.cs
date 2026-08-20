@@ -37,7 +37,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Agent
         public void Setup()
         {
             _engine = new ChessEngineAdapter();
-            _board = TestBoardSetupUtility.CreateStandard();
+            _board = BoardSetup.CreateStandard();
             _board.CurrentTurn = Team.White;
 
             _matchDriver = new MatchDriver(_engine, _board, logMoves: false, domainLogger: null,
@@ -136,7 +136,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Agent
             // (structural guarantee pinned by BetrayalModeTests) — this test instead exercises the
             // end-to-end wiring: MatchDriver->AsyncAIAgent->MatchDriver.PlayMove never produces an
             // Act as the AI's own root choice while DefendOnly is active.
-            _board = TestBoardSetupUtility.CreateEmpty()
+            _board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("b8", Team.Black, ChessPieceType.Knight)
@@ -158,10 +158,10 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Agent
 
             // White (human) makes an ordinary, non-Act move.
             _matchDriver.PlayMove(MoveCommand.CreateStandardMove(
-                TestBoardSetupUtility.AlgebraicToVector("h1"),
-                TestBoardSetupUtility.AlgebraicToVector("h5"),
-                _board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("h1")),
-                _board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("h5")),
+                BoardSetup.AlgebraicToVector("h1"),
+                BoardSetup.AlgebraicToVector("h5"),
+                _board.GetPiece(BoardSetup.AlgebraicToVector("h1")),
+                _board.GetPiece(BoardSetup.AlgebraicToVector("h5")),
                 _board));
 
             Assert.That(_board.CurrentTurn, Is.EqualTo(Team.Black));

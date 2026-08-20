@@ -23,7 +23,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Interaction
     [TestFixture]
     public class LocalMoveExecutorSubPhaseTests
     {
-        private static Vector2Int Sq(string algebraic) => TestBoardSetupUtility.AlgebraicToVector(algebraic);
+        private static Vector2Int Sq(string algebraic) => BoardSetup.AlgebraicToVector(algebraic);
 
         private BoardState _board;
         private IChessEngine _engine;
@@ -62,7 +62,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Interaction
         /// Retribution is carried out by the side that was betrayed, which is the betrayer's own.
         /// </summary>
         private static BoardState QueenBetraysWithARookWaiting() =>
-            TestBoardSetupUtility.CreateEmpty()
+            BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithPiece("h8", Team.Black, ChessPieceType.King)
                 .WithPiece("d1", Team.White, ChessPieceType.Queen)
@@ -137,7 +137,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Interaction
         /// like any other, so it promotes — unlike the Act itself, which never does.
         /// </summary>
         private static BoardState RookBetraysWhereOnlyAPawnCanExecute() =>
-            TestBoardSetupUtility.CreateEmpty()
+            BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithPiece("h1", Team.Black, ChessPieceType.King)
                 .WithPiece("e1", Team.White, ChessPieceType.Rook)
@@ -171,7 +171,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Interaction
         /// rook defected to Black and checking the king it just abandoned.
         /// </summary>
         private static BoardState BetrayalThatLeavesTheKingInCheck() =>
-            TestBoardSetupUtility.CreateEmpty()
+            BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("h8", Team.Black, ChessPieceType.King)
                 .WithPiece("e5", Team.White, ChessPieceType.Rook)

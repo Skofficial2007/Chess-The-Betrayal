@@ -9,7 +9,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
     public class MaterialPhaseTests
     {
         private static BoardState FullNonPawnMaterialBoard() =>
-            TestBoardSetupUtility.CreateEmpty()
+            BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("a1", Team.White, ChessPieceType.Rook)
                 .WithPiece("h1", Team.White, ChessPieceType.Rook)
@@ -28,7 +28,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
                 .WithPiece("d8", Team.Black, ChessPieceType.Queen);
 
         private static BoardState BareKingsBoard() =>
-            TestBoardSetupUtility.CreateEmpty()
+            BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King);
 
@@ -50,7 +50,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
             BoardState fullBoard = FullNonPawnMaterialBoard();
             int fullWeight = MaterialPhase.Weight(fullBoard);
 
-            fullBoard.RemovePiece(TestBoardSetupUtility.AlgebraicToVector("d1"));
+            fullBoard.RemovePiece(BoardSetup.AlgebraicToVector("d1"));
             int afterQueenRemoved = MaterialPhase.Weight(fullBoard);
 
             Assert.That(afterQueenRemoved, Is.LessThan(fullWeight));
@@ -77,7 +77,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
             BoardState board = FullNonPawnMaterialBoard();
             int weightBeforeDefection = MaterialPhase.Weight(board);
 
-            board.DefectPiece(TestBoardSetupUtility.AlgebraicToVector("b1"));
+            board.DefectPiece(BoardSetup.AlgebraicToVector("b1"));
 
             Assert.That(MaterialPhase.Weight(board), Is.EqualTo(weightBeforeDefection));
         }

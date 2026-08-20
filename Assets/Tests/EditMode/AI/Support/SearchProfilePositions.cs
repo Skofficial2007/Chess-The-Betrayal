@@ -29,7 +29,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         /// <summary>A sharp middlegame with pieces en prise and open lines — captures and recaptures
         /// available, so the quiescence tail is far larger than the quiet position's.</summary>
         internal static BoardState TacticalMidgame() =>
-            TestBoardSetupUtility.CreateEmpty()
+            BoardSetup.CreateEmpty()
                 .WithPiece("g1", Team.White, ChessPieceType.King)
                 .WithPiece("g8", Team.Black, ChessPieceType.King)
                 .WithPiece("d1", Team.White, ChessPieceType.Queen)
@@ -57,7 +57,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         /// its forced follow-up are genuinely on the table — the shape whose tree the earlier
         /// benchmarks understated because they measured a quiet opening instead.</summary>
         internal static BoardState BetrayalLiveMidgame() =>
-            TestBoardSetupUtility.CreateEmpty()
+            BoardSetup.CreateEmpty()
                 .WithPiece("g1", Team.White, ChessPieceType.King)
                 .WithPiece("g8", Team.Black, ChessPieceType.King)
                 .WithPiece("e2", Team.White, ChessPieceType.Queen)
@@ -88,7 +88,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         /// a longer horizon before anything decisive happens, which the deep tiers meet just as often
         /// as a middlegame in real play.</summary>
         internal static BoardState QuietEndgame() =>
-            TestBoardSetupUtility.CreateEmpty()
+            BoardSetup.CreateEmpty()
                 .WithPiece("g1", Team.White, ChessPieceType.King)
                 .WithPiece("g8", Team.Black, ChessPieceType.King)
                 .WithPiece("d3", Team.White, ChessPieceType.Rook)

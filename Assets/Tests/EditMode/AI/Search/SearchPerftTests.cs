@@ -62,8 +62,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // Pins the IChessEngine seam's node count to the already-trusted static ChessEngine
             // count at the same depth — if the adapter's ApplyMove/UndoMove ever drift from the
             // static methods they wrap, this diverges even though PerftTests.cs stays green.
-            BoardState boardViaSeam = TestBoardSetupUtility.CreateStandard();
-            BoardState boardViaStatic = TestBoardSetupUtility.CreateStandard();
+            BoardState boardViaSeam = BoardSetup.CreateStandard();
+            BoardState boardViaStatic = BoardSetup.CreateStandard();
 
             ulong seamCount = Perft(boardViaSeam, 2);
             ulong staticCount = StaticPerft(boardViaStatic, 2);
@@ -79,7 +79,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // Retribution. This position's depth-2 node count is a fixed regression baseline — if
             // GetBetrayalTargets/GetRetributionMoves ever leak the disguise-trick mutation, or if
             // an Act/Retribution ply is double-counted/dropped, this count moves.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("b1", Team.White, ChessPieceType.Knight)

@@ -270,7 +270,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.Match
             // move through MatchDriver directly (rather than depending on search preference,
             // which correctly avoids this Act as a losing trade) proves the state transition the
             // counting logic relies on, independent of whether any tier would ever choose it.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("b1", Team.White, ChessPieceType.Knight)
@@ -306,7 +306,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.Match
             // Defection inline inside PlayMove/TurnResolver.Advance, with no Retribution move ever
             // reaching MatchSimulator's ply loop. White's Knight on h8 can only Act its own Pawn on
             // g6, and nothing else on the board can reach h8 to execute it.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("h8", Team.White, ChessPieceType.Knight)
@@ -422,7 +422,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.Match
             // and adjudication disabled so nothing but the search's own choice of Ra8# can end this
             // game — if the search ever failed to find the only mate here, the test would fail loudly
             // on a ply-cap result instead of masking it behind a multi-ply adjudicated draw.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("a1", Team.White, ChessPieceType.Rook)
                 .WithPiece("g8", Team.Black, ChessPieceType.King)

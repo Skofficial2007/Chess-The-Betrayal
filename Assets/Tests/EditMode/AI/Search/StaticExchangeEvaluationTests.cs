@@ -21,7 +21,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         {
             // White Rook takes a lone Black Knight with nothing defending it - straightforward win,
             // no recapture possible, so the result is exactly the Knight's value.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("a4", Team.White, ChessPieceType.Rook)
@@ -38,7 +38,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         {
             // White Pawn takes a Black Pawn that's defended by another Black Pawn of equal value -
             // the exchange nets nothing (100 won, 100 lost back), a textbook "even trade" case.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("d4", Team.White, ChessPieceType.Pawn)
@@ -58,7 +58,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // wins the Pawn but then loses the Queen to the recapture, a textbook SEE-rejects-the-
             // capture case: material result is strongly negative even though the first capture
             // "looks" like a free Pawn by naive MVV-LVA (queen captures a lower-ranked piece).
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("d4", Team.White, ChessPieceType.Queen)
@@ -84,7 +84,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // Rook behind a Rook on the d-file - the front Rook captures, and if the defender
             // recaptures, the back Rook can then recapture in turn only because the front Rook has
             // vacated the file.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("d1", Team.White, ChessPieceType.Rook)
@@ -112,7 +112,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         [Test]
         public void IsApplicable_NoPendingBetrayer_ReturnsTrue()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("a4", Team.White, ChessPieceType.Rook)
@@ -130,7 +130,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // A Betrayer is pending on a totally different square (d4) from the capture being
             // evaluated (a4xa8) - IsApplicable must still return false, because the whole board is
             // mid a forced Betrayal sub-sequence, not just the pending square itself.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("a4", Team.White, ChessPieceType.Rook)
@@ -150,7 +150,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // The capture under evaluation IS the Retribution move itself - an ally executing the
             // Betrayer. This is exactly the case the class doc warns about: "whoever's turn is
             // next" and "whoever benefits" have come apart, so ordinary SEE math would misjudge it.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("a1", Team.White, ChessPieceType.Rook)
@@ -171,7 +171,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // An Act isn't a material capture at all - it stages one. There is no exchange on the
             // target square yet, so there is nothing for the swap-off algorithm to be right about,
             // and scoring it as though there were would invent material that hasn't been won.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("a4", Team.White, ChessPieceType.Rook)
@@ -195,7 +195,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // Equal captures specifically, because the nudge is deliberately confined to the
             // winning and equal capture bands: a losing capture sits close enough to the tiers
             // below it that even a small nudge could push it out of its own band.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("c3", Team.White, ChessPieceType.Knight)
@@ -224,7 +224,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // exchange result can no longer be trusted (an ally, not the opponent, may be the one
             // recapturing), so both captures must fall back to the same coarse piece-rank score
             // rather than one being nudged ahead of the other on exchange math that doesn't apply.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("c3", Team.White, ChessPieceType.Knight)

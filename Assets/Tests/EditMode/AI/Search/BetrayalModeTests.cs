@@ -35,7 +35,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // policy is involved at all — this just confirms the search's own Act-inclusive move
             // generation (GetAllLegalMovesIncludingBetrayal) never surfaces an Act move when the
             // right isn't available, since GetBetrayalTargets itself early-returns on that flag.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("b1", Team.White, ChessPieceType.Knight)
@@ -59,7 +59,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         [Test]
         public void DefendOnlyMode_NeverChoosesActAsItsOwnRootMove()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("b1", Team.White, ChessPieceType.Knight)
@@ -87,7 +87,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // return Black's Act move untouched. If DefendOnly's filter ever leaked into the
             // recursive move-gen call, this Act move would silently disappear from what the search
             // can see one ply in.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("h1", Team.White, ChessPieceType.Rook)
@@ -121,7 +121,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // is human-only. This means whenever a legal Retribution capture exists, the search's
             // own move generation (which returns ONLY Retribution moves while a Betrayer is
             // pending) leaves it no alternative but to choose one, never to "pass" on it.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("b1", Team.White, ChessPieceType.Knight)
@@ -132,7 +132,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
                 .WithComputedHash();
 
             List<MoveCommand> actMoves = new List<MoveCommand>();
-            ChessEngine.GetBetrayalTargets(board, TestBoardSetupUtility.AlgebraicToVector("b1"), actMoves);
+            ChessEngine.GetBetrayalTargets(board, BoardSetup.AlgebraicToVector("b1"), actMoves);
             MoveCommand actMove = actMoves[0];
             _engine.ApplyMove(board, actMove);
 
@@ -142,7 +142,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             Assert.That(chosen.Stage, Is.EqualTo(BetrayalStage.Retribution),
                 "With a legal executioner available, the search must choose a Retribution move — " +
                 "it has no voluntary-skip alternative to consider.");
-            Assert.That(chosen.EndPosition, Is.EqualTo(TestBoardSetupUtility.AlgebraicToVector("a3")),
+            Assert.That(chosen.EndPosition, Is.EqualTo(BoardSetup.AlgebraicToVector("a3")),
                 "The only legal executioner (Rook a1) must capture the Betrayer at a3.");
 
             _engine.UndoMove(board, actMove);

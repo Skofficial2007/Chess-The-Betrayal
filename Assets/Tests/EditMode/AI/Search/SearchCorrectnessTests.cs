@@ -31,7 +31,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         public void FindBestMove_BackRankMateInOne_FindsTheMatingMove()
         {
             // Black King boxed in on g8 by its own pawns; White Rook on a1 delivers Ra1-a8#.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("a1", Team.White, ChessPieceType.Rook)
                 .WithPiece("g8", Team.Black, ChessPieceType.King)
@@ -44,8 +44,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             var settings = new AISearchSettings(maxDepth: 3, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
             MoveCommand best = _search.FindBestMove(board, settings, CancellationToken.None);
 
-            Assert.That(best.StartPosition, Is.EqualTo(TestBoardSetupUtility.AlgebraicToVector("a1")));
-            Assert.That(best.EndPosition, Is.EqualTo(TestBoardSetupUtility.AlgebraicToVector("a8")));
+            Assert.That(best.StartPosition, Is.EqualTo(BoardSetup.AlgebraicToVector("a1")));
+            Assert.That(best.EndPosition, Is.EqualTo(BoardSetup.AlgebraicToVector("a8")));
         }
 
         [Test]
@@ -54,7 +54,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // Every ApplyMove/UndoMove pair — including ones pruned by a beta cutoff mid-loop —
             // must leave the live board exactly as it found it. A single missed UndoMove here
             // would desync the incremental Zobrist hash from the board's actual piece layout.
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             ulong hashBefore = board.ZobristHash;
 
             var settings = new AISearchSettings(maxDepth: 3, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
@@ -74,7 +74,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // already owned for nothing except opening the file, so this is a wash materially,
             // but it proves the search explores Act -> Retribution without desyncing the turn
             // (StageFlipsTurn) or corrupting the hash across the sub-phase.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("b1", Team.White, ChessPieceType.Knight)
@@ -105,7 +105,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // drive the forced Defection to resolution. The Knight defects far from the White King, so
             // no self-check → no ForcedSave → the sequence fully resolves and the turn passes to Black.
             // Before the fix, this looped forever because the pending state was never cleared.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("h8", Team.White, ChessPieceType.Knight) // Betrayer, defects far from its King
@@ -143,7 +143,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // e-file. That obliges White to play a DefensiveOverride (king-save) — the SAME side moves
             // again, pending state stays set until the save closes it. Quiescence must explore the save
             // and still resolve to a finite score with a perfect state round-trip.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("e4", Team.White, ChessPieceType.Rook) // Betrayer, defects and checks e1
@@ -184,7 +184,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // to have no branch for this and silently generated ordinary moves instead of the mandatory
             // DefensiveOverride, which downstream corrupted search state and threw
             // Betrayal_ForcedSaveInvariantViolated deep inside quiescence on a real multi-game run.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("e4", Team.Black, ChessPieceType.Rook) // already defected: now Black
@@ -213,7 +213,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // draw to any side that was behind — the deeper the search, the better it got at
             // steering into that phantom escape hatch, which inverted the whole difficulty ladder.
             // Search must resolve the forced Defection and keep searching instead.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithPiece("b1", Team.White, ChessPieceType.Knight)
                 .WithPiece("a3", Team.White, ChessPieceType.Pawn)
@@ -262,7 +262,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // King along the open e-file — so White owes a mandatory king-save before play resumes.
             // The search must play out that whole forced continuation (Defection, then the save)
             // rather than scoring the empty-Retribution position as a draw.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e5", Team.White, ChessPieceType.Rook)
                 .WithPiece("e4", Team.White, ChessPieceType.Pawn)
@@ -307,7 +307,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // time-capped profile once ended up playing near-random moves: its budget expired
             // before the rescore pass, and the selection window happily treated leftover bounds
             // as real scores.
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             var settings = new AISearchSettings(maxDepth: 3, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             // Uncancelled search with a rescore margin: the pass completes, scores are exact.
@@ -334,7 +334,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         [Test]
         public void FindBestMove_DefendOnlyMode_NeverChoosesActAtRoot()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("b1", Team.White, ChessPieceType.Knight)

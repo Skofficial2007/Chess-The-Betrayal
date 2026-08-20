@@ -46,7 +46,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Agent
         [Test]
         public void APawnOneStepFromTheEndIsOfferedAllFourPieces()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("h1", Team.White, ChessPieceType.King)
                 .WithPiece("e7", Team.White, ChessPieceType.Pawn, hasMoved: true)
                 .WithPiece("a8", Team.Black, ChessPieceType.King)
@@ -74,7 +74,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Agent
         [Test]
         public void ACapturingPromotionIsAlsoOfferedAllFourPieces()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("h1", Team.White, ChessPieceType.King)
                 .WithPiece("e7", Team.White, ChessPieceType.Pawn, hasMoved: true)
                 .WithPiece("f8", Team.Black, ChessPieceType.Rook)
@@ -89,7 +89,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Agent
             var offeredOnTheCapture = new HashSet<ChessPieceType>();
             foreach (MoveCommand move in PromotionsIn(moves))
             {
-                if (move.EndPosition == TestBoardSetupUtility.AlgebraicToVector("f8"))
+                if (move.EndPosition == BoardSetup.AlgebraicToVector("f8"))
                 {
                     offeredOnTheCapture.Add(move.PromotedTo);
                 }
@@ -107,7 +107,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Agent
                 ChessPieceType.Queen, ChessPieceType.Rook, ChessPieceType.Knight, ChessPieceType.Bishop
             })
             {
-                BoardState board = TestBoardSetupUtility.CreateEmpty()
+                BoardState board = BoardSetup.CreateEmpty()
                     .WithPiece("h1", Team.White, ChessPieceType.King)
                     .WithPiece("e7", Team.White, ChessPieceType.Pawn, hasMoved: true)
                     .WithPiece("a8", Team.Black, ChessPieceType.King)
@@ -128,7 +128,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Agent
 
                 _engine.ApplyMove(board, promotion);
 
-                PieceData arrived = board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("e8"));
+                PieceData arrived = board.GetPiece(BoardSetup.AlgebraicToVector("e8"));
                 Assert.That(arrived.Type, Is.EqualTo(chosen),
                     $"Promoting to {chosen} put a {arrived.Type} on the board instead.");
             }
@@ -145,7 +145,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Agent
             // checking the king AND attacking the queen — the king has to move and the queen falls
             // next move. Any other promotion forks nothing and leaves the queens on. A default to
             // queen fails this outright.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("h1", Team.White, ChessPieceType.King)
                 .WithPiece("e7", Team.White, ChessPieceType.Pawn, hasMoved: true)
                 .WithPiece("a2", Team.White, ChessPieceType.Pawn, hasMoved: true)
@@ -160,7 +160,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Agent
             MoveCommand best = _search.FindBestMove(board, settings, CancellationToken.None);
 
             Assert.That(best.IsPromotion, Is.True, $"Expected a promotion, got {best}.");
-            Assert.That(best.EndPosition, Is.EqualTo(TestBoardSetupUtility.AlgebraicToVector("e8")));
+            Assert.That(best.EndPosition, Is.EqualTo(BoardSetup.AlgebraicToVector("e8")));
             Assert.That(best.PromotedTo, Is.EqualTo(ChessPieceType.Knight),
                 $"The knight fork was available and the search took a {best.PromotedTo}.");
         }
@@ -170,7 +170,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Agent
         {
             // The other half of the same claim: preferring a knight above must be the position
             // talking, not a bias. With no tactic on the board the queen is simply the best piece.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("h1", Team.White, ChessPieceType.King)
                 .WithPiece("e7", Team.White, ChessPieceType.Pawn, hasMoved: true)
                 .WithPiece("a7", Team.Black, ChessPieceType.King)

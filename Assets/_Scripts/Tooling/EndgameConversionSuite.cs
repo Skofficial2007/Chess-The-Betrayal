@@ -17,7 +17,7 @@ namespace ChessTheBetrayal.Tooling
     /// </summary>
     public static class EndgameConversionSuite
     {
-        private static Vector2Int At(string algebraic) => TestBoardSetupUtility.AlgebraicToVector(algebraic);
+        private static Vector2Int At(string algebraic) => BoardSetup.AlgebraicToVector(algebraic);
 
         public static IReadOnlyList<EndgameConversionPosition> All { get; } = new List<EndgameConversionPosition>
         {
@@ -26,7 +26,7 @@ namespace ChessTheBetrayal.Tooling
                 ConversionGoal.DriveLoneKingToMate,
                 Team.White,
                 "Textbook King+Rook vs bare King, both kings centralized and the lone king with the whole board to run in — the hardest starting shape for this technique, not a king already boxed in a corner.",
-                () => TestBoardSetupUtility.CreateEmpty()
+                () => BoardSetup.CreateEmpty()
                     .WithPiece("a1", Team.White, ChessPieceType.King)
                     .WithPiece("b3", Team.White, ChessPieceType.Rook)
                     .WithPiece("e5", Team.Black, ChessPieceType.King)
@@ -39,7 +39,7 @@ namespace ChessTheBetrayal.Tooling
                 ConversionGoal.DriveLoneKingToMate,
                 Team.White,
                 "King+Queen vs bare King — the fastest-converting mating technique, included as the easier control case alongside the harder Rook ending.",
-                () => TestBoardSetupUtility.CreateEmpty()
+                () => BoardSetup.CreateEmpty()
                     .WithPiece("a1", Team.White, ChessPieceType.King)
                     .WithPiece("b3", Team.White, ChessPieceType.Queen)
                     .WithPiece("e5", Team.Black, ChessPieceType.King)
@@ -52,7 +52,7 @@ namespace ChessTheBetrayal.Tooling
                 ConversionGoal.PromoteThePawn,
                 Team.White,
                 "White's passed a-pawn is far enough advanced and far enough from Black's king that no legal defense catches it — a clean, unstoppable king-and-pawn promotion race with kings out of each other's way.",
-                () => TestBoardSetupUtility.CreateEmpty()
+                () => BoardSetup.CreateEmpty()
                     .WithPiece("a5", Team.White, ChessPieceType.Pawn)
                     .WithPiece("a1", Team.White, ChessPieceType.King)
                     .WithPiece("h8", Team.Black, ChessPieceType.King)
@@ -70,7 +70,7 @@ namespace ChessTheBetrayal.Tooling
 
         private static BoardState BuildDefectedRookPosition()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithPiece("b3", Team.Black, ChessPieceType.Rook)
                 .WithPiece("e5", Team.Black, ChessPieceType.King)

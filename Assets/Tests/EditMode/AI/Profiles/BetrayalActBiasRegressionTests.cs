@@ -36,7 +36,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Profiles
         /// </summary>
         private static BoardState SymmetricMiddlegame()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("g1", Team.White, ChessPieceType.King)
                 .WithPiece("g8", Team.Black, ChessPieceType.King)
                 .WithPiece("d1", Team.White, ChessPieceType.Queen)

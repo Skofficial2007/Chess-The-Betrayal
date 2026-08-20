@@ -31,7 +31,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         [Test]
         public void FindBestMove_RootScores_PopulatedForEveryRootMove_AtLastCompletedDepth()
         {
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             var settings = new AISearchSettings(maxDepth: 2, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             _search.FindBestMove(board, settings, CancellationToken.None);
@@ -60,7 +60,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // A single depth-1 search never exercises MoveToFront's mid-search reshuffle (only the
             // pre-loop TT-hint call does, before scores exist) — a multi-depth search is required
             // to actually exercise the parallel-array permutation this test guards.
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             var settings = new AISearchSettings(maxDepth: 3, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             MoveCommand best = _search.FindBestMove(board, settings, CancellationToken.None);
@@ -82,7 +82,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         [Test]
         public void FindBestMove_CancelledMidDepth_RootScoresStayAtPreviousCompletedDepth()
         {
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             var settings = new AISearchSettings(maxDepth: 1, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             // First, a real completed depth-1 search to establish a baseline.
@@ -107,7 +107,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         [Test]
         public void FindBestMove_BoundedRescore_OnlyRescoresWithinMargin()
         {
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             var settings = new AISearchSettings(maxDepth: 2, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             // A very small margin (1cp) means at most the best move itself (excluded by construction)
@@ -123,8 +123,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         [Test]
         public void FindBestMove_ZeroRescoreMargin_MatchesBehaviourFromBeforeTheMarginExisted()
         {
-            BoardState boardA = TestBoardSetupUtility.CreateStandard();
-            BoardState boardB = TestBoardSetupUtility.CreateStandard();
+            BoardState boardA = BoardSetup.CreateStandard();
+            BoardState boardB = BoardSetup.CreateStandard();
             var settings = new AISearchSettings(maxDepth: 2, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             var searchA = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator());

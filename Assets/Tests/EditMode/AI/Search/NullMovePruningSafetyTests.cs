@@ -33,7 +33,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         {
             // White Acted the Knight onto its own Pawn; Rook on a1 can execute Retribution.
             // If NMP's guard fired here, CurrentTurn would flip mid-sequence and corrupt movegen.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("a1", Team.White, ChessPieceType.Rook)
@@ -58,7 +58,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // Rook on e4 is the pending Betrayer with no legal Executioner; if it defects it will
             // check its own former King on e1 (ForcedSave). Pending state + non-flip must hold
             // through NMP just as it does through ordinary search.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("e4", Team.White, ChessPieceType.Rook)
@@ -80,7 +80,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         {
             // White king in check from the Black rook on e-file — NMP guard 2 (!IsKingInCheck)
             // must block here; passing while in check is illegal and mate-blind.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.Rook)
                 .WithPiece("a8", Team.Black, ChessPieceType.King)
@@ -102,7 +102,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         {
             // Zugzwang-prone position: side to move has only King + Pawns. NMP guard 5
             // (HasNonPawnMaterial) must block a null move here regardless of depth/beta.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("a2", Team.White, ChessPieceType.Pawn)
@@ -127,7 +127,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // depth-1-minus-2R collapse, either of which would hang or throw. Reaching a normal
             // return with a consistent hash on a full-material midgame position is the signal that
             // the parentWasNull guard is actually wired through the recursion, not just declared.
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             ulong hashBefore = board.ZobristHash;
             var settings = new AISearchSettings(maxDepth: 4, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 

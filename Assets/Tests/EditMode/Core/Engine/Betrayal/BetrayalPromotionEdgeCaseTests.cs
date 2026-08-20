@@ -26,7 +26,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
         public void RetributionPhase_PawnExecutesOnBackRank_GeneratesAllFourPromotionChoices()
         {
             // Arrange: White Pawn on c7. White Knight (Betrayer) on b8.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("c7", Team.White, ChessPieceType.Pawn)
                 .WithPiece("b8", Team.White, ChessPieceType.Knight) // Betrayer
                 .WithPiece("e1", Team.White, ChessPieceType.King)
@@ -35,7 +35,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
                 .WithTurn(Team.White);
 
             // Act
-            ChessEngine.GetRetributionMoves(board, Team.White, TestBoardSetupUtility.AlgebraicToVector("b8"), _moveBuffer);
+            ChessEngine.GetRetributionMoves(board, Team.White, BoardSetup.AlgebraicToVector("b8"), _moveBuffer);
 
             // Assert: Standard pawn logic must spawn exactly 4 promotion variants
             Assert.That(_moveBuffer.Count, Is.EqualTo(4), "A pawn executing a betrayer on the back rank must generate exactly 4 promotion variants.");
@@ -60,7 +60,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
         public void RetributionPhase_PromotionExecution_MaintainsZobristConsistency()
         {
             // Arrange: White pawn prepares to execute the Betrayer and promote to Queen.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("c7", Team.White, ChessPieceType.Pawn)
                 .WithPiece("b8", Team.White, ChessPieceType.Knight) // Betrayer
                 .WithPiece("e1", Team.White, ChessPieceType.King)
@@ -69,8 +69,8 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
                 .WithTurn(Team.White)
                 .WithComputedHash();
 
-            Vector2Int from = TestBoardSetupUtility.AlgebraicToVector("c7");
-            Vector2Int to = TestBoardSetupUtility.AlgebraicToVector("b8");
+            Vector2Int from = BoardSetup.AlgebraicToVector("c7");
+            Vector2Int to = BoardSetup.AlgebraicToVector("b8");
             PieceData pawn = board.GetPiece(from);
             PieceData betrayer = board.GetPiece(to);
 
@@ -109,14 +109,14 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
             foreach (var targetType in targetTypes)
             {
                 _moveBuffer.Clear();
-                BoardState board = TestBoardSetupUtility.CreateEmpty()
+                BoardState board = BoardSetup.CreateEmpty()
                     .WithPiece("a1", Team.White, ChessPieceType.King)
                     .WithPiece("b7", Team.White, ChessPieceType.Pawn)
                     .WithPiece("c8", Team.White, targetType) // Iterate through all target types
                     .WithTurn(Team.White)
                     .WithBetrayalRight(true);
 
-                ChessEngine.GetBetrayalTargets(board, TestBoardSetupUtility.AlgebraicToVector("b7"), _moveBuffer);
+                ChessEngine.GetBetrayalTargets(board, BoardSetup.AlgebraicToVector("b7"), _moveBuffer);
 
                 Assert.That(_moveBuffer.Count, Is.EqualTo(1), $"Pawn targeting {targetType} should generate exactly 1 Act move.");
 

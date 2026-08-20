@@ -42,7 +42,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         public void Setup()
         {
             _engine = new ChessEngineAdapter();
-            _board = TestBoardSetupUtility.CreateStandard();
+            _board = BoardSetup.CreateStandard();
             _lastPlayedMove = null;
 
             _coordinator = new AIMatchCoordinator(_engine, _board, move => _lastPlayedMove = move, ShallowSettings, ProfileProvider);

@@ -69,7 +69,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Profiles
         /// <summary>Same representative post-opening midgame position as SearchBenchmarkTests —
         /// both sides developed, no Betrayal state open, realistic piece density.</summary>
         private static BoardState MidgamePosition() =>
-            TestBoardSetupUtility.CreateEmpty()
+            BoardSetup.CreateEmpty()
                 .WithPiece("g1", Team.White, ChessPieceType.King)
                 .WithPiece("g8", Team.Black, ChessPieceType.King)
                 .WithPiece("d1", Team.White, ChessPieceType.Queen)

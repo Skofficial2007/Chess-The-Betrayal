@@ -32,7 +32,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         public void Setup() => _engine = new ChessEngineAdapter();
 
         private static BoardState MidgamePosition() =>
-            TestBoardSetupUtility.CreateEmpty()
+            BoardSetup.CreateEmpty()
                 .WithPiece("g1", Team.White, ChessPieceType.King)
                 .WithPiece("g8", Team.Black, ChessPieceType.King)
                 .WithPiece("d1", Team.White, ChessPieceType.Queen)

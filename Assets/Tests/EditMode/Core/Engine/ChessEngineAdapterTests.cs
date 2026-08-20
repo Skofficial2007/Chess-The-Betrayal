@@ -27,9 +27,9 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         [Test]
         public void ApplyMove_StandardMove_MovesPieceToDestination()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty().WithPiece("e2", Team.White, ChessPieceType.Pawn);
-            Vector2Int from = TestBoardSetupUtility.AlgebraicToVector("e2");
-            Vector2Int to = TestBoardSetupUtility.AlgebraicToVector("e4");
+            BoardState board = BoardSetup.CreateEmpty().WithPiece("e2", Team.White, ChessPieceType.Pawn);
+            Vector2Int from = BoardSetup.AlgebraicToVector("e2");
+            Vector2Int to = BoardSetup.AlgebraicToVector("e4");
             PieceData pawn = board.GetPiece(from);
             MoveCommand move = MoveCommand.CreateStandardMove(from, to, pawn, default, board);
 
@@ -42,9 +42,9 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         [Test]
         public void ApplyMove_ThenUndoMove_RestoresOriginalPosition()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty().WithPiece("d5", Team.White, ChessPieceType.Knight, hasMoved: true);
-            Vector2Int from = TestBoardSetupUtility.AlgebraicToVector("d5");
-            Vector2Int to = TestBoardSetupUtility.AlgebraicToVector("f6");
+            BoardState board = BoardSetup.CreateEmpty().WithPiece("d5", Team.White, ChessPieceType.Knight, hasMoved: true);
+            Vector2Int from = BoardSetup.AlgebraicToVector("d5");
+            Vector2Int to = BoardSetup.AlgebraicToVector("f6");
             PieceData knight = board.GetPiece(from);
             MoveCommand move = MoveCommand.CreateStandardMove(from, to, knight, default, board);
 
@@ -59,11 +59,11 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         [Test]
         public void ApplyMove_ThenUndoMove_RestoresCapturedPiece()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e4", Team.White, ChessPieceType.Pawn)
                 .WithPiece("d5", Team.Black, ChessPieceType.Pawn);
-            Vector2Int from = TestBoardSetupUtility.AlgebraicToVector("e4");
-            Vector2Int to = TestBoardSetupUtility.AlgebraicToVector("d5");
+            Vector2Int from = BoardSetup.AlgebraicToVector("e4");
+            Vector2Int to = BoardSetup.AlgebraicToVector("d5");
             PieceData attacker = board.GetPiece(from);
             PieceData victim = board.GetPiece(to);
             MoveCommand move = MoveCommand.CreateStandardMove(from, to, attacker, victim, board);
@@ -83,10 +83,10 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
             // Search relies on the Zobrist hash for transposition lookups — if make/unmake through
             // the interface seam ever desynced the hash from the static path, a TT built on top of
             // AlphaBetaSearch would silently corrupt itself the moment AI work resumes.
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             ulong hashBefore = board.ZobristHash;
-            Vector2Int from = TestBoardSetupUtility.AlgebraicToVector("e2");
-            Vector2Int to = TestBoardSetupUtility.AlgebraicToVector("e4");
+            Vector2Int from = BoardSetup.AlgebraicToVector("e2");
+            Vector2Int to = BoardSetup.AlgebraicToVector("e4");
             PieceData pawn = board.GetPiece(from);
             MoveCommand move = MoveCommand.CreateStandardMove(from, to, pawn, default, board);
 
@@ -102,11 +102,11 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
             // Two boards, identical starting state: one driven through the interface seam, one
             // through the static method it wraps. Their resulting piece layout must be identical —
             // this is the whole adapter contract.
-            BoardState boardViaInterface = TestBoardSetupUtility.CreateEmpty().WithPiece("e2", Team.White, ChessPieceType.Pawn);
-            BoardState boardViaStatic = TestBoardSetupUtility.CreateEmpty().WithPiece("e2", Team.White, ChessPieceType.Pawn);
+            BoardState boardViaInterface = BoardSetup.CreateEmpty().WithPiece("e2", Team.White, ChessPieceType.Pawn);
+            BoardState boardViaStatic = BoardSetup.CreateEmpty().WithPiece("e2", Team.White, ChessPieceType.Pawn);
 
-            Vector2Int from = TestBoardSetupUtility.AlgebraicToVector("e2");
-            Vector2Int to = TestBoardSetupUtility.AlgebraicToVector("e4");
+            Vector2Int from = BoardSetup.AlgebraicToVector("e2");
+            Vector2Int to = BoardSetup.AlgebraicToVector("e4");
             PieceData pawn = boardViaInterface.GetPiece(from);
 
             MoveCommand moveA = MoveCommand.CreateStandardMove(from, to, pawn, default, boardViaInterface);
@@ -122,10 +122,10 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         [Test]
         public void UndoMove_DefectionMove_RevertsTeamFlipInPlace()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("d5", Team.White, ChessPieceType.Knight)
                 .WithPendingBetrayer("d5", Team.White);
-            Vector2Int square = TestBoardSetupUtility.AlgebraicToVector("d5");
+            Vector2Int square = BoardSetup.AlgebraicToVector("d5");
             PieceData betrayer = board.GetPiece(square);
             MoveCommand defection = MoveCommand.CreateDefectionMove(square, betrayer, board);
 
@@ -142,7 +142,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
             // Betrayer (Knight b1) targets a friendly victim (Pawn a3); the Act move relocates the
             // Knight and opens the Retribution window. Undo through the seam must restore both the
             // piece layout and the pending-Betrayer board state exactly.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("b1", Team.White, ChessPieceType.Knight)
@@ -152,7 +152,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
             ulong initialHash = board.ZobristHash;
 
             var moveBuffer = new System.Collections.Generic.List<MoveCommand>();
-            ChessEngine.GetBetrayalTargets(board, TestBoardSetupUtility.AlgebraicToVector("b1"), moveBuffer);
+            ChessEngine.GetBetrayalTargets(board, BoardSetup.AlgebraicToVector("b1"), moveBuffer);
             MoveCommand actMove = moveBuffer[0];
 
             _engine.ApplyMove(board, actMove);
@@ -163,8 +163,8 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
 
             Assert.That(board.BetrayalRightAvailable, Is.True, "Undo must restore the unspent betrayal right.");
             Assert.That(board.PendingBetrayerSquare, Is.Null, "Undo must clear the pending-Betrayer window.");
-            Assert.That(board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("b1")).Type, Is.EqualTo(ChessPieceType.Knight), "Knight must return to its origin square.");
-            Assert.That(board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("a3")).Type, Is.EqualTo(ChessPieceType.Pawn), "Victim pawn must be restored at a3.");
+            Assert.That(board.GetPiece(BoardSetup.AlgebraicToVector("b1")).Type, Is.EqualTo(ChessPieceType.Knight), "Knight must return to its origin square.");
+            Assert.That(board.GetPiece(BoardSetup.AlgebraicToVector("a3")).Type, Is.EqualTo(ChessPieceType.Pawn), "Victim pawn must be restored at a3.");
             Assert.DoesNotThrow(() => board.AssertZobristConsistency(), "Hash must remain internally consistent after unwind.");
             Assert.That(board.ZobristHash, Is.EqualTo(initialHash), "Hash must return to its pre-Act value after undo.");
         }
@@ -175,7 +175,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
             // Rook a1 (executioner) captures the just-betrayed Knight at a3, closing the sequence.
             // Undo through the seam must restore the Rook, resurrect the Knight, and reopen the
             // pending-Betrayer window exactly as it stood before Retribution was applied.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("b1", Team.White, ChessPieceType.Knight)
@@ -185,7 +185,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
             board.ComputeFullZobristHash();
 
             var moveBuffer = new System.Collections.Generic.List<MoveCommand>();
-            ChessEngine.GetBetrayalTargets(board, TestBoardSetupUtility.AlgebraicToVector("b1"), moveBuffer);
+            ChessEngine.GetBetrayalTargets(board, BoardSetup.AlgebraicToVector("b1"), moveBuffer);
             MoveCommand actMove = moveBuffer[0];
             _engine.ApplyMove(board, actMove);
             ulong hashAfterAct = board.ZobristHash;
@@ -199,8 +199,8 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
             _engine.UndoMove(board, retMove);
 
             Assert.That(board.PendingBetrayerSquare, Is.Not.Null, "Undo must reopen the pending-Betrayer window Retribution closed.");
-            Assert.That(board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("a1")).Type, Is.EqualTo(ChessPieceType.Rook), "Rook must return to a1.");
-            Assert.That(board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("a3")).Type, Is.EqualTo(ChessPieceType.Knight), "Executed Knight must be restored at a3.");
+            Assert.That(board.GetPiece(BoardSetup.AlgebraicToVector("a1")).Type, Is.EqualTo(ChessPieceType.Rook), "Rook must return to a1.");
+            Assert.That(board.GetPiece(BoardSetup.AlgebraicToVector("a3")).Type, Is.EqualTo(ChessPieceType.Knight), "Executed Knight must be restored at a3.");
             Assert.DoesNotThrow(() => board.AssertZobristConsistency(), "Hash must remain internally consistent after unwind.");
             Assert.That(board.ZobristHash, Is.EqualTo(hashAfterAct), "Hash must return to its post-Act, pre-Retribution value after undo.");
 
@@ -214,7 +214,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
             // Pinned executioner (Rook e4) can't take Retribution, so the Knight at e3 defects and
             // immediately checks the King at e1 — forcing a Defensive Override (King escape). Undo
             // through the seam must reverse the King's escape and restore the pre-save board state.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e4", Team.White, ChessPieceType.Rook)
                 .WithPiece("e8", Team.Black, ChessPieceType.Rook)
@@ -224,9 +224,9 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
             board.ComputeFullZobristHash();
 
             MoveCommand actMove = MoveCommand.CreateStandardMove(
-                TestBoardSetupUtility.AlgebraicToVector("e3"), TestBoardSetupUtility.AlgebraicToVector("d3"),
-                board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("e3")),
-                board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("d3")), board)
+                BoardSetup.AlgebraicToVector("e3"), BoardSetup.AlgebraicToVector("d3"),
+                board.GetPiece(BoardSetup.AlgebraicToVector("e3")),
+                board.GetPiece(BoardSetup.AlgebraicToVector("d3")), board)
                 .WithStage(BetrayalStage.Act);
 
             _engine.ApplyMove(board, actMove);
@@ -248,7 +248,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
             _engine.UndoMove(board, saveMove);
 
             Assert.That(board.PendingBetrayerSquare, Is.Not.Null, "Undo must reopen the pending-Betrayer window the save closed.");
-            Assert.That(board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("e1")).Type, Is.EqualTo(ChessPieceType.King), "King must be restored to e1.");
+            Assert.That(board.GetPiece(BoardSetup.AlgebraicToVector("e1")).Type, Is.EqualTo(ChessPieceType.King), "King must be restored to e1.");
             Assert.DoesNotThrow(() => board.AssertZobristConsistency(), "Hash must remain internally consistent after unwind.");
             Assert.That(board.ZobristHash, Is.EqualTo(hashAfterDefection), "Hash must return to its post-Defection, pre-save value after undo.");
 

@@ -36,7 +36,7 @@ namespace ChessTheBetrayal.Tooling
     /// </summary>
     public static class YardstickCandidateSuite
     {
-        private static Vector2Int At(string algebraic) => TestBoardSetupUtility.AlgebraicToVector(algebraic);
+        private static Vector2Int At(string algebraic) => BoardSetup.AlgebraicToVector(algebraic);
 
         /// <summary>One proposed position and the reasoning behind proposing it.</summary>
         public sealed class Candidate
@@ -72,7 +72,7 @@ namespace ChessTheBetrayal.Tooling
                 "OutsidePassedPawnOutruns",
                 "White's a-pawn is passed and far from the black king; the h-pawn is not. Pushing the "
                 + "outside passer queens by force while any other move lets the king catch it.",
-                () => TestBoardSetupUtility.CreateEmpty()
+                () => BoardSetup.CreateEmpty()
                     .WithPiece("e1", Team.White, ChessPieceType.King)
                     .WithPiece("a4", Team.White, ChessPieceType.Pawn)
                     .WithPiece("h4", Team.White, ChessPieceType.Pawn)
@@ -86,7 +86,7 @@ namespace ChessTheBetrayal.Tooling
                 "ProtectedPasserMustAdvance",
                 "A protected passed pawn on d5 supported by c4. Advancing it is decisive; anything "
                 + "else lets Black blockade with the king.",
-                () => TestBoardSetupUtility.CreateEmpty()
+                () => BoardSetup.CreateEmpty()
                     .WithPiece("e2", Team.White, ChessPieceType.King)
                     .WithPiece("d5", Team.White, ChessPieceType.Pawn)
                     .WithPiece("c4", Team.White, ChessPieceType.Pawn)
@@ -100,7 +100,7 @@ namespace ChessTheBetrayal.Tooling
                 "PawnBreakCreatesAPasser",
                 "The b5 break cracks Black's structure and manufactures a passer out of a blocked "
                 + "position; every quiet alternative leaves the position sealed.",
-                () => TestBoardSetupUtility.CreateEmpty()
+                () => BoardSetup.CreateEmpty()
                     .WithPiece("g1", Team.White, ChessPieceType.King)
                     .WithPiece("a4", Team.White, ChessPieceType.Pawn)
                     .WithPiece("b4", Team.White, ChessPieceType.Pawn)
@@ -116,7 +116,7 @@ namespace ChessTheBetrayal.Tooling
                 "RookPawnAndWrongBishopAvoided",
                 "Pushing the f-pawn rather than the h-pawn keeps a queening square the bishop "
                 + "controls — the h-pawn draws outright.",
-                () => TestBoardSetupUtility.CreateEmpty()
+                () => BoardSetup.CreateEmpty()
                     .WithPiece("e4", Team.White, ChessPieceType.King)
                     .WithPiece("c1", Team.White, ChessPieceType.Bishop)
                     .WithPiece("f4", Team.White, ChessPieceType.Pawn)
@@ -133,7 +133,7 @@ namespace ChessTheBetrayal.Tooling
                 "KingMustApproachToConvert",
                 "Rook endgame where only marching the king forward makes progress; rook shuffles "
                 + "keep the material but never convert.",
-                () => TestBoardSetupUtility.CreateEmpty()
+                () => BoardSetup.CreateEmpty()
                     .WithPiece("e3", Team.White, ChessPieceType.King)
                     .WithPiece("a7", Team.White, ChessPieceType.Rook)
                     .WithPiece("e6", Team.Black, ChessPieceType.King)
@@ -145,7 +145,7 @@ namespace ChessTheBetrayal.Tooling
                 "OppositionWinsThePawnEnding",
                 "A king-and-pawn ending decided purely by taking the opposition; the natural pawn "
                 + "push throws the win away.",
-                () => TestBoardSetupUtility.CreateEmpty()
+                () => BoardSetup.CreateEmpty()
                     .WithPiece("e5", Team.White, ChessPieceType.King)
                     .WithPiece("e4", Team.White, ChessPieceType.Pawn)
                     .WithPiece("e7", Team.Black, ChessPieceType.King)
@@ -159,7 +159,7 @@ namespace ChessTheBetrayal.Tooling
                 "ShelterTheKingBeforeItIsTooLate",
                 "White must close the open file in front of the king; grabbing the loose pawn "
                 + "instead loses to the rook coming in.",
-                () => TestBoardSetupUtility.CreateEmpty()
+                () => BoardSetup.CreateEmpty()
                     .WithPiece("g1", Team.White, ChessPieceType.King)
                     .WithPiece("f2", Team.White, ChessPieceType.Pawn)
                     .WithPiece("h2", Team.White, ChessPieceType.Pawn)
@@ -176,7 +176,7 @@ namespace ChessTheBetrayal.Tooling
                 "BlockTheOpenFileAgainstTheRook",
                 "Interposing on the open file is the only move that holds; every alternative allows "
                 + "a decisive invasion on the back rank.",
-                () => TestBoardSetupUtility.CreateEmpty()
+                () => BoardSetup.CreateEmpty()
                     .WithPiece("h1", Team.White, ChessPieceType.King)
                     .WithPiece("g2", Team.White, ChessPieceType.Pawn)
                     .WithPiece("h2", Team.White, ChessPieceType.Pawn)
@@ -193,7 +193,7 @@ namespace ChessTheBetrayal.Tooling
             new Candidate(
                 "RecaptureTowardTheCentre",
                 "Two recaptures are available and only one avoids leaving doubled isolated pawns.",
-                () => TestBoardSetupUtility.CreateEmpty()
+                () => BoardSetup.CreateEmpty()
                     .WithPiece("e1", Team.White, ChessPieceType.King)
                     .WithPiece("b2", Team.White, ChessPieceType.Pawn)
                     .WithPiece("d2", Team.White, ChessPieceType.Pawn)
@@ -208,7 +208,7 @@ namespace ChessTheBetrayal.Tooling
                 "AvoidSaddlingYourselfWithDoubledPawns",
                 "A capture that doubles White's pawns versus a quiet move that keeps the structure "
                 + "whole; the quiet move is worth more than the pawn.",
-                () => TestBoardSetupUtility.CreateEmpty()
+                () => BoardSetup.CreateEmpty()
                     .WithPiece("e1", Team.White, ChessPieceType.King)
                     .WithPiece("c2", Team.White, ChessPieceType.Pawn)
                     .WithPiece("d3", Team.White, ChessPieceType.Pawn)
@@ -226,7 +226,7 @@ namespace ChessTheBetrayal.Tooling
                 "KeepTheDefectorAwayFromTheKing",
                 "With the Betrayal right live, the move that keeps a potential defector out of the "
                 + "king's zone is worth more than the material alternative.",
-                () => TestBoardSetupUtility.CreateEmpty()
+                () => BoardSetup.CreateEmpty()
                     .WithPiece("g1", Team.White, ChessPieceType.King)
                     .WithPiece("f2", Team.White, ChessPieceType.Pawn)
                     .WithPiece("g2", Team.White, ChessPieceType.Pawn)
@@ -249,7 +249,7 @@ namespace ChessTheBetrayal.Tooling
                 "SeventhRankPasserQueensByForce",
                 "A passer one square from promotion with the enemy king a tempo too far away. "
                 + "Pushing queens by force; any other move lets the king step across.",
-                () => TestBoardSetupUtility.CreateEmpty()
+                () => BoardSetup.CreateEmpty()
                     .WithPiece("a1", Team.White, ChessPieceType.King)
                     .WithPiece("b7", Team.White, ChessPieceType.Pawn)
                     .WithPiece("g4", Team.Black, ChessPieceType.King)
@@ -261,7 +261,7 @@ namespace ChessTheBetrayal.Tooling
                 "RaceTheRightPawnHome",
                 "Two passers, one a tempo ahead of the other. Only the leading pawn queens before "
                 + "the king arrives; pushing the wrong one throws the win away.",
-                () => TestBoardSetupUtility.CreateEmpty()
+                () => BoardSetup.CreateEmpty()
                     .WithPiece("a1", Team.White, ChessPieceType.King)
                     .WithPiece("b6", Team.White, ChessPieceType.Pawn)
                     .WithPiece("g2", Team.White, ChessPieceType.Pawn)
@@ -274,7 +274,7 @@ namespace ChessTheBetrayal.Tooling
                 "OutrunTheKingWithTheDistantPasser",
                 "The b-pawn is outside the black king's square and the e-pawn is not. Only the "
                 + "distant passer promotes.",
-                () => TestBoardSetupUtility.CreateEmpty()
+                () => BoardSetup.CreateEmpty()
                     .WithPiece("h1", Team.White, ChessPieceType.King)
                     .WithPiece("b6", Team.White, ChessPieceType.Pawn)
                     .WithPiece("e5", Team.White, ChessPieceType.Pawn)
@@ -287,7 +287,7 @@ namespace ChessTheBetrayal.Tooling
                 "PushPastTheBlockaderNotAroundIt",
                 "A sixth-rank passer with the defending king one file off. The straight push "
                 + "promotes; the king move allows the blockade.",
-                () => TestBoardSetupUtility.CreateEmpty()
+                () => BoardSetup.CreateEmpty()
                     .WithPiece("c4", Team.White, ChessPieceType.King)
                     .WithPiece("d6", Team.White, ChessPieceType.Pawn)
                     .WithPiece("f6", Team.Black, ChessPieceType.King)
@@ -299,7 +299,7 @@ namespace ChessTheBetrayal.Tooling
                 "CentralisedKnightBeatsTheRimGrab",
                 "A knight on the rim versus a central outpost, with a pawn on offer for the "
                 + "wrong-side knight.",
-                () => TestBoardSetupUtility.CreateEmpty()
+                () => BoardSetup.CreateEmpty()
                     .WithPiece("e1", Team.White, ChessPieceType.King)
                     .WithPiece("c3", Team.White, ChessPieceType.Knight)
                     .WithPiece("d4", Team.White, ChessPieceType.Pawn)

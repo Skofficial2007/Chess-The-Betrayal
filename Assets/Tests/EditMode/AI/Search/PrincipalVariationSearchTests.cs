@@ -31,7 +31,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         [Test]
         public void FindBestMove_BackRankMateInOne_StillFoundAtDepthWherePVSEngages()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("a1", Team.White, ChessPieceType.Rook)
                 .WithPiece("b2", Team.White, ChessPieceType.Pawn)
@@ -48,8 +48,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
 
             MoveCommand best = _search.FindBestMove(board, settings, CancellationToken.None);
 
-            Assert.That(best.StartPosition, Is.EqualTo(TestBoardSetupUtility.AlgebraicToVector("a1")));
-            Assert.That(best.EndPosition, Is.EqualTo(TestBoardSetupUtility.AlgebraicToVector("a8")));
+            Assert.That(best.StartPosition, Is.EqualTo(BoardSetup.AlgebraicToVector("a1")));
+            Assert.That(best.EndPosition, Is.EqualTo(BoardSetup.AlgebraicToVector("a8")));
         }
 
         [Test]
@@ -59,7 +59,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // null-window-scout -> LMR-re-search -> PVS-re-search ladder all get real exercise, not
             // just a single-child pass-through. The regression is Zobrist consistency + no exception,
             // since chosen-move pinning at this depth/branching would be brittle to evaluator tuning.
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             ulong hashBefore = board.ZobristHash;
             var settings = new AISearchSettings(maxDepth: 4, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
@@ -76,7 +76,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // where later root siblings are scouted with a null window. Proves ScoreChild's
             // non-flipping pass-through (Act/Defection share the parent's maximizer, so a null
             // window arrives unchanged in that frame) survives PVS without desyncing the hash.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("b1", Team.White, ChessPieceType.Knight)
@@ -101,7 +101,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // Reuses the exact fixture SearchTTIntegrationTests already pins a specific best move
             // for — proves the PVS ladder doesn't change the chosen move even mid-Betrayal-sequence,
             // where the non-flipping-child pass-through is exercised by every Act/Defection sibling.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("a1", Team.White, ChessPieceType.Rook)

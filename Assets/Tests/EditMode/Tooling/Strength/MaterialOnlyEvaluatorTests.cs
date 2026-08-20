@@ -23,7 +23,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.Strength
             // The only difference is structure — White's pawns are a healthy connected phalanx in
             // one and a tripled, isolated wreck in the other. The production evaluator separates
             // these by a wide margin; a material-only judgement must not tell them apart at all.
-            BoardState healthy = TestBoardSetupUtility.CreateEmpty()
+            BoardState healthy = BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithPiece("b4", Team.White, ChessPieceType.Pawn)
                 .WithPiece("c4", Team.White, ChessPieceType.Pawn)
@@ -35,7 +35,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.Strength
                 .WithTurn(Team.White)
                 .WithComputedHash();
 
-            BoardState wrecked = TestBoardSetupUtility.CreateEmpty()
+            BoardState wrecked = BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithPiece("b2", Team.White, ChessPieceType.Pawn)
                 .WithPiece("b3", Team.White, ChessPieceType.Pawn)
@@ -58,7 +58,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.Strength
             // Identical material again. One white king sits behind an intact pawn shield; the other
             // is stripped bare with an enemy rook bearing down an open file. King safety is exactly
             // the kind of term a proof must not consult.
-            BoardState sheltered = TestBoardSetupUtility.CreateEmpty()
+            BoardState sheltered = BoardSetup.CreateEmpty()
                 .WithPiece("g1", Team.White, ChessPieceType.King)
                 .WithPiece("f2", Team.White, ChessPieceType.Pawn)
                 .WithPiece("g2", Team.White, ChessPieceType.Pawn)
@@ -68,7 +68,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.Strength
                 .WithTurn(Team.White)
                 .WithComputedHash();
 
-            BoardState exposed = TestBoardSetupUtility.CreateEmpty()
+            BoardState exposed = BoardSetup.CreateEmpty()
                 .WithPiece("e4", Team.White, ChessPieceType.King)
                 .WithPiece("a2", Team.White, ChessPieceType.Pawn)
                 .WithPiece("a3", Team.White, ChessPieceType.Pawn)
@@ -89,14 +89,14 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.Strength
             // The bare-king mating scenario the king-approach term exists to reward. Moving the
             // attacking king from the far corner to right beside the defender is a large positional
             // gain and no material change whatsoever.
-            BoardState distant = TestBoardSetupUtility.CreateEmpty()
+            BoardState distant = BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithPiece("h1", Team.White, ChessPieceType.Rook)
                 .WithPiece("e5", Team.Black, ChessPieceType.King)
                 .WithTurn(Team.White)
                 .WithComputedHash();
 
-            BoardState closingIn = TestBoardSetupUtility.CreateEmpty()
+            BoardState closingIn = BoardSetup.CreateEmpty()
                 .WithPiece("e3", Team.White, ChessPieceType.King)
                 .WithPiece("h1", Team.White, ChessPieceType.Rook)
                 .WithPiece("e5", Team.Black, ChessPieceType.King)
@@ -114,7 +114,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.Strength
             // The production evaluator pays a bonus for holding an unspent Betrayal right. A proof
             // standard must not, or a position could be admitted on the strength of an option that
             // was never exercised in the proving line.
-            BoardState withRight = TestBoardSetupUtility.CreateEmpty()
+            BoardState withRight = BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithPiece("d4", Team.White, ChessPieceType.Knight)
                 .WithPiece("h8", Team.Black, ChessPieceType.King)
@@ -122,7 +122,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.Strength
                 .WithBetrayalRight(true)
                 .WithComputedHash();
 
-            BoardState withoutRight = TestBoardSetupUtility.CreateEmpty()
+            BoardState withoutRight = BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithPiece("d4", Team.White, ChessPieceType.Knight)
                 .WithPiece("h8", Team.Black, ChessPieceType.King)
@@ -140,7 +140,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.Strength
         {
             // The other half of the contract: being blind to position is only useful if it still
             // sees material correctly. White is up exactly a rook here.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithPiece("d1", Team.White, ChessPieceType.Rook)
                 .WithPiece("h8", Team.Black, ChessPieceType.King)
@@ -157,7 +157,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.Strength
         {
             // The interface allows a cheap score to be an approximation the full score refines.
             // Here there is nothing to refine, and callers may rely on that.
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
 
             Assert.That(Evaluator.EvaluateCheap(board, Team.White),
                 Is.EqualTo(Evaluator.Evaluate(board, Team.White)));

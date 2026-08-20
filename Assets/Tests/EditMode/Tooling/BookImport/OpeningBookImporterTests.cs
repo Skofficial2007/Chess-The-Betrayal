@@ -58,7 +58,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.BookImport
             // A hand-built position where White's queen directly attacks its own knight — a
             // textbook legal Act target — lets this test exercise the rejection without needing
             // to reach a Betrayal-eligible position via many plies of normal opening theory.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("d1", Team.White, ChessPieceType.Queen)
@@ -170,7 +170,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.BookImport
         public void Compile_PromotionToken_ParsesPromotionPieceCorrectly()
         {
             // A minimal position where a White pawn on the 7th can promote immediately.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("a7", Team.White, ChessPieceType.Pawn)

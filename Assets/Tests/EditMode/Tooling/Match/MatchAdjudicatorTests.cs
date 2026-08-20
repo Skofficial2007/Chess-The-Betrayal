@@ -32,7 +32,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.Match
 
         private static BoardState BoardWithHash(ulong hash)
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty();
+            BoardState board = BoardSetup.CreateEmpty();
             board.ZobristHash = hash;
             return board;
         }

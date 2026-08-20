@@ -5,7 +5,7 @@ using ChessTheBetrayal.Core.Engine;
 
 namespace ChessTheBetrayal.Tooling
 {
-    public static class TestBoardSetupUtility
+    public static class BoardSetup
     {
         /// <summary>
         /// Returns a completely empty 8x8 BoardState with no pieces and all castling

@@ -34,7 +34,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         {
             // A depth-9 search from the opening completes every intermediate depth, so each slot in
             // the curve through 9 must be populated — the old code silently dropped everything past 7.
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             var settings = new AISearchSettings(maxDepth: 9, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             _search.FindBestMove(board, settings, CancellationToken.None);
@@ -52,7 +52,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // The curve is a running cumulative total sampled at each completed depth, so a deeper
             // completed depth can never report fewer total nodes than a shallower one — now checked
             // across the whole 1..9 span, not just the old 1..7 ceiling.
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             var settings = new AISearchSettings(maxDepth: 9, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             _search.FindBestMove(board, settings, CancellationToken.None);
@@ -75,7 +75,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // Alongside the node curve, each completed depth records the cumulative wall-clock ms at
             // that point. A depth-9 search must therefore have a non-zero ms reading by depth 9 (the
             // search takes real time to get there), and depth 8's must be recorded too.
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             var settings = new AISearchSettings(maxDepth: 9, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             _search.FindBestMove(board, settings, CancellationToken.None);
@@ -93,7 +93,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         {
             // Cumulative elapsed time can only ever grow as deeper depths complete — a later depth can
             // never report a smaller running total than an earlier one.
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             var settings = new AISearchSettings(maxDepth: 9, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             _search.FindBestMove(board, settings, CancellationToken.None);
@@ -145,7 +145,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // into quiescence at the horizon — so after one, every section must have been sampled at
             // least once and accumulated some ticks. This proves the timers are wired into the live
             // paths, not that any particular split is "correct" (the sampled ms is an estimate).
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("d4", Team.White, ChessPieceType.Queen)
@@ -209,7 +209,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // tests what this fixture actually means to: two independent searches, not one board's
             // before/after state.
             BoardState PositionForRepeatability() =>
-                TestBoardSetupUtility.CreateEmpty()
+                BoardSetup.CreateEmpty()
                     .WithPiece("e1", Team.White, ChessPieceType.King)
                     .WithPiece("e8", Team.Black, ChessPieceType.King)
                     .WithPiece("d1", Team.White, ChessPieceType.Rook)
@@ -243,7 +243,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // which the first move tried wins the cutoff is the direct signal for whether move
             // ordering is working — it must land in a sane 0..1 range and not stay at zero, since a
             // healthy search wins most cutoffs immediately.
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             var settings = new AISearchSettings(maxDepth: 6, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             _search.FindBestMove(board, settings, CancellationToken.None);
@@ -274,7 +274,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // duplicated (double-counted) or a node fell through uncounted (under-counted) — both
             // would make the skip breakdown misleading rather than just incomplete, so this must hold
             // exactly, not approximately.
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             var settings = new AISearchSettings(maxDepth: 6, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             _search.FindBestMove(board, settings, CancellationToken.None);
@@ -293,10 +293,10 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         {
             // The added per-depth fields are plain value-type longs behind the same guard as every
             // other counter — writing them must not introduce any boxing/GC on the search hot path.
-            BoardState warmup = TestBoardSetupUtility.CreateStandard();
+            BoardState warmup = BoardSetup.CreateStandard();
             _search.FindBestMove(warmup, new AISearchSettings(2, TestTimeBudgets.Generous, BetrayalUsage.Full), CancellationToken.None);
 
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             var settings = new AISearchSettings(maxDepth: 4, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             GC.Collect();
