@@ -3,7 +3,7 @@ using NUnit.Framework;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Diagnostics;
 using ChessTheBetrayal.Core.Engine;
-using ChessTheBetrayal.Tests.Utilities;
+using ChessTheBetrayal.Tooling;
 
 namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
 {

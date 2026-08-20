@@ -4,7 +4,7 @@ using System.Linq;
 using NUnit.Framework;
 using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.EditorTools.Benchmark;
-using ChessTheBetrayal.Tests.Utilities;
+using ChessTheBetrayal.Tooling;
 using UnityEngine;
 
 namespace ChessTheBetrayal.Tests.EditMode.Tooling.Texel

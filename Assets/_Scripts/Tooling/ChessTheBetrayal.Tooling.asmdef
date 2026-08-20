@@ -1,0 +1,23 @@
+{
+    "name": "ChessTheBetrayal.Tooling",
+    "rootNamespace": "",
+    "references": [
+        "ChessTheBetrayal.Core",
+        "ChessTheBetrayal.AI",
+        "ChessTheBetrayal.Events",
+        "ChessTheBetrayal.Gameplay.Manager"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

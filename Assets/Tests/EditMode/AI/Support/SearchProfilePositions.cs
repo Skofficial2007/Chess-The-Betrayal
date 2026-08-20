@@ -1,6 +1,6 @@
 using ChessTheBetrayal.AI.Positions;
 using ChessTheBetrayal.Core.Data;
-using ChessTheBetrayal.Tests.Utilities;
+using ChessTheBetrayal.Tooling;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI
 {

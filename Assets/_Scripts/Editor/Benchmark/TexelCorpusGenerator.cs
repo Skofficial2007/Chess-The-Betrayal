@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using ChessTheBetrayal.AI.Profiles;
-using ChessTheBetrayal.Tests.Utilities;
+using ChessTheBetrayal.Tooling;
 using UnityEditor;
 using UnityEngine;
 

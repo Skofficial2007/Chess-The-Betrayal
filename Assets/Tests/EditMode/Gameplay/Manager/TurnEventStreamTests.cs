@@ -7,7 +7,7 @@ using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.Core.Randomness;
 using ChessTheBetrayal.Events.Payloads;
 using ChessTheBetrayal.Gameplay.Manager;
-using ChessTheBetrayal.Tests.Utilities;
+using ChessTheBetrayal.Tooling;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
 namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager

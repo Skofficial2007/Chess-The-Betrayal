@@ -5,7 +5,7 @@ using NUnit.Framework;
 using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.EditorTools.Benchmark;
-using ChessTheBetrayal.Tests.Utilities;
+using ChessTheBetrayal.Tooling;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI
 {

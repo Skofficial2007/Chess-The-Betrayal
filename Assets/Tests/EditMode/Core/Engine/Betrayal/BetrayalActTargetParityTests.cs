@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Core.Engine.Movement;
-using ChessTheBetrayal.Tests.Utilities;
+using ChessTheBetrayal.Tooling;
 
 namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
 {

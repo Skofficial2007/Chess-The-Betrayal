@@ -1,7 +1,7 @@
 using System;
 using System.Threading;
 using NUnit.Framework;
-using ChessTheBetrayal.Tests.Utilities;
+using ChessTheBetrayal.Tooling;
 
 namespace ChessTheBetrayal.Tests.EditMode.Tooling.Tournament
 {

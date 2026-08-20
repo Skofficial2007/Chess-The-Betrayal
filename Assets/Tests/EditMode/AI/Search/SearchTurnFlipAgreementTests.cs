@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using ChessTheBetrayal.AI.Search;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
-using ChessTheBetrayal.Tests.Utilities;
+using ChessTheBetrayal.Tooling;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI.Search
 {

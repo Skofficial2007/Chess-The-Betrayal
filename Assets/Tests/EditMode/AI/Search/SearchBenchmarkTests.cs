@@ -10,7 +10,7 @@ using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Core.Randomness;
 using ChessTheBetrayal.EditorTools.OpeningBook;
-using ChessTheBetrayal.Tests.Utilities;
+using ChessTheBetrayal.Tooling;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI.Search
 {

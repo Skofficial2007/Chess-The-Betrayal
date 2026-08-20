@@ -1,6 +1,6 @@
 using NUnit.Framework;
 using ChessTheBetrayal.Core.Data;
-using ChessTheBetrayal.Tests.Utilities;
+using ChessTheBetrayal.Tooling;
 
 namespace ChessTheBetrayal.Tests.EditMode.Tooling.Strength
 {

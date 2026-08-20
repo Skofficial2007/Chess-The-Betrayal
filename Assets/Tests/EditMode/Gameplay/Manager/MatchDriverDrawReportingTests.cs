@@ -5,7 +5,7 @@ using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Events.Channels;
 using ChessTheBetrayal.Events.Payloads;
 using ChessTheBetrayal.Gameplay.Manager;
-using ChessTheBetrayal.Tests.Utilities;
+using ChessTheBetrayal.Tooling;
 
 namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
 {

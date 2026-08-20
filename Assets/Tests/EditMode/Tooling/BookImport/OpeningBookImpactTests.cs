@@ -9,7 +9,7 @@ using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.EditorTools.Benchmark;
 using ChessTheBetrayal.EditorTools.OpeningBook;
-using ChessTheBetrayal.Tests.Utilities;
+using ChessTheBetrayal.Tooling;
 
 namespace ChessTheBetrayal.Tests.EditMode.Tooling.BookImport
 {

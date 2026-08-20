@@ -38,7 +38,7 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
         [SerializeField] private TournamentKind _kind = TournamentKind.HeadToHead;
         [SerializeField] private int _runSeed = 20260713;
         [SerializeField] private int _positionCount = 4;
-        [SerializeField] private int _plyCap = Tests.Utilities.MatchSimulator.DefaultPlyCap;
+        [SerializeField] private int _plyCap = ChessTheBetrayal.Tooling.MatchSimulator.DefaultPlyCap;
 
         [SerializeField] private int _subjectChoice;
         [SerializeField] private int _opponentChoice = 5;
@@ -137,7 +137,7 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
                 {
                     _positionCount = EditorGUILayout.IntSlider(
                         new GUIContent("Positions", "Each position is played twice, color-swapped, so games = positions x 2."),
-                        _positionCount, 1, Tests.Utilities.CuratedPositionSuite.Count);
+                        _positionCount, 1, ChessTheBetrayal.Tooling.CuratedPositionSuite.Count);
 
                     DrawProfilePicker("Side A", ref _subjectChoice, ref _customSubject);
                     DrawProfilePicker("Side B", ref _opponentChoice, ref _customOpponent);

@@ -5,7 +5,7 @@ using System.Linq;
 using NUnit.Framework;
 using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.EditorTools.Benchmark;
-using ChessTheBetrayal.Tests.Utilities;
+using ChessTheBetrayal.Tooling;
 
 namespace ChessTheBetrayal.Tests.EditMode.Tooling.Tournament
 {
