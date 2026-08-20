@@ -1,6 +1,6 @@
 {
     "name": "ChessTheBetrayal.Tooling",
-    "rootNamespace": "",
+    "rootNamespace": "ChessTheBetrayal.Tooling",
     "references": [
         "ChessTheBetrayal.Core",
         "ChessTheBetrayal.AI",
@@ -13,9 +13,7 @@
     "excludePlatforms": [],
     "allowUnsafeCode": false,
     "overrideReferences": false,
-    "precompiledReferences": [
-        "nunit.framework.dll"
-    ],
+    "precompiledReferences": [],
     "autoReferenced": false,
     "defineConstraints": [],
     "versionDefines": [],
