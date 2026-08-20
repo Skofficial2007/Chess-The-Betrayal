@@ -5,7 +5,6 @@
     "ChessTheBetrayal.AI",
     "ChessTheBetrayal.Core",
     "ChessTheBetrayal.Events",
-    "ChessTheBetrayal.Infrastructure",
     "ChessTheBetrayal.UI",
     "ChessTheBetrayal.Tooling"
   ],

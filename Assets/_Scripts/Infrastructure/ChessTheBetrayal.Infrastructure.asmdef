@@ -1,9 +1,7 @@
 {
   "name": "ChessTheBetrayal.Infrastructure",
   "rootNamespace": "ChessTheBetrayal.Infrastructure",
-  "references": [
-    "ChessTheBetrayal.Core"
-  ],
+  "references": [],
   "includePlatforms": [],
   "excludePlatforms": [],
   "allowUnsafeCode": false,
