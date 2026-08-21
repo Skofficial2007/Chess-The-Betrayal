@@ -209,3 +209,45 @@ desktop.ini
 
 # Crashlytics
 crashlytics-build.properties
+
+# ----------------------------------------------------------------------
+# [9] UNITY ASSET STORE CONTENT  ★ DO NOT COMMIT ★
+# Every package below is free, but the Asset Store licence does not allow
+# anyone to redistribute the files themselves — which is what committing
+# them to a public repository does. Contributors import them with their own
+# Unity account instead; SETUP.md says which ones and where to get them.
+#
+# Unity identifies assets by IDs stored inside the packages, so importing
+# them restores every reference in the scenes and prefabs automatically,
+# wherever they happen to land on disk. Both the default import paths and
+# the layout this project uses are listed.
+# ----------------------------------------------------------------------
+
+# Low Poly Chess Pack — the board and the twelve piece models
+/[Aa]ssets/BrokenVector/
+/[Aa]ssets/BrokenVector.meta
+/[Aa]ssets/Packages/BrokenVector/
+/[Aa]ssets/Packages/BrokenVector.meta
+
+# AllSky Free — the Epic_BlueSunset skybox
+/[Aa]ssets/AllSkyFree/
+/[Aa]ssets/AllSkyFree.meta
+/[Aa]ssets/Packages/AllSkyFree/
+/[Aa]ssets/Packages/AllSkyFree.meta
+
+# Chess Mega Set (Free) — the dark wood table material
+/[Aa]ssets/Chess MEGA-pack/
+/[Aa]ssets/Chess MEGA-pack.meta
+/[Aa]ssets/Packages/Chess MEGA-pack/
+/[Aa]ssets/Packages/Chess MEGA-pack.meta
+
+# The Assets/Packages folder exists only to hold the three packages above
+/[Aa]ssets/Packages/
+/[Aa]ssets/Packages.meta
+
+# PrimeTween. The licence permits use only when it is installed as a package,
+# which Packages/manifest.json now does from the npm registry — so neither the
+# Asset Store import nor its tarball belongs in the repository.
+/[Aa]ssets/Plugins/PrimeTween/
+/[Aa]ssets/Plugins/PrimeTween.meta
+/[Pp]ackages/*.tgz
