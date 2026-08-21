@@ -4,7 +4,7 @@ using ChessTheBetrayal.Core.Logic;
 using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.Core.Utils;
 
-namespace ChessTheBetrayal.Gameplay
+namespace ChessTheBetrayal.Gameplay.Manager
 {
     /// <summary>
     /// Builds the initial state for a new match: rolls player/first-mover team, places the

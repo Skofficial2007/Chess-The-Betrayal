@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace ChessTheBetrayal.UI
+namespace ChessTheBetrayal.View
 {
     /// <summary>
     /// The visual shape of a piece-swap transition (promotion, defection). Squash is an

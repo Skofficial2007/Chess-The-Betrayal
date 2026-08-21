@@ -76,5 +76,10 @@ namespace ChessTheBetrayal.Core.Diagnostics
         AI_TranspositionHashCollision   = 4001,
         AI_SearchDepthExceeded          = 4002,
         AI_BetrayalBranchExpansion      = 4003,
+
+        // ── AI Lifecycle (verbose-gated diagnostics — "is the AI even running?") ─
+        AI_SearchRequested              = 4101,
+        AI_MoveDecided                  = 4102,
+        AI_SearchCancelled              = 4103,
     }
 }

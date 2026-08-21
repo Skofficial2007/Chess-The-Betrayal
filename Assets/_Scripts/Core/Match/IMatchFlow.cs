@@ -16,5 +16,17 @@ namespace ChessTheBetrayal.Core.Match
 
         /// <summary>Returns to the mode-select screen instead of starting a match immediately.</summary>
         void ReturnToModeSelect();
+
+        /// <summary>Returns to the Practice Match Setup (AI Settings) screen instead of the normal
+        /// mode-select screen — the Replay destination for AI practice matches, which never went
+        /// through mode-select in the first place.</summary>
+        void ReturnToAIMatchSettings();
+
+        /// <summary>
+        /// The player dismissed the Game Over screen. Runs the bound post-game action (e.g. back to
+        /// mode select). Exposed here so UIManager drives it through this seam instead of resolving
+        /// the concrete GameManager — keeps the UI assembly off any upward dependency.
+        /// </summary>
+        void AcknowledgeGameOver();
     }
 }

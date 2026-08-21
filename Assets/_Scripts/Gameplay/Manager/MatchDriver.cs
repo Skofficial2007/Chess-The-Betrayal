@@ -7,7 +7,7 @@ using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.Core.Diagnostics;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
-namespace ChessTheBetrayal.Gameplay
+namespace ChessTheBetrayal.Gameplay.Manager
 {
     /// <summary>
     /// Drives an in-progress match: applies moves through <see cref="IChessEngine"/>, translates
@@ -48,6 +48,35 @@ namespace ChessTheBetrayal.Gameplay
         // every ply, Betrayal or not) — without this, the log would show the move number jumping
         // mid-sequence instead of staying on the ply where the Betrayal actually started.
         private int _betrayalSequenceMoveNumber = -1;
+
+        // Every MoveCommand applied since the last turn boundary — 1 entry for a plain move, 2+
+        // for a Betrayal sub-sequence (Act, then whatever ends it). Flushed via OnTurnCompleted at
+        // each of PlayMove's turn-ending branches, then cleared for the next turn.
+        private readonly List<MoveCommand> _currentTurnMoves = new List<MoveCommand>(4);
+
+        /// <summary>
+        /// Fires once a turn is fully resolved (never on the intermediate Act ply), carrying every
+        /// MoveCommand that turn applied in order. UndoService is the only intended subscriber —
+        /// it records this so a later Undo can unmake exactly this turn's plies in reverse.
+        /// </summary>
+        public event System.Action<IReadOnlyList<MoveCommand>> OnTurnCompleted;
+
+        /// <summary>
+        /// Fires when the match enters a forced Betrayal sub-phase (RetributionPending or
+        /// ForcedSave) in which the side to move owes a mandatory follow-up move WITHOUT the turn
+        /// having flipped — carrying the team that owes that move. No TurnChangedEvent accompanies
+        /// these transitions (Act/Defection don't flip the side to move, per the turn-flip
+        /// invariant), so an autonomous player like the AI would otherwise never be prompted to
+        /// continue its own forced sequence. A human is prompted by the UI reacting to the same
+        /// phase change; this event is the domain-level equivalent for non-UI drivers. Fires only
+        /// when a forced move is actually still owed — never when Defection already fully resolved
+        /// the sequence (result.DidDefect with no ForcedSave), which ends the turn normally.
+        /// </summary>
+        public event System.Action<Team> OnBetrayalMoveRequired;
+
+        /// <summary>Clears the in-progress turn buffer. Call alongside MoveLog.Clear() whenever a
+        /// new match starts, so a stale partial turn from a previous game can never leak in.</summary>
+        public void ResetTurnAccumulator() => _currentTurnMoves.Clear();
 
         /// <summary>The current phase of the turn (Normal, Betrayal sub-phases, GameOver, etc.).</summary>
         public TurnPhase CurrentPhase { get; private set; } = TurnPhase.GameOver;
@@ -141,6 +170,7 @@ namespace ChessTheBetrayal.Gameplay
             // Don't catch (Exception) here — genuine CLR crashes must surface.
 
             TransitionToPhase(result.NextPhase);
+            _currentTurnMoves.Add(move);
 
             // The Act: the Betrayer has just captured a Victim.
             if (move.Stage == BetrayalStage.Act)
@@ -170,6 +200,14 @@ namespace ChessTheBetrayal.Gameplay
                     _domainLogger?.LogWarning(new DomainLogEvent(DomainEventCode.Betrayal_RetributionPieceNone, message: "No legal Retribution move exists. Triggering Defection path."));
                     HandleDefectionOutcome(move.PieceTeam, result);
                 }
+                else
+                {
+                    // Retribution is still owed by the SAME side that just Acted — no turn flip, so
+                    // no TurnChangedEvent. Announce that a forced follow-up move is required so an
+                    // autonomous driver (the AI) continues its own sequence. _board.CurrentTurn is
+                    // still the Betrayer's team here (Act doesn't flip the side to move).
+                    OnBetrayalMoveRequired?.Invoke(_board.CurrentTurn);
+                }
 
                 // Early return. If Retribution is still pending, the turn does NOT end and the
                 // clock does NOT get an increment yet.
@@ -189,6 +227,7 @@ namespace ChessTheBetrayal.Gameplay
 
                 _clock?.OnMoveMade(move.PieceTeam); // Standard Fischer increment now applies
                 CheckForGameEnd(move); // Discovered checks against the opponent evaluate here for the first time
+                FlushCompletedTurn();
                 return;
             }
 
@@ -201,6 +240,7 @@ namespace ChessTheBetrayal.Gameplay
 
                 _clock?.OnMoveMade(move.PieceTeam); // The Defensive Override move IS the final action of this turn — standard increment applies
                 CheckForGameEnd(move); // Discovered checks against the opponent evaluate here
+                FlushCompletedTurn();
                 return;
             }
 
@@ -216,6 +256,17 @@ namespace ChessTheBetrayal.Gameplay
             ));
 
             CheckForGameEnd(move);
+            FlushCompletedTurn();
+        }
+
+        /// <summary>Raises OnTurnCompleted with this turn's accumulated moves, then clears the
+        /// buffer for the next turn. Called at every PlayMove/HandleDefectionOutcome branch that
+        /// actually ends a turn — never after a bare Act, which leaves the turn still open.</summary>
+        private void FlushCompletedTurn()
+        {
+            if (_currentTurnMoves.Count == 0) return;
+            OnTurnCompleted?.Invoke(_currentTurnMoves);
+            _currentTurnMoves.Clear();
         }
 
         /// <summary>
@@ -253,16 +304,32 @@ namespace ChessTheBetrayal.Gameplay
 
             _betrayalChannel?.Raise(new ChessTheBetrayal.Events.Payloads.BetrayalPayload(initiatingTeam, result.DefectedSquare.Value, ChessTheBetrayal.Events.Payloads.BetrayalPhase.DefectionOccurred));
 
+            // Reached via two callers: PlayMove's Act branch (which already appended the Act move
+            // to _currentTurnMoves before calling this) and RequestRetributionSkip (a voluntary
+            // skip, which never goes through PlayMove at all — this is the first move that
+            // sequence appends). Either way the DefectionMove itself is always new to this list —
+            // its Stage.Defection can never collide with an already-appended Act/None entry.
+            if (result.DefectionMove.HasValue)
+            {
+                _currentTurnMoves.Add(result.DefectionMove.Value);
+            }
+
             if (result.RequiresForcedSave)
             {
                 _domainLogger?.LogWarning(new DomainLogEvent(DomainEventCode.Betrayal_ForcedSaveRequired));
                 _betrayalChannel?.Raise(new ChessTheBetrayal.Events.Payloads.BetrayalPayload(initiatingTeam, result.DefectedSquare.Value, ChessTheBetrayal.Events.Payloads.BetrayalPhase.ForcedSaveActive));
-                // No NextTurn() yet — the pending Defensive Override move and final turn advancement happen next.
+                // No NextTurn() yet — the pending Defensive Override move and final turn advancement
+                // happen next. The side that owes that forced DefensiveOverride is whoever
+                // _board.CurrentTurn now points at — the exact same key GetForcedSaveMoves and the
+                // AI's search use — so announce that, not initiatingTeam (they coincide today, but
+                // keying on CurrentTurn keeps this correct against the engine's own source of truth).
+                OnBetrayalMoveRequired?.Invoke(_board.CurrentTurn);
             }
             else
             {
                 // No time bounty — Defection alone grants nothing, per design doc.
                 CheckForGameEnd(result.DefectionMove); // the opponent's newly-acquired piece may itself deliver check/checkmate — evaluated here for the first time.
+                FlushCompletedTurn();
             }
         }
 

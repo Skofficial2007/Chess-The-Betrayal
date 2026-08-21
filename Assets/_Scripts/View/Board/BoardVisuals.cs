@@ -4,17 +4,17 @@ using UnityEngine;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Diagnostics;
 using ChessTheBetrayal.Core.Engine;
-using ChessTheBetrayal.Gameplay;
+using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.Infrastructure;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
-namespace ChessTheBetrayal.UI
+namespace ChessTheBetrayal.View
 {
     /// <summary>
     /// The eyes of the game. Spawns and moves piece GameObjects, highlights tiles, and plays animations.
     /// It has no idea how chess rules work — it just listens to GameManager and reacts.
     /// </summary>
-    public class BoardVisuals : MonoBehaviour
+    public class BoardVisuals : MonoBehaviour, IBoardHitTest
     {
         #region Inspector Fields
 
@@ -164,6 +164,7 @@ namespace ChessTheBetrayal.UI
         private void Awake()
         {
             ServiceLocator.Instance.Register(this);
+            ServiceLocator.Instance.Register<IBoardHitTest>(this);
 
             ValidateRequiredFields();
 
@@ -202,9 +203,9 @@ namespace ChessTheBetrayal.UI
 
         private void Start()
         {
-            if (!ServiceLocator.Instance.TryResolve<GameManager>(out _))
+            if (!ServiceLocator.Instance.TryResolve<IBoardQuery>(out _))
             {
-                Debug.LogError("[BoardVisuals] GameManager was never registered!");
+                Debug.LogError("[BoardVisuals] The match host (IBoardQuery) was never registered!");
             }
         }
 

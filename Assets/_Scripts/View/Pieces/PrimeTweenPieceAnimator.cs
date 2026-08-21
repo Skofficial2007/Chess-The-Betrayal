@@ -5,7 +5,7 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using ChessTheBetrayal.Core.Data;
 
-namespace ChessTheBetrayal.UI
+namespace ChessTheBetrayal.View
 {
     /// <summary>
     /// Real, tweened IPieceAnimator used for human play. Animates a single piece's Transform via

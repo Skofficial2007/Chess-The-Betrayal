@@ -1,0 +1,21 @@
+{
+  "name": "ChessTheBetrayal.View",
+  "references": [
+    "ChessTheBetrayal.Core",
+    "ChessTheBetrayal.Events",
+    "ChessTheBetrayal.Infrastructure",
+    "ChessTheBetrayal.Gameplay.Interaction",
+    "ChessTheBetrayal.UI",
+    "Unity.Cinemachine",
+    "Unity.InputSystem",
+    "PrimeTween.Runtime"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": []
+}

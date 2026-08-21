@@ -11,9 +11,11 @@ namespace ChessTheBetrayal.UI
     {
         [Header("UI References")]
         [SerializeField] private Button playButton;
+        [SerializeField] private Button practiceMatchButton;
         [SerializeField] private Button exitButton;
 
         public event Action OnPlay;
+        public event Action OnPracticeMatch;
         public event Action OnExit;
 
         private void Awake()
@@ -21,6 +23,11 @@ namespace ChessTheBetrayal.UI
             if (playButton != null)
             {
                 playButton.onClick.AddListener(() => OnPlay?.Invoke());
+            }
+
+            if (practiceMatchButton != null)
+            {
+                practiceMatchButton.onClick.AddListener(() => OnPracticeMatch?.Invoke());
             }
 
             if (exitButton != null)

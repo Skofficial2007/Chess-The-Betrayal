@@ -35,6 +35,31 @@ namespace ChessTheBetrayal.AI
         private MoveCommand _pendingResult;
         private CancellationTokenSource _cts;
 
+        /// <summary>
+        /// True from the moment RequestBestMove kicks off a search until either a result is
+        /// consumed via Tick() or the search is cancelled. UndoService reads this to decide
+        /// whether an Undo needs to cancel an in-flight AI reply before popping the board.
+        /// </summary>
+        public bool IsSearching => _cts != null;
+
+        /// <summary>
+        /// Cancels any in-flight search without disposing the agent — distinct from Dispose(),
+        /// which the caller only calls when tearing down the whole match/agent. UndoService calls
+        /// this (never Dispose) so the agent stays usable for the player's very next move.
+        /// </summary>
+        public void CancelSearch() => CancelInFlight();
+
+        // TEMP DEBUG : surfaces a worker-thread exception to the
+        // main-thread caller instead of letting it vanish into the Task's unobserved-exception
+        // path. Remove once the AI flow has been confirmed working end-to-end in-editor.
+        private volatile string _lastSearchException;
+        public string ConsumeLastSearchException()
+        {
+            string ex = _lastSearchException;
+            _lastSearchException = null;
+            return ex;
+        }
+
         public AsyncAIAgent(IChessEngine engine, IPositionEvaluator evaluator, AISearchSettings settings)
         {
             _search = new AlphaBetaSearch(engine, evaluator);
@@ -67,8 +92,10 @@ namespace ChessTheBetrayal.AI
                     }
                 }
                 catch (OperationCanceledException) { /* expected on reset/scene change */ }
-                // Any other exception intentionally surfaces in the Editor console via the Task's
-                // unobserved-exception path during development; wrap with a logger seam before ship.
+                catch (Exception ex)
+                {
+                    _lastSearchException = ex.ToString();
+                }
             }, token);
         }
 
@@ -81,6 +108,14 @@ namespace ChessTheBetrayal.AI
         {
             if (!_hasResult) return;
             _hasResult = false;
+
+            // IsSearching must go false once a result is consumed, per its own contract above —
+            // otherwise a completed-and-delivered search reads as still in-flight forever (until
+            // the next RequestBestMove/CancelSearch/Dispose), which would make UndoService pop
+            // only 1 turn instead of 2 on every Undo pressed after the AI's first reply.
+            _cts?.Dispose();
+            _cts = null;
+
             OnMoveDecided?.Invoke(_pendingResult);
         }
 

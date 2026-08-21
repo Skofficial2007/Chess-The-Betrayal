@@ -2,7 +2,7 @@ using System;
 using UnityEngine;
 using ChessTheBetrayal.Core.Data;
 
-namespace ChessTheBetrayal.UI
+namespace ChessTheBetrayal.View
 {
     /// <summary>
     /// Purely visual component attached to piece prefabs. Contains ZERO game logic — doesn't know

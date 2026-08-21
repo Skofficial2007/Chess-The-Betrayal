@@ -1,9 +1,9 @@
 using UnityEngine;
-using ChessTheBetrayal.Gameplay;
+using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.Events.Payloads;
 using ChessTheBetrayal.Infrastructure;
 
-namespace ChessTheBetrayal.UI
+namespace ChessTheBetrayal.View
 {
     /// <summary>
     /// Highlights legal destination tiles on PieceSelected and clears them on SelectionCleared.
@@ -35,9 +35,9 @@ namespace ChessTheBetrayal.UI
 
         public void HandlePieceSelected(PieceSelectedPayload payload)
         {
-            if (boardVisuals == null || !ServiceLocator.Instance.TryResolve(out GameManager gameManager)) return;
+            if (boardVisuals == null || !ServiceLocator.Instance.TryResolve(out IBoardQuery boardQuery)) return;
 
-            var legalMoves = gameManager.GetLegalMovesAt(payload.Position);
+            var legalMoves = boardQuery.GetLegalMovesAt(payload.Position);
             boardVisuals.HighlightLegalMoves(legalMoves);
         }
 
