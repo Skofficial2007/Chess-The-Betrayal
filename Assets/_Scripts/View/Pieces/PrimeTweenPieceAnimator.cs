@@ -1285,6 +1285,20 @@ namespace ChessTheBetrayal.View.Pieces
             // a second rest position on top of the lifted one, so restart from a clean slate first.
             StopLiftTweens();
 
+            // A rattle has the piece a few centimetres off its square at every moment except its
+            // last, and the line below is about to record where the piece is standing as the place
+            // to set it back down. Recorded mid-rattle that is somewhere the piece never stood, and
+            // the error outlives the rattle by the whole rest of the game — worse, the next rattle
+            // decays to the wrong place too, so answering three checks this way walks the piece a
+            // third of the way off its square.
+            //
+            // Ending the rattle rather than waiting it out, which is what a move does instead: a
+            // move had nobody waiting on it, a tap has the player waiting on it, and making
+            // selection up to ShakeDuration late would be a worse answer than losing the rattle.
+            // Nothing is lost by ending it — a player reaching for the king has plainly seen the
+            // warning, and the check frame under it is a board marker that stays put regardless.
+            StopShake();
+
             _liftRestPosition = _transform.position;
             _liftRestScale = _transform.localScale;
 
