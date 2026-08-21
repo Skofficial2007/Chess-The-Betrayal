@@ -284,7 +284,12 @@ namespace ChessTheBetrayal.View.Pieces
         private const float ShakeTiltDegrees = 7f;            // peak Z-axis lean
         private const float ShakeFrequency = 32f;             // rad/sec of the lateral vibration
         private const float ShakeTiltFrequency = 26f;         // slightly detuned so tilt/slide don't lock in phase
+        // Holds the wait as well as the rattle itself, so stopping the shake stops it whichever of
+        // the two it is currently doing. _shaking separates them: while the piece is still walking
+        // to where it will be shaken there is no rest pose worth putting back, and restoring the
+        // stale one would drag the piece to wherever it last stood still.
         private Tween _shakeTween;
+        private bool _shaking;
         private Vector3 _shakeRestPosition;
         private Quaternion _shakeRestRotation;
 
@@ -389,6 +394,12 @@ namespace ChessTheBetrayal.View.Pieces
             _settleBobTween.Stop();
             _settleBobBaseY = null;
             StopStampBeat();
+
+            // The other half of the shake's claim on this transform (see StartShake). A piece told
+            // to move while it is rattling has to be put back on its rest pose first, or the glide
+            // sets off from wherever in the rattle it was caught — and the shake, still running,
+            // would go on overwriting the glide from underneath it.
+            StopShake();
 
             // A caller driving MoveTo directly (a board move, castling, snap-back) means the piece
             // is no longer conceptually "lifted" — stop any in-flight lift/bob so they can't fight
@@ -1032,23 +1043,66 @@ namespace ChessTheBetrayal.View.Pieces
             _renderer.SetPropertyBlock(_mpb);
         }
 
+        /// <summary>
+        /// Rattles the piece where it stands. A piece that is not standing anywhere yet is left to
+        /// finish its journey first — see StartShake for why it cannot simply begin.
+        /// </summary>
         public void Shake()
         {
-            // A check delivered while a previous shake is still mid-flight (rare, but a fast forced
-            // sequence can do it) would otherwise read the half-finished offset as the new rest
-            // pose. Stop() cancels the tween but does not restore the transform, so if one was live,
-            // restore the cached rest pose first, then read the true rest — the same
-            // snap-before-reread guard PlaySettleBob uses for its baseY. Checked before Stop() since
-            // Stop() clears isAlive.
-            bool wasShaking = _shakeTween.isAlive;
-            _shakeTween.Stop();
-            if (wasShaking)
+            float travelLeft = SecondsOfTravelLeft();
+
+            // Whichever half of a shake is already here gives way to this one. Doing it from here
+            // rather than from StartShake keeps a waiting shake from being stopped inside its own
+            // completion, which is not a thing a tween will sit still for.
+            StopShake();
+
+            if (travelLeft <= 0f)
             {
-                _transform.position = _shakeRestPosition;
-                _transform.localRotation = _shakeRestRotation;
+                StartShake();
+                return;
             }
+
+            _shakeTween = Tween.Delay(this, travelLeft, self => self.StartShake(), useUnscaledTime: true);
+        }
+
+        /// <summary>
+        /// How long until nothing is moving this piece any more, so a shake can be given the
+        /// transform to itself. Zero for a piece already at rest, which is every shake that is not
+        /// answering a move — a tap on a piece with nowhere to go, for one.
+        /// </summary>
+        private float SecondsOfTravelLeft()
+        {
+            if (!_moveTween.isAlive) return 0f;
+
+            float left = _moveTween.duration - _moveTween.elapsedTime;
+            return left > 0f ? left : 0f;
+        }
+
+        /// <summary>
+        /// Takes the transform over and rattles it.
+        ///
+        /// A shake is built from an absolute pose — the place the piece is standing, plus an offset
+        /// that decays to nothing — so it cannot share the transform with a glide that is still
+        /// moving that place underneath it. Both would write position every frame and the shake,
+        /// being the shorter of the two, would get the last word and leave the piece back where the
+        /// glide started. Taking a king out of check and then taking that move back is where it
+        /// showed: the king was told to return to the square it came from and told it was in check
+        /// in the same breath, and it stayed standing on the square it had just left, with the
+        /// check frame drawn on the empty square it should have been on.
+        /// </summary>
+        private void StartShake()
+        {
+            // The glide is over by now — the wait was measured off it — unless a frame boundary
+            // landed inside its last few milliseconds. End it outright in that case so the pose
+            // read below is the square the piece was heading for rather than a hair short of it,
+            // which is the residual that compounds move after move. A move tween carries no
+            // completion callback, so there is nothing to fire early by ending it here.
+            if (_moveTween.isAlive) _moveTween.Complete();
+
+            // Nothing to clear away first: every route in here has just been through StopShake.
             _shakeRestPosition = _transform.position;
             _shakeRestRotation = _transform.localRotation;
+            _shaking = true;
 
             // Local right/up, so the vibration and hop read identically for White and Black kings
             // despite Black's prefab being pre-rotated 180° at spawn (see SpawnSinglePiece). Tilt is
@@ -1081,6 +1135,24 @@ namespace ChessTheBetrayal.View.Pieces
 
             _transform.position = _shakeRestPosition + lateral * sway + up * hop;
             _transform.localRotation = _shakeRestRotation * Quaternion.AngleAxis(tilt, Vector3.forward);
+        }
+
+        /// <summary>
+        /// Ends a shake — waiting or rattling — and puts the piece back on the pose it was rattling
+        /// around, so nothing that follows inherits a half-finished offset as the piece's real
+        /// place. Nothing to put back while it is still only waiting: the pose is not read until the
+        /// rattle itself begins.
+        /// </summary>
+        private void StopShake()
+        {
+            bool wasShaking = _shaking && _shakeTween.isAlive;
+            _shakeTween.Stop();
+            _shaking = false;
+
+            if (!wasShaking) return;
+
+            _transform.position = _shakeRestPosition;
+            _transform.localRotation = _shakeRestRotation;
         }
 
         public void PlayTransitionOut(PieceTransitionStyle style, Action onComplete)
@@ -1296,6 +1368,7 @@ namespace ChessTheBetrayal.View.Pieces
             _settleBobTween.Stop();
             _bobTween.Stop();
             _shakeTween.Stop();
+            _shaking = false;
             _outlineTween.Stop();
             _dissolveTween.Stop();
             _leanTween.Stop();
