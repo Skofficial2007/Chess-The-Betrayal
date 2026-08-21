@@ -15,6 +15,17 @@ namespace ChessTheBetrayal.Core.Engine
     {
         void GetLegalMoves(BoardState board, Vector2Int position, List<MoveCommand> output);
         void GetAllLegalMoves(BoardState board, Team team, List<MoveCommand> masterBuffer);
+
+        /// <summary>
+        /// Same as <see cref="GetAllLegalMoves"/>, but also includes each piece's Betrayal Act
+        /// moves (via GetBetrayalTargets) — GetAllLegalMoves deliberately omits these because
+        /// GetForcedSaveMoves and HasAnyLegalMoves both reuse it and would be corrupted by an Act
+        /// move leaking in (mislabeled as DefensiveOverride, or counted as a check-escape that
+        /// isn't one). The search is the one caller that needs Act moves visible at every ply —
+        /// as both the mover's own choice and the opponent's threat — so it uses this instead.
+        /// </summary>
+        void GetAllLegalMovesIncludingBetrayal(BoardState board, Team team, List<MoveCommand> masterBuffer);
+
         void GetRetributionMoves(BoardState board, Team executionerTeam, Vector2Int betrayerSquare, List<MoveCommand> output);
         void GetForcedSaveMoves(BoardState board, Team team, List<MoveCommand> output);
         bool IsKingInCheck(BoardState board, Team team);

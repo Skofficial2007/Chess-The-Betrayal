@@ -3,6 +3,8 @@ using System.Threading;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("ChessTheBetrayal.Tests.EditMode")]
+
 namespace ChessTheBetrayal.AI
 {
     /// <summary>
@@ -73,6 +75,7 @@ namespace ChessTheBetrayal.AI
                 int alpha = -Infinity;
                 int beta = Infinity;
                 MoveCommand bestThisDepth = bestMove;
+                int bestIndexThisDepth = 0;
                 int bestScore = -Infinity;
                 bool completed = true;
 
@@ -81,18 +84,19 @@ namespace ChessTheBetrayal.AI
                     if (ct.IsCancellationRequested) { completed = false; break; }
 
                     MoveCommand move = _rootMoves[i];
-                    _engine.ApplyMove(board, move);
+                    ApplyMoveAndTurn(board, move);
 
                     // Root moves are always the current player's own choices. An Act or Defection
                     // at the root keeps the SAME player to move, so we recurse without negation.
                     int score = ScoreChild(board, move, depth - 1, alpha, beta, rootTeam, ct);
 
-                    _engine.UndoMove(board, move);
+                    UndoMoveAndTurn(board, move);
 
                     if (score > bestScore)
                     {
                         bestScore = score;
                         bestThisDepth = move;
+                        bestIndexThisDepth = i;
                     }
                     if (score > alpha) alpha = score;
                 }
@@ -101,7 +105,9 @@ namespace ChessTheBetrayal.AI
                 {
                     bestMove = bestThisDepth;
                     // Move ordering payoff: put the best move first next iteration for max cutoffs.
-                    MoveToFront(bestMove);
+                    // Uses the index found above — MoveCommand has no IEquatable, so an IndexOf(move)
+                    // lookup here would box through the reflection-based ValueType.Equals fallback.
+                    MoveToFront(bestIndexThisDepth);
 
                     // Early exit on forced mate found — no deeper search changes the decision.
                     if (bestScore >= MateScore) break;
@@ -120,7 +126,7 @@ namespace ChessTheBetrayal.AI
         private void BuildRootMoves(BoardState board, Team team, BetrayalUsage usage)
         {
             _rootMoves.Clear();
-            _engine.GetAllLegalMoves(board, team, _rootMoves);
+            _engine.GetAllLegalMovesIncludingBetrayal(board, team, _rootMoves);
 
             if (usage == BetrayalUsage.DefendOnly)
             {
@@ -151,10 +157,14 @@ namespace ChessTheBetrayal.AI
             List<MoveCommand> moves = _moveBuffers[depth];
             moves.Clear();
 
-            // GetAllLegalMoves returns ONLY Retribution moves when a betrayer is pending, so the
-            // multi-phase machine "just works" as ordinary children here — no phase flag needed in
-            // the signature; the board's own state drives which moves come back.
-            _engine.GetAllLegalMoves(board, board.CurrentTurn, moves);
+            // GetAllLegalMovesIncludingBetrayal returns ONLY Retribution moves when a betrayer is
+            // pending (same fallthrough GetAllLegalMoves has), so the multi-phase machine "just
+            // works" as ordinary children here — no phase flag needed in the signature; the
+            // board's own state drives which moves come back. Includes Act moves (unlike
+            // GetAllLegalMoves) so the search can both play Betrayal itself and see the opponent
+            // threatening one, at every ply — DefendOnly strips Act from the AGENT's choices only
+            // at the root (see BuildRootMoves); this recursion never filters.
+            _engine.GetAllLegalMovesIncludingBetrayal(board, board.CurrentTurn, moves);
 
             if (moves.Count == 0)
             {
@@ -177,9 +187,9 @@ namespace ChessTheBetrayal.AI
                 if (ct.IsCancellationRequested) return best;
 
                 MoveCommand move = moves[i];
-                _engine.ApplyMove(board, move);
+                ApplyMoveAndTurn(board, move);
                 int score = ScoreChild(board, move, depth - 1, alpha, beta, perspectiveTeam, ct);
-                _engine.UndoMove(board, move);
+                UndoMoveAndTurn(board, move);
 
                 if (score > best) best = score;
                 if (best > alpha) alpha = best;
@@ -194,6 +204,27 @@ namespace ChessTheBetrayal.AI
         }
 
         /// <summary>
+        /// Applies a move AND advances board.CurrentTurn to match — IChessEngine.ApplyMove
+        /// deliberately does not touch CurrentTurn (per-ply turn control belongs to the caller),
+        /// but GetAllLegalMoves/IsKingInCheck/GetRetributionMoves all read CurrentTurn to know
+        /// whose position they're looking at. The search is the caller responsible for keeping it
+        /// in sync, using the exact same StageFlipsTurn rule ApplyZobristMove and TurnResolver use.
+        /// </summary>
+        private void ApplyMoveAndTurn(BoardState board, MoveCommand move)
+        {
+            _engine.ApplyMove(board, move);
+            if (StageFlipsTurn(move.Stage)) board.NextTurn();
+        }
+
+        /// <summary>Mirror of <see cref="ApplyMoveAndTurn"/> — restores CurrentTurn before undoing
+        /// the move itself, so UndoMove sees the same CurrentTurn ApplyMove was called with.</summary>
+        private void UndoMoveAndTurn(BoardState board, MoveCommand move)
+        {
+            if (StageFlipsTurn(move.Stage)) board.NextTurn();
+            _engine.UndoMove(board, move);
+        }
+
+        /// <summary>
         /// The heart of Betrayal-correct search: decide whether this child flips the turn.
         ///   - Turn FLIPPED (normal move, Retribution, DefensiveOverride): standard negamax —
         ///     negate the child and swap/negate the alpha-beta window.
@@ -204,10 +235,7 @@ namespace ChessTheBetrayal.AI
         private int ScoreChild(BoardState board, MoveCommand move, int childDepth,
                                int alpha, int beta, Team perspectiveTeam, CancellationToken ct)
         {
-            bool turnFlipped = move.Stage != BetrayalStage.Act
-                            && move.Stage != BetrayalStage.Defection;
-
-            if (turnFlipped)
+            if (StageFlipsTurn(move.Stage))
             {
                 // Standard negamax step: opponent to move, minimize from our view => negate.
                 Team childPerspective = perspectiveTeam == Team.White ? Team.Black : Team.White;
@@ -222,6 +250,15 @@ namespace ChessTheBetrayal.AI
                 return Search(board, childDepth, alpha, beta, perspectiveTeam, ct);
             }
         }
+
+        /// <summary>
+        /// True when <paramref name="stage"/> passes the turn to the opponent (Retribution,
+        /// DefensiveOverride, and ordinary None moves); false for Act and Defection, which are
+        /// half-moves by the same player. Mirrors ChessEngine.ApplyZobristMove's turn-hash toggle
+        /// and TurnResolver's NextTurn() calls exactly — if that rule ever changes, update both.
+        /// </summary>
+        internal static bool StageFlipsTurn(BetrayalStage stage) =>
+            stage != BetrayalStage.Act && stage != BetrayalStage.Defection;
 
         /// <summary>
         /// Quiescence: extends the search through "loud" positions to kill the horizon effect.
@@ -256,6 +293,9 @@ namespace ChessTheBetrayal.AI
                     // the defected piece now counts for the opponent in the resolved material sum.
                     DefectionOutcome outcome = ChessEngine.ResolveFailedRetribution(board);
                     int resolvedScore = Quiescence(board, alpha, beta, perspectiveTeam, ct);
+                    // ResolveFailedRetribution applies the Defection move directly via ChessEngine,
+                    // bypassing our ApplyMoveAndTurn wrapper — but Defection never flips the turn
+                    // (StageFlipsTurn is false for it), so a plain UndoMove is correct here too.
                     _engine.UndoMove(board, outcome.DefectionMove);
                     return resolvedScore;
                 }
@@ -265,11 +305,11 @@ namespace ChessTheBetrayal.AI
                 for (int i = 0; i < retribution.Count; i++)
                 {
                     MoveCommand move = retribution[i];
-                    _engine.ApplyMove(board, move);
+                    ApplyMoveAndTurn(board, move);
                     // Retribution flips the turn, so negate.
                     Team childPerspective = perspectiveTeam == Team.White ? Team.Black : Team.White;
                     int score = -Quiescence(board, -beta, -alpha, childPerspective, ct);
-                    _engine.UndoMove(board, move);
+                    UndoMoveAndTurn(board, move);
                     if (score > best) best = score;
                     if (best > alpha) alpha = best;
                     if (alpha >= beta) break;
@@ -282,10 +322,11 @@ namespace ChessTheBetrayal.AI
             if (standPat >= beta) return beta;
             if (standPat > alpha) alpha = standPat;
 
-            // Search captures only (loud moves). Reuse a buffer; filter to captures.
+            // Search captures only (loud moves) plus Act, which the loop below explicitly keeps —
+            // reuse a buffer; filter happens per-move just below.
             List<MoveCommand> moves = _moveBuffers[0];
             moves.Clear();
-            _engine.GetAllLegalMoves(board, board.CurrentTurn, moves);
+            _engine.GetAllLegalMovesIncludingBetrayal(board, board.CurrentTurn, moves);
             OrderMoves(moves);
 
             for (int i = 0; i < moves.Count; i++)
@@ -293,9 +334,9 @@ namespace ChessTheBetrayal.AI
                 MoveCommand move = moves[i];
                 if (!move.IsCapture && move.Stage != BetrayalStage.Act) continue; // quiet move, skip
 
-                _engine.ApplyMove(board, move);
+                ApplyMoveAndTurn(board, move);
                 int score = ScoreChild(board, move, 0, alpha, beta, perspectiveTeam, ct);
-                _engine.UndoMove(board, move);
+                UndoMoveAndTurn(board, move);
 
                 if (score >= beta) return beta;
                 if (score > alpha) alpha = score;
@@ -346,14 +387,13 @@ namespace ChessTheBetrayal.AI
             _ => 0
         };
 
-        private void MoveToFront(MoveCommand move)
+        private void MoveToFront(int index)
         {
-            int idx = _rootMoves.IndexOf(move);
-            if (idx > 0)
-            {
-                _rootMoves.RemoveAt(idx);
-                _rootMoves.Insert(0, move);
-            }
+            if (index <= 0) return;
+
+            MoveCommand move = _rootMoves[index];
+            _rootMoves.RemoveAt(index);
+            _rootMoves.Insert(0, move);
         }
     }
 }

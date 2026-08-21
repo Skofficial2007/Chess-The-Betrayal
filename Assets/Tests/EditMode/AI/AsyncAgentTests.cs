@@ -1,0 +1,167 @@
+using NUnit.Framework;
+using System.Diagnostics;
+using System.Threading;
+using ChessTheBetrayal.AI;
+using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.Core.Engine;
+using ChessTheBetrayal.Tests.Utilities;
+
+namespace ChessTheBetrayal.Tests.EditMode.AI
+{
+    /// <summary>
+    /// Exercises AsyncAIAgent's threading contract: OnMoveDecided fires only from Tick() on the
+    /// calling thread, a cancelled search never fires it, and the live board handed to
+    /// RequestBestMove is never mutated (the search only ever touches its own CloneForSnapshot).
+    /// Uses a shallow, fast search (depth 1) and bounded polling loops — this is background-thread
+    /// code, so these tests wait on real wall-clock time rather than driving the worker directly.
+    /// </summary>
+    [TestFixture]
+    public class AsyncAgentTests
+    {
+        private const int PollTimeoutMs = 5000;
+        private const int PollIntervalMs = 10;
+
+        private AsyncAIAgent _agent;
+
+        [SetUp]
+        public void Setup()
+        {
+            _agent = new AsyncAIAgent(
+                new ChessEngineAdapter(),
+                new BetrayalAwareEvaluator(),
+                new AISearchSettings(maxDepth: 1, softTimeBudgetMs: 5000, BetrayalUsage.Full));
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            _agent.Dispose();
+        }
+
+        [Test]
+        public void RequestBestMove_ThenPumpTick_FiresOnMoveDecidedWithALegalMove()
+        {
+            BoardState board = TestBoardSetupUtility.CreateStandard();
+            MoveCommand? delivered = null;
+
+            _agent.OnMoveDecided += move => delivered = move;
+            _agent.RequestBestMove(board, Team.White);
+
+            PumpTickUntil(() => delivered.HasValue);
+
+            Assert.That(delivered, Is.Not.Null, "OnMoveDecided must fire once the background search completes and Tick() is pumped.");
+            Assert.That(delivered.Value.PieceTeam, Is.EqualTo(Team.White));
+        }
+
+        [Test]
+        public void RequestBestMove_BeforeTickIsPumped_DoesNotFireOnMoveDecided()
+        {
+            // The worker publishes its result via a volatile flag; only Tick() may raise the event.
+            // Give the worker ample time to finish and simply never call Tick() — if the worker
+            // fired the event directly, this would already have failed by the time we assert.
+            BoardState board = TestBoardSetupUtility.CreateStandard();
+            bool fired = false;
+            _agent.OnMoveDecided += _ => fired = true;
+
+            _agent.RequestBestMove(board, Team.White);
+            SleepForSearchToFinish();
+
+            Assert.That(fired, Is.False, "OnMoveDecided must not fire before Tick() is pumped, even though the worker has already finished.");
+        }
+
+        [Test]
+        public void RequestBestMove_CancelledBeforeCompletion_NeverFiresOnMoveDecided()
+        {
+            // A deep, slow search on an otherwise-legal position gives us a wide cancellation window.
+            var slowAgent = new AsyncAIAgent(
+                new ChessEngineAdapter(),
+                new BetrayalAwareEvaluator(),
+                new AISearchSettings(maxDepth: 32, softTimeBudgetMs: 30_000, BetrayalUsage.Full));
+
+            try
+            {
+                BoardState board = TestBoardSetupUtility.CreateStandard();
+                bool fired = false;
+                slowAgent.OnMoveDecided += _ => fired = true;
+
+                using var cts = new CancellationTokenSource();
+                slowAgent.RequestBestMove(board, Team.White, cts.Token);
+                cts.Cancel();
+
+                // Give the worker time to observe cancellation and (incorrectly, if buggy) publish.
+                Thread.Sleep(200);
+                slowAgent.Tick();
+
+                Assert.That(fired, Is.False, "A cancelled search must never publish a result, even after Tick() is pumped.");
+            }
+            finally
+            {
+                slowAgent.Dispose();
+            }
+        }
+
+        [Test]
+        public void RequestBestMove_NewRequestCancelsPriorInFlightSearch()
+        {
+            // A second RequestBestMove before the first resolves must cancel the first — only the
+            // second's move (or nothing) should ever reach OnMoveDecided.
+            var slowAgent = new AsyncAIAgent(
+                new ChessEngineAdapter(),
+                new BetrayalAwareEvaluator(),
+                new AISearchSettings(maxDepth: 32, softTimeBudgetMs: 30_000, BetrayalUsage.Full));
+
+            try
+            {
+                BoardState board = TestBoardSetupUtility.CreateStandard();
+                int fireCount = 0;
+                slowAgent.OnMoveDecided += _ => fireCount++;
+
+                slowAgent.RequestBestMove(board, Team.White);
+                slowAgent.RequestBestMove(board, Team.White); // cancels the first in-flight search
+
+                Thread.Sleep(200);
+                slowAgent.Tick();
+
+                Assert.That(fireCount, Is.EqualTo(0),
+                    "Neither the cancelled first search nor the still-running second search should have fired yet.");
+            }
+            finally
+            {
+                slowAgent.Dispose();
+            }
+        }
+
+        [Test]
+        public void RequestBestMove_LiveBoardIsNeverMutatedByTheBackgroundSearch()
+        {
+            // RequestBestMove clones the board once on the calling thread; the search must only
+            // ever touch that isolated clone. The live board's hash must be identical before and
+            // after the background search runs, regardless of what the search explored.
+            BoardState board = TestBoardSetupUtility.CreateStandard();
+            ulong hashBefore = board.ZobristHash;
+            bool delivered = false;
+
+            _agent.OnMoveDecided += _ => delivered = true;
+            _agent.RequestBestMove(board, Team.White);
+            PumpTickUntil(() => delivered);
+
+            Assert.DoesNotThrow(() => board.AssertZobristConsistency());
+            Assert.That(board.ZobristHash, Is.EqualTo(hashBefore),
+                "The live board passed to RequestBestMove must never be mutated by the background search.");
+        }
+
+        /// <summary>Repeatedly calls Tick() until <paramref name="isDone"/> is true or the timeout
+        /// elapses — Tick() is the only public surface that can observe the worker's completion.</summary>
+        private void PumpTickUntil(System.Func<bool> isDone)
+        {
+            var stopwatch = Stopwatch.StartNew();
+            while (!isDone() && stopwatch.ElapsedMilliseconds < PollTimeoutMs)
+            {
+                _agent.Tick();
+                Thread.Sleep(PollIntervalMs);
+            }
+        }
+
+        private static void SleepForSearchToFinish() => Thread.Sleep(300);
+    }
+}

@@ -172,6 +172,45 @@ namespace ChessTheBetrayal.Core.Engine
             }
         }
 
+        /// <summary>
+        /// Same shape as <see cref="GetAllLegalMoves"/>, but calls the public per-position
+        /// GetLegalMoves(board, position, output) overload instead of the private one — the only
+        /// difference being that overload also appends GetBetrayalTargets. See IChessEngine's doc
+        /// comment for why GetAllLegalMoves itself must stay Act-free (GetForcedSaveMoves and
+        /// HasAnyLegalMoves both depend on that) while the AI search needs Act moves visible.
+        /// </summary>
+        public static void GetAllLegalMovesIncludingBetrayal(BoardState board, Team team, List<MoveCommand> masterBuffer)
+        {
+            masterBuffer.Clear();
+
+            if (board.PendingBetrayerSquare.HasValue && board.BetrayalInitiator.HasValue)
+            {
+                PieceData betrayer = board.GetPiece(board.PendingBetrayerSquare.Value);
+
+                if (betrayer.Team == board.BetrayalInitiator.Value)
+                {
+                    GetRetributionMoves(board, team, board.PendingBetrayerSquare.Value, masterBuffer);
+                    return;
+                }
+            }
+
+            if (masterBuffer.Capacity < MaxMovesPerPosition)
+            {
+                masterBuffer.Capacity = MaxMovesPerPosition;
+            }
+
+            int[] indicesSnapshot = SnapshotIndices(board.GetPieceIndices(team), ref _indexScratchBuffer, out int indexCount);
+
+            for (int i = 0; i < indexCount; i++)
+            {
+                int idx = indicesSnapshot[i];
+                Vector2Int pos = new Vector2Int(idx % board.TileCountX, idx / board.TileCountX);
+
+                GetLegalMoves(board, pos, MoveGenBuffer);
+                masterBuffer.AddRange(MoveGenBuffer);
+            }
+        }
+
         public static void GetBetrayalTargets(BoardState board, Vector2Int betrayerPos, List<MoveCommand> output)
         {
             PieceData piece = board.GetPiece(betrayerPos);
@@ -456,6 +495,9 @@ namespace ChessTheBetrayal.Core.Engine
             return new DefectionOutcome(selfCheckAfterDefection, betrayerSquare, defectionMove, reason);
         }
 
+        // TURN-FLIP INVARIANT: Act/Defection do NOT flip side-to-move; Retribution/DefensiveOverride
+        // (and ordinary None moves) DO. Mirrored in AlphaBetaSearch.StageFlipsTurn
+        // (ChessTheBetrayal.AI) — change BOTH or SearchTurnFlipAgreementTests fails.
         private static void ApplyZobristMove(BoardState board, MoveCommand move, int previousCastlingMask, int? previousEnPassantFile)
         {
             if (move.Stage == BetrayalStage.Defection)
@@ -589,6 +631,9 @@ namespace ChessTheBetrayal.Core.Engine
             return null;
         }
 
+        // TURN-FLIP INVARIANT: Act/Defection do NOT flip side-to-move; Retribution/DefensiveOverride
+        // (and ordinary None moves) DO. Mirrored in AlphaBetaSearch.StageFlipsTurn
+        // (ChessTheBetrayal.AI) — change BOTH or SearchTurnFlipAgreementTests fails.
         private static void AdvanceBetrayalState(BoardState board, MoveCommand move)
         {
             if (move.Stage == BetrayalStage.Act)
@@ -677,13 +722,9 @@ namespace ChessTheBetrayal.Core.Engine
 
         /// <summary>
         /// Rolls back a move completely, restoring the board to exactly how it was before.
-        /// This is how the AI can explore thousands of move sequences without ever copying the board.
+        /// This is how a search can explore thousands of move sequences without ever copying the board.
         /// </summary>
-        /// <remarks>
-        /// The InternalsVisibleTo at the top of the file lets the edit-mode tests call this directly;
-        /// other production assemblies still can't.
-        /// </remarks>
-        internal static void UndoMoveOnBoard(BoardState board, MoveCommand move, bool recordHistory = true)
+        public static void UndoMoveOnBoard(BoardState board, MoveCommand move, bool recordHistory = true)
         {
             int currentCastlingMask = board.CastlingRights;
             int? currentEnPassantFile = board.EnPassantFile;
