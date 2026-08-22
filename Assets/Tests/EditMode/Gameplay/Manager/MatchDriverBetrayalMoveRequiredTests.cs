@@ -12,7 +12,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
     /// continue its own forced Betrayal sub-sequence. Act and Defection do NOT flip the side to
     /// move (the turn-flip invariant), so no TurnChangedEvent fires after them; without this event
     /// the AI would Act and then hang forever in RetributionPending, never playing the Retribution
-    /// it owes. This bug was invisible to the AI-11 integration tests because those drove the
+    /// it owes. This bug was invisible to the earlier integration tests because those drove the
     /// Retribution ply by hand instead of through the live event flow.
     /// </summary>
     [TestFixture]

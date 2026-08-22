@@ -8,7 +8,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
     /// <summary>
     /// Owns the match clock's lifecycle: constructing it for a new match (bypassed entirely for
     /// AI/Unlimited sessions), attaching it to MatchDriver, tearing it down, and answering the
-    /// current snapshot. Extracted from GameManager (AI-13) alongside AIMatchCoordinator so the
+    /// current snapshot. Split out of GameManager alongside AIMatchCoordinator so the
     /// clock-specific slice of match orchestration is a plain, testable C# class instead of
     /// MonoBehaviour-embedded code.
     ///

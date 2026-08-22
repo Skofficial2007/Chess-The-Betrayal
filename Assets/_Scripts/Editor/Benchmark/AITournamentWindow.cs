@@ -11,11 +11,18 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
     /// head-to-head or a Quick/Full tournament, and watch standings, per-tier search cost, and
     /// baseline-drift findings fill in live. Strictly a presentation layer — every game is played
     /// by the same session/seeding the batch BenchmarkRunner uses, so a result seen here at seed N
-    /// is bit-identical to a CI run at seed N.
+    /// matches a CI run at seed N (see TournamentSession's own doc comment for the one caveat
+    /// time-budgeted searches put on exact reproduction).
     ///
-    /// Each game is a real synchronous search at the profiles' real depths, so the editor freezes
-    /// for that game's duration between repaints — expect visible stalls on the deep tiers. A run
-    /// does not survive a domain reload (recompiling scripts mid-run cancels it).
+    /// Two ways to run: Live plays one game per editor tick on the main thread (the editor freezes
+    /// for each game's duration between repaints, expect visible stalls on deep tiers) so standings
+    /// fill in as it goes and a cancel is instant. Parallel (Quick/Full only) hands the whole run to
+    /// ParallelTournamentExecutor on a background thread instead, polling a single cancelable
+    /// progress bar — dramatically faster wall-clock, at the cost of no live per-game standings
+    /// until the run (or a cancel) finishes. Neither survives a domain reload (recompiling scripts
+    /// mid-run cancels it); Parallel additionally blocks RunParallel's own call frame until the
+    /// background task unwinds, so closing the window mid-run waits for that unwind rather than
+    /// tearing down instantly the way Live's per-tick pump does.
     /// </summary>
     public sealed class AITournamentWindow : EditorWindow
     {
@@ -53,6 +60,7 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
             public string Id;
             public int MaxDepth;
             public int SoftTimeBudgetMs;
+            public int HardTimeBudgetMs;
             public float BlunderRate;
             public int BlunderMarginCp;
             public float BetrayalAggression;
@@ -64,6 +72,7 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
                 Id = id,
                 MaxDepth = 3,
                 SoftTimeBudgetMs = 1000,
+                HardTimeBudgetMs = 1500,
                 BlunderRate = 0f,
                 BlunderMarginCp = 0,
                 BetrayalAggression = 0f,
@@ -71,11 +80,12 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
                 TieBreakWindowCp = 0,
             };
 
-            // The simulator never consults the opening book (it starts from curated middlegame-ish
-            // positions the book has no entries for), so the flag is fixed off rather than shown as
-            // a dial that would do nothing.
+            // The simulator never consults the opening book — deliberately, so a tournament
+            // measures raw search strength rather than book coverage (several curated starting
+            // positions ARE reachable book lines, so a book probe would short-circuit real
+            // searches). The flag is fixed off rather than shown as a dial that would do nothing.
             public AIProfile Build() => AIProfileGuardrails.Apply(new AIProfile(
-                Id, MaxDepth, SoftTimeBudgetMs, BlunderRate, BlunderMarginCp,
+                Id, MaxDepth, new AITimeBudget(SoftTimeBudgetMs, HardTimeBudgetMs), BlunderRate, BlunderMarginCp,
                 BetrayalAggression, AttackDefenseBias, TieBreakWindowCp, useOpeningBook: false));
         }
 
@@ -149,8 +159,12 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
             EditorGUILayout.BeginHorizontal();
             if (!running)
             {
-                if (GUILayout.Button("Run Tournament", GUILayout.Height(26)))
+                if (GUILayout.Button("Run Tournament (Live)", GUILayout.Height(26)))
                     StartRun();
+
+                if (_kind != TournamentKind.HeadToHead &&
+                    GUILayout.Button("Run Tournament (Parallel, faster)", GUILayout.Height(26)))
+                    RunParallel();
             }
             else
             {
@@ -158,6 +172,16 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
                     StopRun();
             }
             EditorGUILayout.EndHorizontal();
+
+            if (!running)
+            {
+                EditorGUILayout.HelpBox(
+                    "Live plays one game per editor tick and repaints as it goes, so you can watch standings fill " +
+                    "in and cancel mid-run — best for a HeadToHead you're actively reading. Parallel plays every " +
+                    "game across worker threads with a single cancelable progress bar instead — dramatically " +
+                    "faster for Quick/Full, at the cost of not seeing per-game results until it finishes.",
+                    MessageType.None);
+            }
         }
 
         private static readonly string[] _builtInIdsCache = BuildChoiceLabels();
@@ -183,6 +207,7 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
             draft.Id = EditorGUILayout.TextField("Id", string.IsNullOrWhiteSpace(draft.Id) ? "custom" : draft.Id);
             draft.MaxDepth = EditorGUILayout.IntSlider("Max Depth", draft.MaxDepth, 1, 12);
             draft.SoftTimeBudgetMs = Mathf.Max(1, EditorGUILayout.IntField("Soft Time Budget (ms)", draft.SoftTimeBudgetMs));
+            draft.HardTimeBudgetMs = Mathf.Max(draft.SoftTimeBudgetMs, EditorGUILayout.IntField("Hard Time Budget (ms)", draft.HardTimeBudgetMs));
             draft.BlunderRate = EditorGUILayout.Slider("Blunder Rate", draft.BlunderRate, 0f, 1f);
             draft.BlunderMarginCp = Mathf.Max(0, EditorGUILayout.IntField("Blunder Margin (cp)", draft.BlunderMarginCp));
             draft.BetrayalAggression = EditorGUILayout.Slider("Betrayal Aggression", draft.BetrayalAggression, -1f, 1f);
@@ -235,6 +260,78 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
 
             _session.OnGameCompleted += HandleGameCompleted;
             EditorApplication.update += Pump;
+        }
+
+        /// <summary>
+        /// Runs a Quick/Full tournament through ParallelTournamentExecutor instead of the per-tick
+        /// live pump. The executor itself runs on a background thread (Parallel.For blocks its
+        /// caller until every game finishes, and running it directly on the main thread would
+        /// freeze the whole editor exactly like the old single-threaded path did — the entire
+        /// reason for this second button is to avoid that) while this thread polls a thread-safe
+        /// progress counter and drives a cancelable progress bar. Folding results into the session
+        /// (ApplyCompletedGame, which raises OnGameCompleted) still happens on the executor's
+        /// thread — fine here because nothing subscribes to OnGameCompleted during a parallel run,
+        /// unlike the live path.
+        /// </summary>
+        private void RunParallel()
+        {
+            _baseline = BenchmarkBaselineIO.TryRead(BenchmarkBaselineIO.DefaultPath);
+            _findings.Clear();
+            _report = null;
+
+            _session = _kind == TournamentKind.Quick
+                ? TournamentSession.CreateQuick(_runSeed, AIProfileTable.BuiltIn, _plyCap)
+                : TournamentSession.CreateFull(_runSeed, AIProfileTable.BuiltIn, _plyCap);
+
+            TournamentSession session = _session;
+            var cts = new System.Threading.CancellationTokenSource();
+            var progress = new PolledProgress();
+
+            int totalGames = session.TotalGames; // known immediately — don't wait on the first worker report to show a cancel option
+            var workerTask = System.Threading.Tasks.Task.Run(() =>
+                ParallelTournamentExecutor.RunRemainingGames(session, cancellationToken: cts.Token, progress: progress));
+
+            while (!workerTask.IsCompleted)
+            {
+                progress.Snapshot(out int completed, out _);
+                bool cancelled = EditorUtility.DisplayCancelableProgressBar(
+                    "AI Tournament (Parallel)", $"{completed} / {totalGames} games",
+                    totalGames == 0 ? 0f : (float)completed / totalGames);
+                if (cancelled)
+                {
+                    cts.Cancel();
+                    break;
+                }
+                System.Threading.Thread.Sleep(50);
+            }
+
+            workerTask.Wait(); // RunRemainingGames swallows OperationCanceledException itself; this never throws from cancellation.
+            EditorUtility.ClearProgressBar();
+
+            _report = session.BuildReport();
+            _findings = BenchmarkDriftAnalyzer.Analyze(_report, _baseline);
+            _session = null;
+            Repaint();
+        }
+
+        /// <summary>Thread-safe last-known-progress holder — RunParallel's polling loop reads this
+        /// from the main thread while ParallelTournamentExecutor's workers write it concurrently.</summary>
+        private sealed class PolledProgress : ITournamentProgress
+        {
+            private int _completed;
+            private int _total;
+
+            public void ReportGameCompleted(int current, int total)
+            {
+                System.Threading.Interlocked.Exchange(ref _completed, current);
+                System.Threading.Interlocked.Exchange(ref _total, total);
+            }
+
+            public void Snapshot(out int completed, out int total)
+            {
+                completed = System.Threading.Volatile.Read(ref _completed);
+                total = System.Threading.Volatile.Read(ref _total);
+            }
         }
 
         private void StopRun()

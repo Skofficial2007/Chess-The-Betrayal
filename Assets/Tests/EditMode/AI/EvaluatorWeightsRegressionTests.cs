@@ -6,10 +6,11 @@ using ChessTheBetrayal.Tests.Utilities;
 namespace ChessTheBetrayal.Tests.EditMode.AI
 {
     /// <summary>
-    /// AI-25 gave BetrayalAwareEvaluator an EvaluationWeights struct — this is the safety net
-    /// proving that default/identity weights (every tier except Aggressive/Extreme, since their
-    /// AttackDefenseBias == 1 and BetrayalAggression == 0) score bit-identically to the pre-AI-25
-    /// evaluator. Reuses EvaluatorTests.cs's exact positions plus one shelter-pawn position.
+    /// BetrayalAwareEvaluator scales its non-material terms through an EvaluationWeights struct.
+    /// This is the safety net proving that default/identity weights (every tier except Aggressive
+    /// and Extreme, since their AttackDefenseBias == 1 and BetrayalAggression == 0) score
+    /// bit-identically to an unweighted evaluator — weighting must be genuinely inert at identity,
+    /// not merely close. Reuses EvaluatorTests.cs's exact positions plus one shelter-pawn position.
     /// </summary>
     [TestFixture]
     public class EvaluatorWeightsRegressionTests

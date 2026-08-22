@@ -1,4 +1,5 @@
 using System.Text;
+using ChessTheBetrayal.AI;
 using UnityEditor;
 using UnityEngine;
 
@@ -31,7 +32,8 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
                 "Run and overwrite", "Cancel");
             if (!confirmed) return;
 
-            BenchmarkReport report = BenchmarkRunner.RunAll(DefaultRunSeed, BenchmarkMode.Full);
+            BenchmarkReport report = BenchmarkRunner.RunAll(DefaultRunSeed, BenchmarkMode.Full,
+                AIProfileTable.BuiltIn, progress: new DebugLogProgressSink("Update Baseline"));
             BenchmarkBaselineIO.Write(report, BenchmarkBaselineIO.DefaultPath);
 
             Debug.Log($"Benchmark baseline updated: {report.PairResults.Count} pairing(s), {report.TierPerformances.Count} tier(s) recorded.");
@@ -39,7 +41,8 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
 
         private static void RunAndLog(BenchmarkMode mode)
         {
-            BenchmarkReport report = BenchmarkRunner.RunAll(DefaultRunSeed, mode);
+            BenchmarkReport report = BenchmarkRunner.RunAll(DefaultRunSeed, mode,
+                AIProfileTable.BuiltIn, progress: new DebugLogProgressSink(mode.ToString()));
             BenchmarkReport baseline = BenchmarkBaselineIO.TryRead(BenchmarkBaselineIO.DefaultPath);
 
             Debug.Log(FormatReport(report, baseline));
@@ -48,14 +51,18 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
         /// <summary>Batchmode/CI entry point: <c>Unity -batchmode -executeMethod
         /// ChessTheBetrayal.EditorTools.Benchmark.BenchmarkMenu.RunQuickBatch</c> (or RunFullBatch).
         /// Logs the same report a menu run would and exits with a nonzero code if any Fail-severity
-        /// finding survives, so a CI job can gate on it without parsing log text.</summary>
+        /// finding survives, so a CI job can gate on it without parsing log text. Progress logs
+        /// through Debug.Log — visible in a batchmode run's Editor.log even with no console
+        /// attached, the exact signal that was missing when this tooling used to go silent for
+        /// 30+ minutes with no way to tell a slow run from a stalled one.</summary>
         public static void RunQuickBatch() => RunBatch(BenchmarkMode.Quick);
 
         public static void RunFullBatch() => RunBatch(BenchmarkMode.Full);
 
         private static void RunBatch(BenchmarkMode mode)
         {
-            BenchmarkReport report = BenchmarkRunner.RunAll(DefaultRunSeed, mode);
+            BenchmarkReport report = BenchmarkRunner.RunAll(DefaultRunSeed, mode,
+                AIProfileTable.BuiltIn, progress: new DebugLogProgressSink($"{mode} Batch"));
             BenchmarkReport baseline = BenchmarkBaselineIO.TryRead(BenchmarkBaselineIO.DefaultPath);
 
             Debug.Log(FormatReport(report, baseline));

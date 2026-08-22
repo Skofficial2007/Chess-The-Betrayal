@@ -9,12 +9,13 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
 {
     /// <summary>
     /// Pins the TT's match-scoped lifetime: it must persist across successive FindBestMove calls
-    /// on the same AlphaBetaSearch instance (this is what attacks the turn-N -> turn-N+1 node-count
-    /// escalation the ADR targets), and must be fully wiped by an explicit Clear() for a new match.
+    /// on the same AlphaBetaSearch instance (reusing what the previous turn learned is what stops
+    /// node counts escalating from one turn to the next), and must be fully wiped by an explicit
+    /// Clear() for a new match.
     ///
-    /// Probes target a POST-ROOT-MOVE position, not the root's own hash — per the ADR (Sec 2.5),
-    /// the root never stores or short-circuits on the TT (only the recursion below it does), so the
-    /// root position itself never gets an entry. One ply into the tree is where Search actually runs.
+    /// Probes target a POST-ROOT-MOVE position, not the root's own hash — the root never stores or
+    /// short-circuits on the TT (only the recursion below it does), so the root position itself
+    /// never gets an entry. One ply into the tree is where Search actually runs.
     /// </summary>
     [TestFixture]
     public class TranspositionTableLifecycleTests
@@ -49,7 +50,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             var tt = new TranspositionTable(log2Size: 12);
             var search = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator(), transpositionTable: tt);
             BoardState board = TestBoardSetupUtility.CreateStandard();
-            var settings = new AISearchSettings(maxDepth: 3, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 3, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
             ulong childHash = HashAfterFirstLegalMove(board);
 
             search.FindBestMove(board, settings, CancellationToken.None);
@@ -66,7 +67,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             var tt = new TranspositionTable(log2Size: 12);
             var search = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator(), transpositionTable: tt);
             BoardState board = TestBoardSetupUtility.CreateStandard();
-            var settings = new AISearchSettings(maxDepth: 3, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 3, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
             ulong childHash = HashAfterFirstLegalMove(board);
 
             search.FindBestMove(board, settings, CancellationToken.None);

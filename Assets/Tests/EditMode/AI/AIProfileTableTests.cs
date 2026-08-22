@@ -6,8 +6,8 @@ using ChessTheBetrayal.AI;
 namespace ChessTheBetrayal.Tests.EditMode.AI
 {
     /// <summary>
-    /// Pins the "new tier = new data row, zero code change" contract from
-    /// ADR_AI23_Profile_EventStream_OpeningBook.md Section 1.1/1.3.
+    /// Pins the "new tier = new data row, zero code change" contract: adding a difficulty must
+    /// only ever mean adding a row to the table, never editing search or selection logic.
     /// </summary>
     [TestFixture]
     public class AIProfileTableTests
@@ -39,8 +39,25 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
 
                 Assert.That(settings.MaxDepth, Is.EqualTo(profile.MaxDepth));
                 Assert.That(settings.MaxDepth, Is.GreaterThan(0));
-                Assert.That(settings.SoftTimeBudgetMs, Is.EqualTo(profile.SoftTimeBudgetMs));
-                Assert.That(settings.SoftTimeBudgetMs, Is.GreaterThan(0));
+                Assert.That(settings.TimeBudget.SoftMs, Is.EqualTo(profile.TimeBudget.SoftMs));
+                Assert.That(settings.TimeBudget.SoftMs, Is.GreaterThan(0));
+                Assert.That(settings.TimeBudget.HardMs, Is.GreaterThanOrEqualTo(settings.TimeBudget.SoftMs));
+            }
+        }
+
+        [Test]
+        public void BuiltIn_EveryRow_SoftTimeBudgetStaysAtOrBelowTheRealPerMoveTarget()
+        {
+            // Every tier is now measured (not guessed) to comfortably finish its full search well
+            // under the 3-second per-move target, so nothing should ever be configured to try for
+            // longer than that on its own initiative — a slow position hitting the hard ceiling is
+            // still possible, but the search should never be TARGETING more than 3s as its soft goal.
+            const int realTargetMs = 3000;
+            foreach (var profile in AIProfileTable.BuiltIn)
+            {
+                Assert.That(profile.TimeBudget.SoftMs, Is.LessThanOrEqualTo(realTargetMs),
+                    $"'{profile.Id}' has a soft time budget of {profile.TimeBudget.SoftMs}ms — " +
+                    $"every tier should target at most {realTargetMs}ms per move.");
             }
         }
 
@@ -93,7 +110,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         {
             var extendedRoster = new List<AIProfile>(AIProfileTable.BuiltIn)
             {
-                new AIProfile("berserker", maxDepth: 4, softTimeBudgetMs: 1000,
+                new AIProfile("berserker", maxDepth: 4, timeBudget: new AITimeBudget(1000, 1500),
                     blunderRate: 0.15f, blunderMarginCp: 50, betrayalAggression: 1f,
                     attackDefenseBias: 2f, tieBreakWindowCp: 40, useOpeningBook: false)
             };

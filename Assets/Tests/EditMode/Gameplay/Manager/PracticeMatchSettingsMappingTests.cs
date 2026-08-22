@@ -11,7 +11,8 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
     /// <summary>
     /// Confirms PracticeMatchSettings.AiProfileId flows end to end from the settings struct,
     /// through MatchFlowCoordinator.HandleTeamAnimationComplete, into AIMatchCoordinator.SetAIMode
-    /// — the gap AI-23 closes (previously the id was read only for a debug log, never forwarded).
+    /// — the id used to be read only for a debug log and never forwarded, so every Practice match
+    /// silently played against the default profile regardless of the chosen difficulty.
     /// Mirrors MatchFlowCoordinatorTests' fixture construction.
     /// </summary>
     [TestFixture]

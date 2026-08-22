@@ -24,8 +24,8 @@ namespace ChessTheBetrayal.Gameplay.Manager
     /// <summary>
     /// Owns the background-thread AI agent's lifecycle: constructing it for a session, deciding
     /// when to ask it for a move, pumping its main-thread result delivery, and tearing it down.
-    /// Extracted from GameManager (AI-13) so the AI-specific slice of match orchestration is a
-    /// plain, testable C# class instead of MonoBehaviour-embedded code.
+    /// Split out of GameManager so the AI-specific slice of match orchestration is a plain,
+    /// testable C# class instead of MonoBehaviour-embedded code.
     ///
     /// Takes the move-playing seam as a delegate (<see cref="_playMove"/>) rather than a
     /// <see cref="MatchDriver"/> reference — the coordinator's only call into match-flow is
@@ -99,8 +99,9 @@ namespace ChessTheBetrayal.Gameplay.Manager
         /// <summary>
         /// Configures the session for AI play and constructs the background-thread search agent.
         /// AI sessions always run untimed — the caller is responsible for bypassing clock setup.
-        /// openingBook is optional (null skips opening-book play entirely, matching pre-AI-28
-        /// behavior) — GameManager supplies its compiled OpeningBookAsset via the Inspector.
+        /// openingBook is optional (null skips opening-book play entirely, so the AI searches for
+        /// its own move from move one) — GameManager supplies its compiled OpeningBookAsset via
+        /// the Inspector.
         /// </summary>
         public void SetAIMode(Team aiTeam, BetrayalUsage betrayalUsage, string aiProfileId, OpeningBookAsset openingBook = null)
         {

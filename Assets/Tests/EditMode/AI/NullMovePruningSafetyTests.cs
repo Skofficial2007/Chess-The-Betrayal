@@ -8,7 +8,7 @@ using ChessTheBetrayal.Tests.Utilities;
 namespace ChessTheBetrayal.Tests.EditMode.AI
 {
     /// <summary>
-    /// Proves the NMP guard set (ADR Sec 1.2/2.3) actually blocks a null move in every case it must:
+    /// Proves the NMP guard set actually blocks a null move in every case it must:
     /// a pending Betrayer at ANY sub-phase (Act-pending, Retribution-pending, ForcedSave-pending),
     /// being in check, and two consecutive null moves. These are correctness gates, not perf
     /// gates — the whole point is that FindBestMove/RunQuiescenceForTest never desyncs the turn or
@@ -42,7 +42,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 .WithComputedHash();
 
             ulong hashBefore = board.ZobristHash;
-            var settings = new AISearchSettings(maxDepth: 5, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 5, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             Assert.DoesNotThrow(() => _search.FindBestMove(board, settings, CancellationToken.None));
 
@@ -66,7 +66,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 .WithComputedHash();
 
             ulong hashBefore = board.ZobristHash;
-            var settings = new AISearchSettings(maxDepth: 5, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 5, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             Assert.DoesNotThrow(() => _search.FindBestMove(board, settings, CancellationToken.None));
 
@@ -88,7 +88,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 .WithComputedHash();
 
             ulong hashBefore = board.ZobristHash;
-            var settings = new AISearchSettings(maxDepth: 5, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 5, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             Assert.DoesNotThrow(() => _search.FindBestMove(board, settings, CancellationToken.None));
 
@@ -110,7 +110,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 .WithComputedHash();
 
             ulong hashBefore = board.ZobristHash;
-            var settings = new AISearchSettings(maxDepth: 5, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 5, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             Assert.DoesNotThrow(() => _search.FindBestMove(board, settings, CancellationToken.None));
 
@@ -128,7 +128,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             // the parentWasNull guard is actually wired through the recursion, not just declared.
             BoardState board = TestBoardSetupUtility.CreateStandard();
             ulong hashBefore = board.ZobristHash;
-            var settings = new AISearchSettings(maxDepth: 4, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 4, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             Assert.DoesNotThrow(() => _search.FindBestMove(board, settings, CancellationToken.None));
 

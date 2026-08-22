@@ -25,6 +25,28 @@ namespace ChessTheBetrayal.AI
         public long PvsScouts;
         public long PvsReSearches;    // null-window scout landed inside (alpha, beta) and was re-searched
 
+        // Forward-pruning family — each counts a node/move it actually skipped, not an
+        // attempt, mirroring NullMoveCutoffs' own "only the successful case" convention.
+        public long ReverseFutilityCutoffs;
+        public long LateMovePrunes;
+        public long FrontierFutilityPrunes;
+
+        public long BetrayalExtensions; // Acts granted a search extension for staging a forced Retribution
+
+        // Main-search nodes whose pending Retribution had no legal executioner, so the Betrayer's
+        // forced Defection was resolved in-line and the search continued through it (see
+        // AlphaBetaSearch.ResolveForcedDefectionInSearch). Quiescence's own resolutions are counted
+        // separately under QBetrayalResolutionNodes below.
+        public long ForcedDefectionResolutions;
+
+        public long IirReductions; // nodes given a shallower probe search to find an ordering move before the real search
+
+        // Aspiration windows (experimental) — depths searched with a narrow guessed window, and how
+        // many of those had to be thrown away and re-searched with the full window because the
+        // guess was wrong (a fail-low or fail-high against the narrow bound).
+        public long AspirationWindowAttempts;
+        public long AspirationWindowReSearches;
+
         // Quiescence node-count breakdown. NodesVisited above counts ONLY main-search (Search)
         // nodes; Quiescence() increments nothing there by design. These fields fill that gap so the
         // qtree's size and shape can be measured directly instead of inferred from wall-clock/
@@ -34,13 +56,14 @@ namespace ChessTheBetrayal.AI
         public long QActExpansions;             // qsearch-loop moves surviving the filter with Stage == Act
         public long QMovesGenerated;            // total moves returned by the captures/Acts generator per standard qnode
         public long QMovesSearched;             // of those, how many survived the delta-prune filter
+        public long SeeQuiescencePrunes;        // qsearch captures skipped for having a losing static-exchange result
 
         /// <summary>The deepest iterative-deepening depth FindBestMove fully completed before
         /// returning — via a soft-time-budget cancellation, MaxDepth being reached, or an early
         /// mate-found exit. Lets a caller distinguish "the search finished on its own" from "it
         /// got cut off partway" without changing FindBestMove's return type, and is the only way
         /// to compare search throughput across two runs that both hit the same wall-clock budget
-        /// cap (e.g. two devices both capped at a profile's SoftTimeBudgetMs) — the elapsed time
+        /// cap (e.g. two devices both capped at a profile's TimeBudget) — the elapsed time
         /// alone is identical in that case, but the depth reached is not.</summary>
         public int LastCompletedDepth;
 
@@ -80,7 +103,9 @@ namespace ChessTheBetrayal.AI
         public override string ToString() =>
             $"depth={LastCompletedDepth} nodes={NodesVisited} tt(probe={TTProbes} hit={TTHits} emptyMiss={TTEmptyMisses} verifyMiss={TTVerificationMisses} store={TTStores} replace={TTReplacements}) " +
             $"null(try={NullMoveAttempts} cut={NullMoveCutoffs}) lmr(reduce={LmrReductions} research={LmrReSearches}) pvs(scout={PvsScouts} research={PvsReSearches}) " +
-            $"q(nodes={QNodesVisited} betrayalRes={QBetrayalResolutionNodes} actExp={QActExpansions} gen={QMovesGenerated} searched={QMovesSearched}) " +
+            $"fwdPrune(rfp={ReverseFutilityCutoffs} lmp={LateMovePrunes} ffp={FrontierFutilityPrunes}) betrayalExt={BetrayalExtensions} forcedDefection={ForcedDefectionResolutions} iir={IirReductions} " +
+            $"aspiration(attempt={AspirationWindowAttempts} research={AspirationWindowReSearches}) " +
+            $"q(nodes={QNodesVisited} betrayalRes={QBetrayalResolutionNodes} actExp={QActExpansions} gen={QMovesGenerated} searched={QMovesSearched} seePrune={SeeQuiescencePrunes}) " +
             $"depthCurve(d1={NodesAfterDepth1} d2={NodesAfterDepth2} d3={NodesAfterDepth3} d4={NodesAfterDepth4} d5={NodesAfterDepth5} d6={NodesAfterDepth6} d7={NodesAfterDepth7})";
     }
 }

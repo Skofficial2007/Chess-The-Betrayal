@@ -99,8 +99,8 @@ namespace ChessTheBetrayal.AI
 
         /// <summary>
         /// openingBook is optional (null skips book lookup entirely) and only ever consulted when
-        /// profile.UseOpeningBook is true — a profile that opts out of the book plays search moves
-        /// from move one, matching the pre-AI-28 behavior for that profile.
+        /// profile.UseOpeningBook is true — a profile that opts out of the book searches for its
+        /// own move from move one.
         /// </summary>
         public AsyncAIAgent(IChessEngine engine, IPositionEvaluator evaluator, AISearchSettings settings,
             AIProfile profile, IRandomSource rng, OpeningBookAsset openingBook)
@@ -148,14 +148,14 @@ namespace ChessTheBetrayal.AI
             CancellationTokenSource ctsForThisSearch = _cts; // captured so a later RequestBestMove/CancelSearch swapping _cts can't affect this closure
             CancellationToken token = _cts.Token;
 
-            // The wall-clock half of iterative deepening: FindBestMove's depth loop already keeps
-            // the best move from the last FULLY COMPLETED depth and discards a cancelled partial
-            // depth (see its doc comment) — but until now nothing ever triggered that cancellation
-            // on a timer, so SoftTimeBudgetMs was dead data and a hard position could run as long as
-            // MaxDepth allowed. CancelAfter arms exactly the timeout every iterative-deepening chess
-            // engine uses: let the search run until the budget expires, then stop and use whatever
-            // depth it finished. Never throws/blocks — it just schedules Cancel() on the timer thread.
-            _cts.CancelAfter(_settings.SoftTimeBudgetMs);
+            // The wall-clock backstop of iterative deepening: FindBestMove's depth loop already
+            // keeps the best move from the last FULLY COMPLETED depth and discards a cancelled
+            // partial depth (see its doc comment). Arming this timer at the HARD budget rather
+            // than the soft one gives the search room to spend the gap between them on a position
+            // that looks unsettled (see FindBestMove's own soft-budget handling) while this timer
+            // still guarantees the search can never run past the hard ceiling no matter what it
+            // decides internally. Never throws/blocks — it just schedules Cancel() on the timer thread.
+            _cts.CancelAfter(_settings.TimeBudget.HardMs);
 
             Task.Run(() =>
             {
@@ -164,16 +164,23 @@ namespace ChessTheBetrayal.AI
                     // rescoreMargin > 0 only for a personality-driven profile (BlunderMarginCp or
                     // TieBreakWindowCp nonzero) — un-biases the alpha-beta-tightened scores of the
                     // handful of candidates SelectFinalMove might actually pick. Zero for the
-                    // convenience-ctor/zero-dial (Impossible tier) path, matching pre-AI-24 cost.
+                    // convenience-ctor/zero-dial (Impossible tier) path, which skips the rescore
+                    // pass entirely and so pays nothing for it.
                     int rescoreMargin = Math.Max(_profile.BlunderMarginCp, _profile.TieBreakWindowCp);
-                    MoveCommand best = _search.FindBestMove(isolated, _settings, token, rescoreMargin);
+                    MoveCommand best = _search.FindBestMove(isolated, _settings, token, rescoreMargin,
+                        enableInstabilityTimeManagement: true);
 
                     // MoveSelectionPolicy applies AIProfile's personality dials to the search's own
                     // ranked root-move output — still on THIS worker thread, before the result ever
                     // crosses to the main thread. rng == null (convenience ctor) or a fully zero-dial
                     // profile both skip this entirely, returning FindBestMove's own best move
-                    // unchanged — byte-identical to pre-AI-24 behavior.
-                    if (_rng != null && (_profile.BlunderRate > 0f || _profile.TieBreakWindowCp > 0))
+                    // unchanged. RootScoresExactForSelection guards the remaining case: a search
+                    // that spent its whole budget on the depth loop never got its candidate scores
+                    // rescored to exact values, and picking "near-best" moves from the leftover
+                    // alpha-beta bounds is how a time-capped tier ends up playing near-random moves —
+                    // personality dials only apply when the scores they read are real.
+                    if (_rng != null && (_profile.BlunderRate > 0f || _profile.TieBreakWindowCp > 0)
+                        && _search.RootScoresExactForSelection)
                     {
                         best = _selectionPolicy.SelectFinalMove(
                             _search.RootMoves, _search.RootScores, _search.RootMoveCount, _search.BestRootIndex,
@@ -184,7 +191,7 @@ namespace ChessTheBetrayal.AI
                     // deepening — FindBestMove already returns the best move from the last fully
                     // completed depth in that case, so it must still be delivered. token.
                     // IsCancellationRequested being true does NOT mean the search was aborted: it is
-                    // ALSO true when our own CancelAfter(SoftTimeBudgetMs) timer simply expired, which
+                    // ALSO true when our own CancelAfter(HardMs) timer simply expired, which
                     // is the common, correct outcome in a real match. Two genuinely different "this
                     // search no longer matters" conditions must still discard the result:
                     //   1. The caller's own `cancellation` token fired (game reset / scene change /

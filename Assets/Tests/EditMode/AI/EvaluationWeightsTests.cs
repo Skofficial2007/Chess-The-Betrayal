@@ -38,7 +38,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             // A hypothetical future tier at the documented bias ceiling (2.0) would compute
             // DefenseScale = 2 - 2 = 0, but the mapping floors it at 0.5 so defense can never
             // vanish entirely.
-            var extremeBiasProfile = new AIProfile("hypothetical", maxDepth: 1, softTimeBudgetMs: 1,
+            var extremeBiasProfile = new AIProfile("hypothetical", maxDepth: 1, timeBudget: new AITimeBudget(1, 1),
                 blunderRate: 0f, blunderMarginCp: 0, betrayalAggression: 0f,
                 attackDefenseBias: 2.0f, tieBreakWindowCp: 0, useOpeningBook: false);
 

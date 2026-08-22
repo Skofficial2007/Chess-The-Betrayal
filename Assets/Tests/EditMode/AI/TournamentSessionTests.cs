@@ -3,6 +3,7 @@ using System.Linq;
 using NUnit.Framework;
 using ChessTheBetrayal.AI;
 using ChessTheBetrayal.EditorTools.Benchmark;
+using ChessTheBetrayal.Tests.Utilities;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI
 {
@@ -20,12 +21,12 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
 
         private static readonly IReadOnlyList<AIProfile> FastFixtureRoster = new[]
         {
-            new AIProfile("easy", maxDepth: 1, softTimeBudgetMs: 500, blunderRate: 0.3f, blunderMarginCp: 120, betrayalAggression: 0f, attackDefenseBias: 1f, tieBreakWindowCp: 30, useOpeningBook: false),
-            new AIProfile("normal", maxDepth: 1, softTimeBudgetMs: 500, blunderRate: 0.1f, blunderMarginCp: 80, betrayalAggression: 0f, attackDefenseBias: 1f, tieBreakWindowCp: 20, useOpeningBook: false),
-            new AIProfile("hard", maxDepth: 2, softTimeBudgetMs: 500, blunderRate: 0.02f, blunderMarginCp: 40, betrayalAggression: 0f, attackDefenseBias: 1f, tieBreakWindowCp: 15, useOpeningBook: false),
-            new AIProfile("aggressive", maxDepth: 1, softTimeBudgetMs: 500, blunderRate: 0.05f, blunderMarginCp: 60, betrayalAggression: 0.7f, attackDefenseBias: 1.5f, tieBreakWindowCp: 25, useOpeningBook: false),
-            new AIProfile("extreme", maxDepth: 2, softTimeBudgetMs: 500, blunderRate: 0f, blunderMarginCp: 0, betrayalAggression: 0.3f, attackDefenseBias: 1.2f, tieBreakWindowCp: 10, useOpeningBook: false),
-            new AIProfile("impossible", maxDepth: 1, softTimeBudgetMs: 500, blunderRate: 0f, blunderMarginCp: 0, betrayalAggression: 0f, attackDefenseBias: 1f, tieBreakWindowCp: 0, useOpeningBook: false),
+            new AIProfile("easy", maxDepth: 1, timeBudget: new AITimeBudget(500, 750), blunderRate: 0.3f, blunderMarginCp: 120, betrayalAggression: 0f, attackDefenseBias: 1f, tieBreakWindowCp: 30, useOpeningBook: false),
+            new AIProfile("normal", maxDepth: 1, timeBudget: new AITimeBudget(500, 750), blunderRate: 0.1f, blunderMarginCp: 80, betrayalAggression: 0f, attackDefenseBias: 1f, tieBreakWindowCp: 20, useOpeningBook: false),
+            new AIProfile("hard", maxDepth: 2, timeBudget: new AITimeBudget(500, 750), blunderRate: 0.02f, blunderMarginCp: 40, betrayalAggression: 0f, attackDefenseBias: 1f, tieBreakWindowCp: 15, useOpeningBook: false),
+            new AIProfile("aggressive", maxDepth: 1, timeBudget: new AITimeBudget(500, 750), blunderRate: 0.05f, blunderMarginCp: 60, betrayalAggression: 0.7f, attackDefenseBias: 1.5f, tieBreakWindowCp: 25, useOpeningBook: false),
+            new AIProfile("extreme", maxDepth: 2, timeBudget: new AITimeBudget(500, 750), blunderRate: 0f, blunderMarginCp: 0, betrayalAggression: 0.3f, attackDefenseBias: 1.2f, tieBreakWindowCp: 10, useOpeningBook: false),
+            new AIProfile("impossible", maxDepth: 1, timeBudget: new AITimeBudget(500, 750), blunderRate: 0f, blunderMarginCp: 0, betrayalAggression: 0f, attackDefenseBias: 1f, tieBreakWindowCp: 0, useOpeningBook: false),
         };
 
         private static AIProfile Find(string id) => FastFixtureRoster.Single(p => p.Id == id);
@@ -105,11 +106,16 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         [Test]
         public void CreateQuick_DrainedSession_MatchesBenchmarkRunnerRunAll()
         {
-            var session = TournamentSession.CreateQuick(runSeed: 7, FastFixtureRoster, TestPlyCap);
+            // Uncapped: this test asserts identity between a hand-drained session and RunAll's
+            // (now parallel-by-default) drain — under a real time budget a search's own move
+            // choice can legitimately vary run to run with CPU contention, which would make this
+            // comparison flaky for a reason that has nothing to do with the two paths actually
+            // agreeing. See TournamentSession.CreateQuick's own doc comment.
+            var session = TournamentSession.CreateQuick(runSeed: 7, FastFixtureRoster, TestPlyCap, MatchTimeControl.Uncapped);
             while (session.RunNextGame()) { }
             BenchmarkReport fromSession = session.BuildReport();
 
-            BenchmarkReport fromRunAll = BenchmarkRunner.RunAll(runSeed: 7, BenchmarkMode.Quick, FastFixtureRoster, TestPlyCap);
+            BenchmarkReport fromRunAll = BenchmarkRunner.RunAll(runSeed: 7, BenchmarkMode.Quick, FastFixtureRoster, TestPlyCap, timeControl: MatchTimeControl.Uncapped);
 
             Assert.That(fromSession.PairResults.Count, Is.EqualTo(fromRunAll.PairResults.Count));
             for (int i = 0; i < fromSession.PairResults.Count; i++)

@@ -19,9 +19,9 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
     /// TEMPORARY diagnostic tool, not shipped gameplay code — delete this whole folder once real
     /// device throughput has been measured across enough devices and a mobile-tier perf plan
     /// exists. Because of that, this class allocates freely (StringBuilder-free plain strings, a
-    /// List&lt;MoveCommand&gt; per run) rather than following the zero-GC discipline the actual
-    /// gameplay/search hot path (AlphaBetaSearch, TranspositionTable) holds itself to — a benchmark
-    /// that runs twelve times total, not sixty times a second, is not that hot path.
+    /// List&lt;MoveCommand&gt; per run) rather than avoiding allocation the way the actual
+    /// gameplay/search hot path (AlphaBetaSearch, TranspositionTable) has to — a benchmark that
+    /// runs twelve times total, not sixty times a second, is not that hot path.
     /// </summary>
     public sealed class MobileSearchBenchmarkRunner
     {
@@ -69,24 +69,25 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         /// chess this simple loop can follow.
         /// </summary>
         private static AISearchSettings SettingsFor(AIProfile profile) =>
-            new AISearchSettings(profile.MaxDepth, profile.SoftTimeBudgetMs, BetrayalUsage.DefendOnly);
+            new AISearchSettings(profile.MaxDepth, profile.TimeBudget, BetrayalUsage.DefendOnly);
 
         /// <summary>
         /// Runs one search under the same wall-clock cap real gameplay uses: AsyncAIAgent arms
-        /// CancelAfter(SoftTimeBudgetMs) on every request, and iterative deepening returns the
-        /// best move from the last fully completed depth when that fires. Passing
-        /// CancellationToken.None instead (an earlier version of this tool did) lets a deep tier
-        /// like "impossible" run unbounded — timing a configuration that can never occur in a real
-        /// match. Budget-capped timings are what players actually experience.
+        /// CancelAfter(HardMs) on every request, and iterative deepening returns the best move
+        /// from the last fully completed depth when that fires. Passing CancellationToken.None
+        /// instead (an earlier version of this tool did) lets a deep tier like "impossible" run
+        /// unbounded — timing a configuration that can never occur in a real match. Budget-capped
+        /// timings are what players actually experience.
         /// </summary>
         private static MoveCommand TimedSearch(AlphaBetaSearch search, BoardState board,
             AISearchSettings settings, out SearchTiming timing)
         {
             using var cts = new CancellationTokenSource();
-            cts.CancelAfter(settings.SoftTimeBudgetMs);
+            cts.CancelAfter(settings.TimeBudget.HardMs);
 
             var stopwatch = Stopwatch.StartNew();
-            MoveCommand best = search.FindBestMove(board, settings, cts.Token);
+            MoveCommand best = search.FindBestMove(board, settings, cts.Token,
+                enableInstabilityTimeManagement: true);
             stopwatch.Stop();
 
             int depthReached = 0;

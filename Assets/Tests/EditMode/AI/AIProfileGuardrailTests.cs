@@ -14,13 +14,13 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
     {
         private static AIProfile ShallowProfile(float attackDefenseBias, float betrayalAggression) =>
             new AIProfile("test", maxDepth: AIProfileGuardrails.ShallowSearchDepthThreshold - 1,
-                softTimeBudgetMs: 1000, blunderRate: 0f, blunderMarginCp: 0,
+                timeBudget: new AITimeBudget(1000, 1500), blunderRate: 0f, blunderMarginCp: 0,
                 betrayalAggression: betrayalAggression, attackDefenseBias: attackDefenseBias,
                 tieBreakWindowCp: 0, useOpeningBook: false);
 
         private static AIProfile DeepProfile(float attackDefenseBias, float betrayalAggression) =>
             new AIProfile("test", maxDepth: AIProfileGuardrails.ShallowSearchDepthThreshold,
-                softTimeBudgetMs: 1000, blunderRate: 0f, blunderMarginCp: 0,
+                timeBudget: new AITimeBudget(1000, 1500), blunderRate: 0f, blunderMarginCp: 0,
                 betrayalAggression: betrayalAggression, attackDefenseBias: attackDefenseBias,
                 tieBreakWindowCp: 0, useOpeningBook: false);
 
@@ -81,7 +81,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         [Test]
         public void Apply_PreservesEveryOtherFieldUnchanged()
         {
-            var source = new AIProfile("test", maxDepth: 2, softTimeBudgetMs: 1234,
+            var source = new AIProfile("test", maxDepth: 2, timeBudget: new AITimeBudget(1234, 1999),
                 blunderRate: 0.5f, blunderMarginCp: 77, betrayalAggression: 1f,
                 attackDefenseBias: 2f, tieBreakWindowCp: 99, useOpeningBook: true);
 
@@ -89,7 +89,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
 
             Assert.That(result.Id, Is.EqualTo("test"));
             Assert.That(result.MaxDepth, Is.EqualTo(2));
-            Assert.That(result.SoftTimeBudgetMs, Is.EqualTo(1234));
+            Assert.That(result.TimeBudget.SoftMs, Is.EqualTo(1234));
+            Assert.That(result.TimeBudget.HardMs, Is.EqualTo(1999));
             Assert.That(result.BlunderRate, Is.EqualTo(0.5f));
             Assert.That(result.BlunderMarginCp, Is.EqualTo(77));
             Assert.That(result.TieBreakWindowCp, Is.EqualTo(99));
@@ -121,7 +122,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             var corruptedRoster = new[]
             {
                 new AIProfile("shallow-corrupt", maxDepth: AIProfileGuardrails.ShallowSearchDepthThreshold - 1,
-                    softTimeBudgetMs: 1000, blunderRate: 0f, blunderMarginCp: 0,
+                    timeBudget: new AITimeBudget(1000, 1500), blunderRate: 0f, blunderMarginCp: 0,
                     betrayalAggression: 1f, attackDefenseBias: 2f, tieBreakWindowCp: 0, useOpeningBook: false)
             };
             IAIProfileProvider provider = new GuardrailedFixtureProvider(corruptedRoster);

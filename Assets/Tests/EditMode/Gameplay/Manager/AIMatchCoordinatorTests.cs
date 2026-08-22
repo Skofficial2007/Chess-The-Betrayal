@@ -12,7 +12,7 @@ using ChessTheBetrayal.Tests.Utilities;
 namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
 {
     /// <summary>
-    /// AIMatchCoordinator is the AI-13 extraction of GameManager's AI-coordinator slice: turn
+    /// AIMatchCoordinator owns GameManager's AI-coordinator slice: turn
     /// triggering, search lifecycle, and Undo's cancel-before-pop ordering. Constructed with only
     /// IChessEngine/BoardState/a playMove delegate — no MatchDriver or GameManager reference — so
     /// these tests exercise it exactly the way GameManager composes it, minus the MonoBehaviour.
@@ -26,11 +26,11 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         // Shallow/fast settings for delivery/cancellation tests — mirrors AsyncAgentTests' own
         // depth-1 override, so these tests don't have to wait out a full deep search.
         private static AISearchSettings ShallowSettings(BetrayalUsage usage, AIProfile profile) =>
-            new AISearchSettings(maxDepth: 1, softTimeBudgetMs: 5000, usage);
+            new AISearchSettings(maxDepth: 1, TestTimeBudgets.Generous, usage);
 
         // Deep/slow settings, used only where a test needs a wide cancellation window.
         private static AISearchSettings SlowSettings(BetrayalUsage usage, AIProfile profile) =>
-            new AISearchSettings(maxDepth: 32, softTimeBudgetMs: 30_000, usage);
+            new AISearchSettings(maxDepth: 32, TestTimeBudgets.Generous, usage);
 
         private static readonly IAIProfileProvider ProfileProvider = new AIProfileTableProvider();
 

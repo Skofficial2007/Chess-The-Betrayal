@@ -16,7 +16,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
     public class MatchSimulatorTests
     {
         private static AIProfile Fast(string id, int maxDepth) =>
-            new AIProfile(id, maxDepth, softTimeBudgetMs: 2000, blunderRate: 0f, blunderMarginCp: 0,
+            new AIProfile(id, maxDepth, timeBudget: new AITimeBudget(2000, 3000), blunderRate: 0f, blunderMarginCp: 0,
                 betrayalAggression: 0f, attackDefenseBias: 1f, tieBreakWindowCp: 0, useOpeningBook: false);
 
         [Test]
@@ -59,6 +59,83 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
 
             Assert.That(result.PlyCount, Is.LessThanOrEqualTo(4));
             Assert.That(System.Enum.IsDefined(typeof(MatchOutcome), result.Outcome), Is.True);
+        }
+
+        [Test]
+        public void PlayGame_ReusingOneSimulatorAcrossGames_MatchesAFreshSimulatorsResult()
+        {
+            // The simulator keeps its two transposition tables alive across games and wipes them
+            // between games. If that wipe ever regressed, entries left over from the first game
+            // would perturb move ordering in the second and this comparison against a fresh
+            // simulator would diverge. Uncapped + zero-dial profiles so the games are fully
+            // deterministic and the only possible source of divergence is table carryover.
+            AIProfile shallow = Fast("shallow", maxDepth: 2);
+
+            var reused = new MatchSimulator(MatchTimeControl.Uncapped);
+            reused.PlayGame(CuratedPositionSuite.Build(0), shallow, shallow, rngSeedWhite: 111, rngSeedBlack: 222, plyCap: 12);
+            MatchResult second = reused.PlayGame(CuratedPositionSuite.Build(1), shallow, shallow, rngSeedWhite: 333, rngSeedBlack: 444, plyCap: 12);
+
+            MatchResult fresh = new MatchSimulator(MatchTimeControl.Uncapped)
+                .PlayGame(CuratedPositionSuite.Build(1), shallow, shallow, rngSeedWhite: 333, rngSeedBlack: 444, plyCap: 12);
+
+            Assert.That(second.Outcome, Is.EqualTo(fresh.Outcome));
+            Assert.That(second.PlyCount, Is.EqualTo(fresh.PlyCount));
+        }
+
+        [Test]
+        public void PlayGame_ProductionBudget_TightBudgetBoundsADeepProfilesMoves()
+        {
+            // A depth-9 profile squeezed into a 40ms hard budget: every move must get cut off by
+            // the budget timer instead of running its full depth. Ten such plies plus harness
+            // overhead land well under a second; the pre-time-control behavior (every move
+            // searched to depth 9 regardless) took multiple seconds per MOVE on midgame
+            // positions, so the generous ceiling here still cleanly separates the two.
+            var deepButTight = new AIProfile("deeptight", maxDepth: 9, timeBudget: new AITimeBudget(20, 40),
+                blunderRate: 0f, blunderMarginCp: 0, betrayalAggression: 0f, attackDefenseBias: 1f,
+                tieBreakWindowCp: 0, useOpeningBook: false);
+            BoardState position = CuratedPositionSuite.Build(0);
+
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            MatchResult result = new MatchSimulator().PlayGame(
+                position, deepButTight, deepButTight, rngSeedWhite: 1, rngSeedBlack: 2, plyCap: 10);
+            stopwatch.Stop();
+
+            Assert.That(System.Enum.IsDefined(typeof(MatchOutcome), result.Outcome), Is.True);
+            Assert.That(stopwatch.Elapsed.TotalSeconds, Is.LessThan(5.0),
+                "a 40ms hard budget across at most 10 plies must not take seconds — the budget timer is not arming.");
+        }
+
+        [Test]
+        public void PlayGame_ZeroDialProfilesReachAQuietRepeatingLine_AdjudicationEndsItBeforeThePlyCap()
+        {
+            // Two identical, zero-blunder, zero-personality profiles from a roughly balanced
+            // position tend to shuffle into a repeating/quiet line rather than a decisive result —
+            // exactly the scenario the fifty-move/repetition/draw-margin rules exist to cut short.
+            // A generous 120-ply cap (DefaultPlyCap) is the pre-adjudication behavior; this proves
+            // Standard rules end the game well before that ceiling is reached.
+            AIProfile shallow = Fast("shallow", maxDepth: 2);
+            BoardState position = CuratedPositionSuite.Build(0);
+
+            MatchResult adjudicated = new MatchSimulator(MatchTimeControl.Uncapped, adjudicationRules: AdjudicationRules.Standard)
+                .PlayGame(position, shallow, shallow, rngSeedWhite: 111, rngSeedBlack: 222);
+
+            Assert.That(adjudicated.PlyCount, Is.LessThan(MatchSimulator.DefaultPlyCap),
+                "Standard adjudication rules should end a quiet/repeating shallow-vs-shallow game well before the full ply cap.");
+        }
+
+        [Test]
+        public void PlayGame_AdjudicationDisabled_PlaysAtLeastAsLongAsWithStandardRules()
+        {
+            AIProfile shallow = Fast("shallow", maxDepth: 2);
+            BoardState position = CuratedPositionSuite.Build(0);
+
+            MatchResult withStandardRules = new MatchSimulator(MatchTimeControl.Uncapped, adjudicationRules: AdjudicationRules.Standard)
+                .PlayGame(position, shallow, shallow, rngSeedWhite: 111, rngSeedBlack: 222);
+            MatchResult withRulesDisabled = new MatchSimulator(MatchTimeControl.Uncapped, adjudicationRules: AdjudicationRules.Disabled)
+                .PlayGame(position, shallow, shallow, rngSeedWhite: 111, rngSeedBlack: 222);
+
+            Assert.That(withRulesDisabled.PlyCount, Is.GreaterThanOrEqualTo(withStandardRules.PlyCount),
+                "Disabled must never end a game EARLIER than Standard would — it is strictly a superset of plies played.");
         }
 
         [Test]

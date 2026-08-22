@@ -8,8 +8,8 @@ using ChessTheBetrayal.Tests.Utilities;
 namespace ChessTheBetrayal.Tests.EditMode.AI
 {
     /// <summary>
-    /// ADR_AI16b Step C (Path A): quiescence now probes/stores the shared transposition table at
-    /// depth 0, and bounds Betrayal Act re-expansion to the first quiescence ply. Mirrors
+    /// Quiescence probes/stores the shared transposition table at depth 0, and bounds Betrayal Act
+    /// re-expansion to the first quiescence ply. Mirrors
     /// SearchTTIntegrationTests' "same move, fewer nodes" pattern — the qsearch TT must change
     /// exploration cost only, never which move the search ultimately reports as best, and the Act
     /// horizon gate must change the qtree's branching factor without ever standing pat mid-sequence.
@@ -52,7 +52,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             BoardState boardTTOn = CaptureRichMidgamePosition();
             BoardState boardTTOff = CaptureRichMidgamePosition();
 
-            var settings = new AISearchSettings(maxDepth: 5, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 5, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             var searchOn = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator(),
                 transpositionTable: new TranspositionTable(log2Size: 14));
@@ -75,7 +75,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             BoardState boardTTOn = CaptureRichMidgamePosition();
             BoardState boardTTOff = CaptureRichMidgamePosition();
 
-            var settings = new AISearchSettings(maxDepth: 5, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 5, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             var searchOn = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator(),
                 transpositionTable: new TranspositionTable(log2Size: 14));
@@ -112,7 +112,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 .WithPendingBetrayer("d4", Team.Black)
                 .WithComputedHash();
 
-            var settings = new AISearchSettings(maxDepth: 3, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 3, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             var searchOn = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator(),
                 transpositionTable: new TranspositionTable(log2Size: 12));
@@ -159,12 +159,13 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         [Test]
         public void FindBestMove_BetrayalRightAvailableMidgame_ActExpansionsOnlyOccurAtFirstQuiescencePly()
         {
-            // Path A2's horizon gate: QActExpansions must still be > 0 (the search DOES see one ply
-            // of imminent Betrayal threat at the horizon), but the unbounded re-fan Step B measured
-            // (actExp=181144 on the fixed benchmark) must shrink substantially once Act can only be
-            // initiated at qply == MaxQuiescencePly, not at every nested qply thereafter.
+            // The horizon gate: QActExpansions must still be > 0 (the search DOES see one ply of
+            // imminent Betrayal threat at the horizon), but letting Acts restart a new sequence at
+            // every nested quiescence ply fanned the tree out enormously for very little extra
+            // insight. Acts can now only be initiated at the first quiescence ply, which shrinks
+            // that count substantially without blinding the search to an incoming Betrayal.
             BoardState board = CaptureRichMidgamePosition();
-            var settings = new AISearchSettings(maxDepth: 5, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 5, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
             var search = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator());
 
             search.FindBestMove(board, settings, CancellationToken.None);

@@ -13,7 +13,7 @@ using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
 {
     /// <summary>
-    /// Pins the per-ply event-stream contract the AI-26 match-lifecycle work introduces:
+    /// Pins the per-ply match-lifecycle event-stream contract:
     /// MoveExecutedPayload.PlyIndex stays monotonic independent of TurnNumber (which repeats
     /// across a Betrayal sub-sequence), and MatchFlowCoordinator.ConfigureMatch is a genuinely
     /// pure domain seam that raises zero view-facing callbacks — the exact gap a future
@@ -145,8 +145,8 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         [Test]
         public void HandleTeamAnimationComplete_StillRaisesBothViewCallbacksExactlyOnce()
         {
-            // Regression guard for the AI-26 extraction: the local-play flow's observable
-            // behavior must not change even though the raises moved out of ConfigureMatch.
+            // The local-play flow's observable behavior must not change even though the raises
+            // moved out of ConfigureMatch.
             MatchFlowFixture fixture = MatchFlowFixture.Build();
 
             fixture.MatchFlow.HandleTeamRollRequested();
@@ -162,8 +162,8 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         [Test]
         public void RequestUndo_RaisesBoardResyncRequired_NotGameStarted()
         {
-            // AI-26 replaces the undo path's reuse of raiseGameStarted with a distinct
-            // BoardResyncRequired signal — "game started" must stay a true lifecycle fact a
+            // The undo path raises a distinct BoardResyncRequired signal rather than reusing
+            // raiseGameStarted — "game started" must stay a true lifecycle fact a
             // future network reconnect can rely on, not be overloaded to also mean "resync."
             MatchFlowFixture fixture = MatchFlowFixture.Build();
 

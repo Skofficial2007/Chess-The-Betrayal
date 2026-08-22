@@ -10,7 +10,7 @@ using ChessTheBetrayal.Tests.Utilities;
 namespace ChessTheBetrayal.Tests.EditMode.AI
 {
     /// <summary>
-    /// Guards the zero-GC search-loop requirement: per-ply move buffers are pre-sized once in the
+    /// Guards the search loop's no-allocation requirement: per-ply move buffers are sized once in the
     /// constructor and reused via Clear(), move ordering is an in-place insertion sort, and the
     /// root Betrayal filter is an in-place swap-remove — none of that should allocate once the
     /// search itself is running. A regression here (a LINQ call, a closure, a List.Sort(lambda))
@@ -30,16 +30,16 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
 
             // Warm up the buffers array and JIT the search path once outside the measured window —
             // the constructor and first-call JIT both allocate legitimately and aren't part of the
-            // zero-GC contract, which only covers the steady-state per-node search loop.
+            // no-allocation contract, which only covers the steady-state per-node search loop.
             BoardState warmup = TestBoardSetupUtility.CreateStandard();
-            _search.FindBestMove(warmup, new AISearchSettings(2, 5000, BetrayalUsage.Full), CancellationToken.None);
+            _search.FindBestMove(warmup, new AISearchSettings(2, TestTimeBudgets.Generous, BetrayalUsage.Full), CancellationToken.None);
         }
 
         [Test]
         public void FindBestMove_FixedPosition_AllocatesNoManagedMemory()
         {
             BoardState board = TestBoardSetupUtility.CreateStandard();
-            var settings = new AISearchSettings(maxDepth: 3, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 3, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             GC.Collect();
             GC.WaitForPendingFinalizers();
@@ -58,7 +58,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         public void FindBestMove_WithRescoreMargin_AllocatesNoManagedMemory()
         {
             BoardState board = TestBoardSetupUtility.CreateStandard();
-            var settings = new AISearchSettings(maxDepth: 3, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 3, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
 
             // Warm up the bounded-rescore path too — its own pooled arrays are already sized in the
             // constructor, but the first call still needs to JIT the new code path outside the
@@ -74,7 +74,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             long after = GC.GetAllocatedBytesForCurrentThread();
 
             Assert.That(after - before, Is.EqualTo(0L),
-                "The bounded candidate re-search (AI-24) must not allocate managed memory either — " +
+                "The bounded candidate re-search must not allocate managed memory either — " +
                 "only in-place array writes and ScoreChild calls, no new lists/arrays.");
         }
 
@@ -82,8 +82,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         public void SelectFinalMove_RepeatedCalls_AllocateNoManagedMemory()
         {
             BoardState board = TestBoardSetupUtility.CreateStandard();
-            var settings = new AISearchSettings(maxDepth: 2, softTimeBudgetMs: 5000, BetrayalUsage.Full);
-            var profile = new AIProfile("test", maxDepth: 2, softTimeBudgetMs: 5000,
+            var settings = new AISearchSettings(maxDepth: 2, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
+            var profile = new AIProfile("test", maxDepth: 2, timeBudget: new AITimeBudget(5000, 7500),
                 blunderRate: 0.2f, blunderMarginCp: 50, betrayalAggression: 0.5f,
                 attackDefenseBias: 1f, tieBreakWindowCp: 30, useOpeningBook: false);
             var rng = new SystemRandomSource(seed: 42);
@@ -113,7 +113,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             var weightedSearch = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator(weights));
 
             BoardState warmup = TestBoardSetupUtility.CreateStandard();
-            var settings = new AISearchSettings(maxDepth: 3, softTimeBudgetMs: 5000, BetrayalUsage.Full);
+            var settings = new AISearchSettings(maxDepth: 3, timeBudget: TestTimeBudgets.Generous, BetrayalUsage.Full);
             weightedSearch.FindBestMove(warmup, settings, CancellationToken.None);
 
             BoardState board = TestBoardSetupUtility.CreateStandard();
@@ -127,7 +127,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             long after = GC.GetAllocatedBytesForCurrentThread();
 
             Assert.That(after - before, Is.EqualTo(0L),
-                "AI-25's weighted evaluator (non-identity EvaluationWeights, including the new king-shelter term) must not allocate managed memory during a real search.");
+                "The weighted evaluator (non-identity EvaluationWeights, including the king-shelter term) must not allocate managed memory during a real search.");
         }
     }
 }

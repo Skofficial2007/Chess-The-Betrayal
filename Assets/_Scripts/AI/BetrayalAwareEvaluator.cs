@@ -7,7 +7,7 @@ namespace ChessTheBetrayal.AI
     /// Static evaluation from one team's point of view. Positive = good for forTeam.
     /// Scores a position by reading the per-team piece lists.
     ///
-    /// Betrayal-specific terms (from the AI research analysis):
+    /// Two terms exist specifically because of the Betrayal mechanic:
     ///   1. Option value  — an UNSPENT betrayal right is worth a small bonus to whoever still
     ///                       holds it. Without this, the AI has no reason to preserve the right
     ///                       or to value reaching a position where Betrayal is strong.
@@ -21,7 +21,8 @@ namespace ChessTheBetrayal.AI
     /// </summary>
     public sealed class BetrayalAwareEvaluator : IPositionEvaluator
     {
-        // Centipawn values (report's scale: P=100, N=320, B=325, R=500, Q=975).
+        // Centipawn values on the conventional scale, where a pawn is 100. Bishops edge out
+        // knights slightly, which is the usual modern valuation.
         private const int PawnValue   = 100;
         private const int KnightValue = 320;
         private const int BishopValue = 325;

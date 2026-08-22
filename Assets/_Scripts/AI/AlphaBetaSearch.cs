@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
@@ -45,6 +47,50 @@ namespace ChessTheBetrayal.AI
         private static int NullMoveReduction(int depth) => NullMoveBaseReduction + depth / 6;
         private static int NullMoveMinDepth(int depth) => NullMoveReduction(depth) + 2; // guard 3: depth >= R + 2
 
+        // Reverse futility pruning (a.k.a. static null-move pruning): only attempted within this many
+        // plies of the horizon — beyond that the static eval is too weak a proxy for "this node is
+        // hopeless for the opponent" to trust without search. Margin grows with depth so a node
+        // further from the horizon demands a bigger static cushion before it's allowed to skip search
+        // entirely, mirroring how NullMoveReduction scales its own confidence with depth.
+        private const int ReverseFutilityMaxDepth = 6;
+        private static int ReverseFutilityMargin(int depth) => 90 * depth;
+
+        // Move-count pruning (LMP): once this many quiet moves have already been searched at a
+        // shallow node without improving alpha, later quiet moves in the same list are skipped
+        // outright rather than searched — a quiet move that far down an already-ordered list is
+        // vanishingly unlikely to be the best move at a node this close to the horizon. Only ever
+        // applied to quiet, non-TT, non-killer moves (see IsReducibleMove's own exemptions), so a
+        // capture/promotion/Betrayal-stage move is never skipped this way.
+        private const int LateMovePruningMaxDepth = 4;
+        private static int LateMovePruningThreshold(int depth) => 3 + depth * depth;
+
+        // Frontier futility pruning: at a node this close to the horizon, a quiet move that can't
+        // even in its best case (static eval + margin) reach alpha is skipped without being
+        // searched. The margin scales with depth for the same reason ReverseFutilityMargin's does —
+        // more plies of remaining search means more room for the position to improve, so the cutoff
+        // needs a bigger cushion to stay safe. Exempt from this: any move that leaves the opponent
+        // in check, since that promise of forced follow-up is exactly what a purely-static eval
+        // can't see (this is why quiescence itself never stands pat while resolving one either).
+        private const int FrontierFutilityMaxDepth = 3;
+        private static int FrontierFutilityMargin(int depth) => 150 + 100 * depth;
+
+        // Betrayal/Retribution search extension: an Act that stages a forced Retribution can be
+        // granted its next ply back (searched at the SAME depth it was found at, instead of one
+        // shallower), so the forced sequence stays inside the normal search window. Capped per
+        // line (extensionsUsedThisLine) so a chain of Betrayals can never re-extend forever.
+        //
+        // Currently DISABLED (cap 0), from measurement rather than principle. The extension is not
+        // needed for correct valuation: quiescence refuses to stand pat while any Betrayal
+        // sequence is unresolved, so no leaf is ever evaluated mid-sequence with or without the
+        // extra ply — the extension only deepens the position AFTER the sequence resolves. Once
+        // the search valued Defections honestly (see ResolveForcedDefectionInSearch), that quality
+        // nudge measured at roughly double the node count at depth 9 on a Betrayal-live midgame —
+        // about the price of a full extra ply of depth everywhere, spent only on Betrayal lines.
+        // Depth spent uniformly buys more strength than depth spent there, so the cap is 0. The
+        // machinery stays wired so re-enabling is a one-constant change if a future measured pass
+        // finds positions where it earns its cost.
+        private const int MaxBetrayalExtensionsPerLine = 0;
+
         // Hard backstop for quiescence recursion. A Betrayal sub-phase (Act -> Retribution/Defection
         // -> optional DefensiveOverride) is at most a handful of plies for one turn, and captures
         // fizzle out fast, so a real quiescence line is short. This cap exists purely so that a future
@@ -52,14 +98,69 @@ namespace ChessTheBetrayal.AI
         // forced-Defection loop once did — if we ever hit it we stand pat rather than recurse forever.
         private const int MaxQuiescencePly = 64;
 
+        // A node deep enough to matter but with no TT move at all gets a cheap shallower probe first,
+        // purely to seed move ordering for the real search that follows. Below this depth the node is
+        // already cheap enough that skipping straight to the real search costs less than the probe would.
+        private const int InternalIterativeReductionMinDepth = 4;
+        private const int InternalIterativeReductionAmount = 1;
+
+        // Once the same root move has survived this many completed depths in a row, the search is
+        // treated as settled on it: a move that has been best for several successive, deeper
+        // searches is overwhelmingly unlikely to be overturned by one more ply, so continuing to
+        // spend budget on it is wasted time the player just experiences as the AI "thinking" about
+        // a decision it already made. This is the move-stability half of the settle-early signal —
+        // deliberately move-only, because a score that keeps drifting under a move that never
+        // changes just means the engine is refining its valuation of a decision it has already
+        // committed to, which is not a reason to keep searching.
+        private const int StableDepthsToSettle = 3;
+
+        // Instability time management: once the soft half of the time budget has elapsed, whether
+        // iterative deepening starts another depth depends on how settled the root looks. A root is
+        // "stable" once the last two completed depths agree on both the best move AND a close-enough
+        // score — either signal alone is too weak (the score can swing wildly while the same move
+        // stays best because a deeper tactic was just found under it, and the score can stay flat
+        // while the best move itself flip-flops between two nearly-equal candidates), so both must
+        // hold before another depth is judged unnecessary. The score window reuses the same order of
+        // magnitude this codebase already treats as "noise" for move selection (AIProfileTable's own
+        // tie-break windows run 10-30cp). The minimum-depth floor reuses AIProfileGuardrails' own
+        // "a shallow search can't be trusted" threshold rather than inventing a second one.
+        private const int StabilityThresholdCp = 25;
+
+        // Aspiration windows (experimental, off by default — see FindBestMove's own doc comment):
+        // instead of always searching a fresh depth with the full [-Infinity, +Infinity] window,
+        // guess that the score won't move far from the previous depth's answer and search a narrow
+        // band around it first. Most of the time that guess holds and every cutoff in the tree gets
+        // tighter for free; when it doesn't, the result lands exactly on the window's edge (a
+        // fail-low or fail-high) rather than a real score, and that whole depth must be re-searched
+        // with the full window before its result can be trusted — a narrow window can never be
+        // allowed to silently stand in for the true value. The margin is wider than
+        // StabilityThresholdCp on purpose: that constant exists to detect when two depths agree
+        // closely enough to stop searching, which wants to be strict; this one exists to avoid
+        // triggering an expensive re-search on perfectly ordinary depth-to-depth drift, which wants
+        // to be forgiving.
+        private const int AspirationWindowCp = 50;
+
         private readonly IChessEngine _engine;
         private readonly IPositionEvaluator _evaluator;
         private readonly TranspositionTable _tt;
         private readonly int _maxSupportedDepth;
 
-        // Reused across the whole search — one buffer per depth level to avoid clobbering a
+        // Reused across the whole search — one buffer per ply-from-root to avoid clobbering a
         // parent's move list while recursing. Grown lazily; never freed. No per-node allocation.
-        private readonly List<MoveCommand>[] _moveBuffers;
+        //
+        // Indexed by plyFromRoot, NOT by depth. depth used to be a safe index on its own — every
+        // recursive step strictly decreased it, so no two active stack frames could ever hold the
+        // same depth value at once. The Betrayal/Retribution extension breaks that: an Act that
+        // stages a forced Retribution gets +1 ply of depth BACK, so depth can legitimately repeat
+        // across nested frames now (a deep descendant can numerically match an ancestor's depth).
+        // plyFromRoot never has this problem — it strictly increases on every single recursive step
+        // with no exceptions (see ScoreChild, which always receives the caller's already-incremented
+        // plyFromRoot down both its flipping and non-flipping branches) — so it's the only safe key
+        // once depth-restoring extensions exist. Mirrors _killerMoves' own plyFromRoot keying and
+        // maxSupportedDepth-based sizing below. Not readonly (unlike _quiescenceBuffers) because
+        // MoveBuffer can grow this array in place via Array.Resize if plyFromRoot ever exceeds the
+        // ctor's initial sizing — see MoveBuffer's own doc comment.
+        private List<MoveCommand>[] _moveBuffers;
         private readonly List<MoveCommand> _rootMoves = new List<MoveCommand>(64);
 
         // Parallel to _rootMoves by index — every root move's score at the last FULLY COMPLETED
@@ -68,19 +169,49 @@ namespace ChessTheBetrayal.AI
         // from it once a depth actually completes, so a cancelled/partial depth's scores never
         // leak into the externally-visible array. Sized comfortably above realistic
         // Betrayal-inclusive root branching; grown lazily (mirrors _moveBuffers' own policy) so a
-        // pathological position can never index out of bounds without violating steady-state
-        // zero-GC in the common case. MoveSelectionPolicy.MaxRootMoves must match this sizing.
+        // pathological position can never index out of bounds, while an ordinary one never
+        // allocates at all. MoveSelectionPolicy.MaxRootMoves must match this sizing.
         private int[] _rootScores = new int[128];
         private int[] _rootScoresScratch = new int[128];
 
         // One move buffer per quiescence recursion level, indexed by the qply budget. Quiescence is
-        // reached from Search(depth 0), so it must NOT borrow a depth-indexed _moveBuffers slot — the
-        // ancestor Search frames at depth 1..N are still iterating their own _moveBuffers[depth] lists.
+        // reached from Search(depth 0), so it must NOT borrow a _moveBuffers slot — every ancestor
+        // Search frame still on the stack is still iterating its own plyFromRoot-keyed list there.
         // And a SINGLE shared quiescence buffer is not enough either: a Retribution/DefensiveOverride
         // loop holds its buffer across a -Quiescence(...) recursion that can itself open a new Betrayal
         // sub-phase, which would clobber the parent's list mid-iteration. Keying by qply gives every
         // nested quiescence ply its own buffer with zero per-node allocation (pool built once here).
         private readonly List<MoveCommand>[] _quiescenceBuffers;
+
+        // Quiet-move ordering memory, both allocated once here and reused for the whole search —
+        // same zero-per-node-allocation discipline as _moveBuffers/_quiescenceBuffers above.
+        //
+        // History: for a quiet move that caused a beta cutoff, remember it by [piece type][target
+        // square] so the same kind of move gets tried earlier next time it's legal somewhere else in
+        // the tree. Indexed by ChessPieceType (0..6) and by the 64 board squares (EndPosition.y * 8 +
+        // EndPosition.x). Only ever touched for moves with Stage == BetrayalStage.None — a Betrayal
+        // Act/Retribution/DefensiveOverride/Defection move is never "just a quiet developing move" in
+        // the sense this heuristic is trying to capture, so mixing its stats in would blur the signal
+        // for ordinary positions without helping Betrayal ones either.
+        private readonly int[,] _historyScores = new int[7, 64];
+
+        // Killers: the two most recent quiet moves that caused a beta cutoff AT THIS EXACT PLY FROM
+        // ROOT, tried right after the TT move and winning captures. Keyed by plyFromRoot rather than
+        // by whose turn it is, because Search already increments plyFromRoot on every single
+        // recursive descent — including the non-flipping Act/Retribution steps inside a Betrayal
+        // sequence — so an Act at ply k and its forced Retribution at ply k+1 land in different slots
+        // automatically. Keying by side-to-move instead would be wrong here, since Betrayal doesn't
+        // flip the mover every ply the way ordinary chess does.
+        private readonly uint[,] _killerMoves;
+
+        // Capture ordering's SEE cache, one slot per move-list index — filled once, up front, by
+        // OrderMoves' pre-pass, then read (never recomputed) for every comparison the insertion
+        // sort makes below. SEE walks every piece on the board, so calling it fresh on each of the
+        // O(n^2) comparisons an insertion sort can make would be far more expensive than the
+        // ordering win it buys; computing each move's score exactly once avoids that. Sized to the
+        // same ceiling as _moveBuffers' individual lists and grown lazily on the same "never shrink"
+        // policy as _rootScores.
+        private int[] _seeScoreCache = new int[64];
 
         public AlphaBetaSearch(IChessEngine engine, IPositionEvaluator evaluator, int maxSupportedDepth = 32,
                                 TranspositionTable transpositionTable = null)
@@ -98,6 +229,11 @@ namespace ChessTheBetrayal.AI
             _quiescenceBuffers = new List<MoveCommand>[MaxQuiescencePly + 1];
             for (int i = 0; i < _quiescenceBuffers.Length; i++)
                 _quiescenceBuffers[i] = new List<MoveCommand>(48);
+
+            // Two killer slots per ply from root, indexed 0..maxSupportedDepth (a null-move-reduced
+            // or extended line can in principle exceed the nominal search depth, so the buffer is
+            // sized against the same maxSupportedDepth ceiling _moveBuffers already trusts).
+            _killerMoves = new uint[maxSupportedDepth + 1, 2];
         }
 
         /// <summary>The private per-ply quiescence move buffer for the given qply budget.</summary>
@@ -108,9 +244,30 @@ namespace ChessTheBetrayal.AI
             return buffer;
         }
 
+        /// <summary>The private per-ply-from-root main-search move buffer (see the _moveBuffers
+        /// field comment for why this is keyed by plyFromRoot rather than depth). Grows the backing
+        /// array lazily — mirrors _rootScores/_seeScoreCache's own "never shrink" policy — since a
+        /// deep enough chain of Betrayal extensions can in principle push plyFromRoot past the
+        /// ctor's maxSupportedDepth-based initial sizing, even though depth itself never exceeds it
+        /// (the depth < _maxSupportedDepth guard on the extension itself sees to that).</summary>
+        private List<MoveCommand> MoveBuffer(int plyFromRoot)
+        {
+            if (plyFromRoot >= _moveBuffers.Length)
+            {
+                int newSize = plyFromRoot + 1;
+                Array.Resize(ref _moveBuffers, newSize);
+                for (int i = 0; i < _moveBuffers.Length; i++)
+                    _moveBuffers[i] ??= new List<MoveCommand>(64);
+            }
+
+            List<MoveCommand> buffer = _moveBuffers[plyFromRoot];
+            buffer.Clear();
+            return buffer;
+        }
+
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         /// <summary>
-        /// Telemetry for the most recently completed FindBestMove call (AI-21). Lives on the shared
+        /// Telemetry for the most recently completed FindBestMove call. Lives on the shared
         /// TranspositionTable rather than a second bag, since every AlphaBetaSearch already owns one
         /// TT reference and the TT's own counters (probe/hit/store/replace) need to live there
         /// anyway. Reset at the top of FindBestMove, so a mid-search read (there isn't one — this is
@@ -136,6 +293,20 @@ namespace ChessTheBetrayal.AI
         public int BestRootIndex { get; private set; }
 
         /// <summary>
+        /// True only when the candidate-rescore pass ran to completion, i.e. every RootScores entry
+        /// within the requested margin of the best is a genuine full-window value rather than the
+        /// tightened alpha-beta bound the main loop recorded. A search that spends its whole time
+        /// budget on the depth loop gets its rescore pass cancelled before it starts — its
+        /// non-best RootScores are then only upper bounds, and a bound can sit arbitrarily close
+        /// to the best score while the move it belongs to is actually much worse. Any caller that
+        /// picks among near-best candidates (tie-break windows, deliberate blunders) MUST check
+        /// this first and fall back to the best move alone when it is false — selecting from
+        /// bound scores is how a time-capped tier ends up playing near-random moves with full
+        /// confidence.
+        /// </summary>
+        public bool RootScoresExactForSelection { get; private set; }
+
+        /// <summary>
         /// Iterative deepening entry point. Returns the best move for board.CurrentTurn.
         /// Caller runs this on a worker thread against a cloned board (see AsyncAIAgent).
         ///
@@ -146,21 +317,49 @@ namespace ChessTheBetrayal.AI
         /// "later root moves may only carry an upper-bound score" caveat (see MoveSelectionPolicy)
         /// for the handful of candidates a personality-driven selection might actually pick.
         /// TT-warmed (every node was already visited this search), so it's cheap. Defaults to 0 —
-        /// today's exact pre-AI-24 behavior, zero overhead — for callers that don't need it.
+        /// no rescore pass at all, zero overhead — for callers that don't need it. Whether the
+        /// pass actually COMPLETED is reported via RootScoresExactForSelection; a cancelled
+        /// search skips or truncates it, and selection must then stick to the best move.
+        ///
+        /// enableInstabilityTimeManagement: off by default so every existing CancellationToken.None
+        /// caller (both benchmark suites) stays exactly depth-bound, byte-identical to before this
+        /// was added — this flag is what makes that a guarantee of the call site, not a coincidence
+        /// of which numbers happen to be passed as the time budget. Real gameplay/tooling callers
+        /// (AsyncAIAgent, MobileSearchBenchmarkRunner) pass true: once the soft half of the time
+        /// budget elapses, a settled root is allowed to stop early instead of spending the full
+        /// budget on a search that's very unlikely to change its mind, and an unsettled root is
+        /// allowed to keep going into the soft-to-hard gap instead of stopping the instant soft is
+        /// crossed — see the between-depths check below for exactly how "settled" is judged.
+        ///
+        /// enableAspirationWindows: off by default, same "structural guarantee, not a numeric
+        /// coincidence" reasoning as enableInstabilityTimeManagement — every existing
+        /// CancellationToken.None caller omits it and is therefore unaffected by construction. When
+        /// on, every depth after the first searches a narrow window guessed from the previous
+        /// depth's score instead of the full range, re-searching that same depth with the full
+        /// window on a fail-low/fail-high before trusting the result. This is an independent,
+        /// composable switch from enableInstabilityTimeManagement — either can be on without the
+        /// other. Experimental: the literature is genuinely mixed on whether this helps (a
+        /// documented case exists of a comparable engine measuring REMOVING aspiration windows as a
+        /// net improvement), which is exactly why it ships behind its own flag rather than replacing
+        /// the full-window search outright.
         /// </summary>
         public MoveCommand FindBestMove(BoardState board, AISearchSettings settings, CancellationToken ct,
-            int candidateRescoreMarginCp = 0)
+            int candidateRescoreMarginCp = 0, bool enableInstabilityTimeManagement = false,
+            bool enableAspirationWindows = false)
         {
             Team rootTeam = board.CurrentTurn;
+            Stopwatch stopwatch = enableInstabilityTimeManagement ? Stopwatch.StartNew() : null;
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             _tt.Stats.Reset();
 #endif
             _tt.NewSearch();
+            Array.Clear(_historyScores, 0, _historyScores.Length);
 
             // Build the root move list ONCE. This is where the agent-level Betrayal policy applies.
             BuildRootMoves(board, rootTeam, settings.BetrayalUsage);
             EnsureRootScoreCapacity(_rootMoves.Count);
+            RootScoresExactForSelection = false;
 
             // TT informs root ORDERING ONLY — never a short-circuit. The root list carries the
             // BetrayalUsage.DefendOnly filter and MoveToFront's PV bookkeeping; a TT cutoff here
@@ -177,6 +376,25 @@ namespace ChessTheBetrayal.AI
             MoveCommand bestMove = _rootMoves.Count > 0 ? _rootMoves[0] : default;
             int lastCompletedDepth = 0;
 
+            // Only meaningful when enableInstabilityTimeManagement is on — tracks what the
+            // PREVIOUS completed depth found, so the next depth's completion can compare against
+            // it. hasPriorCompletedDepth distinguishes "no previous depth yet" from a legitimate
+            // score of 0, since a fresh search has nothing to compare its first completed depth to.
+            bool hasPriorCompletedDepth = false;
+            int previousCompletedScore = 0;
+            MoveCommand previousCompletedBestMove = default;
+
+            // How many completed depths in a row have agreed on the same best move (see
+            // StableDepthsToSettle). Reset to 0 whenever the best move changes between depths.
+            int consecutiveStableDepths = 0;
+
+            // Only meaningful when enableAspirationWindows is on — deliberately a SEPARATE pair of
+            // locals from the instability-tracking ones above, even though both record "the last
+            // completed depth's score": the two flags are independent and composable, so neither
+            // one's bookkeeping may depend on whether the other happens to be enabled.
+            bool hasPriorAspirationScore = false;
+            int priorAspirationScore = 0;
+
             // Iterative deepening: search depth 1, 2, 3... keeping the best move from the last
             // FULLY COMPLETED depth. If cancelled or over-budget mid-depth, we discard that
             // partial depth and return the previous complete one.
@@ -184,39 +402,95 @@ namespace ChessTheBetrayal.AI
             {
                 if (ct.IsCancellationRequested) break;
 
-                int alpha = -Infinity;
-                int beta = Infinity;
+                // Killers are a per-iteration hint (last depth's cutoff-causing quiet moves), not a
+                // cross-iteration guarantee — clearing them each time keeps a stale slot from a
+                // shallower, since-refuted line from lingering and mis-ordering a deeper one.
+                Array.Clear(_killerMoves, 0, _killerMoves.Length);
+
                 MoveCommand bestThisDepth = bestMove;
                 int bestIndexThisDepth = 0;
                 int bestScore = -Infinity;
                 bool completed = true;
 
-                for (int i = 0; i < _rootMoves.Count; i++)
+                // Aspiration windows: the first attempt at this depth guesses a narrow band around
+                // the previous depth's score instead of searching the full range. If that guess
+                // turns out wrong (the true score lands ON or PAST the window edge, which alpha-beta
+                // reports as a fail-low/fail-high rather than a real value), the whole depth is
+                // thrown away and re-searched with the full window before its result is trusted —
+                // never trust a bound as if it were an exact score. `widenToFullWindow` starts false
+                // (or true outright when the flag is off, or there's no prior score to aspire
+                // around, or a bailout condition below decides even a doubled window isn't worth it)
+                // so a normal full-window search is always the fallback both features degrade to.
+                bool widenToFullWindow = !enableAspirationWindows || !hasPriorAspirationScore;
+                int windowMarginCp = AspirationWindowCp;
+
+                while (true)
                 {
-                    if (ct.IsCancellationRequested) { completed = false; break; }
+                    int alpha = widenToFullWindow ? -Infinity : priorAspirationScore - windowMarginCp;
+                    int beta = widenToFullWindow ? Infinity : priorAspirationScore + windowMarginCp;
 
-                    MoveCommand move = _rootMoves[i];
-                    ApplyMoveAndTurn(board, move);
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                    if (!widenToFullWindow) _tt.Stats.AspirationWindowAttempts++;
+#endif
 
-                    // Root moves are always the current player's own choices. An Act or Defection
-                    // at the root keeps the SAME player to move, so we recurse without negation.
-                    int score = ScoreChild(board, move, depth - 1, 1, alpha, beta, rootTeam, ct);
+                    bestThisDepth = bestMove;
+                    bestIndexThisDepth = 0;
+                    bestScore = -Infinity;
+                    completed = true;
 
-                    UndoMoveAndTurn(board, move);
-
-                    // Every candidate's score is recorded here (not just the running best) — this
-                    // scratch write is unconditional so MoveSelectionPolicy can later rank/bias
-                    // among ALL root moves, not only the single winner. Committed into the
-                    // externally-visible _rootScores only if this depth completes (below).
-                    _rootScoresScratch[i] = score;
-
-                    if (score > bestScore)
+                    for (int i = 0; i < _rootMoves.Count; i++)
                     {
-                        bestScore = score;
-                        bestThisDepth = move;
-                        bestIndexThisDepth = i;
+                        if (ct.IsCancellationRequested) { completed = false; break; }
+
+                        MoveCommand move = _rootMoves[i];
+                        ApplyMoveAndTurn(board, move);
+
+                        // Root moves are always the current player's own choices. An Act or Defection
+                        // at the root keeps the SAME player to move, so we recurse without negation.
+                        // A root Act that stages a forced Retribution gets the same one-ply extension
+                        // an Act found deeper in the tree does (see the move loop below) — root is just
+                        // the shallowest possible place for that sequence to start. Zero extensions
+                        // have been used at the root, so the cap check is against zero.
+                        bool rootGrantsExtension = move.Stage == BetrayalStage.Act && board.PendingBetrayerSquare.HasValue
+                            && 0 < MaxBetrayalExtensionsPerLine
+                            && depth < _maxSupportedDepth;
+                        int rootSearchDepth = rootGrantsExtension ? depth : depth - 1;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                        if (rootGrantsExtension) _tt.Stats.BetrayalExtensions++;
+#endif
+                        int score = ScoreChild(board, move, rootSearchDepth, 1, alpha, beta, rootTeam, ct, rootGrantsExtension ? 1 : 0);
+
+                        UndoMoveAndTurn(board, move);
+
+                        // Every candidate's score is recorded here (not just the running best) — this
+                        // scratch write is unconditional so MoveSelectionPolicy can later rank/bias
+                        // among ALL root moves, not only the single winner. Committed into the
+                        // externally-visible _rootScores only if this depth completes (below).
+                        _rootScoresScratch[i] = score;
+
+                        if (score > bestScore)
+                        {
+                            bestScore = score;
+                            bestThisDepth = move;
+                            bestIndexThisDepth = i;
+                        }
+                        if (score > alpha) alpha = score;
                     }
-                    if (score > alpha) alpha = score;
+
+                    // A fail-low/fail-high against a narrow window means bestScore is only a bound,
+                    // not the true value — the whole depth must be re-searched with the full window.
+                    // Cancellation takes priority over a fail-widen retry: an incomplete depth from a
+                    // cancelled scan must fall straight through to the completed-gated discard below,
+                    // never loop back for another (equally doomed) attempt.
+                    if (widenToFullWindow || !completed) break;
+                    bool failedLow = bestScore <= priorAspirationScore - windowMarginCp;
+                    bool failedHigh = bestScore >= priorAspirationScore + windowMarginCp;
+                    if (!failedLow && !failedHigh) break;
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                    _tt.Stats.AspirationWindowReSearches++;
+#endif
+                    widenToFullWindow = true;
                 }
 
                 if (completed)
@@ -244,6 +518,62 @@ namespace ChessTheBetrayal.AI
 
                     // Early exit on forced mate found — no deeper search changes the decision.
                     if (bestScore >= MateScore) break;
+
+                    if (enableAspirationWindows)
+                    {
+                        hasPriorAspirationScore = true;
+                        priorAspirationScore = bestScore;
+                    }
+
+                    if (enableInstabilityTimeManagement)
+                    {
+                        long elapsedMs = stopwatch.ElapsedMilliseconds;
+
+                        // Count how many depths in a row have kept the same best move. Compared
+                        // against the previous completed depth's move BEFORE the bookkeeping below
+                        // refreshes it. A change (or the very first depth) resets the streak to 0.
+                        if (hasPriorCompletedDepth && PackMove(bestMove) == PackMove(previousCompletedBestMove))
+                            consecutiveStableDepths++;
+                        else
+                            consecutiveStableDepths = 0;
+
+                        // Below the depth floor, the stability signal itself isn't trustworthy yet
+                        // (same reasoning AIProfileGuardrails already applies to a shallow search
+                        // being asked to vet a reshaped evaluator) — always search on regardless of
+                        // elapsed time, exactly like today with the flag off.
+                        bool depthDeepEnoughToTrustStability = depth >= AIProfileGuardrails.ShallowSearchDepthThreshold;
+
+                        if (depthDeepEnoughToTrustStability)
+                        {
+                            // Two independent reasons to consider the root settled, either one enough:
+                            //  - The last two depths agreed on move AND score (the original, strict
+                            //    signal — a genuinely quiet position the search has fully converged on).
+                            //  - The same move has simply survived several deeper searches in a row,
+                            //    even if its score is still drifting. A move that no amount of extra
+                            //    depth dislodges is one the engine has effectively decided on; the
+                            //    remaining budget would only refine a number, not change the move the
+                            //    player actually faces. This is what keeps the deep tiers from burning
+                            //    their whole budget every move on positions where the choice is clear.
+                            bool converged = hasPriorCompletedDepth
+                                && IsRootStable(bestScore, previousCompletedScore, bestMove, previousCompletedBestMove);
+                            bool moveWellSettled = consecutiveStableDepths >= StableDepthsToSettle;
+                            bool stable = converged || moveWellSettled;
+
+                            // Settled and past the soft target: further search is unlikely to change
+                            // the answer, so stop now rather than spend the rest of the budget.
+                            if (stable && elapsedMs >= settings.TimeBudget.SoftMs) break;
+
+                            // Unsettled: allowed to spend into the soft-to-hard gap for one more
+                            // depth, but never past the hard ceiling — that ceiling is also what the
+                            // external CancelAfter(HardMs) timer backstops independently, so the two
+                            // never disagree about what "hard" means.
+                            if (!stable && elapsedMs >= settings.TimeBudget.HardMs) break;
+                        }
+
+                        hasPriorCompletedDepth = true;
+                        previousCompletedScore = bestScore;
+                        previousCompletedBestMove = bestMove;
+                    }
                 }
             }
 
@@ -266,23 +596,46 @@ namespace ChessTheBetrayal.AI
             int threshold = _rootScores[0] - candidateRescoreMarginCp; // BestRootIndex == 0
             for (int i = 1; i < _rootMoves.Count; i++) // index 0 is already exact-enough by construction
             {
-                // Safe degrade: leave any not-yet-rescored entry at its tightened-window value —
-                // still "acceptable by direction" per the ADR's own caveat, never a torn write.
-                if (ct.IsCancellationRequested) break;
+                // Cancelled mid-pass: leave the remaining entries at their tightened-window values
+                // and — critically — leave RootScoresExactForSelection false, so no caller
+                // mistakes those bounds for real scores. A search that spends its whole time
+                // budget on the depth loop lands here with the token already fired, which is the
+                // normal case for a deep tier, not an anomaly.
+                if (ct.IsCancellationRequested) return;
                 if (_rootScores[i] < threshold) continue;
 
                 MoveCommand move = _rootMoves[i];
                 ApplyMoveAndTurn(board, move);
-                int exactScore = ScoreChild(board, move, lastCompletedDepth - 1, 1, -Infinity, Infinity, rootTeam, ct);
+
+                // Mirror FindBestMove's own root extension exactly, so a rescored candidate's depth
+                // matches what the original completed-depth search actually explored for it — an
+                // Act that stages a Retribution must get the same extra ply here it got the first
+                // time, or this "exact" re-search would silently search one ply shallower than the
+                // tightened-window pass it's supposed to be correcting.
+                bool rootGrantsExtension = move.Stage == BetrayalStage.Act && board.PendingBetrayerSquare.HasValue
+                    && 0 < MaxBetrayalExtensionsPerLine
+                    && lastCompletedDepth < _maxSupportedDepth;
+                int rootSearchDepth = rootGrantsExtension ? lastCompletedDepth : lastCompletedDepth - 1;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                if (rootGrantsExtension) _tt.Stats.BetrayalExtensions++;
+#endif
+                int exactScore = ScoreChild(board, move, rootSearchDepth, 1, -Infinity, Infinity, rootTeam, ct, rootGrantsExtension ? 1 : 0);
                 UndoMoveAndTurn(board, move);
+
+                // A cancellation that fired DURING this candidate's re-search makes its result a
+                // partial garbage value, not an exact score — discard it and report the pass as
+                // incomplete rather than publish a number that looks authoritative.
+                if (ct.IsCancellationRequested) return;
 
                 _rootScores[i] = exactScore;
             }
+
+            RootScoresExactForSelection = true;
         }
 
         /// <summary>Grows the root-score buffers to fit a pathological branching root, mirroring
-        /// _moveBuffers' own "grown lazily, never freed" policy. A no-op (and therefore zero-GC)
-        /// for every position within the initial 128-move capacity.</summary>
+        /// _moveBuffers' own "grown lazily, never freed" policy. A no-op, allocating nothing, for
+        /// every position within the initial 128-move capacity.</summary>
         private void EnsureRootScoreCapacity(int requiredCount)
         {
             if (_rootScores.Length >= requiredCount) return;
@@ -320,7 +673,7 @@ namespace ChessTheBetrayal.AI
         /// Recursive negamax. 'perspectiveTeam' is whichever side we're currently scoring FOR
         /// (it changes only when the turn actually flips). alpha/beta are always in perspectiveTeam's frame.
         /// </summary>
-        private int Search(BoardState board, int depth, int plyFromRoot, int alpha, int beta, Team perspectiveTeam, CancellationToken ct, bool parentWasNull = false)
+        private int Search(BoardState board, int depth, int plyFromRoot, int alpha, int beta, Team perspectiveTeam, CancellationToken ct, bool parentWasNull = false, int extensionsUsedThisLine = 0, bool iirAllowed = true)
         {
             if (ct.IsCancellationRequested) return 0;
 
@@ -354,15 +707,64 @@ namespace ChessTheBetrayal.AI
                 }
             }
 
+            // Internal iterative reduction: a node this deep with no TT move at all has never been
+            // searched before, so move ordering here is flying blind (no killer/history head start
+            // from a prior visit). Rather than order blindly at full cost, do a cheap shallower probe
+            // first — its own recursive TT stores will very likely populate an entry for THIS
+            // position, handing the real search below a ttMove to order from. Same reasoning as the
+            // engine's existing null-move probe: spend a smaller search to buy a better-ordered
+            // bigger one. No Betrayal-specific guard needed — this only changes how deep we look
+            // before committing to the real search at this exact node, not what moves are legal or
+            // how the turn/hash bookkeeping behaves. iirAllowed: false on the probe call itself so a
+            // TT-cold line can't cascade into a chain of nested reductions all the way down to the
+            // depth floor — this fires at most once per real node, exactly like a single extra ply
+            // of lookahead, not a repeating discount applied at every level of the probe.
+            if (iirAllowed && ttMove == 0 && depth >= InternalIterativeReductionMinDepth)
+            {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                _tt.Stats.IirReductions++;
+#endif
+                Search(board, depth - InternalIterativeReductionAmount, plyFromRoot, alpha, beta, perspectiveTeam, ct, parentWasNull, extensionsUsedThisLine, iirAllowed: false);
+                if (_tt.Probe(board.ZobristHash, out _, out uint iirPackedMove, out _, out _))
+                    ttMove = iirPackedMove;
+            }
+
+            // Shared guard for the whole forward-pruning family (NMP, reverse futility, move-count
+            // pruning, frontier futility): every one of them substitutes a cheap static judgment for
+            // real search, which is only sound when this node is an ordinary, non-forcing position.
+            // PendingBetrayerSquare covers Act-pending, Retribution-pending, AND ForcedSave-pending
+            // alike — a pruned-away node mid-sequence would corrupt move generation and the turn/hash
+            // bookkeeping exactly like a null move would. Being in check means every legal move is
+            // already forced and narrow, so there is nothing "extra" left to prune away safely.
+            bool forwardPruningAllowed = !board.PendingBetrayerSquare.HasValue
+                && !_engine.IsKingInCheck(board, board.CurrentTurn);
+
+            // Reverse futility pruning (static null-move pruning): if the static eval already beats
+            // beta by more than this depth's margin, the opponent would need to find an improvement
+            // search says is implausible at this shallow a depth just to bring the score back down to
+            // beta — so we trust the static judgment and cut immediately instead of searching.
+            if (forwardPruningAllowed
+                && depth <= ReverseFutilityMaxDepth
+                && beta < MateScore - _maxSupportedDepth)
+            {
+                int staticEval = _evaluator.Evaluate(board, perspectiveTeam);
+                if (staticEval - ReverseFutilityMargin(depth) >= beta)
+                {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                    _tt.Stats.ReverseFutilityCutoffs++;
+#endif
+                    return staticEval;
+                }
+            }
+
             // Null Move Pruning — sits after the TT probe, before movegen; the full guard set below
             // must pass before we ever touch the board. PendingBetrayerSquare covers Act-pending,
             // Retribution-pending, AND ForcedSave-pending alike, not just Retribution — a null move
             // mid-sequence would flip CurrentTurn while the domain mandates the SAME player
             // continues, corrupting move generation, the TT hash, and the alpha-beta frame at once.
             if (depth >= NullMoveMinDepth(depth)
-                && !board.PendingBetrayerSquare.HasValue
+                && forwardPruningAllowed
                 && !parentWasNull
-                && !_engine.IsKingInCheck(board, board.CurrentTurn)
                 && HasNonPawnMaterial(board, board.CurrentTurn)
                 && beta < MateScore - _maxSupportedDepth)
             {
@@ -383,7 +785,7 @@ namespace ChessTheBetrayal.AI
                 }
             }
 
-            List<MoveCommand> moves = _moveBuffers[depth];
+            List<MoveCommand> moves = MoveBuffer(plyFromRoot);
             moves.Clear();
 
             // GetAllLegalMovesIncludingBetrayal returns ONLY Retribution moves when a betrayer is
@@ -397,7 +799,40 @@ namespace ChessTheBetrayal.AI
 
             if (moves.Count == 0)
             {
-                // No legal moves: checkmate (bad for side to move) or stalemate (draw).
+                // A pending Retribution with no legal executioner is NOT stalemate — the Betrayer
+                // defects to the other side and play continues (the same rule TurnResolver applies
+                // in a live game, and Quiescence's own ResolveForcedDefection applies past the
+                // horizon). Scoring it as a draw here hands every losing side a phantom escape
+                // hatch: "play an Act nobody can answer, get a guaranteed 0" — when the real
+                // continuation usually loses the defected piece's worth of material. A deeper
+                // search is BETTER at engineering exactly that configuration several plies ahead,
+                // which made stronger tiers actively steer into self-destructing Betrayals.
+                if (board.PendingBetrayerSquare.HasValue && board.BetrayalInitiator.HasValue
+                    && board.GetPiece(board.PendingBetrayerSquare.Value).Team == board.BetrayalInitiator.Value)
+                {
+                    int resolved = ResolveForcedDefectionInSearch(board, depth, plyFromRoot, alpha, beta,
+                        perspectiveTeam, ct, extensionsUsedThisLine);
+
+                    // Unlike the mate/stalemate returns below (trivial to recompute), this result
+                    // cost a real subtree search — worth a TT entry like any other node's, or every
+                    // deepening iteration and every transposition into this position replays the
+                    // whole post-Defection continuation from scratch. The pending sub-state is part
+                    // of the Zobrist hash, so the entry can never be confused with the resolved
+                    // position's own. No best move to record: the "move" here is the domain's
+                    // automatic resolution, not a searchable choice.
+                    if (!ct.IsCancellationRequested)
+                    {
+                        TTFlag resolvedFlag = resolved <= alphaOriginal ? TTFlag.UpperBound
+                                            : resolved >= beta ? TTFlag.LowerBound
+                                            : TTFlag.Exact;
+                        _tt.Store(board.ZobristHash, AdjustMateScore(resolved, plyFromRoot), packedMove: 0, depth, resolvedFlag);
+                    }
+                    return resolved;
+                }
+
+                // No legal moves: checkmate (bad for side to move) or stalemate (draw). A
+                // ForcedSave-pending position with no legal king-save lands here too, and the
+                // in-check branch scores it as the mate it is.
                 bool inCheck = _engine.IsKingInCheck(board, board.CurrentTurn);
                 if (inCheck)
                 {
@@ -408,12 +843,26 @@ namespace ChessTheBetrayal.AI
                 return 0; // stalemate
             }
 
-            OrderMoves(moves, ttMove);
+            OrderMoves(board, moves, ttMove, plyFromRoot);
 
             // LMR eligibility for THIS node is fixed once, before the loop: a pending Betrayer means
             // every child here is part of a forced tactical sequence (same reasoning as the null-move
             // guard above), so nothing at this node may ever be reduced.
             bool nodeAllowsReduction = depth >= 3 && !board.PendingBetrayerSquare.HasValue;
+
+            // Move-count pruning and frontier futility are both members of the forward-pruning
+            // family gated by the same shared guard as NMP/reverse-futility above. A node with only
+            // one legal move can never actually skip it (best must come from somewhere), so both are
+            // additionally gated on moves.Count > 1 here rather than relying on the loop's own
+            // "at least one move survives" behavior to hold by accident.
+            bool nodeAllowsLateMovePruning = forwardPruningAllowed && depth <= LateMovePruningMaxDepth && moves.Count > 1;
+            bool nodeAllowsFrontierFutility = forwardPruningAllowed && depth <= FrontierFutilityMaxDepth && moves.Count > 1;
+
+            // Computed lazily — only the first time either pruning member actually needs it — since
+            // most nodes never reach this depth band and the eval call is not free.
+            bool staticEvalComputed = false;
+            int staticEvalForPruning = 0;
+            int quietMovesSearched = 0;
 
             int best = -Infinity;
             uint bestPackedMove = 0;
@@ -422,8 +871,59 @@ namespace ChessTheBetrayal.AI
                 if (ct.IsCancellationRequested) return best;
 
                 MoveCommand move = moves[i];
+                bool isQuiet = IsReducibleMove(move, ttMove);
 
-                bool reduce = nodeAllowsReduction && i >= 2 && IsReducibleMove(move, ttMove);
+                // Move-count pruning: once enough quiet moves have already been tried at this node
+                // without improving alpha, later quiet moves in the (cutoff-ordered) list are so
+                // unlikely to be the best that we skip them without searching at all. i > 0 keeps the
+                // PV/first move always searched regardless of the counter.
+                if (nodeAllowsLateMovePruning && isQuiet && i > 0 && quietMovesSearched >= LateMovePruningThreshold(depth))
+                {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                    _tt.Stats.LateMovePrunes++;
+#endif
+                    continue;
+                }
+
+                // Frontier futility pruning: a quiet move whose best-case static outlook still can't
+                // reach alpha is skipped, UNLESS it leaves the opponent in check — a forcing move's
+                // true value can't be judged from a static eval, exactly like quiescence's own
+                // never-stand-pat-mid-sequence rule for a pending Betrayer.
+                if (nodeAllowsFrontierFutility && isQuiet && i > 0)
+                {
+                    if (!staticEvalComputed)
+                    {
+                        staticEvalForPruning = _evaluator.Evaluate(board, perspectiveTeam);
+                        staticEvalComputed = true;
+                    }
+
+                    if (staticEvalForPruning + FrontierFutilityMargin(depth) <= alpha)
+                    {
+                        ApplyMoveAndTurn(board, move);
+                        bool givesCheck = _engine.IsKingInCheck(board, board.CurrentTurn);
+                        UndoMoveAndTurn(board, move);
+
+                        if (!givesCheck)
+                        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                            _tt.Stats.FrontierFutilityPrunes++;
+#endif
+                            continue;
+                        }
+                    }
+                }
+
+                if (isQuiet) quietMovesSearched++;
+
+                // Late quiet moves AND Act moves both reduce. An Act volunteers one of your own
+                // pieces to the opponent unless your own side then executes it, so with Defections
+                // valued honestly it is almost never the best move at a node — yet it opens a
+                // full-width continuation (the defected piece changes sides and play goes on),
+                // making it one of the most expensive children to search. Exactly the profile LMR
+                // exists for: search it shallower first, and the fail-high re-search below restores
+                // full depth on the rare occasion an Act really is strong here. i >= 2 keeps the
+                // PV move and the first alternative at full depth, same as for quiet moves.
+                bool reduce = nodeAllowsReduction && i >= 2 && (isQuiet || move.Stage == BetrayalStage.Act);
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                 if (reduce) _tt.Stats.LmrReductions++;
 #endif
@@ -432,12 +932,40 @@ namespace ChessTheBetrayal.AI
 
                 ApplyMoveAndTurn(board, move);
 
+                // Betrayal/Retribution extension: only ever granted for the move that JUST staged
+                // the forced sequence (an Act that left a Retribution pending), never for a move
+                // played WHILE already inside one — Retribution/DefensiveOverride/Defection moves
+                // already get their ply "for free" via the non-flipping ScoreChild path (see its
+                // own doc comment), so extending them again on top of that would double-count the
+                // same forced sequence. board.PendingBetrayerSquare is read AFTER ApplyMoveAndTurn,
+                // so it reflects the position this child is actually about to search, not the
+                // parent's.
+                // depth < _maxSupportedDepth guards the extension the same way _moveBuffers/
+                // _killerMoves are themselves sized to maxSupportedDepth + 1 — without it, a chain
+                // of extensions near the ceiling could push searchDepth's recursive Search call past
+                // the last valid _moveBuffers index and index out of bounds.
+                // !reduce keeps "reduced" and "extended" mutually exclusive for the same child by
+                // construction — the re-search depth arithmetic below leans on that invariant, and
+                // an Act cheap enough to reduce has by definition not earned an extra ply anyway.
+                bool grantExtension = !reduce && move.Stage == BetrayalStage.Act
+                    && board.PendingBetrayerSquare.HasValue
+                    && extensionsUsedThisLine < MaxBetrayalExtensionsPerLine
+                    && depth < _maxSupportedDepth;
+                int childExtensionsUsed = grantExtension ? extensionsUsedThisLine + 1 : extensionsUsedThisLine;
+                if (grantExtension)
+                {
+                    searchDepth++;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                    _tt.Stats.BetrayalExtensions++;
+#endif
+                }
+
                 int score;
                 if (i == 0)
                 {
                     // PV move (first child, typically the TT/ordering pick): full window. Its score
                     // sets the working alpha every later sibling is scouted against.
-                    score = ScoreChild(board, move, searchDepth, plyFromRoot + 1, alpha, beta, perspectiveTeam, ct);
+                    score = ScoreChild(board, move, searchDepth, plyFromRoot + 1, alpha, beta, perspectiveTeam, ct, childExtensionsUsed);
                 }
                 else
                 {
@@ -448,28 +976,35 @@ namespace ChessTheBetrayal.AI
                     // non-flipping Act/Defection child (same maximizer frame) and negates it to
                     // (-alpha-1, -alpha) for a flipping child. Proves "can this beat alpha?" cheaply;
                     // a fail-low here is a real cutoff regardless of whether depth was reduced.
-                    score = ScoreChild(board, move, searchDepth, plyFromRoot + 1, alpha, alpha + 1, perspectiveTeam, ct);
+                    score = ScoreChild(board, move, searchDepth, plyFromRoot + 1, alpha, alpha + 1, perspectiveTeam, ct, childExtensionsUsed);
 
                     // LMR fail-high — the reduction may have hidden real strength. Re-search at full
                     // depth, STILL null-window, before deciding whether a full-window re-search is
-                    // even warranted.
+                    // even warranted. A reduced child (quiet or Act) is never also extended (see the
+                    // !reduce guard on grantExtension), so "full depth" here is always plain
+                    // depth - 1, never the extended searchDepth.
                     if (reduce && score > alpha)
                     {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                         _tt.Stats.LmrReSearches++;
 #endif
-                        score = ScoreChild(board, move, depth - 1, plyFromRoot + 1, alpha, alpha + 1, perspectiveTeam, ct);
+                        score = ScoreChild(board, move, depth - 1, plyFromRoot + 1, alpha, alpha + 1, perspectiveTeam, ct, childExtensionsUsed);
                     }
 
                     // PVS fail-high — the null-window scout can only prove "not worse than alpha",
                     // not the true score. Only a genuine alpha<score<beta result needs the full-window
                     // re-search; a score >= beta is already a valid cutoff via the null window alone.
+                    // Full, un-reduced depth — reduce and grantExtension are mutually exclusive (see
+                    // the !reduce guard above), so this is depth - 1 for a reduced child and depth
+                    // (the extended searchDepth) for an extended Act; either way it's the same depth
+                    // the LMR fail-high branch above would have used had it fired instead.
                     if (score > alpha && score < beta)
                     {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                         _tt.Stats.PvsReSearches++;
 #endif
-                        score = ScoreChild(board, move, depth - 1, plyFromRoot + 1, alpha, beta, perspectiveTeam, ct);
+                        int fullDepth = grantExtension ? depth : depth - 1;
+                        score = ScoreChild(board, move, fullDepth, plyFromRoot + 1, alpha, beta, perspectiveTeam, ct, childExtensionsUsed);
                     }
                 }
 
@@ -485,7 +1020,11 @@ namespace ChessTheBetrayal.AI
                 // Beta cutoff. Valid across the Retribution sub-phase precisely because the
                 // non-flipping plies don't swap the alpha/beta frame — so a cutoff proven inside
                 // a betrayal sequence is still a cutoff for the same maximizer that owns this node.
-                if (alpha >= beta) break;
+                if (alpha >= beta)
+                {
+                    RecordQuietCutoff(move, depth, plyFromRoot);
+                    break;
+                }
             }
 
             // Never store a cancelled node — its 'best' is a partial, garbage result, not a proof.
@@ -603,21 +1142,23 @@ namespace ChessTheBetrayal.AI
         /// This is the exact mirror of Core's ApplyZobristMove turn-hash rule.
         /// </summary>
         private int ScoreChild(BoardState board, MoveCommand move, int childDepth, int plyFromRoot,
-                               int alpha, int beta, Team perspectiveTeam, CancellationToken ct)
+                               int alpha, int beta, Team perspectiveTeam, CancellationToken ct, int extensionsUsedThisLine = 0)
         {
             if (StageFlipsTurn(move.Stage))
             {
                 // Standard negamax step: opponent to move, minimize from our view => negate.
                 Team childPerspective = perspectiveTeam == Team.White ? Team.Black : Team.White;
-                return -Search(board, childDepth, plyFromRoot, -beta, -alpha, childPerspective, ct);
+                return -Search(board, childDepth, plyFromRoot, -beta, -alpha, childPerspective, ct, extensionsUsedThisLine: extensionsUsedThisLine);
             }
             else
             {
                 // Same player continues (mid-Betrayal). No negation, no window swap, same frame.
                 // NOTE: we do NOT decrement depth differently here — an Act followed by a forced
                 // Retribution is two plies of one turn; letting each consume a ply keeps the depth
-                // budget honest and prevents infinite non-flipping recursion.
-                return Search(board, childDepth, plyFromRoot, alpha, beta, perspectiveTeam, ct);
+                // budget honest and prevents infinite non-flipping recursion. The extension above
+                // is what compensates for that cost on the Act itself; this branch's depth handling
+                // is unchanged by it.
+                return Search(board, childDepth, plyFromRoot, alpha, beta, perspectiveTeam, ct, extensionsUsedThisLine: extensionsUsedThisLine);
             }
         }
 
@@ -634,7 +1175,9 @@ namespace ChessTheBetrayal.AI
         /// Quiescence: extends the search through "loud" positions to kill the horizon effect.
         /// BETRAYAL-CRITICAL: if we hit the depth limit while a Betrayer is still pending (Act
         /// played, not yet resolved), the position is NOT quiet — standing pat here would evaluate
-        /// a board mid-defection and return garbage (the report's "illusion of material loss").
+        /// a board mid-defection and return garbage — the material count is momentarily wrong,
+        /// because the betrayed piece has left its old side but the reply that answers it hasn't
+        /// been played yet.
         /// We must resolve the Retribution/Defection/ForcedSave sub-phase before we're allowed to
         /// stand pat, driving it through exactly the same rule the domain uses in
         /// TurnResolver.ResultFromDefectionOutcome (clear pending + pass the turn on a plain
@@ -691,7 +1234,7 @@ namespace ChessTheBetrayal.AI
                 if (retribution.Count == 0)
                     return ResolveForcedDefection(board, alpha, beta, perspectiveTeam, plyFromRoot, qply, ct);
 
-                OrderMoves(retribution);
+                OrderMoves(board, retribution);
                 int bestRetribution = -Infinity;
                 for (int i = 0; i < retribution.Count; i++)
                 {
@@ -757,7 +1300,7 @@ namespace ChessTheBetrayal.AI
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             _tt.Stats.QMovesGenerated += moves.Count;
 #endif
-            OrderMoves(moves);
+            OrderMoves(board, moves);
 
             int best = standPat;
             for (int i = 0; i < moves.Count; i++)
@@ -787,6 +1330,23 @@ namespace ChessTheBetrayal.AI
                 {
                     int optimisticGain = CapturedPieceValue(move.CapturedType) + DeltaPruningMargin;
                     if (standPat + optimisticGain <= alpha) continue;
+
+                    // Static-exchange prune: delta pruning above only catches a capture whose best
+                    // case can't help even if it wins outright — this catches the opposite case, a
+                    // capture that LOOKS like material gain (it passed delta pruning) but actually
+                    // loses material once every recapture on the square is accounted for. Only
+                    // trusted where StaticExchangeEvaluation.IsApplicable holds; on a square where a
+                    // Betrayal Act just staged a pending Retribution, the exchange isn't a normal
+                    // alternating trade, so this prune stays off there exactly like ordering's own
+                    // SEE nudge does.
+                    if (StaticExchangeEvaluation.IsApplicable(board, move)
+                        && StaticExchangeEvaluation.Evaluate(board, move) < 0)
+                    {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                        _tt.Stats.SeeQuiescencePrunes++;
+#endif
+                        continue;
+                    }
                 }
 
                 ApplyMoveAndTurn(board, move);
@@ -900,6 +1460,51 @@ namespace ChessTheBetrayal.AI
         }
 
         /// <summary>
+        /// The main-search twin of <see cref="ResolveForcedDefection"/>: a Search node whose
+        /// pending Retribution has no legal executioner resolves the Betrayer's Defection in-line
+        /// and keeps searching, instead of mistaking the empty move list for stalemate. The
+        /// resolution itself is the domain's, not a searched move — the same two sub-cases and the
+        /// same undo contract as the quiescence version; only the recursion target differs (back
+        /// into Search, one ply shallower, so the depth budget stays honest and the recursion
+        /// provably terminates — at depth 0 it lands in Quiescence, which already handles every
+        /// pending-Betrayal state).
+        /// </summary>
+        private int ResolveForcedDefectionInSearch(BoardState board, int depth, int plyFromRoot,
+                                                   int alpha, int beta, Team perspectiveTeam, CancellationToken ct,
+                                                   int extensionsUsedThisLine)
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            _tt.Stats.ForcedDefectionResolutions++;
+#endif
+            DefectionOutcome outcome = ChessEngine.ResolveFailedRetribution(board);
+
+            int score;
+            if (outcome.RequiresForcedSave)
+            {
+                // The defected piece checks its former King: the SAME side owes a mandatory
+                // king-save, so no turn flip and no negation. The recursive call re-enters Search
+                // on the ForcedSave-pending position, whose move generation returns only the legal
+                // king-saves (and whose own empty-list case is a genuine mate, scored above).
+                score = Search(board, depth - 1, plyFromRoot + 1, alpha, beta, perspectiveTeam, ct,
+                    extensionsUsedThisLine: extensionsUsedThisLine);
+            }
+            else
+            {
+                // Fully resolved: the turn passes to the opponent, standard negamax step.
+                // CurrentTurn is the caller's own bookkeeping to flip, exactly as in the
+                // quiescence version — ResolveFailedRetribution already handled every hash toggle.
+                board.NextTurn();
+                Team childPerspective = perspectiveTeam == Team.White ? Team.Black : Team.White;
+                score = -Search(board, depth - 1, plyFromRoot + 1, -beta, -alpha, childPerspective, ct,
+                    extensionsUsedThisLine: extensionsUsedThisLine);
+                board.NextTurn();
+            }
+
+            _engine.UndoMove(board, outcome.DefectionMove);
+            return score;
+        }
+
+        /// <summary>
         /// Plays out the mandatory king-save obligation on a board that's already ForcedSave-pending
         /// — whether that obligation was just discovered this instant (ResolveForcedDefection, right
         /// after the Defection that created it) or the board arrived here already carrying it from a
@@ -920,7 +1525,7 @@ namespace ChessTheBetrayal.AI
                 return board.CurrentTurn == perspectiveTeam ? -MateScore : MateScore;
             }
 
-            OrderMoves(saves);
+            OrderMoves(board, saves);
             int best = -Infinity;
             for (int i = 0; i < saves.Count; i++)
             {
@@ -940,51 +1545,148 @@ namespace ChessTheBetrayal.AI
         /// <summary>
         /// MVV-LVA-ish ordering + Act-first. Good ordering is what makes alpha-beta cut ~b^(d/2)
         /// instead of b^d. Betrayal Act moves are searched early because they're high-variance and
-        /// most likely to cause cutoffs (or refutations) — we want them near the front.
+        /// most likely to cause cutoffs (or refutations) — we want them near the front. No
+        /// plyFromRoot to key killers against at this call site (quiescence has no ply-indexed
+        /// killer table of its own), so quiet moves fall back to history only.
         /// </summary>
-        private static void OrderMoves(List<MoveCommand> moves) => OrderMoves(moves, 0);
+        private void OrderMoves(BoardState board, List<MoveCommand> moves) => OrderMoves(board, moves, 0, plyFromRoot: -1);
 
         /// <summary>
         /// MVV-LVA-ish ordering + Act-first, with the TT move (if any) sorted to the very front.
         /// Good ordering is what makes alpha-beta cut ~b^(d/2) instead of b^d — a TT-move hit from a
         /// prior iteration/turn is the single best predictor of the true best move at a node.
+        /// plyFromRoot: -1 opts out of the killer lookup (used by quiescence, which has no
+        /// ply-indexed killer table of its own).
+        ///
+        /// A capture's exact tier position within the winning/losing capture bands comes from a
+        /// real static-exchange read (see EnsureSeeScoreCache/SeeOrderBonus below) whenever
+        /// StaticExchangeEvaluation.IsApplicable allows it — the coarse piece-rank difference
+        /// (MVV-LVA) that used to be the whole story is now only the fallback for a Betrayal-pending
+        /// square, where SEE's alternating-recapture assumption doesn't hold.
         /// </summary>
-        private static void OrderMoves(List<MoveCommand> moves, uint ttMove)
+        private void OrderMoves(BoardState board, List<MoveCommand> moves, uint ttMove, int plyFromRoot)
         {
+            EnsureSeeScoreCache(moves.Count);
+            for (int i = 0; i < moves.Count; i++)
+                _seeScoreCache[i] = ComputeSeeOrderBonus(board, moves[i]);
+
             // Simple insertion-sort by a cheap score key; move lists are small (<~45), so this is
-            // faster than allocating a comparer/delegate and avoids GC.
+            // faster than allocating a comparer/delegate and avoids GC. The SEE cache is index-
+            // aligned to the ORIGINAL move order and must move in lockstep with each swap below —
+            // it's the same "score sits in a parallel array, shuffled together with its move"
+            // discipline MoveToFront already uses for _rootScores/_rootMoves.
             for (int i = 1; i < moves.Count; i++)
             {
                 MoveCommand key = moves[i];
-                int keyScore = OrderScore(key, ttMove);
+                int keySee = _seeScoreCache[i];
+                int keyScore = OrderScore(key, ttMove, plyFromRoot, keySee);
                 int j = i - 1;
-                while (j >= 0 && OrderScore(moves[j], ttMove) < keyScore)
+                while (j >= 0 && OrderScore(moves[j], ttMove, plyFromRoot, _seeScoreCache[j]) < keyScore)
                 {
                     moves[j + 1] = moves[j];
+                    _seeScoreCache[j + 1] = _seeScoreCache[j];
                     j--;
                 }
                 moves[j + 1] = key;
+                _seeScoreCache[j + 1] = keySee;
             }
         }
 
+        /// <summary>Grows the SEE ordering cache to fit a pathological move-list size, mirroring
+        /// EnsureRootScoreCapacity's own "grown lazily, never freed" policy.</summary>
+        private void EnsureSeeScoreCache(int requiredCount)
+        {
+            if (_seeScoreCache.Length >= requiredCount) return;
+            Array.Resize(ref _seeScoreCache, requiredCount * 2);
+        }
+
+        // SEE's raw centipawn output (up to the low tens of thousands for a king-adjacent trade)
+        // is far larger than the gap between OrderScoreCore's tier bands — adding it in unscaled
+        // would risk a deeply-losing SEE capture outscoring a promo or even a quiet move's tier,
+        // which is not what this lever is for: SEE is only supposed to refine ordering WITHIN
+        // whichever tier MVV-LVA already placed the capture in, not override the tier system
+        // itself. Clamping to this range keeps the nudge strictly smaller than the smallest gap
+        // between two adjacent tiers (Tier 2's equal-capture/promo band down to Tier 3's Act band
+        // is a 9,500-point gap; ±500 leaves comfortable headroom on both sides).
+        private const int SeeOrderBonusClamp = 500;
+
         /// <summary>
-        /// LMR exemption predicate, keyed on move SEMANTICS rather than sort
-        /// position: a capture, a promotion, the TT/PV move, or any Betrayal-stage move (Act,
-        /// Retribution, DefensiveOverride, Defection) is never reduced. The per-node depth/pending-
-        /// Betrayer/index gates live in Search's loop, since those need node-level state this
-        /// predicate doesn't have.
+        /// A small ordering nudge derived from a real static-exchange read, computed exactly once
+        /// per move per OrderMoves call (see the cache above) rather than per comparison. Zero for
+        /// every non-capture, and zero whenever StaticExchangeEvaluation.IsApplicable says the
+        /// alternating-recapture assumption doesn't hold here (a Betrayal-pending square) — those
+        /// moves fall back to OrderScoreCore's plain MVV-LVA rank-difference entirely, exactly as
+        /// before this lever existed. Clamped (see SeeOrderBonusClamp) so it can only reorder
+        /// moves within their existing MVV-LVA tier, never move a capture into a different one.
+        /// </summary>
+        private static int ComputeSeeOrderBonus(BoardState board, MoveCommand m)
+        {
+            if (!m.IsCapture || !StaticExchangeEvaluation.IsApplicable(board, m)) return 0;
+
+            int see = StaticExchangeEvaluation.Evaluate(board, m);
+            if (see > SeeOrderBonusClamp) return SeeOrderBonusClamp;
+            if (see < -SeeOrderBonusClamp) return -SeeOrderBonusClamp;
+            return see;
+        }
+
+        /// <summary>
+        /// Quiet-move predicate, keyed on move SEMANTICS rather than sort position: true only for
+        /// a plain non-capture, non-promotion, non-Betrayal, non-TT move. Feeds move-count
+        /// pruning, frontier futility, and the quiet half of the reduction decision — a capture,
+        /// promotion, or Betrayal-stage move is never treated as quiet (though an Act still gets
+        /// its own reduction path in Search's loop, on its own reasoning). The per-node
+        /// depth/pending-Betrayer/index gates live in Search's loop, since those need node-level
+        /// state this predicate doesn't have.
         /// </summary>
         internal static bool IsReducibleMove(MoveCommand m, uint ttMove) =>
             !m.IsCapture && !m.IsPromotion && m.Stage == BetrayalStage.None && PackMove(m) != ttMove;
 
         /// <summary>
-        /// Concrete tier bands. Ordering only — never changes which move wins the
-        /// node, only how fast alpha-beta gets there. Act is Tier 3 (below captures/promo, above
-        /// quiets): demoted from the old flat +5000 so a cheaper cutoff gets a chance to fire
-        /// before the search pays Retribution's branching cost by exploring an Act first.
+        /// Concrete tier bands, ignoring killer/history (see the 3-arg overload below for the
+        /// version Search actually orders with). Kept as its own static entry point since
+        /// MoveOrderingTierTests pins the tier bands in isolation, independent of any particular
+        /// search's accumulated killer/history state.
         /// </summary>
-        internal static int OrderScore(MoveCommand m, uint ttMove)
+        internal static int OrderScore(MoveCommand m, uint ttMove) => OrderScoreCore(m, ttMove, out _);
+
+        /// <summary>
+        /// Concrete tier bands, plus a real static-exchange nudge on captures where one is
+        /// available. Ordering only — never changes which move wins the node, only how fast
+        /// alpha-beta gets there. Act is Tier 3 (below captures/promo, above quiets): demoted from
+        /// the old flat +5000 so a cheaper cutoff gets a chance to fire before the search pays
+        /// Retribution's branching cost by exploring an Act first.
+        ///
+        /// seeBonus is added on top of the coarse MVV-LVA tier score for a capture, refining the
+        /// ordering WITHIN the winning/losing-capture bands with an actual exchange result instead
+        /// of just the piece-rank difference — e.g. two different winning captures that MVV-LVA
+        /// would rank identically can still be told apart by how much material each one really
+        /// nets once recaptures are accounted for. It never moves a capture OUT of its MVV-LVA tier
+        /// (a small nudge added to a Tier-1 score still sorts above every Tier-2 score, since the
+        /// tier gap is always far larger than any single exchange's plausible centipawn swing).
+        ///
+        /// The quiet band (Tier 4, previously a flat 0) now carries a killer/history sub-score so
+        /// quiet moves that have caused cutoffs before get tried before ones that never have —
+        /// still strictly below every capture/promo/Act tier above it, so this only reorders WITHIN
+        /// the quiet band, never promotes a quiet move ahead of a tactical one.
+        /// </summary>
+        private int OrderScore(MoveCommand m, uint ttMove, int plyFromRoot, int seeBonus)
         {
+            int tierScore = OrderScoreCore(m, ttMove, out bool isQuiet);
+            if (isQuiet) return QuietMoveOrderScore(m, plyFromRoot);
+
+            // Only the winning/equal-capture bands (Tier 1/2, both >= 20,000) get the SEE nudge —
+            // a losing capture's tier sits too close to the Act/quiet bands below it (as little as
+            // a few points of headroom) for even a small nudge to stay safely inside it, so those
+            // keep the plain MVV-LVA rank-difference score exactly as before this lever existed.
+            return tierScore >= 20_000 ? tierScore + seeBonus : tierScore;
+        }
+
+        /// <summary>Shared tier-band logic for both OrderScore overloads. isQuiet reports whether
+        /// the move fell all the way through to the quiet band, so the ply-aware caller knows to
+        /// layer a killer/history sub-score on top instead of using the (always 0) tier value.</summary>
+        private static int OrderScoreCore(MoveCommand m, uint ttMove, out bool isQuiet)
+        {
+            isQuiet = false;
             if (ttMove != 0 && PackMove(m) == ttMove) return 100_000;  // Tier 0: TT/PV move
 
             int capturedRank = PieceRank(m.CapturedType);
@@ -1005,7 +1707,79 @@ namespace ChessTheBetrayal.AI
             if (m.IsCapture)
                 return capturedRank * 10 - pieceRank;                  // Tier 4: losing capture
 
+            isQuiet = true;
             return 0;                                                  // Tier 4: quiet
+        }
+
+        /// <summary>
+        /// Killer bonus (this ply's remembered cutoff moves) plus history bonus (this piece/square
+        /// pair's accumulated cutoff weight). Both are clamped so their sum stays well under the
+        /// Act tier band above — a losing capture already scores as low as 1 in the existing tier
+        /// bands, so this doesn't try to outrank captures in general, only the tier immediately
+        /// above the shared quiet/losing-capture region. Only meaningful for Stage == None moves —
+        /// history is never recorded for a Betrayal-stage move (see the update site in Search), so
+        /// this always resolves to 0 for one and the killer check below simply won't match either.
+        /// </summary>
+        private int QuietMoveOrderScore(MoveCommand m, int plyFromRoot)
+        {
+            uint packed = PackMove(m);
+            int killerBonus = 0;
+            if (plyFromRoot >= 0 && plyFromRoot < _killerMoves.GetLength(0))
+            {
+                if (packed == _killerMoves[plyFromRoot, 0]) killerBonus = 9000;
+                else if (packed == _killerMoves[plyFromRoot, 1]) killerBonus = 8000;
+            }
+
+            // Already clamped to 999 at the write site (RecordQuietCutoff) — combined with
+            // killerBonus's 9000 ceiling, the sum can never approach the Act tier at 10_000.
+            int historyBonus = m.Stage == BetrayalStage.None
+                ? _historyScores[(int)m.PieceType, SquareIndex(m.EndPosition)]
+                : 0;
+
+            return killerBonus + historyBonus;
+        }
+
+        private static int SquareIndex(Vector2Int square) => square.y * 8 + square.x;
+
+        /// <summary>
+        /// Called once per beta cutoff, right where Search's move loop breaks. Only a QUIET move
+        /// (not a capture, not a promotion, not any Betrayal-stage move) updates history/killers —
+        /// a capture or Act already sorts ahead of the whole quiet band via OrderScore's tier
+        /// bands, so remembering it here would never change its own ordering and would only risk
+        /// crowding out genuinely useful quiet-move memory.
+        /// </summary>
+        /// <summary>Test seam: exercises the exact same update RecordQuietCutoff performs from
+        /// inside Search's move loop, without needing to engineer a full search tree that happens
+        /// to produce a cutoff at a specific ply. Not part of the search's own control flow.</summary>
+        internal void RecordQuietCutoffForTest(MoveCommand move, int depth, int plyFromRoot) =>
+            RecordQuietCutoff(move, depth, plyFromRoot);
+
+        /// <summary>Test seam: reads back the ordering score OrderMoves would have used for this
+        /// move at this ply, including any killer/history bonus and (when a board is supplied) any
+        /// static-exchange nudge recorded so far. A null board mirrors the pre-SEE behavior (no
+        /// nudge) — most existing callers only care about killer/history tier placement and don't
+        /// have a board handy.</summary>
+        internal int OrderScoreForTest(MoveCommand move, uint ttMove, int plyFromRoot, BoardState board = null) =>
+            OrderScore(move, ttMove, plyFromRoot, board == null ? 0 : ComputeSeeOrderBonus(board, move));
+
+        private void RecordQuietCutoff(MoveCommand move, int depth, int plyFromRoot)
+        {
+            if (move.IsCapture || move.IsPromotion || move.Stage != BetrayalStage.None) return;
+
+            // Depth-weighted so a cutoff found deep in the tree (a stronger, more expensive proof)
+            // outweighs one found shallow. Clamped well under QuietMoveOrderScore's killer bonus
+            // (9000/8000) so history can nudge ordering among non-killer quiet moves but never adds
+            // up to enough to compete with an actual killer-slot match, let alone the Act tier above it.
+            ref int score = ref _historyScores[(int)move.PieceType, SquareIndex(move.EndPosition)];
+            score = Math.Min(score + depth * depth, 999);
+
+            if (plyFromRoot < 0 || plyFromRoot >= _killerMoves.GetLength(0)) return;
+
+            uint packed = PackMove(move);
+            if (packed == _killerMoves[plyFromRoot, 0]) return; // already the top killer here
+
+            _killerMoves[plyFromRoot, 1] = _killerMoves[plyFromRoot, 0];
+            _killerMoves[plyFromRoot, 0] = packed;
         }
 
         /// <summary>
@@ -1023,6 +1797,19 @@ namespace ChessTheBetrayal.AI
             uint promo = (uint)m.PromotedTo & 0xF;
             uint stage = (uint)m.Stage & 0x7;
             return from | (to << 6) | (promo << 12) | (stage << 16);
+        }
+
+        /// <summary>True once two consecutive completed depths agree closely enough that another
+        /// depth is unlikely to change the answer — same best move AND a score within
+        /// StabilityThresholdCp of each other. Neither signal alone is trustworthy on its own (see
+        /// the constant's own doc comment), so both are required.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool IsRootStable(int currentScore, int previousScore, MoveCommand currentBest, MoveCommand previousBest)
+        {
+            bool sameBestMove = PackMove(currentBest) == PackMove(previousBest);
+            int scoreDelta = currentScore - previousScore;
+            if (scoreDelta < 0) scoreDelta = -scoreDelta;
+            return sameBestMove && scoreDelta <= StabilityThresholdCp;
         }
 
         private static int PieceRank(ChessPieceType t) => t switch
