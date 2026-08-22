@@ -7,6 +7,9 @@ namespace ChessTheBetrayal.AI
     /// the runtime resolution path — <see cref="AIProfileTableProvider"/> reads the code-side
     /// <see cref="AIProfileTable.BuiltIn"/> roster this ticket. This asset type exists so a later
     /// ticket can redirect the provider at authored assets without shape changes.
+    ///
+    /// PROVISIONAL — every asset of this type mirrors a row in <see cref="AIProfileTable.BuiltIn"/>,
+    /// which is itself pre-validation. See that class's doc comment for what "validated" means here.
     /// </summary>
     [CreateAssetMenu(menuName = "Chess/AI/AI Profile Definition", fileName = "AIProfileDefinition")]
     public sealed class AIProfileDefinition : ScriptableObject
@@ -21,9 +24,9 @@ namespace ChessTheBetrayal.AI
         [SerializeField, Min(0)] private int _tieBreakWindowCp;
         [SerializeField] private bool _useOpeningBook = true;
 
-        public AIProfile ToProfile() => new AIProfile(
+        public AIProfile ToProfile() => AIProfileGuardrails.Apply(new AIProfile(
             _id, _maxDepth, _softTimeBudgetMs, _blunderRate, _blunderMarginCp,
-            _betrayalAggression, _attackDefenseBias, _tieBreakWindowCp, _useOpeningBook);
+            _betrayalAggression, _attackDefenseBias, _tieBreakWindowCp, _useOpeningBook));
 
         private void OnValidate()
         {
@@ -35,6 +38,29 @@ namespace ChessTheBetrayal.AI
 
             if (_softTimeBudgetMs < 1)
                 Debug.LogError($"[{nameof(AIProfileDefinition)}] '{name}' SoftTimeBudgetMs must be >= 1.", this);
+
+            if (AIProfileGuardrails.RequiresClamp(_maxDepth))
+            {
+                if (_attackDefenseBias < AIProfileGuardrails.MinClampedAttackDefenseBias ||
+                    _attackDefenseBias > AIProfileGuardrails.MaxClampedAttackDefenseBias)
+                {
+                    Debug.LogError(
+                        $"[{nameof(AIProfileDefinition)}] '{name}' has MaxDepth {_maxDepth} (< {AIProfileGuardrails.ShallowSearchDepthThreshold}) " +
+                        $"with AttackDefenseBias {_attackDefenseBias}, outside the shallow-search range " +
+                        $"[{AIProfileGuardrails.MinClampedAttackDefenseBias}, {AIProfileGuardrails.MaxClampedAttackDefenseBias}]. " +
+                        "It will be clamped at resolution — a shallow search can't vet a strongly reshaped evaluator.", this);
+                }
+
+                if (_betrayalAggression < AIProfileGuardrails.MinClampedBetrayalAggression ||
+                    _betrayalAggression > AIProfileGuardrails.MaxClampedBetrayalAggression)
+                {
+                    Debug.LogError(
+                        $"[{nameof(AIProfileDefinition)}] '{name}' has MaxDepth {_maxDepth} (< {AIProfileGuardrails.ShallowSearchDepthThreshold}) " +
+                        $"with BetrayalAggression {_betrayalAggression}, outside the shallow-search range " +
+                        $"[{AIProfileGuardrails.MinClampedBetrayalAggression}, {AIProfileGuardrails.MaxClampedBetrayalAggression}]. " +
+                        "It will be clamped at resolution — a shallow search can't vet a strongly reshaped evaluator.", this);
+                }
+            }
         }
     }
 }

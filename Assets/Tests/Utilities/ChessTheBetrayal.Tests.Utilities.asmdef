@@ -2,7 +2,10 @@
     "name": "ChessTheBetrayal.Tests.Utilities",
     "rootNamespace": "",
     "references": [
-        "ChessTheBetrayal.Core"
+        "ChessTheBetrayal.Core",
+        "ChessTheBetrayal.AI",
+        "ChessTheBetrayal.Events",
+        "ChessTheBetrayal.Gameplay.Manager"
     ],
     "includePlatforms": [
         "Editor"

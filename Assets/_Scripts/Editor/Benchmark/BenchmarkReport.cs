@@ -1,0 +1,94 @@
+using System;
+using System.Collections.Generic;
+
+namespace ChessTheBetrayal.EditorTools.Benchmark
+{
+    /// <summary>How much of the tournament matrix a run covers.</summary>
+    public enum BenchmarkMode
+    {
+        /// <summary>Adjacent strength-chain pairs only, reduced game count — the routine/on-demand check.</summary>
+        Quick,
+
+        /// <summary>The full round-robin matrix at full game count — the tuning instrument, nightly-class cost.</summary>
+        Full
+    }
+
+    /// <summary>One pairing's win/draw/loss record for the profile listed first (Subject).</summary>
+    [Serializable]
+    public sealed class PairResult
+    {
+        public string Subject;
+        public string Opponent;
+        public int Games;
+        public int SubjectWins;
+        public int OpponentWins;
+        public int Draws;
+        public float SubjectWinRate;
+
+        public PairResult() { }
+
+        public PairResult(string subject, string opponent, int games, int subjectWins, int opponentWins, int draws)
+        {
+            Subject = subject;
+            Opponent = opponent;
+            Games = games;
+            SubjectWins = subjectWins;
+            OpponentWins = opponentWins;
+            Draws = draws;
+            SubjectWinRate = games == 0 ? 0f : (subjectWins + 0.5f * draws) / games;
+        }
+    }
+
+    /// <summary>Search/perf telemetry for one profile tier, averaged across every move it made this run.</summary>
+    [Serializable]
+    public sealed class TierPerformance
+    {
+        public string ProfileId;
+        public int MovesSampled;
+        public double MeanNodesPerMove;
+        public double MeanMsPerMove;
+        public int DeepestCompletedDepth;
+        public float ObservedBlunderActuationRate;
+
+        public TierPerformance() { }
+
+        public TierPerformance(string profileId, int movesSampled, double meanNodesPerMove,
+            double meanMsPerMove, int deepestCompletedDepth, float observedBlunderActuationRate)
+        {
+            ProfileId = profileId;
+            MovesSampled = movesSampled;
+            MeanNodesPerMove = meanNodesPerMove;
+            MeanMsPerMove = meanMsPerMove;
+            DeepestCompletedDepth = deepestCompletedDepth;
+            ObservedBlunderActuationRate = observedBlunderActuationRate;
+        }
+    }
+
+    /// <summary>
+    /// One benchmark run's full output: the artifact both the strength-drift check and the
+    /// performance-drift check read from, captured in a single tournament pass. This is the shape
+    /// serialized to Docs/Benchmarks/baseline.json.
+    /// </summary>
+    [Serializable]
+    public sealed class BenchmarkReport
+    {
+        public int RunSeed;
+        public string Mode;
+        public List<PairResult> PairResults = new List<PairResult>();
+        public List<TierPerformance> TierPerformances = new List<TierPerformance>();
+
+        public PairResult FindPair(string subject, string opponent)
+        {
+            foreach (PairResult pair in PairResults)
+                if (pair.Subject == subject && pair.Opponent == opponent) return pair;
+            return null;
+        }
+
+        public TierPerformance FindTier(string profileId)
+        {
+            foreach (TierPerformance tier in TierPerformances)
+                if (tier.ProfileId == profileId) return tier;
+            return null;
+        }
+    }
+}
