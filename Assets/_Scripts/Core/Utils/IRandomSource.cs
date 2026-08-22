@@ -9,5 +9,10 @@ namespace ChessTheBetrayal.Core.Utils
     {
         bool NextBool();
         int NextInt(int maxExclusive);
+
+        /// <summary>Returns a value in [0, 1). Used for probability rolls (e.g. AI blunder rate)
+        /// and weighted picks — composition (Pick/WeightedPick over a candidate set) lives in the
+        /// caller, this stays a minimal primitive.</summary>
+        float NextFloat();
     }
 }

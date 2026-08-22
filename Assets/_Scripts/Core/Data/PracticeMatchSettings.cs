@@ -8,9 +8,9 @@ namespace ChessTheBetrayal.Core.Data
     /// Consumed end to end by MatchFlowCoordinator.HandleTeamAnimationComplete: BetrayalEnabled sets
     /// BoardState.BetrayalRightAvailable, AiDefendOnly maps to AISearchSettings.BetrayalUsage (kept
     /// as a Core-safe bool here since Core.Data must not depend on ChessTheBetrayal.AI),
-    /// RetributionSkipAllowed gates GameHUD's Skip button. Difficulty is stored but not yet branched
-    /// on — every level currently resolves to the same AISearchSettings.Ultimate() search until the
-    /// dedicated difficulty ticket lands.
+    /// RetributionSkipAllowed gates GameHUD's Skip button. AiProfileId is a stable lookup key
+    /// (e.g. "normal") resolved against ChessTheBetrayal.AI.AIProfileTable by AIMatchCoordinator —
+    /// kept as a plain string here so Core stays AI-assembly-free.
     /// </summary>
     public readonly struct PracticeMatchSettings
     {
@@ -27,15 +27,18 @@ namespace ChessTheBetrayal.Core.Data
         /// search branch — see AI_System_Design doc.</summary>
         public readonly bool RetributionSkipAllowed;
 
-        public readonly AIDifficulty Difficulty;
+        /// <summary>Stable AIProfile id (e.g. "easy"/"normal"/"hard"). Resolved by
+        /// ChessTheBetrayal.AI.IAIProfileProvider; an unknown id falls back to "normal" rather
+        /// than throwing.</summary>
+        public readonly string AiProfileId;
 
         public PracticeMatchSettings(bool betrayalEnabled, bool aiDefendOnly,
-            bool retributionSkipAllowed, AIDifficulty difficulty)
+            bool retributionSkipAllowed, string aiProfileId)
         {
             BetrayalEnabled = betrayalEnabled;
             AiDefendOnly = aiDefendOnly;
             RetributionSkipAllowed = retributionSkipAllowed;
-            Difficulty = difficulty;
+            AiProfileId = aiProfileId;
         }
 
         /// <summary>Sensible defaults matching the panel's default toggle states.</summary>
@@ -43,6 +46,6 @@ namespace ChessTheBetrayal.Core.Data
             betrayalEnabled: true,
             aiDefendOnly: false,
             retributionSkipAllowed: true,
-            difficulty: AIDifficulty.Normal);
+            aiProfileId: "normal");
     }
 }

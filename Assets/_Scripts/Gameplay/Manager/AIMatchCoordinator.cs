@@ -1,12 +1,26 @@
 using System;
 using System.Diagnostics;
 using ChessTheBetrayal.AI;
+using ChessTheBetrayal.AI.OpeningBook;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Diagnostics;
 using ChessTheBetrayal.Core.Engine;
 
 namespace ChessTheBetrayal.Gameplay.Manager
 {
+    /// <summary>
+    /// Local-AI-only presentation state for the background search agent, driven entirely by
+    /// AIMatchCoordinator on the main thread (the worker thread only sets AsyncAIAgent's own
+    /// volatile completion flag; Tick() is what observes it and advances this machine). Idle is
+    /// the rest state; Searching starts the instant TryRequestMove hands work to the agent;
+    /// ResultReady is a one-tick pulse the instant Tick() observes a completed search, then the
+    /// machine falls straight back to Idle once HandleMoveDecided has fed the move through
+    /// _playMove — nothing external needs to observe ResultReady, so it's transient by design,
+    /// not a state a caller can get stuck polling. CancelInFlightSearch takes Searching straight
+    /// back to Idle without ever visiting ResultReady.
+    /// </summary>
+    public enum AgentActivity { Idle, Searching, ResultReady }
+
     /// <summary>
     /// Owns the background-thread AI agent's lifecycle: constructing it for a session, deciding
     /// when to ask it for a move, pumping its main-thread result delivery, and tearing it down.
@@ -24,7 +38,8 @@ namespace ChessTheBetrayal.Gameplay.Manager
         private readonly IChessEngine _engine;
         private readonly BoardState _board;
         private readonly Action<MoveCommand> _playMove;
-        private readonly Func<BetrayalUsage, AISearchSettings> _searchSettingsFactory;
+        private readonly Func<BetrayalUsage, AIProfile, AISearchSettings> _searchSettingsFactory;
+        private readonly IAIProfileProvider _profileProvider;
 
         // Optional — null in most tests. Verbose-gated AI-lifecycle logging so a human can tell the
         // background search is actually running (and how long it took) instead of guessing. Never
@@ -46,54 +61,69 @@ namespace ChessTheBetrayal.Gameplay.Manager
         /// <summary>True once <see cref="SetAIMode"/> has constructed an agent for this session.</summary>
         public bool IsAiMode => _aiAgent != null;
 
+        /// <summary>Current step of the search-lifecycle state machine — see <see cref="AgentActivity"/>.</summary>
+        public AgentActivity Activity { get; private set; } = AgentActivity.Idle;
+
         /// <summary>True while a background search is in flight — UndoService's cancel-before-pop ordering reads this.</summary>
-        public bool IsSearchInFlight => _aiAgent is AsyncAIAgent asyncAgent && asyncAgent.IsSearching;
+        public bool IsSearchInFlight => Activity == AgentActivity.Searching;
 
         /// <summary>Fires when the AI's background search worker throws. TEMP debug surface (see AsyncAIAgent) — GameManager routes it to Debug.LogError.</summary>
         public event Action<string> OnSearchException;
 
         public AIMatchCoordinator(IChessEngine engine, BoardState board, Action<MoveCommand> playMove, IDomainLogger logger = null)
-            : this(engine, board, playMove, AISearchSettings.Ultimate, logger)
+            : this(engine, board, playMove, AISearchSettings.FromProfile, new AIProfileTableProvider(), logger)
         {
         }
 
         /// <summary>
         /// Lets a caller substitute a shallow/fast <see cref="AISearchSettings"/> factory (e.g.
-        /// maxDepth: 1) instead of the production <see cref="AISearchSettings.Ultimate"/> depth-7
-        /// search — used by tests so search-lifecycle assertions (cancellation, delivery,
-        /// IsSearchInFlight) don't have to wait out a full-depth search. GameManager's composition
-        /// root always uses the single-argument constructor above.
+        /// maxDepth: 1) and/or profile provider instead of the production
+        /// <see cref="AISearchSettings.FromProfile"/> mapping — used by tests so search-lifecycle
+        /// assertions (cancellation, delivery, IsSearchInFlight) don't have to wait out a
+        /// full-depth search. GameManager's composition root always uses the single-argument
+        /// constructor above.
         /// </summary>
         public AIMatchCoordinator(
             IChessEngine engine, BoardState board, Action<MoveCommand> playMove,
-            Func<BetrayalUsage, AISearchSettings> searchSettingsFactory, IDomainLogger logger = null)
+            Func<BetrayalUsage, AIProfile, AISearchSettings> searchSettingsFactory,
+            IAIProfileProvider profileProvider, IDomainLogger logger = null)
         {
             _engine = engine;
             _board = board;
             _playMove = playMove;
             _searchSettingsFactory = searchSettingsFactory;
+            _profileProvider = profileProvider ?? new AIProfileTableProvider();
             _logger = logger;
         }
 
         /// <summary>
         /// Configures the session for AI play and constructs the background-thread search agent.
         /// AI sessions always run untimed — the caller is responsible for bypassing clock setup.
+        /// openingBook is optional (null skips opening-book play entirely, matching pre-AI-28
+        /// behavior) — GameManager supplies its compiled OpeningBookAsset via the Inspector.
         /// </summary>
-        public void SetAIMode(Team aiTeam, BetrayalUsage betrayalUsage)
+        public void SetAIMode(Team aiTeam, BetrayalUsage betrayalUsage, string aiProfileId, OpeningBookAsset openingBook = null)
         {
             _aiTeam = aiTeam;
 
             TearDownAgent();
 
-            AISearchSettings settings = _searchSettingsFactory(betrayalUsage);
+            AIProfile profile = _profileProvider.Resolve(aiProfileId);
+            AISearchSettings settings = _searchSettingsFactory(betrayalUsage, profile);
             _configuredDepth = settings.MaxDepth;
+
+            EvaluationWeights weights = EvaluationWeights.FromProfile(profile);
 
             var agent = new AsyncAIAgent(
                 _engine,
-                new BetrayalAwareEvaluator(),
-                settings);
+                new BetrayalAwareEvaluator(weights),
+                settings,
+                profile,
+                new SystemRandomSource(),
+                openingBook);
 
             agent.OnMoveDecided += HandleMoveDecided;
+            agent.OnBookMovePlayed += HandleBookMovePlayed;
             _aiAgent = agent;
         }
 
@@ -108,6 +138,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
             }
 
             _searchStopwatch.Restart();
+            Activity = AgentActivity.Searching;
             _aiAgent.RequestBestMove(_board, _aiTeam);
         }
 
@@ -118,6 +149,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
 
             asyncAgent.CancelSearch();
             _searchStopwatch.Reset();
+            Activity = AgentActivity.Idle;
 
             if (_logger != null && _logger.IsVerbose)
             {
@@ -147,6 +179,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
         private void HandleMoveDecided(MoveCommand move)
         {
             if (_searchStopwatch.IsRunning) _searchStopwatch.Stop();
+            Activity = AgentActivity.ResultReady;
 
             if (_logger != null && _logger.IsVerbose)
             {
@@ -158,6 +191,26 @@ namespace ChessTheBetrayal.Gameplay.Manager
             }
 
             _playMove(move);
+            Activity = AgentActivity.Idle;
+        }
+
+        /// <summary>
+        /// Same hand-off as HandleMoveDecided, but for a move the opening book answered instantly
+        /// with no search — logged as AI_BookMovePlayed instead of AI_MoveDecided since there is no
+        /// search elapsed-time to report.
+        /// </summary>
+        private void HandleBookMovePlayed(MoveCommand move)
+        {
+            if (_searchStopwatch.IsRunning) _searchStopwatch.Stop();
+            Activity = AgentActivity.ResultReady;
+
+            if (_logger != null && _logger.IsVerbose)
+            {
+                _logger.LogInfo(new DomainLogEvent(DomainEventCode.AI_BookMovePlayed, message: $"{_aiTeam} plays {move}"));
+            }
+
+            _playMove(move);
+            Activity = AgentActivity.Idle;
         }
 
         private void TearDownAgent()
@@ -165,9 +218,11 @@ namespace ChessTheBetrayal.Gameplay.Manager
             if (_aiAgent is AsyncAIAgent asyncAgent)
             {
                 asyncAgent.OnMoveDecided -= HandleMoveDecided;
+                asyncAgent.OnBookMovePlayed -= HandleBookMovePlayed;
                 asyncAgent.Dispose();
             }
             _aiAgent = null;
+            Activity = AgentActivity.Idle;
         }
 
         public void Dispose() => TearDownAgent();

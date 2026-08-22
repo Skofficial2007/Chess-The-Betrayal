@@ -49,6 +49,12 @@ namespace ChessTheBetrayal.Gameplay.Manager
         // mid-sequence instead of staying on the ply where the Betrayal actually started.
         private int _betrayalSequenceMoveNumber = -1;
 
+        // Monotonic count of plies applied this match — see MoveExecutedPayload.PlyIndex doc
+        // comment. Incremented once per applied ply (every branch that raises
+        // _moveExecutedChannel), independent of TurnNumber which repeats across a Betrayal
+        // sub-sequence. Reset alongside the turn accumulator at match start.
+        private int _plyIndex;
+
         // Every MoveCommand applied since the last turn boundary — 1 entry for a plain move, 2+
         // for a Betrayal sub-sequence (Act, then whatever ends it). Flushed via OnTurnCompleted at
         // each of PlayMove's turn-ending branches, then cleared for the next turn.
@@ -76,7 +82,11 @@ namespace ChessTheBetrayal.Gameplay.Manager
 
         /// <summary>Clears the in-progress turn buffer. Call alongside MoveLog.Clear() whenever a
         /// new match starts, so a stale partial turn from a previous game can never leak in.</summary>
-        public void ResetTurnAccumulator() => _currentTurnMoves.Clear();
+        public void ResetTurnAccumulator()
+        {
+            _currentTurnMoves.Clear();
+            _plyIndex = 0;
+        }
 
         /// <summary>The current phase of the turn (Normal, Betrayal sub-phases, GameOver, etc.).</summary>
         public TurnPhase CurrentPhase { get; private set; } = TurnPhase.GameOver;
@@ -193,7 +203,8 @@ namespace ChessTheBetrayal.Gameplay.Manager
 
                 // Fire the standard move event so visuals update, but pass isCheck=false
                 // because Edge Case C dictates Discovered Checks on Opponent wait until the sequence resolves.
-                _moveExecutedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveExecutedPayload(move, _board.FullMoveNumber, false));
+                _plyIndex++;
+                _moveExecutedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveExecutedPayload(move, _board.FullMoveNumber, false, _plyIndex));
 
                 if (result.DidDefect)
                 {
@@ -223,7 +234,8 @@ namespace ChessTheBetrayal.Gameplay.Manager
 
                 // Fire the move event so BoardVisuals plays the capture animation.
                 bool isCheckAfterRetribution = _engine.IsKingInCheck(_board, _board.CurrentTurn);
-                _moveExecutedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveExecutedPayload(move, _board.FullMoveNumber, isCheckAfterRetribution));
+                _plyIndex++;
+                _moveExecutedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveExecutedPayload(move, _board.FullMoveNumber, isCheckAfterRetribution, _plyIndex));
 
                 _clock?.OnMoveMade(move.PieceTeam); // Standard Fischer increment now applies
                 CheckForGameEnd(move); // Discovered checks against the opponent evaluate here for the first time
@@ -236,7 +248,8 @@ namespace ChessTheBetrayal.Gameplay.Manager
             {
                 // Fire the move event so BoardVisuals plays the save animation.
                 bool isCheckAfterSave = _engine.IsKingInCheck(_board, _board.CurrentTurn);
-                _moveExecutedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveExecutedPayload(move, _board.FullMoveNumber, isCheckAfterSave));
+                _plyIndex++;
+                _moveExecutedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveExecutedPayload(move, _board.FullMoveNumber, isCheckAfterSave, _plyIndex));
 
                 _clock?.OnMoveMade(move.PieceTeam); // The Defensive Override move IS the final action of this turn — standard increment applies
                 CheckForGameEnd(move); // Discovered checks against the opponent evaluate here
@@ -249,10 +262,12 @@ namespace ChessTheBetrayal.Gameplay.Manager
             // We need to calculate if this move resulted in a check so the UI can flash the HUD.
             bool isCheck = _engine.IsKingInCheck(_board, _board.CurrentTurn);
 
+            _plyIndex++;
             _moveExecutedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveExecutedPayload(
                 move,
                 _board.FullMoveNumber,
-                isCheck
+                isCheck,
+                _plyIndex
             ));
 
             CheckForGameEnd(move);

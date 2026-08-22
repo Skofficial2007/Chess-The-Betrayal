@@ -54,6 +54,9 @@ namespace ChessTheBetrayal.App
         [Header("Debug")]
         [SerializeField] private bool logMoves = true;
 
+        [Header("AI")]
+        [SerializeField] private ChessTheBetrayal.AI.OpeningBook.OpeningBookAsset _openingBook;
+
         [Header("Betrayal Time Bounty (milliseconds)")]
         [SerializeField] private long _betrayalBountyBulletMs = 3_000L;   // Bullet 1|0
         [SerializeField] private long _betrayalBountyBullet2Ms = 5_000L;   // Bullet 2|1
@@ -69,6 +72,7 @@ namespace ChessTheBetrayal.App
         [Header("Event Channels")]
         [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _gameStartedChannel;
         [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _gameResetChannel;
+        [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _boardResyncRequiredChannel;
         [SerializeField] private ChessTheBetrayal.Events.GameOverEventChannel _gameOverChannel;
         [SerializeField] private ChessTheBetrayal.Events.TurnChangedEventChannel _turnChangedChannel;
         [SerializeField] private ChessTheBetrayal.Events.MoveExecutedEventChannel _moveExecutedChannel;
@@ -244,12 +248,14 @@ namespace ChessTheBetrayal.App
                 onExecutorPromotionRequired: OnExecutorPromotionRequired,
                 raiseGameModeConfigured: mode => _gameModeConfiguredChannel?.Raise(mode),
                 raiseGameStarted: () => _gameStartedChannel?.Raise(),
+                raiseBoardResyncRequired: () => _boardResyncRequiredChannel?.Raise(),
                 setSharedBoardState: board => _sharedBoardState?.Set(board),
                 clearSharedBoardState: () => _sharedBoardState?.Clear(),
                 raiseGameReset: () => _gameResetChannel?.Raise());
+            _matchFlow.OpeningBook = _openingBook;
 
             _gameOverChannel?.Register(OnGameOverRaised);
-            _matchStartRequestedChannel?.Register(StartMatch);
+            _matchStartRequestedChannel?.Register(BeginPlay);
             _turnChangedChannel?.Register(OnTurnChangedForAI);
         }
 
@@ -308,7 +314,7 @@ namespace ChessTheBetrayal.App
             }
 
             _gameOverChannel?.Unregister(OnGameOverRaised);
-            _matchStartRequestedChannel?.Unregister(StartMatch);
+            _matchStartRequestedChannel?.Unregister(BeginPlay);
             _turnChangedChannel?.Unregister(OnTurnChangedForAI);
 
             // Reset the static engine logger to the safe default to prevent scene-reload issues.
@@ -328,6 +334,7 @@ namespace ChessTheBetrayal.App
             InspectorGuard.Require(_sharedClockState, nameof(_sharedClockState), this);
             InspectorGuard.Require(_gameStartedChannel, nameof(_gameStartedChannel), this);
             InspectorGuard.Require(_gameResetChannel, nameof(_gameResetChannel), this);
+            InspectorGuard.Require(_boardResyncRequiredChannel, nameof(_boardResyncRequiredChannel), this);
             InspectorGuard.Require(_gameOverChannel, nameof(_gameOverChannel), this);
             InspectorGuard.Require(_turnChangedChannel, nameof(_turnChangedChannel), this);
             InspectorGuard.Require(_moveExecutedChannel, nameof(_moveExecutedChannel), this);
@@ -433,7 +440,7 @@ namespace ChessTheBetrayal.App
         /// Called by the presentation layer when all intro animations are finished.
         /// Unlocks the board, allowing pieces to move and starting the active player's clock.
         /// </summary>
-        public void StartMatch() => _matchFlow.StartMatch();
+        public void BeginPlay() => _matchFlow.BeginPlay();
 
         #endregion
 
@@ -514,19 +521,19 @@ namespace ChessTheBetrayal.App
         /// <summary>
         /// Configures the session for AI play. AI sessions always run untimed (see
         /// MatchFlowCoordinator.InitializeClock). Call this — and only this — before
-        /// HandleTeamAnimationComplete/StartMatch run their course; the AI coordinator's agent
-        /// being set is what makes TryRequestMove (fired from StartMatch and every TurnChangedEvent)
-        /// not a no-op. Calling it late (after StartMatch) simply means the AI won't move until the
+        /// HandleTeamAnimationComplete/BeginPlay run their course; the AI coordinator's agent
+        /// being set is what makes TryRequestMove (fired from BeginPlay and every TurnChangedEvent)
+        /// not a no-op. Calling it late (after BeginPlay) simply means the AI won't move until the
         /// next turn change — there's no unsafe half-configured state in between.
         /// </summary>
-        public void SetAIMode(Team aiTeam = Team.Black, BetrayalUsage betrayalUsage = BetrayalUsage.Full) =>
-            _matchFlow.SetAIMode(aiTeam, betrayalUsage);
+        public void SetAIMode(Team aiTeam = Team.Black, BetrayalUsage betrayalUsage = BetrayalUsage.Full, string aiProfileId = "normal") =>
+            _matchFlow.SetAIMode(aiTeam, betrayalUsage, aiProfileId);
 
         /// <summary>
         /// Fires whenever a turn-ending move completes (see MatchDriver.CheckForGameEnd's
         /// GameState.Normal/Check branches). This is what triggers the AI's move after every
         /// human reply — the very first ply (when the AI draws White) has no preceding
-        /// TurnChangedEvent, so StartMatch() calls TryRequestAIMove directly for that case.
+        /// TurnChangedEvent, so BeginPlay() calls TryRequestAIMove directly for that case.
         /// </summary>
         private void OnTurnChangedForAI(ChessTheBetrayal.Events.Payloads.TurnChangedPayload payload) =>
             _aiCoordinator.TryRequestMove(IsGameActive);

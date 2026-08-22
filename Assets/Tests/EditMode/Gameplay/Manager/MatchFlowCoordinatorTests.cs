@@ -30,6 +30,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             public FixedRandomSource(bool nextBool) { _nextBool = nextBool; }
             public bool NextBool() => _nextBool;
             public int NextInt(int maxExclusive) => 0;
+            public float NextFloat() => 0f;
         }
 
         private GameObject _host;
@@ -47,6 +48,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         private (Vector2Int from, Vector2Int to)? _rejectedMove;
         private GameModeConfig? _raisedGameModeConfigured;
         private int _raisedGameStartedCount;
+        private int _raisedBoardResyncRequiredCount;
         private BoardState _lastSetSharedBoardState;
         private int _clearedSharedBoardStateCount;
         private int _raisedGameResetCount;
@@ -78,6 +80,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             _lastSetSharedBoardState = null;
             _clearedSharedBoardStateCount = 0;
             _raisedGameResetCount = 0;
+            _raisedBoardResyncRequiredCount = 0;
 
             _matchFlow = new MatchFlowCoordinator(
                 _board, new GameSetup(logMoves: false), _matchDriver, _matchDriver.PlayMove, engine, _undoService, _aiCoordinator, _clockCoordinator,
@@ -90,6 +93,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
                 onExecutorPromotionRequired: (_, __, ___) => { },
                 raiseGameModeConfigured: mode => _raisedGameModeConfigured = mode,
                 raiseGameStarted: () => _raisedGameStartedCount++,
+                raiseBoardResyncRequired: () => _raisedBoardResyncRequiredCount++,
                 setSharedBoardState: board => _lastSetSharedBoardState = board,
                 clearSharedBoardState: () => _clearedSharedBoardStateCount++,
                 raiseGameReset: () => _raisedGameResetCount++);
@@ -146,7 +150,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         public void HandleTeamAnimationComplete_WithPendingPracticeSettings_AppliesEveryChoiceAndConsumesItOnce()
         {
             var settings = new PracticeMatchSettings(
-                betrayalEnabled: false, aiDefendOnly: true, retributionSkipAllowed: false, difficulty: AIDifficulty.Hard);
+                betrayalEnabled: false, aiDefendOnly: true, retributionSkipAllowed: false, aiProfileId: "hard");
             _matchFlow.SetPracticeMatchSettings(settings);
 
             _matchFlow.HandleTeamRollRequested();
@@ -185,19 +189,20 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
                 onExecutorPromotionRequired: (_, __, ___) => { },
                 raiseGameModeConfigured: mode => _raisedGameModeConfigured = mode,
                 raiseGameStarted: () => _raisedGameStartedCount++,
+                raiseBoardResyncRequired: () => _raisedBoardResyncRequiredCount++,
                 setSharedBoardState: board => _lastSetSharedBoardState = board,
                 clearSharedBoardState: () => _clearedSharedBoardStateCount++,
                 raiseGameReset: () => _raisedGameResetCount++);
 
             var settings = new PracticeMatchSettings(
-                betrayalEnabled: true, aiDefendOnly: false, retributionSkipAllowed: true, difficulty: AIDifficulty.Normal);
+                betrayalEnabled: true, aiDefendOnly: false, retributionSkipAllowed: true, aiProfileId: "normal");
             matchFlow.SetPracticeMatchSettings(settings);
 
             matchFlow.HandleTeamRollRequested();
             Assert.That(matchFlow.PlayerTeam, Is.EqualTo(Team.White), "Test fixture must pin the human to White.");
 
             matchFlow.HandleTeamAnimationComplete();
-            matchFlow.StartMatch();
+            matchFlow.BeginPlay();
 
             Assert.That(matchFlow.CanUndo, Is.False, "No turn has completed yet.");
 
@@ -215,7 +220,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             _matchFlow.HandleTeamAnimationComplete();
             Assert.That(_matchFlow.CurrentPhase, Is.EqualTo(TurnPhase.Starting));
 
-            _matchFlow.StartMatch();
+            _matchFlow.BeginPlay();
 
             Assert.That(_matchFlow.CurrentPhase, Is.EqualTo(TurnPhase.Normal));
         }
@@ -225,7 +230,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         {
             Assert.That(_matchFlow.CurrentPhase, Is.EqualTo(TurnPhase.GameOver));
 
-            _matchFlow.StartMatch();
+            _matchFlow.BeginPlay();
 
             Assert.That(_matchFlow.CurrentPhase, Is.EqualTo(TurnPhase.GameOver));
         }
@@ -246,7 +251,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         {
             _matchFlow.HandleTeamRollRequested();
             _matchFlow.HandleTeamAnimationComplete();
-            _matchFlow.StartMatch();
+            _matchFlow.BeginPlay();
 
             var from = new Vector2Int(0, 1);
             var to = new Vector2Int(0, 3);
@@ -262,7 +267,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         {
             _matchFlow.HandleTeamRollRequested();
             _matchFlow.HandleTeamAnimationComplete();
-            _matchFlow.StartMatch();
+            _matchFlow.BeginPlay();
 
             _matchFlow.HandleGameReset();
 
@@ -316,7 +321,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             // move BOTH sides in turn — the prototype behavior that must not regress.
             _matchFlow.HandleTeamRollRequested();
             _matchFlow.HandleTeamAnimationComplete();
-            _matchFlow.StartMatch();
+            _matchFlow.BeginPlay();
 
             // White to move: a White pawn is selectable.
             Assert.That(_matchFlow.CanSelectPiece(new Vector2Int(0, 1)), Is.True);
@@ -332,11 +337,11 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         public void CanSelectPiece_AiMatch_HumanControlsOnlyTheirOwnTeam()
         {
             var settings = new PracticeMatchSettings(
-                betrayalEnabled: true, aiDefendOnly: false, retributionSkipAllowed: true, difficulty: AIDifficulty.Normal);
+                betrayalEnabled: true, aiDefendOnly: false, retributionSkipAllowed: true, aiProfileId: "normal");
             _matchFlow.SetPracticeMatchSettings(settings);
             _matchFlow.HandleTeamRollRequested();
             _matchFlow.HandleTeamAnimationComplete();
-            _matchFlow.StartMatch();
+            _matchFlow.BeginPlay();
 
             Assert.That(_matchFlow.IsAiMode, Is.True);
 
@@ -363,7 +368,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             var mode = new GameModeConfig("Blitz 5|0", baseTimeMs: 5 * 60_000L, incrementMs: 0);
             _matchFlow.HandleGameModeReceived(mode);
 
-            _matchFlow.SetAIMode(Team.Black, BetrayalUsage.Full);
+            _matchFlow.SetAIMode(Team.Black, BetrayalUsage.Full, "normal");
 
             Assert.That(_matchFlow.IsAiMode, Is.True);
             Assert.That(_matchFlow.SelectedMode.IsUnlimited, Is.True,
