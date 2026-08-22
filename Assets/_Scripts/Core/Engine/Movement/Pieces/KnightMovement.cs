@@ -39,5 +39,22 @@ namespace ChessTheBetrayal.Core.Movement
                 }
             }
         }
+
+        public void GetAttackedSquares(BoardState board, PieceData piece, Vector2Int startPos, List<Vector2Int> buffer)
+        {
+            // A knight jumps, so every in-bounds offset square is attacked regardless of occupancy.
+            for (int i = 0; i < KnightOffsets.GetLength(0); i++)
+            {
+                Vector2Int target = new Vector2Int(
+                    startPos.x + KnightOffsets[i, 0],
+                    startPos.y + KnightOffsets[i, 1]
+                );
+
+                if (board.IsValidIndex(target))
+                {
+                    buffer.Add(target);
+                }
+            }
+        }
     }
 }

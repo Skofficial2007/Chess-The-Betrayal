@@ -30,6 +30,7 @@ namespace ChessTheBetrayal.AI
 
         private readonly AlphaBetaSearch _search;
         private readonly AISearchSettings _settings;
+        private readonly TranspositionTable _tt;
 
         private volatile bool _hasResult;
         private MoveCommand _pendingResult;
@@ -62,7 +63,12 @@ namespace ChessTheBetrayal.AI
 
         public AsyncAIAgent(IChessEngine engine, IPositionEvaluator evaluator, AISearchSettings settings)
         {
-            _search = new AlphaBetaSearch(engine, evaluator);
+            // Owned here (not by AlphaBetaSearch) so it PERSISTS across FindBestMove calls within a
+            // match — this is what attacks the successive-turn escalation the TT is built for.
+            // A fresh AsyncAIAgent (one per match, via AIMatchCoordinator.SetAIMode) gets a fresh
+            // table for free; there is no need to clear it mid-match.
+            _tt = new TranspositionTable(log2Size: 20); // ~16 MB desktop; mobile sizing TBD via settings
+            _search = new AlphaBetaSearch(engine, evaluator, transpositionTable: _tt);
             _settings = settings;
         }
 
@@ -78,18 +84,42 @@ namespace ChessTheBetrayal.AI
             BoardState isolated = board.CloneForSnapshot();
 
             _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+            CancellationTokenSource ctsForThisSearch = _cts; // captured so a later RequestBestMove/CancelSearch swapping _cts can't affect this closure
             CancellationToken token = _cts.Token;
+
+            // The wall-clock half of iterative deepening: FindBestMove's depth loop already keeps
+            // the best move from the last FULLY COMPLETED depth and discards a cancelled partial
+            // depth (see its doc comment) — but until now nothing ever triggered that cancellation
+            // on a timer, so SoftTimeBudgetMs was dead data and a hard position could run as long as
+            // MaxDepth allowed. CancelAfter arms exactly the timeout every iterative-deepening chess
+            // engine uses: let the search run until the budget expires, then stop and use whatever
+            // depth it finished. Never throws/blocks — it just schedules Cancel() on the timer thread.
+            _cts.CancelAfter(_settings.SoftTimeBudgetMs);
 
             Task.Run(() =>
             {
                 try
                 {
                     MoveCommand best = _search.FindBestMove(isolated, _settings, token);
-                    if (!token.IsCancellationRequested)
-                    {
-                        _pendingResult = best;
-                        _hasResult = true; // volatile write publishes _pendingResult to the main thread
-                    }
+
+                    // A budget-expiry cancellation is the EXPECTED, successful outcome of iterative
+                    // deepening — FindBestMove already returns the best move from the last fully
+                    // completed depth in that case, so it must still be delivered. token.
+                    // IsCancellationRequested being true does NOT mean the search was aborted: it is
+                    // ALSO true when our own CancelAfter(SoftTimeBudgetMs) timer simply expired, which
+                    // is the common, correct outcome in a real match. Two genuinely different "this
+                    // search no longer matters" conditions must still discard the result:
+                    //   1. The caller's own `cancellation` token fired (game reset / scene change /
+                    //      whatever owns it) — checked directly, independent of our internal timer.
+                    //   2. This search was superseded — CancelInFlight() (via a new RequestBestMove or
+                    //      CancelSearch/Dispose) replaced _cts with a new instance (or null) before
+                    //      this callback ran, so an identity check against the captured instance is
+                    //      the correct "am I still the current search" signal.
+                    if (cancellation.IsCancellationRequested) return;
+                    if (!ReferenceEquals(_cts, ctsForThisSearch)) return;
+
+                    _pendingResult = best;
+                    _hasResult = true; // volatile write publishes _pendingResult to the main thread
                 }
                 catch (OperationCanceledException) { /* expected on reset/scene change */ }
                 catch (Exception ex)
