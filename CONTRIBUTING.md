@@ -4,7 +4,8 @@ Contributions are welcome. This page covers how to get a change in and what the 
 look like when it arrives.
 
 Start with [SETUP.md](SETUP.md) — the repository does not carry its Asset Store art, so a fresh
-clone needs a few minutes of setup before it will run.
+clone needs a few minutes of setup before it will run. [Docs/](Docs/) explains how the larger pieces
+work; if you are about to change the AI, read `Docs/AI/search.md` first.
 
 ## Getting a change in
 
@@ -13,9 +14,12 @@ clone needs a few minutes of setup before it will run.
 2. **Make the change, and add a test for it.** Nearly everything here is testable without opening a
    scene, and that is deliberate — see below.
 3. **Run the EditMode suite** (Window → General → Test Runner) and make sure it is green.
-4. **Open a pull request against `main`.** The template will ask you what changed, why, and how you
+4. **Update the docs if you changed what they describe.** `Docs/` says how things work now, in
+   present tense. If your change makes one of those documents wrong, fix it in the same branch. A
+   document that lags the code is worse than no document, because people believe it.
+5. **Open a pull request against `main`.** The template will ask you what changed, why, and how you
    tested it. Filling it in properly is most of what makes a change easy to accept.
-5. A maintainer reviews it. Nobody can push to `main` directly, so every change — including the
+6. A maintainer reviews it. Nobody can push to `main` directly, so every change — including the
    maintainer's own — arrives through a pull request.
 
 Small, focused pull requests get reviewed quickly. A branch that fixes one bug is easy to say yes
