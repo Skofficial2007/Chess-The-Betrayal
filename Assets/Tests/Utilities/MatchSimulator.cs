@@ -45,14 +45,60 @@ namespace ChessTheBetrayal.Tests.Utilities
 
         /// <summary>How many of this side's moves rolled a real blunder (see
         /// MoveSelectionPolicy.SelectFinalMove's blunderRollFired out param) versus how many moves
-        /// had a nonzero chance to (BlunderRate &gt; 0). A tier whose observed rate drifts far from
-        /// its configured BlunderRate means the roll isn't expressing at the probability the preset
-        /// table claims.</summary>
+        /// actually reached that roll — a nonzero BlunderRate AND a completed candidate-rescore
+        /// pass (see RootScoresExactForSelection). A move where the rescore pass never completed
+        /// never gets a chance to roll at all, so it must not count toward either side of this
+        /// ratio; counting it in Offered without ever being able to count in Fired would silently
+        /// deflate the observed rate below what the roll itself is actually doing. Even with that
+        /// counted correctly, ObservedBlunderActuationRate is still expected to sit somewhat below
+        /// the configured rate — a roll can succeed and still find no candidate within
+        /// BlunderMarginCp to land on (see SelectFinalMove) — so a small gap here is not itself a
+        /// bug; the useful signal is a LARGE or tier-dependent one.</summary>
         public readonly int BlunderRollOffered;
         public readonly int BlunderRollFired;
 
+        /// <summary>Sum and count behind MeanCompletedDepth, kept separately from the totals above so
+        /// a parallel merge across games can add two of these structs together and still get an exact
+        /// mean — dividing two already-divided means would not. The deepest single move a tier reached
+        /// (DeepestCompletedDepth) answers "what is reachable"; this answers "what does a move
+        /// typically get," which is the number a depth-ceiling decision actually needs, since one
+        /// cheap position can make the deepest-reached number look like the typical one when it
+        /// isn't.</summary>
+        public readonly long CompletedDepthSum;
+        public readonly int ShallowestCompletedDepth;
+
+        /// <summary>Count of moves that completed each depth, indexed by depth (index 0 unused,
+        /// depths run 1..DepthHistogramCapacity-1). Fixed-size and allocated once per accumulator, no
+        /// per-move allocation. A depth beyond the ceiling is folded into the last slot rather than
+        /// indexing out of range — no configured tier is anywhere near this deep, so folding there
+        /// only matters if a future tier is misconfigured, and losing precision on that count is far
+        /// better than an index-out-of-range fault mid-tournament.</summary>
+        public readonly int[] DepthHistogram;
+
+        /// <summary>One more than the deepest depth any built-in tier is configured to search to
+        /// today — wide enough that no real profile's MaxDepth ever folds into the overflow slot,
+        /// without sizing the histogram off AlphaBetaSearch's own much larger internal ceiling.</summary>
+        public const int DepthHistogramCapacity = 16;
+
+        /// <summary>How many of this side's played moves were a Betrayal Act — the move actually
+        /// chosen and applied to the board, not a count of Acts merely considered somewhere in the
+        /// search tree (SearchStats.QActExpansions already covers that, and answers a different
+        /// question). This is the number a valuation audit needs: how often does the AI actually
+        /// choose to betray, in real games, at this tier.</summary>
+        public readonly int ActsPlayed;
+
+        /// <summary>Of this side's played Acts, how many were answered by a legal Retribution
+        /// (the ally executes the betrayer) versus resolved as a Defection (no legal executioner,
+        /// so the betrayer permanently switches sides) — the two branches have very different
+        /// costs to the initiator, so lumping them into one Act count would hide which kind of
+        /// Betrayal the AI is actually choosing.</summary>
+        public readonly int ActsResolvedByRetribution;
+        public readonly int ActsResolvedByDefection;
+
         public MatchSideStats(int moveCount, long totalNodesVisited, long totalQNodesVisited,
-            int deepestCompletedDepth, double totalElapsedMs, int blunderRollOffered, int blunderRollFired)
+            int deepestCompletedDepth, double totalElapsedMs, int blunderRollOffered, int blunderRollFired,
+            long completedDepthSum, int shallowestCompletedDepth, int[] depthHistogram,
+            int actsPlayed = 0, int actsResolvedByRetribution = 0, int actsResolvedByDefection = 0)
         {
             MoveCount = moveCount;
             TotalNodesVisited = totalNodesVisited;
@@ -61,11 +107,19 @@ namespace ChessTheBetrayal.Tests.Utilities
             TotalElapsedMs = totalElapsedMs;
             BlunderRollOffered = blunderRollOffered;
             BlunderRollFired = blunderRollFired;
+            CompletedDepthSum = completedDepthSum;
+            ShallowestCompletedDepth = shallowestCompletedDepth;
+            DepthHistogram = depthHistogram;
+            ActsPlayed = actsPlayed;
+            ActsResolvedByRetribution = actsResolvedByRetribution;
+            ActsResolvedByDefection = actsResolvedByDefection;
         }
 
         public double MeanNodesPerMove => MoveCount == 0 ? 0 : (double)(TotalNodesVisited + TotalQNodesVisited) / MoveCount;
         public double MeanMsPerMove => MoveCount == 0 ? 0 : TotalElapsedMs / MoveCount;
         public float ObservedBlunderActuationRate => BlunderRollOffered == 0 ? 0f : (float)BlunderRollFired / BlunderRollOffered;
+        public double MeanCompletedDepth => MoveCount == 0 ? 0 : (double)CompletedDepthSum / MoveCount;
+        public float ActRate => MoveCount == 0 ? 0f : (float)ActsPlayed / MoveCount;
     }
 
     /// <summary>A completed game plus each side's aggregated search telemetry for it.</summary>
@@ -123,6 +177,7 @@ namespace ChessTheBetrayal.Tests.Utilities
         private readonly int _moveBudgetCapMs;
         private readonly TranspositionTable _whiteTable;
         private readonly TranspositionTable _blackTable;
+        private readonly IPositionSampler _sampler;
 
         /// <param name="moveBudgetCapMs">When positive (and time control is ProductionBudget),
         /// every move's hard budget is clamped to at most this many milliseconds, and its soft
@@ -131,17 +186,24 @@ namespace ChessTheBetrayal.Tests.Utilities
         /// tournament can play many games fast without switching to a different, less-faithful code
         /// path. A profile whose real budget is already under the cap is unaffected. 0 (the
         /// default) leaves each profile's own budget in force.</param>
+        /// <param name="sampler">When supplied, is offered every quiet position each game passes
+        /// through and told each game's final outcome — see IPositionSampler. Null (the default, the
+        /// entire benchmark/tournament path) makes the hook completely inert: one null check per ply
+        /// and nothing else, no added allocation and no behaviour change, so a run that isn't
+        /// collecting a corpus plays exactly as it always did.</param>
         public MatchSimulator(
             MatchTimeControl timeControl = MatchTimeControl.ProductionBudget,
             int transpositionTableLog2Size = ProductionTranspositionTableLog2Size,
             AdjudicationRules? adjudicationRules = null,
-            int moveBudgetCapMs = 0)
+            int moveBudgetCapMs = 0,
+            IPositionSampler sampler = null)
         {
             _timeControl = timeControl;
             _adjudicationRules = adjudicationRules ?? AdjudicationRules.Standard;
             _moveBudgetCapMs = moveBudgetCapMs;
             _whiteTable = new TranspositionTable(transpositionTableLog2Size);
             _blackTable = new TranspositionTable(transpositionTableLog2Size);
+            _sampler = sampler;
         }
 
         /// <summary>
@@ -207,11 +269,38 @@ namespace ChessTheBetrayal.Tests.Utilities
             var adjudicator = new MatchAdjudicator(_adjudicationRules);
             adjudicator.RecordStartingPosition(board);
 
+            // Fires OnGameComplete exactly once, from whichever of this method's three return points
+            // ends the game — a local function rather than duplicating the call at each return site,
+            // where a future edit could easily add a fourth exit and forget it.
+            MatchResult Finish(MatchOutcome outcome, int plyCount, bool reachedPlyCap)
+            {
+                _sampler?.OnGameComplete(outcome);
+                return new MatchResult(outcome, plyCount, reachedPlyCap);
+            }
+
+            // True once any Act earlier in this game resolved with no legal Retribution — the board's
+            // piece placement already reflects the swapped team, but a sampler needs to know a quiet
+            // position sits downstream of that swap without re-deriving it from move history.
+            bool defectionHasOccurred = false;
+
             int ply = 0;
             for (; ply < plyCap && !board.IsGameOver; ply++)
             {
                 Team mover = board.CurrentTurn;
                 bool isWhite = mover == Team.White;
+
+                // Offered before this ply's move is played, on the position the mover is about to
+                // move FROM — quiet here means no in-check escape forced, no Betrayer awaiting
+                // Retribution/Defection, and the board settled in Normal phase (never mid-sequence).
+                // Note this check cannot reuse the CurrentPhase!=Normal `continue` further below: that
+                // one runs AFTER PlayMove and gates adjudication, not sampling.
+                if (_sampler != null
+                    && matchDriver.CurrentPhase == TurnPhase.Normal
+                    && !board.PendingBetrayerSquare.HasValue
+                    && !_engine.IsKingInCheck(board, mover))
+                {
+                    _sampler.OnQuietPosition(board, mover, ply, defectionHasOccurred);
+                }
 
                 AIProfile profile = isWhite ? whiteProfile : blackProfile;
                 AlphaBetaSearch search = isWhite ? whiteSearch : blackSearch;
@@ -229,10 +318,13 @@ namespace ChessTheBetrayal.Tests.Utilities
                 // spent its whole time budget on the depth loop never rescored its candidate
                 // scores to exact values, and applying blunder/tie-break windows to the leftover
                 // alpha-beta bounds selects near-random moves — the exact failure that once made
-                // every time-capped tier lose to shallower ones in this very harness.
+                // every time-capped tier lose to shallower ones in this very harness. A move that
+                // doesn't clear this guard never gets a chance to roll for a blunder at all, so it
+                // must not count as an offered roll either — see BlunderRollOffered's doc comment.
+                bool blunderRollOffered = (profile.BlunderRate > 0f || profile.TieBreakWindowCp > 0)
+                    && search.RootScoresExactForSelection;
                 bool blunderRollFired = false;
-                if ((profile.BlunderRate > 0f || profile.TieBreakWindowCp > 0)
-                    && search.RootScoresExactForSelection)
+                if (blunderRollOffered)
                 {
                     move = policy.SelectFinalMove(
                         search.RootMoves, search.RootScores, search.RootMoveCount, search.BestRootIndex,
@@ -247,9 +339,28 @@ namespace ChessTheBetrayal.Tests.Utilities
                 int scoreFromMoverPerspective = search.RootMoveCount > 0 ? search.RootScores[search.BestRootIndex] : 0;
                 int scoreForWhiteCp = isWhite ? scoreFromMoverPerspective : -scoreFromMoverPerspective;
 
-                accumulator.Record(search.Stats, moveStopwatch.Elapsed.TotalMilliseconds, profile.BlunderRate > 0f, blunderRollFired);
+                accumulator.Record(search.Stats, moveStopwatch.Elapsed.TotalMilliseconds, blunderRollOffered, blunderRollFired);
+
+                // Retribution is always played by the SAME side that Acted (an ally executes its
+                // own betrayer — see ChessEngine.GetRetributionMoves), and Act/Retribution never
+                // flip the turn, so a Retribution move always lands on the accumulator of the Act
+                // that preceded it. A Defection, by contrast, is resolved inline inside
+                // MatchDriver.PlayMove/TurnResolver.Advance whenever no legal Retribution exists —
+                // it never becomes a MoveCommand this loop sees at all, so it has no move stage of
+                // its own to count here. Every played Act resolves exactly one way or the other, so
+                // counting Retributions directly and treating the remainder as Defections (done at
+                // the accumulator/report level, see ActsResolvedByDefection) is exact.
+                if (move.Stage == BetrayalStage.Act) accumulator.RecordActPlayed();
+                else if (move.Stage == BetrayalStage.Retribution) accumulator.RecordActResolvedByRetribution();
 
                 matchDriver.PlayMove(move);
+
+                // Same "no legal Retribution existed" signal the accumulator infers as a remainder
+                // (ActsPlayed - ActsResolvedByRetribution) at the report level — read directly here,
+                // right after the move that could have triggered it, since defectionHasOccurred needs
+                // to be current for the very next sampling check at the top of the loop.
+                if (move.Stage == BetrayalStage.Act && !board.PendingBetrayerSquare.HasValue)
+                    defectionHasOccurred = true;
 
                 // Betrayal sub-sequence moves (Act/Retribution/DefensiveOverride) don't end a turn
                 // and can leave the board in a state a repetition/fifty-move count shouldn't
@@ -263,7 +374,7 @@ namespace ChessTheBetrayal.Tests.Utilities
                 {
                     whiteStats = whiteAccumulator.ToStats();
                     blackStats = blackAccumulator.ToStats();
-                    return new MatchResult(adjudicated.Value, ply + 1, reachedPlyCap: false);
+                    return Finish(adjudicated.Value, ply + 1, reachedPlyCap: false);
                 }
             }
 
@@ -278,10 +389,10 @@ namespace ChessTheBetrayal.Tests.Utilities
                     Team.Black => MatchOutcome.BlackWon,
                     _ => MatchOutcome.Draw
                 };
-                return new MatchResult(outcome, ply, reachedPlyCap: false);
+                return Finish(outcome, ply, reachedPlyCap: false);
             }
 
-            return new MatchResult(AdjudicateByMargin(board), ply, reachedPlyCap: true);
+            return Finish(AdjudicateByMargin(board), ply, reachedPlyCap: true);
         }
 
         /// <summary>
@@ -337,9 +448,14 @@ namespace ChessTheBetrayal.Tests.Utilities
             private long _totalNodesVisited;
             private long _totalQNodesVisited;
             private int _deepestCompletedDepth;
+            private int _shallowestCompletedDepth;
+            private long _completedDepthSum;
+            private readonly int[] _depthHistogram = new int[MatchSideStats.DepthHistogramCapacity];
             private double _totalElapsedMs;
             private int _blunderRollOffered;
             private int _blunderRollFired;
+            private int _actsPlayed;
+            private int _actsResolvedByRetribution;
 
             public void Record(SearchStats stats, double elapsedMs, bool blunderRollOffered, bool blunderRollFired)
             {
@@ -348,14 +464,24 @@ namespace ChessTheBetrayal.Tests.Utilities
                 _totalQNodesVisited += stats.QNodesVisited;
                 if (stats.LastCompletedDepth > _deepestCompletedDepth)
                     _deepestCompletedDepth = stats.LastCompletedDepth;
+                if (_moveCount == 1 || stats.LastCompletedDepth < _shallowestCompletedDepth)
+                    _shallowestCompletedDepth = stats.LastCompletedDepth;
+                _completedDepthSum += stats.LastCompletedDepth;
+                int histogramSlot = Math.Min(Math.Max(stats.LastCompletedDepth, 0), _depthHistogram.Length - 1);
+                _depthHistogram[histogramSlot]++;
                 _totalElapsedMs += elapsedMs;
                 if (blunderRollOffered) _blunderRollOffered++;
                 if (blunderRollFired) _blunderRollFired++;
             }
 
+            public void RecordActPlayed() => _actsPlayed++;
+            public void RecordActResolvedByRetribution() => _actsResolvedByRetribution++;
+
             public MatchSideStats ToStats() => new MatchSideStats(
                 _moveCount, _totalNodesVisited, _totalQNodesVisited, _deepestCompletedDepth,
-                _totalElapsedMs, _blunderRollOffered, _blunderRollFired);
+                _totalElapsedMs, _blunderRollOffered, _blunderRollFired,
+                _completedDepthSum, _shallowestCompletedDepth, (int[])_depthHistogram.Clone(),
+                _actsPlayed, _actsResolvedByRetribution, _actsPlayed - _actsResolvedByRetribution);
         }
 
         /// <summary>

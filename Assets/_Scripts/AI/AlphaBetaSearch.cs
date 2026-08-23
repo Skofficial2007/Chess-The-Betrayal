@@ -39,6 +39,17 @@ namespace ChessTheBetrayal.AI
         private const int Infinity = 1_000_000;
         private const int MateScore = 900_000;
 
+        // How far below the exact MateScore constant a score still counts as "this is a mate,
+        // just found some plies away from here" rather than an ordinary evaluation. A mate's score
+        // is MateScore minus however many plies of remaining depth were searched at the moment it
+        // was found (see the mate-detection branch in Search), so the exact constant itself is only
+        // ever reached by a mate discovered with zero remaining depth — everywhere else the score
+        // sits some small distance below it. 1000 is comfortably wider than that distance can ever
+        // get in this engine (bounded by the deepest depth/ply the search supports, a small double-
+        // digit number), while staying far below where a real positional evaluation could ever
+        // wander, so the two can never be confused for each other.
+        private const int MateScoreBand = 1000;
+
         // Null Move Pruning: the reduction grows with depth so a deep node skips more of the
         // opponent's reply before deciding a null move is safe, while a shallow node stays
         // conservative. Minimum search depth to even attempt it scales the same way, so the
@@ -97,6 +108,25 @@ namespace ChessTheBetrayal.AI
         // Betrayal-state edge case can never StackOverflow the worker thread the way the unresolved
         // forced-Defection loop once did — if we ever hit it we stand pat rather than recurse forever.
         private const int MaxQuiescencePly = 64;
+
+        // The largest amount the evaluator's full-only terms could possibly move a score away from
+        // its cheap partial score, so the stand-pat lazy cut below can skip real work whenever the
+        // cheap score is already outside the search window by more than this much — no full-only
+        // term could still pull the result back to the other side. Four terms live behind the full
+        // path today: PawnStructure clamps each side's passed-pawn bonus to at most
+        // MaxPassedBonusPerSide and its doubled/isolated penalty to at most MaxPenaltyPerSide;
+        // KingSafety clamps each side's total exposure (zone attackers, open files, a pending
+        // self-Betrayer near the king) to at most MaxKingSafetyPerSide; EndgameKingApproach clamps
+        // the bonus for closing in on a confined lone enemy king to at most MaxKingApproachPerSide.
+        // The evaluator's attack/defense scaling can multiply any bucket by as much as 2 (the
+        // documented ceiling on AttackDefenseBias in EvaluationWeights, not just today's table
+        // values) — so the worst possible gap between one side maxed on every bonus and the other
+        // maxed on every penalty, both fully scaled, is the sum of all four ceilings times that same
+        // factor. Pinned by a dedicated worst-case probe test; raise this again, with the same
+        // reasoning, whenever a new full-only term is added.
+        internal const int MaxPositionalSwing =
+            (PawnStructure.MaxPassedBonusPerSide + PawnStructure.MaxPenaltyPerSide
+                + KingSafety.MaxKingSafetyPerSide + EndgameKingApproach.MaxKingApproachPerSide) * 2;
 
         // A node deep enough to matter but with no TT move at all gets a cheap shallower probe first,
         // purely to seed move ordering for the real search that follows. Below this depth the node is
@@ -351,6 +381,12 @@ namespace ChessTheBetrayal.AI
             Stopwatch stopwatch = enableInstabilityTimeManagement ? Stopwatch.StartNew() : null;
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
+            // A telemetry-only clock start, always taken while telemetry is compiled in, so the
+            // per-depth ms curve is captured even for the ordinary searches that don't ask for
+            // instability time management (their own stopwatch above stays null). A raw timestamp
+            // rather than a Stopwatch instance so starting the clock allocates nothing — the per-depth
+            // read below subtracts against it. One read per completed depth adds nothing per node.
+            long telemetryStartTimestamp = Stopwatch.GetTimestamp();
             _tt.Stats.Reset();
 #endif
             _tt.NewSearch();
@@ -400,7 +436,13 @@ namespace ChessTheBetrayal.AI
             // partial depth and return the previous complete one.
             for (int depth = 1; depth <= settings.MaxDepth; depth++)
             {
-                if (ct.IsCancellationRequested) break;
+                if (ct.IsCancellationRequested)
+                {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                    _tt.Stats.StopReason = SearchStopReason.Budget;
+#endif
+                    break;
+                }
 
                 // Killers are a per-iteration hint (last depth's cutoff-causing quiet moves), not a
                 // cross-iteration guarantee — clearing them each time keeps a stale slot from a
@@ -514,10 +556,26 @@ namespace ChessTheBetrayal.AI
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                     _tt.Stats.AssignNodesAfterDepth(depth, _tt.Stats.NodesVisited + _tt.Stats.QNodesVisited);
+                    _tt.Stats.AssignElapsedMsAfterDepth(depth,
+                        (Stopwatch.GetTimestamp() - telemetryStartTimestamp) * 1000L / Stopwatch.Frequency);
 #endif
 
-                    // Early exit on forced mate found — no deeper search changes the decision.
-                    if (bestScore >= MateScore) break;
+                    // Early exit on forced mate found — no deeper search changes the decision. A
+                    // mate's score is MateScore minus the remaining depth at the moment it was
+                    // found (see the mate-detection branch in Search), so it approaches MateScore
+                    // but reaches the EXACT constant only when a mate is found with zero remaining
+                    // depth left to search — comparing against the same mate band the TT's own
+                    // AdjustMateScore/UnadjustMateScore already use is what makes this fire for a
+                    // real mate found at any realistic depth, not just that one edge case. Still
+                    // one-sided: a position where THIS side is being mated scores near -MateScore,
+                    // nowhere near this positive band, so only a winning mate ever triggers it.
+                    if (bestScore >= MateScore - MateScoreBand)
+                    {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                        _tt.Stats.StopReason = SearchStopReason.MateFound;
+#endif
+                        break;
+                    }
 
                     if (enableAspirationWindows)
                     {
@@ -561,13 +619,25 @@ namespace ChessTheBetrayal.AI
 
                             // Settled and past the soft target: further search is unlikely to change
                             // the answer, so stop now rather than spend the rest of the budget.
-                            if (stable && elapsedMs >= settings.TimeBudget.SoftMs) break;
+                            if (stable && elapsedMs >= settings.TimeBudget.SoftMs)
+                            {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                                _tt.Stats.StopReason = SearchStopReason.SettledEarly;
+#endif
+                                break;
+                            }
 
                             // Unsettled: allowed to spend into the soft-to-hard gap for one more
                             // depth, but never past the hard ceiling — that ceiling is also what the
                             // external CancelAfter(HardMs) timer backstops independently, so the two
                             // never disagree about what "hard" means.
-                            if (!stable && elapsedMs >= settings.TimeBudget.HardMs) break;
+                            if (!stable && elapsedMs >= settings.TimeBudget.HardMs)
+                            {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                                _tt.Stats.StopReason = SearchStopReason.Budget;
+#endif
+                                break;
+                            }
                         }
 
                         hasPriorCompletedDepth = true;
@@ -576,6 +646,22 @@ namespace ChessTheBetrayal.AI
                     }
                 }
             }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            // None of the loop's own break sites fired. That usually means depth ran all the way
+            // through MaxDepth on its own, but not always: when cancellation lands while the LAST
+            // configured depth is still in flight, that depth is abandoned without committing, and
+            // the loop then ends on its own counter rather than reaching the cancellation check at
+            // the top — so no break site runs even though the clock is what actually stopped the
+            // search. Completing every configured depth is the honest test for a ceiling stop, and
+            // it separates the two cases exactly.
+            if (_tt.Stats.StopReason == SearchStopReason.Unset)
+            {
+                _tt.Stats.StopReason = lastCompletedDepth >= settings.MaxDepth
+                    ? SearchStopReason.Ceiling
+                    : SearchStopReason.Budget;
+            }
+#endif
 
             RescoreCandidatesWithFullWindow(board, rootTeam, lastCompletedDepth, candidateRescoreMarginCp, ct);
 
@@ -669,6 +755,48 @@ namespace ChessTheBetrayal.AI
             }
         }
 
+        /// <summary>Scores a position through the evaluator. Every eval call in the search routes
+        /// through here so position-scoring time can be attributed as one section; in a release build
+        /// this compiles down to a plain evaluator call with no timing at all.</summary>
+        private int EvaluateTimed(BoardState board, Team perspectiveTeam)
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            bool sample = _tt.Stats.ShouldSampleEval();
+            long start = sample ? Stopwatch.GetTimestamp() : 0;
+            int score = _evaluator.Evaluate(board, perspectiveTeam);
+            if (sample) _tt.Stats.RecordEvalTicks(Stopwatch.GetTimestamp() - start);
+            return score;
+#else
+            return _evaluator.Evaluate(board, perspectiveTeam);
+#endif
+        }
+
+        /// <summary>
+        /// Quiescence's stand-pat score, computed through the cheap/full lazy hatch: the cheap
+        /// score is always cheap enough to just compute, and if it already sits far enough outside
+        /// (alpha, beta) that nothing the full evaluator could still add or subtract
+        /// (MaxPositionalSwing) would pull it back into the window, the full evaluation would only
+        /// have confirmed what the cheap score already decided — so it's skipped. Never used
+        /// anywhere a Betrayer is mid-sequence: the caller only reaches this once both Retribution
+        /// and ForcedSave obligations have already resolved, but the explicit guard below keeps
+        /// that true even if a future change to the caller ever stopped guaranteeing it.</summary>
+        private int EvaluateStandPat(BoardState board, Team perspectiveTeam, int alpha, int beta)
+        {
+            if (board.PendingBetrayerSquare.HasValue)
+                return EvaluateTimed(board, perspectiveTeam);
+
+            int cheap = _evaluator.EvaluateCheap(board, perspectiveTeam);
+            if (cheap - MaxPositionalSwing >= beta || cheap + MaxPositionalSwing <= alpha)
+            {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                _tt.Stats.LazyStandPatCuts++;
+#endif
+                return cheap;
+            }
+
+            return EvaluateTimed(board, perspectiveTeam);
+        }
+
         /// <summary>
         /// Recursive negamax. 'perspectiveTeam' is whichever side we're currently scoring FOR
         /// (it changes only when the turn actually flips). alpha/beta are always in perspectiveTeam's frame.
@@ -687,12 +815,30 @@ namespace ChessTheBetrayal.AI
             // NodesVisited — that counter tracks the pruned tree the TT/NMP/LMR/PVS multipliers act
             // on, not the quiescence tail, which is a separate, per-design-unbounded-by-depth cost.
             if (depth <= 0)
+            {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                bool sampleQ = _tt.Stats.ShouldSampleQuiescence();
+                long qStart = sampleQ ? Stopwatch.GetTimestamp() : 0;
+                int qScore = Quiescence(board, alpha, beta, perspectiveTeam, plyFromRoot, MaxQuiescencePly, ct);
+                if (sampleQ) _tt.Stats.RecordQuiescenceTicks(Stopwatch.GetTimestamp() - qStart);
+                return qScore;
+#else
                 return Quiescence(board, alpha, beta, perspectiveTeam, plyFromRoot, MaxQuiescencePly, ct);
+#endif
+            }
 
             int alphaOriginal = alpha;
             uint ttMove = 0;
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            bool sampleTT = _tt.Stats.ShouldSampleTT();
+            long ttStart = sampleTT ? Stopwatch.GetTimestamp() : 0;
+            bool ttHit = _tt.Probe(board.ZobristHash, out int ttScore, out uint ttPackedMove, out int ttDepth, out TTFlag ttFlag);
+            if (sampleTT) _tt.Stats.RecordTTTicks(Stopwatch.GetTimestamp() - ttStart);
+            if (ttHit)
+#else
             if (_tt.Probe(board.ZobristHash, out int ttScore, out uint ttPackedMove, out int ttDepth, out TTFlag ttFlag))
+#endif
             {
                 // Always harvested for ordering, even on a depth-insufficient hit.
                 ttMove = ttPackedMove;
@@ -747,7 +893,7 @@ namespace ChessTheBetrayal.AI
                 && depth <= ReverseFutilityMaxDepth
                 && beta < MateScore - _maxSupportedDepth)
             {
-                int staticEval = _evaluator.Evaluate(board, perspectiveTeam);
+                int staticEval = EvaluateTimed(board, perspectiveTeam);
                 if (staticEval - ReverseFutilityMargin(depth) >= beta)
                 {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -762,11 +908,47 @@ namespace ChessTheBetrayal.AI
             // Retribution-pending, AND ForcedSave-pending alike, not just Retribution — a null move
             // mid-sequence would flip CurrentTurn while the domain mandates the SAME player
             // continues, corrupting move generation, the TT hash, and the alpha-beta frame at once.
-            if (depth >= NullMoveMinDepth(depth)
-                && forwardPruningAllowed
-                && !parentWasNull
-                && HasNonPawnMaterial(board, board.CurrentTurn)
-                && beta < MateScore - _maxSupportedDepth)
+            //
+            // The single combined condition below is unchanged from before — this is broken into a
+            // sequence of individually-named checks purely so telemetry can record WHICH guard turned
+            // a node away, not just that one did. Each branch below is mutually exclusive with the
+            // others (a node can only be counted against the first reason it fails), and together
+            // with a successful attempt they account for every node that reached this point — so the
+            // skip counters plus NullMoveAttempts should always sum to the same total across a search.
+            bool nullMoveDepthOk = depth >= NullMoveMinDepth(depth);
+            bool nullMoveBetaOk = beta < MateScore - _maxSupportedDepth;
+
+            if (!nullMoveDepthOk)
+            {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                _tt.Stats.NullMoveSkippedByDepth++;
+#endif
+            }
+            else if (!forwardPruningAllowed)
+            {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                _tt.Stats.NullMoveSkippedByGuard++;
+#endif
+            }
+            else if (parentWasNull)
+            {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                _tt.Stats.NullMoveSkippedByParentNull++;
+#endif
+            }
+            else if (!HasNonPawnMaterial(board, board.CurrentTurn))
+            {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                _tt.Stats.NullMoveSkippedByMaterial++;
+#endif
+            }
+            else if (!nullMoveBetaOk)
+            {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                _tt.Stats.NullMoveSkippedByBeta++;
+#endif
+            }
+            else
             {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                 _tt.Stats.NullMoveAttempts++;
@@ -795,7 +977,14 @@ namespace ChessTheBetrayal.AI
             // GetAllLegalMoves) so the search can both play Betrayal itself and see the opponent
             // threatening one, at every ply — DefendOnly strips Act from the AGENT's choices only
             // at the root (see BuildRootMoves); this recursion never filters.
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            bool sampleGen = _tt.Stats.ShouldSampleMoveGen();
+            long genStart = sampleGen ? Stopwatch.GetTimestamp() : 0;
+#endif
             _engine.GetAllLegalMovesIncludingBetrayal(board, board.CurrentTurn, moves);
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            if (sampleGen) _tt.Stats.RecordMoveGenTicks(Stopwatch.GetTimestamp() - genStart);
+#endif
 
             if (moves.Count == 0)
             {
@@ -893,7 +1082,7 @@ namespace ChessTheBetrayal.AI
                 {
                     if (!staticEvalComputed)
                     {
-                        staticEvalForPruning = _evaluator.Evaluate(board, perspectiveTeam);
+                        staticEvalForPruning = EvaluateTimed(board, perspectiveTeam);
                         staticEvalComputed = true;
                     }
 
@@ -1022,6 +1211,14 @@ namespace ChessTheBetrayal.AI
                 // a betrayal sequence is still a cutoff for the same maximizer that owns this node.
                 if (alpha >= beta)
                 {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                    // How often the very first move tried is the one that closes the node out — the
+                    // signature of move ordering doing its job. A falling rate at a given depth means
+                    // later moves are winning cutoffs more often, i.e. ordering is losing its grip as
+                    // the tree gets deeper.
+                    _tt.Stats.BetaCutoffs++;
+                    if (i == 0) _tt.Stats.FirstMoveBetaCutoffs++;
+#endif
                     RecordQuietCutoff(move, depth, plyFromRoot);
                     break;
                 }
@@ -1033,7 +1230,14 @@ namespace ChessTheBetrayal.AI
                 TTFlag flag = best <= alphaOriginal ? TTFlag.UpperBound
                             : best >= beta ? TTFlag.LowerBound
                             : TTFlag.Exact;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                bool sampleStore = _tt.Stats.ShouldSampleTT();
+                long storeStart = sampleStore ? Stopwatch.GetTimestamp() : 0;
                 _tt.Store(board.ZobristHash, AdjustMateScore(best, plyFromRoot), bestPackedMove, depth, flag);
+                if (sampleStore) _tt.Stats.RecordTTTicks(Stopwatch.GetTimestamp() - storeStart);
+#else
+                _tt.Store(board.ZobristHash, AdjustMateScore(best, plyFromRoot), bestPackedMove, depth, flag);
+#endif
             }
 
             return best;
@@ -1047,15 +1251,15 @@ namespace ChessTheBetrayal.AI
         /// </summary>
         private static int AdjustMateScore(int score, int plyFromRoot)
         {
-            if (score >= MateScore - 1000) return score + plyFromRoot;
-            if (score <= -(MateScore - 1000)) return score - plyFromRoot;
+            if (score >= MateScore - MateScoreBand) return score + plyFromRoot;
+            if (score <= -(MateScore - MateScoreBand)) return score - plyFromRoot;
             return score;
         }
 
         private static int UnadjustMateScore(int score, int plyFromRoot)
         {
-            if (score >= MateScore - 1000) return score - plyFromRoot;
-            if (score <= -(MateScore - 1000)) return score + plyFromRoot;
+            if (score >= MateScore - MateScoreBand) return score - plyFromRoot;
+            if (score <= -(MateScore - MateScoreBand)) return score + plyFromRoot;
             return score;
         }
 
@@ -1223,7 +1427,7 @@ namespace ChessTheBetrayal.AI
                 // Backstop: if we've somehow burned the whole quiescence budget while still mid-
                 // Betrayal, stop recursing and evaluate in place rather than risk a StackOverflow.
                 if (qply <= 0)
-                    return _evaluator.Evaluate(board, perspectiveTeam);
+                    return EvaluateTimed(board, perspectiveTeam);
 
                 // Force resolution: generate Retribution moves; if none, the domain's Defection path
                 // resolves it. Either way we recurse one more ply into the resolved position.
@@ -1257,7 +1461,7 @@ namespace ChessTheBetrayal.AI
                 _tt.Stats.QBetrayalResolutionNodes++;
 #endif
                 if (qply <= 0)
-                    return _evaluator.Evaluate(board, perspectiveTeam);
+                    return EvaluateTimed(board, perspectiveTeam);
 
                 // The board already arrived here mid-ForcedSave (a prior ply's Defection left this
                 // exact obligation open) — resolve it the same way ResolveForcedDefection's own
@@ -1271,7 +1475,15 @@ namespace ChessTheBetrayal.AI
             // never evict a Search entry of depth >= 1, so there is no second table and no pollution
             // risk beyond what depth-0-vs-depth-0 entries already tolerate.
             int alphaOriginal = alpha;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            bool sampleQTT = _tt.Stats.ShouldSampleTT();
+            long qttStart = sampleQTT ? Stopwatch.GetTimestamp() : 0;
+            bool qttHit = _tt.Probe(board.ZobristHash, out int ttScore, out _, out _, out TTFlag ttFlag);
+            if (sampleQTT) _tt.Stats.RecordTTTicks(Stopwatch.GetTimestamp() - qttStart);
+            if (qttHit)
+#else
             if (_tt.Probe(board.ZobristHash, out int ttScore, out _, out _, out TTFlag ttFlag))
+#endif
             {
                 int s = UnadjustMateScore(ttScore, plyFromRoot);
                 if (ttFlag == TTFlag.Exact) return s;
@@ -1286,7 +1498,7 @@ namespace ChessTheBetrayal.AI
             // at every early-return site would be needless surface area. Fail-soft is the more
             // standard alpha-beta convention (Search itself already returns 'best', not 'beta') and
             // is provably still a valid cutoff (best >= beta here).
-            int standPat = _evaluator.Evaluate(board, perspectiveTeam);
+            int standPat = EvaluateStandPat(board, perspectiveTeam, alpha, beta);
             if (standPat >= beta) return standPat;
             if (standPat > alpha) alpha = standPat;
 
@@ -1296,8 +1508,13 @@ namespace ChessTheBetrayal.AI
             // quiescence only ever wants this subset, and full movegen was spending most of its
             // cost legality-checking quiet moves that would just get filtered out below anyway.
             List<MoveCommand> moves = QuiescenceBuffer(qply);
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            bool sampleQGen = _tt.Stats.ShouldSampleMoveGen();
+            long qGenStart = sampleQGen ? Stopwatch.GetTimestamp() : 0;
+#endif
             _engine.GetCapturesAndActsOnly(board, board.CurrentTurn, moves);
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
+            if (sampleQGen) _tt.Stats.RecordMoveGenTicks(Stopwatch.GetTimestamp() - qGenStart);
             _tt.Stats.QMovesGenerated += moves.Count;
 #endif
             OrderMoves(board, moves);
@@ -1392,6 +1609,23 @@ namespace ChessTheBetrayal.AI
         /// </summary>
         internal int RunQuiescenceForTest(BoardState board, Team perspectiveTeam, CancellationToken ct) =>
             Quiescence(board, -Infinity, Infinity, perspectiveTeam, plyFromRoot: 0, MaxQuiescencePly, ct);
+
+        /// <summary>
+        /// Test seam: run quiescence with a caller-supplied (alpha, beta) window instead of the
+        /// standard open one. Lets LazyEvaluationTests put the stand-pat lazy cut's own decision
+        /// (does the cheap score already fall outside this window?) under direct control, rather
+        /// than hoping a real position happens to produce a tight window naturally.
+        /// </summary>
+        internal int RunQuiescenceForTest(BoardState board, Team perspectiveTeam, int alpha, int beta, CancellationToken ct) =>
+            Quiescence(board, alpha, beta, perspectiveTeam, plyFromRoot: 0, MaxQuiescencePly, ct);
+
+        /// <summary>
+        /// Test seam: the stand-pat lazy hatch's own decision in isolation, without running the
+        /// rest of quiescence around it. Lets a test assert directly whether a position's cheap
+        /// score was used as-is or the full evaluator was consulted, for a given window.
+        /// </summary>
+        internal int EvaluateStandPatForTest(BoardState board, Team perspectiveTeam, int alpha, int beta) =>
+            EvaluateStandPat(board, perspectiveTeam, alpha, beta);
 
         /// <summary>
         /// The forced-Defection branch of quiescence: no legal Executioner exists, so the Betrayer
@@ -1825,10 +2059,21 @@ namespace ChessTheBetrayal.AI
         // Quiescence delta-pruning margin, in the evaluator's centipawn scale (BetrayalAwareEvaluator:
         // P=100..Q=975). Covers promotion upside on a capturing pawn push plus general evaluator
         // noise, so a capture that's only borderline-hopeless is never wrongly pruned before it's
-        // tried. This is the standard "even best case can't help" quiescence cut — it only skips
-        // moves whose absolute best-case outcome still can't reach alpha, so it can never change
-        // which move quiescence ultimately reports as best, only how many hopeless captures it
-        // bothers exploring on the way there.
+        // tried. This is the standard "even best case can't help" quiescence cut — it skips moves
+        // whose absolute best-case outcome still can't reach alpha.
+        //
+        // This margin was briefly tightened to 150 and then measured back to 200, which is worth
+        // recording because the reason is not obvious. Skipping a capture leaves quiescence
+        // reporting its coarse stand-pat estimate rather than a genuinely searched score, and the
+        // main search orders its moves on exactly those scores. A tighter margin therefore trades
+        // a smaller quiescence tail for less accurate leaf scores, and when those coarser scores
+        // blur the ranking of the moves above them, the main tree fans out and costs far more than
+        // the tail ever saved. Measured across twelve real opening positions under the live
+        // per-move time budget, the tighter margin reached exactly the same total depth while
+        // leaving fewer searches able to finish early on a settled position, and its per-position
+        // node counts swung heavily in BOTH directions — the swings tracking move-ordering quality
+        // (first-move cutoff rate) almost exactly. A change that buys no depth and adds that much
+        // variance is not worth carrying, so the wider, more forgiving margin stays.
         private const int DeltaPruningMargin = 200;
 
         private static int CapturedPieceValue(ChessPieceType t) => t switch

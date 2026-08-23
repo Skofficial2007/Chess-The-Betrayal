@@ -1,4 +1,4 @@
-using System.Text;
+using System.Collections.Generic;
 using ChessTheBetrayal.AI;
 using UnityEditor;
 using UnityEngine;
@@ -15,11 +15,24 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
     {
         private const int DefaultRunSeed = 20260713;
 
+        /// <summary>How many times the high-confidence pass replays the whole position list per
+        /// pairing. Five passes is 200 games per pairing, tightening the 95% interval from roughly
+        /// +/-15% to +/-7% — enough to tell a real result from a coin flip near a decision
+        /// boundary, which a single pass cannot do.</summary>
+        private const int HighConfidenceRepeats = 5;
+
         [MenuItem("Chess: The Betrayal/AI/Run Strength Benchmark (Quick)")]
         private static void RunQuickFromMenu() => RunAndLog(BenchmarkMode.Quick);
 
         [MenuItem("Chess: The Betrayal/AI/Run Strength Benchmark (Full, slow)")]
         private static void RunFullFromMenu() => RunAndLog(BenchmarkMode.Full);
+
+        [MenuItem("Chess: The Betrayal/AI/Run Strength Benchmark (High confidence, slowest)")]
+        private static void RunHighConfidenceFromMenu() => RunAndLog(BenchmarkMode.Full, HighConfidenceRepeats);
+
+        [MenuItem("Chess: The Betrayal/AI/Run Strength Benchmark (Top of ladder only)")]
+        private static void RunTopOfLadderFromMenu() =>
+            RunAndLog(BenchmarkMode.Full, TopOfLadderRepeats, TopOfLadderPairings);
 
         [MenuItem("Chess: The Betrayal/AI/Update Benchmark Baseline...")]
         private static void UpdateBaselineFromMenu()
@@ -39,13 +52,16 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
             Debug.Log($"Benchmark baseline updated: {report.PairResults.Count} pairing(s), {report.TierPerformances.Count} tier(s) recorded.");
         }
 
-        private static void RunAndLog(BenchmarkMode mode)
+        private static void RunAndLog(BenchmarkMode mode, int repeats = 1,
+            IReadOnlyList<(string Subject, string Opponent)> pairings = null)
         {
             BenchmarkReport report = BenchmarkRunner.RunAll(DefaultRunSeed, mode,
-                AIProfileTable.BuiltIn, progress: new DebugLogProgressSink(mode.ToString()));
+                AIProfileTable.BuiltIn, progress: new DebugLogProgressSink(mode.ToString()),
+                persistRunsUnderDirectory: RunsDirectory, logGamesToConsole: true, repeats: repeats,
+                pairings: pairings);
             BenchmarkReport baseline = BenchmarkBaselineIO.TryRead(BenchmarkBaselineIO.DefaultPath);
 
-            Debug.Log(FormatReport(report, baseline));
+            Debug.Log(BenchmarkReportFormatter.ToPlainText(report, baseline));
         }
 
         /// <summary>Batchmode/CI entry point: <c>Unity -batchmode -executeMethod
@@ -59,13 +75,60 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
 
         public static void RunFullBatch() => RunBatch(BenchmarkMode.Full);
 
-        private static void RunBatch(BenchmarkMode mode)
+        /// <summary>The run to reach for when a number has to be trusted rather than merely
+        /// glanced at — a full matrix replayed HighConfidenceRepeats times, which is what it takes
+        /// to separate a genuine result from noise near a decision boundary. Costs proportionally
+        /// more wall clock than RunFullBatch, so it is a deliberate choice, not the default.</summary>
+        public static void RunHighConfidenceBatch() => RunBatch(BenchmarkMode.Full, HighConfidenceRepeats);
+
+        /// <summary>How many passes the top-of-ladder run plays. Eight passes is 320 games per
+        /// pairing and a 95% interval near +/-5.5%, tight enough that a result close to the 55%
+        /// strength floor lands decisively on one side of it instead of straddling it — which is
+        /// the whole reason to spend a long run on these two pairings rather than a wider one.</summary>
+        private const int TopOfLadderRepeats = 8;
+
+        /// <summary>The two relationships the difficulty ladder actually stands or falls on. Every
+        /// other pairing in the roster is settled by a wide margin, so more games there change no
+        /// conclusion; these two sit close enough to the floor that only a large sample can
+        /// separate a real ordering from a coin flip.</summary>
+        private static readonly (string Subject, string Opponent)[] TopOfLadderPairings =
         {
-            BenchmarkReport report = BenchmarkRunner.RunAll(DefaultRunSeed, mode,
-                AIProfileTable.BuiltIn, progress: new DebugLogProgressSink($"{mode} Batch"));
+            ("extreme", "hard"),
+            ("impossible", "extreme"),
+        };
+
+        /// <summary>Spends a long run entirely on the top of the ladder — see TopOfLadderPairings
+        /// for why that beats a wider matrix when the question is whether the deepest tiers are
+        /// genuinely ordered.</summary>
+        public static void RunTopOfLadderBatch() =>
+            RunBatch(BenchmarkMode.Full, TopOfLadderRepeats, TopOfLadderPairings);
+
+        private static void RunBatch(BenchmarkMode mode, int repeats = 1,
+            IReadOnlyList<(string Subject, string Opponent)> pairings = null)
+        {
+            BenchmarkReport report;
+            try
+            {
+                report = BenchmarkRunner.RunAll(DefaultRunSeed, mode,
+                    AIProfileTable.BuiltIn, progress: new DebugLogProgressSink($"{mode} Batch"),
+                    persistRunsUnderDirectory: RunsDirectory, useWatchdog: true, logGamesToConsole: true,
+                    repeats: repeats, pairings: pairings);
+            }
+            catch (TournamentStalledException stalled)
+            {
+                // A stall means the run is almost certainly deadlocked, not just slow — exit
+                // nonzero so CI treats this as a failure rather than hanging until an external
+                // timeout kills the whole job with no explanation. Every game that DID finish is
+                // already durable on disk (stalled.RunDirectory), which is the entire point of
+                // wiring persistence in before this watchdog.
+                Debug.LogError(stalled.Message);
+                EditorApplication.Exit(2);
+                return;
+            }
+
             BenchmarkReport baseline = BenchmarkBaselineIO.TryRead(BenchmarkBaselineIO.DefaultPath);
 
-            Debug.Log(FormatReport(report, baseline));
+            Debug.Log(BenchmarkReportFormatter.ToPlainText(report, baseline));
 
             var findings = BenchmarkDriftAnalyzer.Analyze(report, baseline);
             bool anyFailure = false;
@@ -75,38 +138,7 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
             EditorApplication.Exit(anyFailure ? 1 : 0);
         }
 
-        private static string FormatReport(BenchmarkReport report, BenchmarkReport baseline)
-        {
-            var sb = new StringBuilder();
-            sb.AppendLine($"Benchmark run — mode={report.Mode} seed={report.RunSeed}");
-
-            foreach (PairResult pair in report.PairResults)
-            {
-                sb.AppendLine($"  {pair.Subject} vs {pair.Opponent}: {pair.SubjectWinRate:P1} " +
-                    $"({pair.SubjectWins}W {pair.OpponentWins}L {pair.Draws}D over {pair.Games} games)");
-            }
-
-            foreach (TierPerformance tier in report.TierPerformances)
-            {
-                sb.AppendLine($"  [{tier.ProfileId}] {tier.MovesSampled} moves, " +
-                    $"{tier.MeanNodesPerMove:F0} nodes/move, {tier.MeanMsPerMove:F0}ms/move, " +
-                    $"depth reached {tier.DeepestCompletedDepth}, blunder-actuation {tier.ObservedBlunderActuationRate:P1}");
-            }
-
-            var findings = BenchmarkDriftAnalyzer.Analyze(report, baseline);
-            if (findings.Count == 0)
-            {
-                sb.AppendLine(baseline == null
-                    ? "  No baseline on disk yet — nothing to diff against."
-                    : "  No drift findings.");
-            }
-            else
-            {
-                foreach (var finding in findings)
-                    sb.AppendLine($"  [{finding.Severity}] {finding.Message}");
-            }
-
-            return sb.ToString();
-        }
+        private static string RunsDirectory =>
+            System.IO.Path.Combine(Application.dataPath, "..", "Docs", "Benchmarks", "Runs");
     }
 }

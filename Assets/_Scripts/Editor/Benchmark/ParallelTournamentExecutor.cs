@@ -50,16 +50,30 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
         /// shipped sinks are) — separate from the session's own OnGameCompleted (fires from the
         /// caller's thread, in order) so a progress bar/log can show live movement without a
         /// caller needing to reason about thread affinity. Defaults to reporting nothing.
+        /// runWriter, when supplied, receives each game the moment IT finishes, from whichever
+        /// worker thread that is — not batched into the fold loop below — so a run killed mid-way
+        /// still has every game that had already finished durably on disk, in whatever order they
+        /// completed rather than original game order (TournamentRunWriter's own reader tolerates
+        /// that; every record carries its own game index). See TournamentRunWriter's own doc
+        /// comment for why writing from a worker thread never blocks the search itself.
+        /// watchdog, when supplied, is fed every progress report and its Token
+        /// is the one actually passed to the parallel loop — construct it with cancellationToken
+        /// as its own externalToken so a caller-initiated cancel and a stall both flow through the
+        /// same path (see TournamentWatchdog's own doc comment). When a watchdog is supplied, the
+        /// cancellationToken parameter here is ignored in favor of watchdog.Token.
         /// </summary>
         public static void RunRemainingGames(
             TournamentSession session,
             int maxDegreeOfParallelism = -1,
             CancellationToken cancellationToken = default,
-            ITournamentProgress progress = null)
+            ITournamentProgress progress = null,
+            TournamentRunWriter runWriter = null,
+            TournamentWatchdog watchdog = null)
         {
             if (session == null) throw new ArgumentNullException(nameof(session));
             if (maxDegreeOfParallelism <= 0) maxDegreeOfParallelism = DefaultMaxDegreeOfParallelism;
             progress ??= NullTournamentProgress.Instance;
+            CancellationToken effectiveToken = watchdog?.Token ?? cancellationToken;
 
             int totalPending = session.PendingGameCount;
             if (totalPending == 0) return;
@@ -80,7 +94,7 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
                 var options = new ParallelOptions
                 {
                     MaxDegreeOfParallelism = maxDegreeOfParallelism,
-                    CancellationToken = cancellationToken
+                    CancellationToken = effectiveToken
                 };
 
                 try
@@ -88,10 +102,21 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
                     Parallel.For(0, totalPending, options, offset =>
                     {
                         MatchSimulator simulator = threadLocalSimulator.Value;
-                        results[offset] = session.PlayOneGame(simulator, startIndex + offset);
+                        TournamentGameRecord record = session.PlayOneGame(simulator, startIndex + offset);
+                        results[offset] = record;
+
+                        // Persisted the moment THIS game finishes, from whichever worker thread got
+                        // here — not folded in at the end with everything else. WriteGame only
+                        // enqueues onto a BlockingCollection (safe for concurrent producers by
+                        // design) and returns immediately, so this never blocks the search. This is
+                        // the whole reason a runWriter exists: a run killed partway must leave every
+                        // game that already finished durably on disk, not just whatever the fold
+                        // loop below had gotten to.
+                        runWriter?.WriteGame(ToRunRecord(record, startIndex + offset));
 
                         int completed = Interlocked.Increment(ref completedSoFar);
                         progress.ReportGameCompleted(completed, totalPending);
+                        watchdog?.ReportProgress(completed);
                     });
                 }
                 catch (OperationCanceledException)
@@ -101,16 +126,37 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
                     // run leaves a valid (just incomplete) report.
                 }
 
-                // Fold results into the session sequentially, in original game order, skipping any
-                // slot a cancelled run never reached (default(TournamentGameRecord) is null for
-                // this reference type — Parallel.For's own array-write is the only writer per
-                // slot, so a null here unambiguously means "cancelled before this one ran").
+                // Fold every game that actually finished into the session, in original game order.
+                // A cancelled run leaves holes (default(TournamentGameRecord) is null for this
+                // reference type — Parallel.For's own array-write is the only writer per slot), but
+                // those holes are not confined to the tail: workers race ahead of each other, so game
+                // 9 can finish before game 3 gets cancelled out from under a slower worker. Skipping
+                // past a hole instead of stopping at it keeps every game that did complete, rather
+                // than silently discarding real results the moment the first gap appears. Only the
+                // session fold happens here now — ApplyCompletedGame mutates shared tallies/tier
+                // accumulators with no locking of its own, so it stays serialized on this one
+                // caller thread exactly as before; persistence already happened above, per-game.
                 for (int i = 0; i < results.Length; i++)
                 {
-                    if (results[i] == null) break;
+                    if (results[i] == null) continue;
                     session.ApplyCompletedGame(results[i]);
                 }
             }
+        }
+
+        /// <summary>Converts a played game into the flat shape TournamentRunWriter persists.
+        /// Subject/opponent are re-derived from White/Black + SubjectIsWhite the same way
+        /// TournamentSession.ApplyCompletedGame does, so the run file and the in-memory report
+        /// always agree on which side is "subject."</summary>
+        private static TournamentRunRecord ToRunRecord(TournamentGameRecord record, int gameIndex)
+        {
+            string subjectId = record.SubjectIsWhite ? record.WhiteId : record.BlackId;
+            string opponentId = record.SubjectIsWhite ? record.BlackId : record.WhiteId;
+            double elapsedMs = record.Result.WhiteStats.TotalElapsedMs + record.Result.BlackStats.TotalElapsedMs;
+
+            return new TournamentRunRecord(gameIndex, record.PairIndex, subjectId, opponentId,
+                record.SubjectIsWhite, record.PositionIndex, record.Result.Result.Outcome,
+                record.Result.Result.PlyCount, record.Result.Result.ReachedPlyCap, elapsedMs);
         }
     }
 }

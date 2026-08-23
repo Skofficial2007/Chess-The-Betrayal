@@ -44,6 +44,14 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
     /// statistics over a whole run absorb that, and a bit-exact single-game reproduction is still
     /// available by running the simulator with MatchTimeControl.Uncapped.
     ///
+    /// The curated position list bounds how many games one pass can play, which in turn bounds how
+    /// tight a win rate's confidence interval can get — one pass over twenty positions in both
+    /// colors is forty games per pairing, roughly +/-15% at 95% confidence, too wide to resolve a
+    /// result near a decision boundary. repeats plays the whole list that many times over, each pass
+    /// seeded independently, so a caller who needs a confident number can buy one with wall clock
+    /// instead of being capped by the position count. Confidence narrows with the square root of
+    /// the sample, so quadrupling the games roughly halves the interval.
+    ///
     /// Dev/editor-only, same category as the opening-book compiler — never a player feature.
     /// </summary>
     public sealed class TournamentSession
@@ -54,8 +62,14 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
 
         /// <summary>The strength-chain adjacency the preset table promises — same pairs
         /// AIProfileStrengthOrderingTests checks, so Quick mode measures the exact relationships
-        /// the table's own regression tests already gate on.</summary>
-        private static readonly (string Subject, string Opponent)[] AdjacentPairs =
+        /// the table's own regression tests already gate on.
+        ///
+        /// Subject is always the side expected to WIN. That direction is load-bearing beyond
+        /// Quick mode's own game list: it is also the only reason a win-rate floor means anything,
+        /// so BenchmarkDriftAnalyzer reads this same list rather than keeping its own copy —
+        /// a second copy would eventually disagree, and a floor applied in the wrong direction
+        /// grades a correctly-working ladder as a failure.</summary>
+        public static readonly (string Subject, string Opponent)[] AdjacentPairs =
         {
             ("normal", "easy"),
             ("hard", "normal"),
@@ -69,14 +83,23 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
         {
             public readonly int PairIndex;
             public readonly int PositionIndex;
+
+            /// <summary>Which pass over the position list this game belongs to. Feeds the seeding's
+            /// own game index, so repeat 1 of a position plays from the same board as repeat 0 but
+            /// with independent RNG streams on both sides — a genuinely new sample rather than a
+            /// replay of one already counted.</summary>
+            public readonly int RepeatIndex;
+
             public readonly AIProfile White;
             public readonly AIProfile Black;
             public readonly bool SubjectIsWhite;
 
-            public PendingGame(int pairIndex, int positionIndex, AIProfile white, AIProfile black, bool subjectIsWhite)
+            public PendingGame(int pairIndex, int positionIndex, int repeatIndex,
+                AIProfile white, AIProfile black, bool subjectIsWhite)
             {
                 PairIndex = pairIndex;
                 PositionIndex = positionIndex;
+                RepeatIndex = repeatIndex;
                 White = white;
                 Black = black;
                 SubjectIsWhite = subjectIsWhite;
@@ -87,6 +110,12 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
         {
             public int SubjectWins, OpponentWins, Draws, Games;
         }
+
+        /// <summary>What this run is, for anything that labels it to a human — the run directory's
+        /// name, progress lines, and the report's own Mode field. A focused run says so rather than
+        /// inheriting the name of the mode whose pairing list it replaced, so a persisted artifact
+        /// is never mistaken for a whole-matrix run it did not perform.</summary>
+        public string ModeLabel => _modeLabel;
 
         private readonly string _modeLabel;
         private readonly int _runSeed;
@@ -108,8 +137,12 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
 
         private TournamentSession(string modeLabel, int runSeed, int plyCap, MatchTimeControl timeControl,
             IReadOnlyList<(string Subject, string Opponent)> pairs,
-            Func<string, AIProfile> resolve, int positionCount)
+            Func<string, AIProfile> resolve, int positionCount, int repeats)
         {
+            if (repeats < 1)
+                throw new ArgumentOutOfRangeException(nameof(repeats), repeats,
+                    "A tournament must play each position at least once.");
+
             _modeLabel = modeLabel;
             _runSeed = runSeed;
             _plyCap = plyCap;
@@ -118,21 +151,24 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
             _pairs = pairs;
             _tallies = new PairTally[pairs.Count];
 
-            // The full game list is laid out up front: pair by pair, position by position, subject
-            // playing White then Black against the same position (color-swapping cancels first-move
-            // advantage — see CuratedPositionSuite). This fixed order is part of the reproducibility
-            // contract, so RunNextGame only ever walks it forward.
-            _games = new List<PendingGame>(pairs.Count * positionCount * 2);
+            // The full game list is laid out up front: pair by pair, repeat by repeat, position by
+            // position, subject playing White then Black against the same position (color-swapping
+            // cancels first-move advantage — see CuratedPositionSuite). This fixed order is part of
+            // the reproducibility contract, so RunNextGame only ever walks it forward.
+            _games = new List<PendingGame>(pairs.Count * positionCount * repeats * 2);
             for (int pairIndex = 0; pairIndex < pairs.Count; pairIndex++)
             {
                 _tallies[pairIndex] = new PairTally();
                 AIProfile subject = resolve(pairs[pairIndex].Subject);
                 AIProfile opponent = resolve(pairs[pairIndex].Opponent);
 
-                for (int positionIndex = 0; positionIndex < positionCount; positionIndex++)
+                for (int repeatIndex = 0; repeatIndex < repeats; repeatIndex++)
                 {
-                    _games.Add(new PendingGame(pairIndex, positionIndex, subject, opponent, subjectIsWhite: true));
-                    _games.Add(new PendingGame(pairIndex, positionIndex, opponent, subject, subjectIsWhite: false));
+                    for (int positionIndex = 0; positionIndex < positionCount; positionIndex++)
+                    {
+                        _games.Add(new PendingGame(pairIndex, positionIndex, repeatIndex, subject, opponent, subjectIsWhite: true));
+                        _games.Add(new PendingGame(pairIndex, positionIndex, repeatIndex, opponent, subject, subjectIsWhite: false));
+                    }
                 }
             }
         }
@@ -146,20 +182,45 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
         /// bug in this session, it's what a time-bounded engine actually does under load.
         /// </summary>
         public static TournamentSession CreateQuick(int runSeed, IReadOnlyList<AIProfile> roster,
-            int plyCap = MatchSimulator.DefaultPlyCap, MatchTimeControl timeControl = MatchTimeControl.ProductionBudget)
+            int plyCap = MatchSimulator.DefaultPlyCap, MatchTimeControl timeControl = MatchTimeControl.ProductionBudget,
+            int repeats = 1)
         {
             return new TournamentSession(BenchmarkMode.Quick.ToString(), runSeed, plyCap, timeControl,
                 AdjacentPairs, id => ResolveInRoster(roster, id),
-                Math.Min(QuickPositionCount, CuratedPositionSuite.Count));
+                Math.Min(QuickPositionCount, CuratedPositionSuite.Count), repeats);
         }
 
-        /// <summary>See CreateQuick's doc comment for the timeControl parameter.</summary>
+        /// <summary>
+        /// A tournament over a caller-chosen subset of pairings. Spending the whole budget on the
+        /// one or two relationships a question actually turns on buys far more confidence per hour
+        /// than spreading it across a matrix whose other rows are already decided by wide margins —
+        /// a pairing settled at 0% or 95% learns nothing from more games, while one sitting near a
+        /// decision boundary needs every sample it can get.
+        ///
+        /// Pairings are given Subject-first, Subject being the side expected to win, matching how
+        /// AdjacentPairs reads and how a win rate is graded.
+        /// See CreateQuick's doc comment for the timeControl parameter.
+        /// </summary>
+        public static TournamentSession CreateForPairings(int runSeed, IReadOnlyList<AIProfile> roster,
+            IReadOnlyList<(string Subject, string Opponent)> pairings, int plyCap = MatchSimulator.DefaultPlyCap,
+            MatchTimeControl timeControl = MatchTimeControl.ProductionBudget, int repeats = 1)
+        {
+            if (pairings == null || pairings.Count == 0)
+                throw new ArgumentException("A tournament needs at least one pairing to play.", nameof(pairings));
+
+            return new TournamentSession("Focused", runSeed, plyCap, timeControl,
+                pairings, id => ResolveInRoster(roster, id), CuratedPositionSuite.Count, repeats);
+        }
+
+        /// <summary>See CreateQuick's doc comment for the timeControl parameter, and the class
+        /// summary for what repeats buys.</summary>
         public static TournamentSession CreateFull(int runSeed, IReadOnlyList<AIProfile> roster,
-            int plyCap = MatchSimulator.DefaultPlyCap, MatchTimeControl timeControl = MatchTimeControl.ProductionBudget)
+            int plyCap = MatchSimulator.DefaultPlyCap, MatchTimeControl timeControl = MatchTimeControl.ProductionBudget,
+            int repeats = 1)
         {
             return new TournamentSession(BenchmarkMode.Full.ToString(), runSeed, plyCap, timeControl,
                 AllPairsRoundRobin(roster), id => ResolveInRoster(roster, id),
-                CuratedPositionSuite.Count);
+                CuratedPositionSuite.Count, repeats);
         }
 
         /// <summary>
@@ -169,12 +230,13 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
         /// See CreateQuick's doc comment for the timeControl parameter.
         /// </summary>
         public static TournamentSession CreateHeadToHead(int runSeed, AIProfile subject, AIProfile opponent,
-            int positionCount, int plyCap = MatchSimulator.DefaultPlyCap, MatchTimeControl timeControl = MatchTimeControl.ProductionBudget)
+            int positionCount, int plyCap = MatchSimulator.DefaultPlyCap,
+            MatchTimeControl timeControl = MatchTimeControl.ProductionBudget, int repeats = 1)
         {
             var pair = new[] { (subject.Id, opponent.Id) };
             return new TournamentSession("HeadToHead", runSeed, plyCap, timeControl,
                 pair, id => id == subject.Id ? subject : opponent,
-                Math.Min(Math.Max(positionCount, 1), CuratedPositionSuite.Count));
+                Math.Min(Math.Max(positionCount, 1), CuratedPositionSuite.Count), repeats);
         }
 
         /// <summary>
@@ -217,8 +279,8 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
 
         private TournamentGameRecord PlayOneGame(MatchSimulator simulator, PendingGame game)
         {
-            int seedWhite = TournamentSeeding.DeriveSeed(_runSeed, game.PositionIndex, game.PairIndex, gameIndex: 0, side: 0);
-            int seedBlack = TournamentSeeding.DeriveSeed(_runSeed, game.PositionIndex, game.PairIndex, gameIndex: 0, side: 1);
+            int seedWhite = TournamentSeeding.DeriveSeed(_runSeed, game.PositionIndex, game.PairIndex, game.RepeatIndex, side: 0);
+            int seedBlack = TournamentSeeding.DeriveSeed(_runSeed, game.PositionIndex, game.PairIndex, game.RepeatIndex, side: 1);
 
             BoardState position = CuratedPositionSuite.Build(game.PositionIndex);
             MatchStatsResult result = simulator.PlayGameWithStats(position, game.White, game.Black, seedWhite, seedBlack, _plyCap);
@@ -318,18 +380,36 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
             private double _totalNodes;
             private double _totalElapsedMs;
             private int _deepestCompletedDepth;
+            private int _shallowestCompletedDepth;
+            private long _completedDepthSum;
+            private readonly int[] _depthHistogram = new int[MatchSideStats.DepthHistogramCapacity];
+            private bool _hasAnyMoves;
             private int _blunderRollOffered;
             private int _blunderRollFired;
+            private int _actsPlayed;
+            private int _actsResolvedByRetribution;
+            private int _actsResolvedByDefection;
 
             public void Add(MatchSideStats stats)
             {
+                if (stats.MoveCount == 0) return;
+
                 _movesSampled += stats.MoveCount;
                 _totalNodes += stats.TotalNodesVisited + stats.TotalQNodesVisited;
                 _totalElapsedMs += stats.TotalElapsedMs;
                 if (stats.DeepestCompletedDepth > _deepestCompletedDepth)
                     _deepestCompletedDepth = stats.DeepestCompletedDepth;
+                if (!_hasAnyMoves || stats.ShallowestCompletedDepth < _shallowestCompletedDepth)
+                    _shallowestCompletedDepth = stats.ShallowestCompletedDepth;
+                _hasAnyMoves = true;
+                _completedDepthSum += stats.CompletedDepthSum;
+                for (int i = 0; i < _depthHistogram.Length; i++)
+                    _depthHistogram[i] += stats.DepthHistogram[i];
                 _blunderRollOffered += stats.BlunderRollOffered;
                 _blunderRollFired += stats.BlunderRollFired;
+                _actsPlayed += stats.ActsPlayed;
+                _actsResolvedByRetribution += stats.ActsResolvedByRetribution;
+                _actsResolvedByDefection += stats.ActsResolvedByDefection;
             }
 
             public TierPerformance ToTierPerformance(string profileId) => new TierPerformance(
@@ -338,7 +418,13 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
                 meanNodesPerMove: _movesSampled == 0 ? 0 : _totalNodes / _movesSampled,
                 meanMsPerMove: _movesSampled == 0 ? 0 : _totalElapsedMs / _movesSampled,
                 deepestCompletedDepth: _deepestCompletedDepth,
-                observedBlunderActuationRate: _blunderRollOffered == 0 ? 0f : (float)_blunderRollFired / _blunderRollOffered);
+                meanCompletedDepth: _movesSampled == 0 ? 0 : (double)_completedDepthSum / _movesSampled,
+                shallowestCompletedDepth: _shallowestCompletedDepth,
+                depthHistogram: (int[])_depthHistogram.Clone(),
+                observedBlunderActuationRate: _blunderRollOffered == 0 ? 0f : (float)_blunderRollFired / _blunderRollOffered,
+                actsPlayed: _actsPlayed,
+                actsResolvedByRetribution: _actsResolvedByRetribution,
+                actsResolvedByDefection: _actsResolvedByDefection);
         }
     }
 

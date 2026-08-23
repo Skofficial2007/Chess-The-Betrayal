@@ -83,7 +83,14 @@ namespace ChessTheBetrayal.Tests.Utilities
             if (absScore <= _rules.DrawAdjudicationMarginCp)
             {
                 _drawStreakPlies++;
-                if (_drawStreakPlies >= _rules.DrawAdjudicationConsecutivePlies)
+
+                // A sustained small score is only a reliable "this is really a draw" signal while
+                // neither side can still swing the material count with a single Betrayal — the
+                // right can flip a piece's team outright, so a position that reads as equal right
+                // now can stop reading that way the moment either side spends it. Repetition and the
+                // fifty-move rule are left alone: those are draws by the game's own rules regardless
+                // of whether the right is live, since neither one depends on the score being settled.
+                if (_drawStreakPlies >= _rules.DrawAdjudicationConsecutivePlies && !board.BetrayalRightAvailable)
                     return MatchOutcome.Draw;
             }
             else

@@ -48,10 +48,81 @@ namespace ChessTheBetrayal.AI
             _weights = weights;
         }
 
+        /// <summary>
+        /// Full evaluation: everything EvaluateCheap does, plus the terms expensive enough to live
+        /// behind the lazy stand-pat cut rather than always being computed — pawn structure (passed,
+        /// isolated, doubled pawns), king safety (zone pressure, open files, a pending Betrayer of
+        /// your own standing in your own king's zone), and king approach (closing the distance on a
+        /// confined lone enemy king once this side holds mating material and the enemy has none). On
+        /// a position with no pawns, no live Betrayal sequence near either king, and no bare-king
+        /// mating scenario this equals EvaluateCheap exactly; the two diverge once any of those
+        /// conditions is present.
+        /// </summary>
         public int Evaluate(BoardState board, Team forTeam)
         {
-            int whiteScore = MaterialAndPosition(board, Team.White);
-            int blackScore = MaterialAndPosition(board, Team.Black);
+            int score = EvaluateCheap(board, forTeam);
+
+            // White-relative deltas, same convention MaterialAndPosition's own White-minus-Black
+            // score uses, so they flip the same way EvaluateCheap's total already flipped above.
+            int pawnScore = PawnStructureDelta(board);
+            int kingSafetyScore = KingSafetyDelta(board);
+            int kingApproachScore = KingApproachDelta(board);
+            return forTeam == Team.White
+                ? score + pawnScore + kingSafetyScore + kingApproachScore
+                : score - pawnScore - kingSafetyScore - kingApproachScore;
+        }
+
+        /// <summary>
+        /// White's pawn-structure score minus Black's, already scaled by the same attack/defense
+        /// weights the rest of the evaluator uses.
+        /// </summary>
+        private int PawnStructureDelta(BoardState board)
+        {
+            PawnStructure.Score(board, Team.White, out int whiteAttack, out int whiteDefense);
+            PawnStructure.Score(board, Team.Black, out int blackAttack, out int blackDefense);
+
+            int whitePawnScore = (int)(whiteAttack * _weights.AttackScale) + (int)(whiteDefense * _weights.DefenseScale);
+            int blackPawnScore = (int)(blackAttack * _weights.AttackScale) + (int)(blackDefense * _weights.DefenseScale);
+
+            return whitePawnScore - blackPawnScore;
+        }
+
+        /// <summary>
+        /// White's king-safety score minus Black's, already scaled by DefenseScale — king danger is
+        /// always a defense-bucket concept, the same convention KingShelterBonus already uses.
+        /// </summary>
+        private int KingSafetyDelta(BoardState board)
+        {
+            int whiteKingSafety = (int)(KingSafety.Score(board, Team.White) * _weights.DefenseScale);
+            int blackKingSafety = (int)(KingSafety.Score(board, Team.Black) * _weights.DefenseScale);
+
+            return whiteKingSafety - blackKingSafety;
+        }
+
+        /// <summary>
+        /// White's king-approach score minus Black's, scaled by AttackScale — closing the distance
+        /// on a confined enemy king is offense, the mirror of KingSafetyDelta's defense-only term.
+        /// Zero for either side outside a genuine bare-king mating scenario (see
+        /// EndgameKingApproach's own gate), so this is inert in the vast majority of positions.
+        /// </summary>
+        private int KingApproachDelta(BoardState board)
+        {
+            int whiteApproach = (int)(EndgameKingApproach.Score(board, Team.White) * _weights.AttackScale);
+            int blackApproach = (int)(EndgameKingApproach.Score(board, Team.Black) * _weights.AttackScale);
+
+            return whiteApproach - blackApproach;
+        }
+
+        public int EvaluateCheap(BoardState board, Team forTeam)
+        {
+            // Computed once per call, never cached: a Defection can flip a piece's team on the
+            // very next move, and the search applies/undoes moves constantly, so any cached value
+            // would be stale within a ply. Both sides read the SAME whole-board weight — how far
+            // the game has progressed isn't a property of one team's own pieces.
+            int phaseWeight = MaterialPhase.Weight(board);
+
+            int whiteScore = MaterialAndPosition(board, Team.White, phaseWeight);
+            int blackScore = MaterialAndPosition(board, Team.Black, phaseWeight);
 
             int score = whiteScore - blackScore; // White's perspective
 
@@ -74,9 +145,13 @@ namespace ChessTheBetrayal.AI
         /// Material is NEVER scaled — asymmetric material weighting breaks negamax's zero-sum
         /// frame. Everything positional splits into two buckets by whether the piece square sits
         /// on the scoring side's own half (Defense, including the new king-shelter term) or past
-        /// the midline into enemy territory (Attack), each independently scaled.
+        /// the midline into enemy territory (Attack), each independently scaled. The mg/eg blend
+        /// happens INSIDE PieceSquareTables.Bonus, before this split — each piece contributes one
+        /// already-blended number, so the attack/defense bucketing below sees exactly the same
+        /// shape it always has and the personality dials keep applying to whichever bucket a piece
+        /// actually landed in.
         /// </summary>
-        private int MaterialAndPosition(BoardState board, Team team)
+        private int MaterialAndPosition(BoardState board, Team team, int phaseWeight)
         {
             int material = 0;
             int attackPst = 0;
@@ -92,7 +167,7 @@ namespace ChessTheBetrayal.AI
 
                 material += BaseValue(piece.Type);
 
-                int bonus = PieceSquareTables.Bonus(piece.Type, x, y, team, board.TileCountX, board.TileCountY);
+                int bonus = PieceSquareTables.Bonus(piece.Type, x, y, team, board.TileCountX, board.TileCountY, phaseWeight);
                 // Same row normalization PieceSquareTables.Bonus uses internally — row 0 is the
                 // scoring side's own back rank, row 7 is the opponent's. row >= 4 means the piece
                 // is on/past the midline into enemy territory.

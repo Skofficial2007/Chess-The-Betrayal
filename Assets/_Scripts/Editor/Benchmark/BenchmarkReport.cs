@@ -47,21 +47,52 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
         public int MovesSampled;
         public double MeanNodesPerMove;
         public double MeanMsPerMove;
+
+        /// <summary>The single deepest ply any one move reached this run — a "what is reachable"
+        /// number. It is a maximum, not typical, so one cheap position can make a tier look like it
+        /// reaches a depth it rarely does in practice; MeanCompletedDepth below is the typical-play
+        /// number a depth-ceiling decision should actually read.</summary>
         public int DeepestCompletedDepth;
+        public double MeanCompletedDepth;
+        public int ShallowestCompletedDepth;
+
+        /// <summary>Move count per completed depth, index = depth (0 unused). See
+        /// MatchSideStats.DepthHistogramCapacity for the fixed size and overflow-folding rule.</summary>
+        public int[] DepthHistogram;
+
         public float ObservedBlunderActuationRate;
+
+        /// <summary>How many of this tier's played moves this run were a Betrayal Act, and how
+        /// that Act resolved — an ally executing the betrayer (Retribution) versus the betrayer
+        /// permanently switching sides (Defection, resolved with no move of its own whenever no
+        /// legal Retribution existed). The two branches cost the initiator very differently, so
+        /// they're reported separately rather than as one undifferentiated Act count.</summary>
+        public int ActsPlayed;
+        public int ActsResolvedByRetribution;
+        public int ActsResolvedByDefection;
 
         public TierPerformance() { }
 
         public TierPerformance(string profileId, int movesSampled, double meanNodesPerMove,
-            double meanMsPerMove, int deepestCompletedDepth, float observedBlunderActuationRate)
+            double meanMsPerMove, int deepestCompletedDepth, double meanCompletedDepth,
+            int shallowestCompletedDepth, int[] depthHistogram, float observedBlunderActuationRate,
+            int actsPlayed = 0, int actsResolvedByRetribution = 0, int actsResolvedByDefection = 0)
         {
             ProfileId = profileId;
             MovesSampled = movesSampled;
             MeanNodesPerMove = meanNodesPerMove;
             MeanMsPerMove = meanMsPerMove;
             DeepestCompletedDepth = deepestCompletedDepth;
+            MeanCompletedDepth = meanCompletedDepth;
+            ShallowestCompletedDepth = shallowestCompletedDepth;
+            DepthHistogram = depthHistogram;
             ObservedBlunderActuationRate = observedBlunderActuationRate;
+            ActsPlayed = actsPlayed;
+            ActsResolvedByRetribution = actsResolvedByRetribution;
+            ActsResolvedByDefection = actsResolvedByDefection;
         }
+
+        public float ActRate => MovesSampled == 0 ? 0f : (float)ActsPlayed / MovesSampled;
     }
 
     /// <summary>

@@ -8,5 +8,13 @@ namespace ChessTheBetrayal.AI
     public interface IPositionEvaluator
     {
         int Evaluate(BoardState board, Team forTeam);
+
+        /// <summary>
+        /// A cheaper partial score a caller can use to skip the full evaluation when it already
+        /// falls far enough outside a search window that no additional term could change the
+        /// outcome. Must never cost more than Evaluate, and Evaluate must never return something
+        /// this couldn't have bounded.
+        /// </summary>
+        int EvaluateCheap(BoardState board, Team forTeam);
     }
 }

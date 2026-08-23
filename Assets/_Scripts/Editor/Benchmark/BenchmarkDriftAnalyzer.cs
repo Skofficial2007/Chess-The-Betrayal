@@ -5,7 +5,15 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
     public enum DriftSeverity
     {
         Warn,
-        Fail
+        Fail,
+
+        /// <summary>The observed number crossed a threshold, but the sample is small enough that
+        /// its own 95% confidence interval overlaps the threshold — the run cannot actually tell a
+        /// real regression apart from ordinary sampling noise at this N. Reported instead of Fail
+        /// so a low-N run never asserts a confident failure it has no statistical power to back up
+        /// (see TournamentStatistics.WinRateMargin95); reported instead of silence so the finding
+        /// isn't simply dropped and lost.</summary>
+        Inconclusive
     }
 
     /// <summary>One threshold check's outcome against a baseline.</summary>
@@ -26,6 +34,12 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
     /// threshold table: an ordering violation or a depth-7-class timing regression fails outright
     /// (blocks the tuning-table/search change from merging); everything else warns (prompts
     /// investigation without blocking unrelated work).
+    ///
+    /// The win-rate floor is applied ONLY to pairings the preset table actually makes a claim about,
+    /// in the direction it claims — see TournamentSession.AdjacentPairs. A report from a full
+    /// round-robin contains every pair in roster order, so most of its rows read weaker-vs-stronger
+    /// and carry no promise at all; grading those against a floor meant for the other direction
+    /// would report a correctly-ordered ladder as a wall of failures.
     /// </summary>
     public static class BenchmarkDriftAnalyzer
     {
@@ -41,10 +55,30 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
 
             foreach (PairResult pair in current.PairResults)
             {
+                // The floor only means anything when the Subject is the side we expect to WIN.
+                // Quick mode lists its pairs stronger-first, but a round-robin lists every pair in
+                // roster order, so half of them read weaker-vs-stronger — and grading those against
+                // a 55% floor would report the ladder working correctly as a failure (a tier losing
+                // 0% against one two steps above it is the ladder being right, not broken).
+                if (!AssertsSubjectIsStronger(pair.Subject, pair.Opponent)) continue;
+
                 if (pair.SubjectWinRate < AdjacentPairHardFloor)
                 {
-                    findings.Add(new DriftFinding(DriftSeverity.Fail,
-                        $"{pair.Subject} vs {pair.Opponent}: win rate {pair.SubjectWinRate:P1} is below the {AdjacentPairHardFloor:P0} hard floor over {pair.Games} games."));
+                    float margin = TournamentStatistics.WinRateMargin95(pair.Games);
+                    bool floorIsInsideConfidenceInterval = pair.SubjectWinRate + margin >= AdjacentPairHardFloor;
+
+                    if (floorIsInsideConfidenceInterval)
+                    {
+                        findings.Add(new DriftFinding(DriftSeverity.Inconclusive,
+                            $"{pair.Subject} vs {pair.Opponent}: win rate {pair.SubjectWinRate:P1} +/-{margin:P1} is below the " +
+                            $"{AdjacentPairHardFloor:P0} floor over only {pair.Games} games, but the {AdjacentPairHardFloor:P0} floor " +
+                            "is inside this sample's own 95% confidence interval — more games are needed before calling this a real failure."));
+                    }
+                    else
+                    {
+                        findings.Add(new DriftFinding(DriftSeverity.Fail,
+                            $"{pair.Subject} vs {pair.Opponent}: win rate {pair.SubjectWinRate:P1} +/-{margin:P1} is below the {AdjacentPairHardFloor:P0} hard floor over {pair.Games} games."));
+                    }
                 }
 
                 PairResult baselinePair = baseline?.FindPair(pair.Subject, pair.Opponent);
@@ -97,6 +131,24 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
             }
 
             return findings;
+        }
+
+        /// <summary>
+        /// Whether this pairing is one the preset table actually promises an outcome for, with the
+        /// Subject as the side expected to win. Only those carry a win-rate floor.
+        ///
+        /// Two pairings are deliberately absent. A tier is never asserted against one several rungs
+        /// below it (the claim is that each step up beats the step below, and transitivity covers
+        /// the rest), and `aggressive` is a PERSONALITY rather than a rung — it trades soundness for
+        /// Betrayal-seeking play, so it is asserted against the tiers it should still beat and left
+        /// unasserted against the deeper ones, where losing is a legitimate consequence of its
+        /// dials rather than a regression.
+        /// </summary>
+        private static bool AssertsSubjectIsStronger(string subject, string opponent)
+        {
+            foreach ((string Subject, string Opponent) claim in TournamentSession.AdjacentPairs)
+                if (claim.Subject == subject && claim.Opponent == opponent) return true;
+            return false;
         }
 
         private static AI.AIProfile FindConfiguredProfile(string id)

@@ -1,7 +1,10 @@
+using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
 using ChessTheBetrayal.AI;
 using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.Core.Engine;
+using ChessTheBetrayal.Gameplay.Manager;
 using ChessTheBetrayal.Tests.Utilities;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI
@@ -18,6 +21,19 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         private static AIProfile Fast(string id, int maxDepth) =>
             new AIProfile(id, maxDepth, timeBudget: new AITimeBudget(2000, 3000), blunderRate: 0f, blunderMarginCp: 0,
                 betrayalAggression: 0f, attackDefenseBias: 1f, tieBreakWindowCp: 0, useOpeningBook: false);
+
+        /// <summary>Test double recording every callback MatchSimulator makes on the sampling seam,
+        /// so a test can assert on the raw sequence without needing a real corpus writer.</summary>
+        private sealed class RecordingPositionSampler : IPositionSampler
+        {
+            public readonly List<(BoardState Board, Team SideToMove, int Ply, bool PostDefectionOccurred)> QuietPositions = new();
+            public readonly List<MatchOutcome> CompletedOutcomes = new();
+
+            public void OnQuietPosition(BoardState board, Team sideToMove, int ply, bool postDefectionOccurred) =>
+                QuietPositions.Add((board.CloneForSnapshot(), sideToMove, ply, postDefectionOccurred));
+
+            public void OnGameComplete(MatchOutcome outcome) => CompletedOutcomes.Add(outcome);
+        }
 
         [Test]
         public void PlayGame_SameSeeds_ProducesBitIdenticalOutcomeAndPlyCount()
@@ -176,6 +192,289 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         public void CuratedPositionSuite_HasAtLeastTwentyPositions()
         {
             Assert.That(CuratedPositionSuite.Count, Is.GreaterThanOrEqualTo(20));
+        }
+
+        [Test]
+        public void MatchSideStats_MeanCompletedDepth_IsGenuinelyDistinctFromTheMaximum()
+        {
+            // A hand-built two-move fixture: one move completed depth 3, the other depth 9. A mean
+            // of 6 proves this reads as an actual average, not the deepest single move relabeled —
+            // the failure mode this field exists to fix (DeepestCompletedDepth alone lets one cheap
+            // position make a whole tier look like it typically reaches a depth it rarely does).
+            var histogram = new int[MatchSideStats.DepthHistogramCapacity];
+            histogram[3] = 1;
+            histogram[9] = 1;
+            var stats = new MatchSideStats(
+                moveCount: 2, totalNodesVisited: 100, totalQNodesVisited: 20,
+                deepestCompletedDepth: 9, totalElapsedMs: 500.0, blunderRollOffered: 0, blunderRollFired: 0,
+                completedDepthSum: 3 + 9, shallowestCompletedDepth: 3, depthHistogram: histogram);
+
+            Assert.That(stats.MeanCompletedDepth, Is.EqualTo(6.0));
+            Assert.That(stats.DeepestCompletedDepth, Is.EqualTo(9));
+            Assert.That(stats.ShallowestCompletedDepth, Is.EqualTo(3));
+            Assert.That(stats.MeanCompletedDepth, Is.Not.EqualTo(stats.DeepestCompletedDepth),
+                "the mean must not silently collapse to the maximum on a mixed-depth sample.");
+        }
+
+        [Test]
+        public void MatchSideStats_MeanCompletedDepth_ZeroMoves_DoesNotDivideByZero()
+        {
+            var stats = new MatchSideStats(
+                moveCount: 0, totalNodesVisited: 0, totalQNodesVisited: 0,
+                deepestCompletedDepth: 0, totalElapsedMs: 0.0, blunderRollOffered: 0, blunderRollFired: 0,
+                completedDepthSum: 0, shallowestCompletedDepth: 0, depthHistogram: null);
+
+            Assert.That(stats.MeanCompletedDepth, Is.EqualTo(0.0));
+        }
+
+        [Test]
+        public void PlayGameWithStats_RealGame_ReportsMeanAtOrBelowTheMaximum()
+        {
+            // Not a synthetic fixture — a real played game, proving the invariant holds against the
+            // actual accumulator wiring (SideStatsAccumulator), not just the struct's own math.
+            AIProfile shallow = Fast("shallow", maxDepth: 3);
+            BoardState position = CuratedPositionSuite.Build(0);
+
+            MatchStatsResult result = new MatchSimulator(MatchTimeControl.Uncapped)
+                .PlayGameWithStats(position, shallow, shallow, rngSeedWhite: 1, rngSeedBlack: 2, plyCap: 10);
+
+            Assert.That(result.WhiteStats.MeanCompletedDepth, Is.LessThanOrEqualTo(result.WhiteStats.DeepestCompletedDepth));
+            Assert.That(result.WhiteStats.MeanCompletedDepth, Is.GreaterThanOrEqualTo(result.WhiteStats.ShallowestCompletedDepth));
+            Assert.That(result.WhiteStats.DepthHistogram.Sum(), Is.EqualTo(result.WhiteStats.MoveCount),
+                "every completed move must land in exactly one histogram slot.");
+        }
+
+        [Test]
+        public void PlayGameWithStats_NoBetrayalOnTheBoard_ReportsZeroActsForBothSides()
+        {
+            AIProfile shallow = Fast("shallow", maxDepth: 2);
+            BoardState position = CuratedPositionSuite.Build(0);
+
+            MatchStatsResult result = new MatchSimulator(MatchTimeControl.Uncapped)
+                .PlayGameWithStats(position, shallow, shallow, rngSeedWhite: 1, rngSeedBlack: 2, plyCap: 6);
+
+            Assert.That(result.WhiteStats.ActsPlayed, Is.Zero);
+            Assert.That(result.BlackStats.ActsPlayed, Is.Zero);
+            Assert.That(result.WhiteStats.ActsResolvedByRetribution, Is.Zero);
+            Assert.That(result.WhiteStats.ActsResolvedByDefection, Is.Zero);
+        }
+
+        [Test]
+        public void ActThatLeavesALegalRetribution_KeepsPendingBetrayerSquareSetAndTheSameSideToMove()
+        {
+            // MatchSimulator's Act/Retribution/Defection counting reads exactly this signal after
+            // playing an Act: PendingBetrayerSquare still set means a legal Retribution genuinely
+            // exists and is about to be played by the SAME side (an ally executes its own
+            // betrayer); this fixture is the SearchCorrectnessTests position where White's Knight
+            // can Act its own Pawn on a3 and White's Rook on a1 can then execute it. Driving the
+            // move through MatchDriver directly (rather than depending on search preference,
+            // which correctly avoids this Act as a losing trade) proves the state transition the
+            // counting logic relies on, independent of whether any tier would ever choose it.
+            BoardState board = TestBoardSetupUtility.CreateEmpty()
+                .WithPiece("e1", Team.White, ChessPieceType.King)
+                .WithPiece("e8", Team.Black, ChessPieceType.King)
+                .WithPiece("b1", Team.White, ChessPieceType.Knight)
+                .WithPiece("a3", Team.White, ChessPieceType.Pawn)
+                .WithPiece("a1", Team.White, ChessPieceType.Rook)
+                .WithTurn(Team.White)
+                .WithBetrayalRight(true)
+                .WithComputedHash();
+
+            // The Rook can ALSO Act the Knight directly (its own separate legal Act), so the
+            // Knight-Acts-the-Pawn move — the one this fixture is actually about — must be
+            // selected explicitly rather than assuming there is only one Act available.
+            var moves = new List<MoveCommand>();
+            ChessEngine.GetAllLegalMovesIncludingBetrayal(board, Team.White, moves);
+            MoveCommand act = moves.Single(m => m.Stage == BetrayalStage.Act && m.PieceType == ChessPieceType.Knight);
+
+            var driver = new MatchDriver(new ChessEngineAdapter(), board, logMoves: false, domainLogger: null,
+                gameOverChannel: null, turnChangedChannel: null, moveExecutedChannel: null,
+                moveRejectedChannel: null, checkDetectedChannel: null, betrayalChannel: null);
+            driver.TransitionToPhase(TurnPhase.Normal);
+            driver.PlayMove(act);
+
+            Assert.That(board.PendingBetrayerSquare, Is.EqualTo(act.EndPosition),
+                "a legal Retribution exists (White's own Rook can reach the betrayer), so the sequence must still be open.");
+            Assert.That(board.CurrentTurn, Is.EqualTo(Team.White),
+                "Retribution is owed by the SAME side that Acted — the turn must not have flipped yet.");
+        }
+
+        [Test]
+        public void ActWithNoLegalRetribution_ClearsPendingBetrayerSquareAndFlipsTheTurn()
+        {
+            // The counting logic's other branch: no legal Retribution means the engine resolves a
+            // Defection inline inside PlayMove/TurnResolver.Advance, with no Retribution move ever
+            // reaching MatchSimulator's ply loop. White's Knight on h8 can only Act its own Pawn on
+            // g6, and nothing else on the board can reach h8 to execute it.
+            BoardState board = TestBoardSetupUtility.CreateEmpty()
+                .WithPiece("a1", Team.White, ChessPieceType.King)
+                .WithPiece("e8", Team.Black, ChessPieceType.King)
+                .WithPiece("h8", Team.White, ChessPieceType.Knight)
+                .WithPiece("g6", Team.White, ChessPieceType.Pawn)
+                .WithTurn(Team.White)
+                .WithBetrayalRight(true)
+                .WithComputedHash();
+
+            var moves = new List<MoveCommand>();
+            ChessEngine.GetAllLegalMovesIncludingBetrayal(board, Team.White, moves);
+            MoveCommand act = moves.Single(m => m.Stage == BetrayalStage.Act);
+
+            var driver = new MatchDriver(new ChessEngineAdapter(), board, logMoves: false, domainLogger: null,
+                gameOverChannel: null, turnChangedChannel: null, moveExecutedChannel: null,
+                moveRejectedChannel: null, checkDetectedChannel: null, betrayalChannel: null);
+            driver.TransitionToPhase(TurnPhase.Normal);
+            driver.PlayMove(act);
+
+            Assert.That(board.PendingBetrayerSquare, Is.Null,
+                "no legal Retribution exists in this fixture, so the Defection must have resolved inline.");
+            Assert.That(board.CurrentTurn, Is.EqualTo(Team.Black),
+                "a resolved Defection with no ForcedSave passes the turn.");
+        }
+
+        private static AIProfile BlunderCapable(string id, int maxDepth, int softMs, int hardMs) =>
+            new AIProfile(id, maxDepth, timeBudget: new AITimeBudget(softMs, hardMs), blunderRate: 1f, blunderMarginCp: 200,
+                betrayalAggression: 0f, attackDefenseBias: 1f, tieBreakWindowCp: 0, useOpeningBook: false);
+
+        [Test]
+        public void PlayGame_RescorePassCompletes_CountsEveryMoveAsBlunderRollOffered()
+        {
+            // A shallow search under a generous budget always finishes its candidate-rescore pass,
+            // so RootScoresExactForSelection is true on every move — every move should count as an
+            // offered roll.
+            AIProfile shallowGenerous = BlunderCapable("shallow", maxDepth: 2, softMs: 2000, hardMs: 3000);
+
+            MatchStatsResult result = new MatchSimulator().PlayGameWithStats(
+                CuratedPositionSuite.Build(0), shallowGenerous, shallowGenerous, rngSeedWhite: 1, rngSeedBlack: 2, plyCap: 6);
+
+            Assert.That(result.WhiteStats.BlunderRollOffered, Is.EqualTo(result.WhiteStats.MoveCount));
+            Assert.That(result.BlackStats.BlunderRollOffered, Is.EqualTo(result.BlackStats.MoveCount));
+        }
+
+        [Test]
+        public void PlayGame_RescorePassNeverCompletes_NeverCountsABlunderRollAsOffered()
+        {
+            // A deep search under a starved move-budget cap never gets far enough to run its
+            // candidate-rescore pass, so RootScoresExactForSelection is false on every move — none
+            // of those moves should count as an offered roll, even though BlunderRate is nonzero.
+            // Before this fix, MatchSimulator counted every move here as "offered" regardless,
+            // which silently deflated the observed actuation rate on any budget-bound tier.
+            AIProfile deepStarved = BlunderCapable("deep", maxDepth: 8, softMs: 2000, hardMs: 3000);
+
+            var starvedSimulator = new MatchSimulator(MatchTimeControl.ProductionBudget, moveBudgetCapMs: 3);
+
+            MatchStatsResult result = starvedSimulator.PlayGameWithStats(
+                CuratedPositionSuite.Build(0), deepStarved, deepStarved, rngSeedWhite: 1, rngSeedBlack: 2, plyCap: 6);
+
+            Assert.That(result.WhiteStats.MoveCount, Is.GreaterThan(0));
+            Assert.That(result.WhiteStats.BlunderRollOffered, Is.Zero);
+            Assert.That(result.BlackStats.BlunderRollOffered, Is.Zero);
+        }
+
+        [Test]
+        public void PlayGame_NullSampler_PlaysByteIdenticallyToNoSamplerAtAll()
+        {
+            // The hook must be provably inert on the path every existing benchmark/tournament run
+            // takes today — same outcome, same ply count, with or without the constructor parameter
+            // present in the call.
+            AIProfile shallow = Fast("shallow", maxDepth: 2);
+            BoardState position = CuratedPositionSuite.Build(0);
+
+            MatchResult withoutParam = new MatchSimulator()
+                .PlayGame(position, shallow, shallow, rngSeedWhite: 111, rngSeedBlack: 222, plyCap: 20);
+            MatchResult withNullSampler = new MatchSimulator(sampler: null)
+                .PlayGame(position, shallow, shallow, rngSeedWhite: 111, rngSeedBlack: 222, plyCap: 20);
+
+            Assert.That(withNullSampler.Outcome, Is.EqualTo(withoutParam.Outcome));
+            Assert.That(withNullSampler.PlyCount, Is.EqualTo(withoutParam.PlyCount));
+        }
+
+        [Test]
+        public void PlayGame_WithSampler_EveryOfferedPositionIsQuiet()
+        {
+            AIProfile shallow = Fast("shallow", maxDepth: 2);
+            BoardState position = CuratedPositionSuite.Build(0);
+            var sampler = new RecordingPositionSampler();
+            var engine = new ChessEngineAdapter();
+
+            new MatchSimulator(sampler: sampler)
+                .PlayGame(position, shallow, shallow, rngSeedWhite: 111, rngSeedBlack: 222, plyCap: 20);
+
+            Assert.That(sampler.QuietPositions, Is.Not.Empty,
+                "a 20-ply game from a quiet opening position must offer at least one quiet sample.");
+            Assert.That(sampler.QuietPositions, Has.All.Matches<(BoardState Board, Team SideToMove, int Ply, bool PostDefectionOccurred)>(p => !p.PostDefectionOccurred),
+                "no Defection occurred anywhere in this zero-BetrayalAggression opening game, so the flag must stay false on every sample.");
+            foreach (var (board, sideToMove, _, _) in sampler.QuietPositions)
+            {
+                Assert.That(board.PendingBetrayerSquare, Is.Null,
+                    "a position with a Betrayer awaiting Retribution/Defection must never be offered as quiet.");
+                Assert.That(engine.IsKingInCheck(board, sideToMove), Is.False,
+                    "a position where the side to move is in check must never be offered as quiet.");
+            }
+        }
+
+        [Test]
+        public void PlayGame_DecisiveNaturalCheckmate_FiresOnGameCompleteExactlyOnceWithTheRealOutcome()
+        {
+            // Back-rank mate in one: White's Rook on a1 delivers Ra8#, hitting the natural
+            // board.IsGameOver return path (not adjudication, not the ply cap). The king's own three
+            // pawns wall it onto the back rank (a-file is clear all the way from a1 to a8 — unlike a
+            // rook trying to reach h8 behind an h7 pawn, which is not a legal path at all). plyCap: 1
+            // and adjudication disabled so nothing but the search's own choice of Ra8# can end this
+            // game — if the search ever failed to find the only mate here, the test would fail loudly
+            // on a ply-cap result instead of masking it behind a multi-ply adjudicated draw.
+            BoardState board = TestBoardSetupUtility.CreateEmpty()
+                .WithPiece("e1", Team.White, ChessPieceType.King)
+                .WithPiece("a1", Team.White, ChessPieceType.Rook)
+                .WithPiece("g8", Team.Black, ChessPieceType.King)
+                .WithPiece("f7", Team.Black, ChessPieceType.Pawn)
+                .WithPiece("g7", Team.Black, ChessPieceType.Pawn)
+                .WithPiece("h7", Team.Black, ChessPieceType.Pawn)
+                .WithTurn(Team.White)
+                .WithComputedHash();
+            AIProfile mateFinder = Fast("matefinder", maxDepth: 3);
+            var sampler = new RecordingPositionSampler();
+
+            MatchResult result = new MatchSimulator(MatchTimeControl.Uncapped, adjudicationRules: AdjudicationRules.Disabled, sampler: sampler)
+                .PlayGame(board, mateFinder, mateFinder, rngSeedWhite: 1, rngSeedBlack: 2, plyCap: 1);
+
+            Assert.That(result.Outcome, Is.EqualTo(MatchOutcome.WhiteWon));
+            Assert.That(result.ReachedPlyCap, Is.False);
+            Assert.That(sampler.CompletedOutcomes, Has.Count.EqualTo(1));
+            Assert.That(sampler.CompletedOutcomes[0], Is.EqualTo(MatchOutcome.WhiteWon));
+        }
+
+        [Test]
+        public void PlayGame_AdjudicatedEarly_FiresOnGameCompleteExactlyOnceWithTheAdjudicatedOutcome()
+        {
+            // The same quiet/repeating-line fixture AdjudicationEndsItBeforeThePlyCap already proves
+            // ends before the ply cap via MatchAdjudicator.RecordPly — this exercises the OTHER
+            // return path (adjudicated-early) rather than the natural-checkmate or ply-cap ones.
+            AIProfile shallow = Fast("shallow", maxDepth: 2);
+            BoardState position = CuratedPositionSuite.Build(0);
+            var sampler = new RecordingPositionSampler();
+
+            MatchResult result = new MatchSimulator(MatchTimeControl.Uncapped, adjudicationRules: AdjudicationRules.Standard, sampler: sampler)
+                .PlayGame(position, shallow, shallow, rngSeedWhite: 111, rngSeedBlack: 222);
+
+            Assert.That(result.PlyCount, Is.LessThan(MatchSimulator.DefaultPlyCap));
+            Assert.That(result.ReachedPlyCap, Is.False);
+            Assert.That(sampler.CompletedOutcomes, Has.Count.EqualTo(1));
+            Assert.That(sampler.CompletedOutcomes[0], Is.EqualTo(result.Outcome));
+        }
+
+        [Test]
+        public void PlayGame_ReachesPlyCap_FiresOnGameCompleteExactlyOnceWithTheMarginAdjudicatedOutcome()
+        {
+            AIProfile veryShallow = Fast("veryshallow", maxDepth: 1);
+            BoardState position = CuratedPositionSuite.Build(0);
+            var sampler = new RecordingPositionSampler();
+
+            MatchResult result = new MatchSimulator(sampler: sampler)
+                .PlayGame(position, veryShallow, veryShallow, rngSeedWhite: 1, rngSeedBlack: 2, plyCap: 4);
+
+            Assert.That(result.ReachedPlyCap, Is.True);
+            Assert.That(sampler.CompletedOutcomes, Has.Count.EqualTo(1));
+            Assert.That(sampler.CompletedOutcomes[0], Is.EqualTo(result.Outcome));
         }
     }
 }
