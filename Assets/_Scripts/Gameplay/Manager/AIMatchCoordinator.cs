@@ -125,6 +125,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
 
             agent.OnMoveDecided += HandleMoveDecided;
             agent.OnBookMovePlayed += HandleBookMovePlayed;
+            agent.OnLeftOpeningBook += HandleLeftOpeningBook;
             _aiAgent = agent;
         }
 
@@ -214,12 +215,27 @@ namespace ChessTheBetrayal.Gameplay.Manager
             Activity = AgentActivity.Idle;
         }
 
+        /// <summary>
+        /// Logs the point the AI ran out of opening theory and started working moves out for
+        /// itself. Purely a diagnostic marker — the move that follows is delivered through
+        /// HandleMoveDecided like any other searched move, so nothing about play changes here.
+        /// </summary>
+        private void HandleLeftOpeningBook(MoveCommand move)
+        {
+            if (_logger != null && _logger.IsVerbose)
+            {
+                _logger.LogInfo(new DomainLogEvent(DomainEventCode.AI_LeftOpeningBook,
+                    message: $"{_aiTeam} is out of book"));
+            }
+        }
+
         private void TearDownAgent()
         {
             if (_aiAgent is AsyncAIAgent asyncAgent)
             {
                 asyncAgent.OnMoveDecided -= HandleMoveDecided;
                 asyncAgent.OnBookMovePlayed -= HandleBookMovePlayed;
+                asyncAgent.OnLeftOpeningBook -= HandleLeftOpeningBook;
                 asyncAgent.Dispose();
             }
             _aiAgent = null;

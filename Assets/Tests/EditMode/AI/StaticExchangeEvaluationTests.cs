@@ -164,6 +164,89 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             Assert.That(StaticExchangeEvaluation.IsApplicable(board, retribution), Is.False);
         }
 
+        [Test]
+        public void IsApplicable_ActMove_ReturnsFalse()
+        {
+            // An Act isn't a material capture at all - it stages one. There is no exchange on the
+            // target square yet, so there is nothing for the swap-off algorithm to be right about,
+            // and scoring it as though there were would invent material that hasn't been won.
+            BoardState board = TestBoardSetupUtility.CreateEmpty()
+                .WithPiece("e1", Team.White, ChessPieceType.King)
+                .WithPiece("e8", Team.Black, ChessPieceType.King)
+                .WithPiece("a4", Team.White, ChessPieceType.Rook)
+                .WithPiece("a8", Team.Black, ChessPieceType.Knight)
+                .WithComputedHash();
+
+            MoveCommand act = BuildCapture(board, "a4", "a8", Team.White, ChessPieceType.Rook, ChessPieceType.Knight)
+                .WithStage(BetrayalStage.Act);
+
+            Assert.That(StaticExchangeEvaluation.IsApplicable(board, act), Is.False);
+        }
+
+        [Test]
+        public void CaptureOrdering_UsesExchangeResult_WhenNoBetrayerPending()
+        {
+            // The ordering nudge is only worth having if it actually separates two captures that
+            // the coarse piece-rank comparison rates identically. Both moves below are Knight
+            // takes Knight - an even trade by piece rank, so both land on exactly the same tier
+            // score - but only one of them loses the Knight straight back to a defender.
+            //
+            // Equal captures specifically, because the nudge is deliberately confined to the
+            // winning and equal capture bands: a losing capture sits close enough to the tiers
+            // below it that even a small nudge could push it out of its own band.
+            BoardState board = TestBoardSetupUtility.CreateEmpty()
+                .WithPiece("e1", Team.White, ChessPieceType.King)
+                .WithPiece("e8", Team.Black, ChessPieceType.King)
+                .WithPiece("c3", Team.White, ChessPieceType.Knight)
+                .WithPiece("a4", Team.Black, ChessPieceType.Knight)
+                .WithPiece("f3", Team.White, ChessPieceType.Knight)
+                .WithPiece("h4", Team.Black, ChessPieceType.Knight)
+                .WithPiece("h5", Team.Black, ChessPieceType.Rook)
+                .WithComputedHash();
+
+            AlphaBetaSearch search = new AlphaBetaSearch(new ChessEngineAdapter(), new BetrayalAwareEvaluator());
+
+            MoveCommand safeCapture = BuildCapture(board, "c3", "a4", Team.White, ChessPieceType.Knight, ChessPieceType.Knight);
+            MoveCommand defendedCapture = BuildCapture(board, "f3", "h4", Team.White, ChessPieceType.Knight, ChessPieceType.Knight);
+
+            int safeScore = search.OrderScoreForTest(safeCapture, ttMove: 0, plyFromRoot: -1, board: board);
+            int defendedScore = search.OrderScoreForTest(defendedCapture, ttMove: 0, plyFromRoot: -1, board: board);
+
+            Assert.That(safeScore, Is.GreaterThan(defendedScore),
+                "A capture that survives the recapture should order ahead of one that loses the piece back.");
+        }
+
+        [Test]
+        public void CaptureOrdering_FallsBackToPieceRank_WhenBetrayerPending()
+        {
+            // Same two captures as above, but with a Betrayer pending elsewhere on the board. The
+            // exchange result can no longer be trusted (an ally, not the opponent, may be the one
+            // recapturing), so both captures must fall back to the same coarse piece-rank score
+            // rather than one being nudged ahead of the other on exchange math that doesn't apply.
+            BoardState board = TestBoardSetupUtility.CreateEmpty()
+                .WithPiece("e1", Team.White, ChessPieceType.King)
+                .WithPiece("e8", Team.Black, ChessPieceType.King)
+                .WithPiece("c3", Team.White, ChessPieceType.Knight)
+                .WithPiece("a4", Team.Black, ChessPieceType.Knight)
+                .WithPiece("f3", Team.White, ChessPieceType.Knight)
+                .WithPiece("h4", Team.Black, ChessPieceType.Knight)
+                .WithPiece("h5", Team.Black, ChessPieceType.Rook)
+                .WithPiece("d5", Team.Black, ChessPieceType.Bishop)
+                .WithPendingBetrayer("d5", Team.Black)
+                .WithComputedHash();
+
+            AlphaBetaSearch search = new AlphaBetaSearch(new ChessEngineAdapter(), new BetrayalAwareEvaluator());
+
+            MoveCommand safeCapture = BuildCapture(board, "c3", "a4", Team.White, ChessPieceType.Knight, ChessPieceType.Knight);
+            MoveCommand defendedCapture = BuildCapture(board, "f3", "h4", Team.White, ChessPieceType.Knight, ChessPieceType.Knight);
+
+            int safeScore = search.OrderScoreForTest(safeCapture, ttMove: 0, plyFromRoot: -1, board: board);
+            int defendedScore = search.OrderScoreForTest(defendedCapture, ttMove: 0, plyFromRoot: -1, board: board);
+
+            Assert.That(safeScore, Is.EqualTo(defendedScore),
+                "With a Betrayer pending, ordering must ignore the exchange result entirely.");
+        }
+
         private static MoveCommand BuildCapture(BoardState board, string from, string to, Team team,
                                                   ChessPieceType pieceType, ChessPieceType capturedType)
         {

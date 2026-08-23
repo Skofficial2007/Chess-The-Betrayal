@@ -27,14 +27,27 @@ namespace ChessTheBetrayal.AI
         // inside SoftMs. The deeper tiers are budget-bound: they reach whatever depth the budget
         // allows on the given hardware, deeper on faster machines, and iterative deepening always
         // keeps the last fully completed depth's move, so a budget stop is never a wasted search.
+        //
+        // OpeningBookDepthPlies is how much theory each tier is allowed to play from memory before
+        // it has to think for itself, and it is the other half of what makes a tier feel like its
+        // difficulty. Left unlimited it hands every tier identical grandmaster openings, which
+        // makes the weak ones play far above their level for the first several moves and then fall
+        // off a cliff. The shipped book runs a median of 16 plies and no line shorter than 8, so
+        // every allowance below is one a real game actually reaches rather than a number that
+        // quietly never applies. The top two tiers keep the whole book: correct theory played
+        // instantly, with the entire time budget saved for the middlegame.
+        //
+        // Past roughly ply 10 the book holds close to one reply per position, so the allowances
+        // below give up very little variety — the choice of opening is made and done inside the
+        // first few moves.
         public static readonly IReadOnlyList<AIProfile> BuiltIn = new[]
         {
-            new AIProfile("easy",       maxDepth: 3,  timeBudget: new AITimeBudget(400, 1300),     blunderRate: 0.30f, blunderMarginCp: 120, betrayalAggression: 0f,    attackDefenseBias: 1.0f, tieBreakWindowCp: 30, useOpeningBook: true),
-            new AIProfile("normal",     maxDepth: 5,  timeBudget: new AITimeBudget(700, 2250),     blunderRate: 0.10f, blunderMarginCp: 80,  betrayalAggression: 0f,    attackDefenseBias: 1.0f, tieBreakWindowCp: 20, useOpeningBook: true),
-            new AIProfile("hard",       maxDepth: 8,  timeBudget: new AITimeBudget(900, 3000),     blunderRate: 0.02f, blunderMarginCp: 40,  betrayalAggression: 0f,    attackDefenseBias: 1.0f, tieBreakWindowCp: 15, useOpeningBook: true),
-            new AIProfile("aggressive", maxDepth: 7,  timeBudget: new AITimeBudget(900, 3000),     blunderRate: 0.05f, blunderMarginCp: 60,  betrayalAggression: 0.7f,  attackDefenseBias: 1.5f, tieBreakWindowCp: 25, useOpeningBook: true),
-            new AIProfile("extreme",    maxDepth: 9,  timeBudget: new AITimeBudget(1000, 3000),    blunderRate: 0f,    blunderMarginCp: 0,   betrayalAggression: 0.3f,  attackDefenseBias: 1.2f, tieBreakWindowCp: 10, useOpeningBook: true),
-            new AIProfile("impossible", maxDepth: 9,  timeBudget: new AITimeBudget(1200, 3000),    blunderRate: 0f,    blunderMarginCp: 0,   betrayalAggression: 0f,    attackDefenseBias: 1.0f, tieBreakWindowCp: 0,  useOpeningBook: true),
+            new AIProfile("easy",       maxDepth: 3,  timeBudget: new AITimeBudget(400, 1300),     blunderRate: 0.30f, blunderMarginCp: 120, betrayalAggression: 0f,    attackDefenseBias: 1.0f, tieBreakWindowCp: 30, useOpeningBook: true, openingBookDepthPlies: 4),
+            new AIProfile("normal",     maxDepth: 5,  timeBudget: new AITimeBudget(700, 2250),     blunderRate: 0.10f, blunderMarginCp: 80,  betrayalAggression: 0f,    attackDefenseBias: 1.0f, tieBreakWindowCp: 20, useOpeningBook: true, openingBookDepthPlies: 8),
+            new AIProfile("hard",       maxDepth: 8,  timeBudget: new AITimeBudget(900, 3000),     blunderRate: 0.02f, blunderMarginCp: 40,  betrayalAggression: 0f,    attackDefenseBias: 1.0f, tieBreakWindowCp: 15, useOpeningBook: true, openingBookDepthPlies: 14),
+            new AIProfile("aggressive", maxDepth: 7,  timeBudget: new AITimeBudget(900, 3000),     blunderRate: 0.05f, blunderMarginCp: 60,  betrayalAggression: 0.7f,  attackDefenseBias: 1.5f, tieBreakWindowCp: 25, useOpeningBook: true, openingBookDepthPlies: 10),
+            new AIProfile("extreme",    maxDepth: 9,  timeBudget: new AITimeBudget(1000, 3000),    blunderRate: 0f,    blunderMarginCp: 0,   betrayalAggression: 0.3f,  attackDefenseBias: 1.2f, tieBreakWindowCp: 10, useOpeningBook: true, openingBookDepthPlies: 0),
+            new AIProfile("impossible", maxDepth: 9,  timeBudget: new AITimeBudget(1200, 3000),    blunderRate: 0f,    blunderMarginCp: 0,   betrayalAggression: 0f,    attackDefenseBias: 1.0f, tieBreakWindowCp: 0,  useOpeningBook: true, openingBookDepthPlies: 0),
         };
     }
 }

@@ -41,6 +41,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
             { DomainEventCode.AI_MoveDecided,                  "[AI] Move decided — elapsed ms" },
             { DomainEventCode.AI_SearchCancelled,              "[AI] Search cancelled (undo)" },
             { DomainEventCode.AI_BookMovePlayed,               "[AI] Opening book move played" },
+            { DomainEventCode.AI_LeftOpeningBook,              "[AI] Left the opening book — thinking for itself from here" },
         };
 
         public UnityDomainLogger(bool verbose = false, Action<DomainLogEvent> onFatalError = null)

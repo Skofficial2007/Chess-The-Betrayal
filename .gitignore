@@ -209,6 +209,9 @@ desktop.ini
 
 # Crashlytics
 crashlytics-build.properties
+# Test result XML written by a command-line test run
+/TestResults-*.xml
+Docs/Benchmarks/baseline.proposed.json
 
 # ----------------------------------------------------------------------
 # [9] UNITY ASSET STORE CONTENT  ★ DO NOT COMMIT ★

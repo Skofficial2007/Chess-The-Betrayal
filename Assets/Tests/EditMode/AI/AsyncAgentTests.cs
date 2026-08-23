@@ -1,11 +1,15 @@
 using NUnit.Framework;
 using System.Diagnostics;
 using System.Threading;
+using UnityEngine;
 using ChessTheBetrayal.AI;
+using ChessTheBetrayal.AI.OpeningBook;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
+using ChessTheBetrayal.EditorTools.OpeningBook;
 using ChessTheBetrayal.Gameplay.Manager;
 using ChessTheBetrayal.Tests.Utilities;
+using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI
 {
@@ -253,6 +257,137 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             finally
             {
                 agent.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// A two-ply book: White's opening move, and Black's reply to it. The position after both
+        /// have been played is deliberately NOT in the book, so the agent's second turn is the
+        /// first move it has to think about — which is the boundary these tests are about.
+        /// </summary>
+        private static OpeningBookAsset TwoPlyBook()
+        {
+            var (keys, packedMoves, weights, schemeVersion) = OpeningBookCompiler.Compile("e2e4 e7e5");
+            var asset = ScriptableObject.CreateInstance<OpeningBookAsset>();
+            asset.SetEntries(keys, packedMoves, weights, schemeVersion);
+            return asset;
+        }
+
+        /// <summary>A tier that always consults the book and has no personality dials, so what the
+        /// agent delivers is decided entirely by the book and the search.</summary>
+        private static AIProfile BookProfile() => new AIProfile(
+            "book-test", maxDepth: 1, timeBudget: new AITimeBudget(5000, 5000), blunderRate: 0f,
+            blunderMarginCp: 0, betrayalAggression: 0f, attackDefenseBias: 1f, tieBreakWindowCp: 0,
+            useOpeningBook: true, openingBookDepthPlies: 0);
+
+        private static AsyncAIAgent BookAgent(OpeningBookAsset book) => new AsyncAIAgent(
+            new ChessEngineAdapter(),
+            new BetrayalAwareEvaluator(),
+            new AISearchSettings(maxDepth: 1, new AITimeBudget(5000, 5000), BetrayalUsage.Full),
+            BookProfile(),
+            new SystemRandomSource(seed: 31),
+            book);
+
+        /// <summary>Plays a specific move by locating it among the legal moves, advancing the turn
+        /// the way a real game does.</summary>
+        private static void Play(BoardState board, string from, string to)
+        {
+            var engine = new ChessEngineAdapter();
+            var legalMoves = new System.Collections.Generic.List<MoveCommand>();
+            engine.GetAllLegalMovesIncludingBetrayal(board, board.CurrentTurn, legalMoves);
+
+            Vector2Int start = TestBoardSetupUtility.AlgebraicToVector(from);
+            Vector2Int end = TestBoardSetupUtility.AlgebraicToVector(to);
+
+            foreach (MoveCommand candidate in legalMoves)
+            {
+                if (candidate.StartPosition == start && candidate.EndPosition == end)
+                {
+                    new TurnResolver().Advance(board, candidate);
+                    return;
+                }
+            }
+
+            Assert.Fail($"'{from}{to}' is not legal in this position.");
+        }
+
+        [Test]
+        public void OnLeftOpeningBook_FiresOnceOnTheFirstMoveTheAgentHasToWorkOutItself()
+        {
+            OpeningBookAsset book = TwoPlyBook();
+            AsyncAIAgent agent = BookAgent(book);
+            BoardState board = OpeningBookCompiler.CreateStandardStartingPosition();
+
+            int leftBookCount = 0;
+            int bookMoveCount = 0;
+            MoveCommand? firstOwnMove = null;
+
+            agent.OnLeftOpeningBook += move => { leftBookCount++; firstOwnMove = move; };
+            agent.OnBookMovePlayed += move => { bookMoveCount++; new TurnResolver().Advance(board, move); };
+            agent.OnMoveDecided += move => new TurnResolver().Advance(board, move);
+
+            try
+            {
+                // White's first move comes straight from the book, so no boundary has been crossed.
+                agent.RequestBestMove(board, Team.White);
+                PumpUntil(agent, () => bookMoveCount == 1);
+                Assert.That(leftBookCount, Is.Zero, "Playing a book move is not leaving the book.");
+
+                Play(board, "e7", "e5");
+
+                // The book has nothing here, so this move is the agent's own — the boundary.
+                int decided = 0;
+                agent.OnMoveDecided += _ => decided++;
+                agent.RequestBestMove(board, Team.White);
+                PumpUntil(agent, () => decided == 1);
+
+                Assert.That(leftBookCount, Is.EqualTo(1),
+                    "The first move the agent searched for after a run of book moves must announce leaving the book.");
+                Assert.That(firstOwnMove, Is.Not.Null);
+
+                // Every later move is also searched, but the book was already left — announcing it
+                // again would turn a one-off boundary into a per-move message.
+                Play(board, "b8", "c6");
+                agent.RequestBestMove(board, Team.White);
+                PumpUntil(agent, () => decided == 2);
+
+                Assert.That(leftBookCount, Is.EqualTo(1), "Leaving the book must be announced once, not on every searched move.");
+            }
+            finally
+            {
+                agent.Dispose();
+                Object.DestroyImmediate(book);
+            }
+        }
+
+        [Test]
+        public void OnLeftOpeningBook_WhenTheAgentNeverPlayedFromTheBook_NeverFires()
+        {
+            // Absence of the signal has to mean "searched from move one", never "still in book" —
+            // otherwise a log with no boundary in it is ambiguous exactly when it matters.
+            BoardState board = OpeningBookCompiler.CreateStandardStartingPosition();
+            bool leftBook = false;
+            bool delivered = false;
+
+            _agent.OnLeftOpeningBook += _ => leftBook = true;
+            _agent.OnMoveDecided += _ => delivered = true;
+
+            _agent.RequestBestMove(board, Team.White);
+            PumpTickUntil(() => delivered);
+
+            Assert.That(delivered, Is.True);
+            Assert.That(leftBook, Is.False, "An agent with no book behind it has no book to leave.");
+        }
+
+        /// <summary>Tick-pumping variant for the locally-constructed agents above, which the shared
+        /// PumpTickUntil helper cannot reach because it pumps the fixture's own agent.</summary>
+        private static void PumpUntil(AsyncAIAgent agent, System.Func<bool> isDone)
+        {
+            var stopwatch = Stopwatch.StartNew();
+            while (!isDone() && stopwatch.ElapsedMilliseconds < PollTimeoutMs)
+            {
+                agent.Tick();
+                Thread.Sleep(PollIntervalMs);
             }
         }
 

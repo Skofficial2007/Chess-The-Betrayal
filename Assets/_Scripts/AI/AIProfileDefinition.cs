@@ -25,9 +25,13 @@ namespace ChessTheBetrayal.AI
         [SerializeField, Min(0)] private int _tieBreakWindowCp;
         [SerializeField] private bool _useOpeningBook = true;
 
+        /// <summary>Plies of opening theory this tier may play from the book before it has to
+        /// search for itself; 0 means as far as the book goes. See AIProfile.</summary>
+        [SerializeField, Min(0)] private int _openingBookDepthPlies;
+
         public AIProfile ToProfile() => AIProfileGuardrails.Apply(new AIProfile(
             _id, _maxDepth, new AITimeBudget(_softTimeBudgetMs, _hardTimeBudgetMs), _blunderRate, _blunderMarginCp,
-            _betrayalAggression, _attackDefenseBias, _tieBreakWindowCp, _useOpeningBook));
+            _betrayalAggression, _attackDefenseBias, _tieBreakWindowCp, _useOpeningBook, _openingBookDepthPlies));
 
         private void OnValidate()
         {

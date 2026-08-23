@@ -21,3 +21,4 @@ MonoBehaviour:
   _attackDefenseBias: 1
   _tieBreakWindowCp: 20
   _useOpeningBook: 1
+  _openingBookDepthPlies: 8

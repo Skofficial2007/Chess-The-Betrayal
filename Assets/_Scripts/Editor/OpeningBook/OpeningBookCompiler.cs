@@ -155,19 +155,8 @@ namespace ChessTheBetrayal.EditorTools.OpeningBook
             return null;
         }
 
-        private static string ToToken(Vector2Int from, Vector2Int to, ChessPieceType promotion)
-        {
-            string square(Vector2Int v) => $"{(char)('a' + v.x)}{v.y + 1}";
-            string promoLetter = promotion switch
-            {
-                ChessPieceType.Queen => "q",
-                ChessPieceType.Rook => "r",
-                ChessPieceType.Bishop => "b",
-                ChessPieceType.Knight => "n",
-                _ => ""
-            };
-            return $"{square(from)}{square(to)}{promoLetter}";
-        }
+        private static string ToToken(Vector2Int from, Vector2Int to, ChessPieceType promotion) =>
+            CoordinateNotation.ToToken(from, to, promotion);
 
         /// <summary>
         /// Builds the standard chess starting position directly (no Betrayal state, full castling

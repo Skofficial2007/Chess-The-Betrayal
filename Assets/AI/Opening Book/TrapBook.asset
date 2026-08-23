@@ -1,0 +1,67 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fbba068141f1c6e4db4667e94132cc6e, type: 3}
+  m_Name: TrapBook
+  m_EditorClassIdentifier: ChessTheBetrayal.AI::ChessTheBetrayal.AI.OpeningBook.TrapBookAsset
+  _positionKeys: 970cbc3da1c67b015f425314bb134702de04046dffb05f0b70151a484e28920b0e0418f7ceb76010a1933c7cc200a315144892d71cf4b81b8ec3625148841128274fb0de0acff62f31f9ecda1def023ab437471f57efe13e48400c4abb062948d48d53afe830644bf3e8beb5cc73465a09ee35962668ab6619c79dfae698176ae1b3f6a2cf7baf6efcbe9f2a286b6a850ae9826493f4da8bf012fe3607f8f08f038f8e121f60fd997bef0041adc6089e6d9f0d2a909e4aa39da819cef77148a4b85a935c2229eaa70741ca76e37f7aa897f7c09e220deaabc92cbec1d563d5b5a1263bcf82de10b8caaecda06f74a9bb784493235acbc2bef46aebe4bc26d8c2122bfbe436992cc466874c527d00ccc548a1802daccad2cb576dee30a48502ce2813d150a391ccd8005b3c9f9f09dad9b0f2bad5941c3ce8a7e788a692d1b7e83c05cf6b096cdcea74c60cce83e237f4f2f2698126e6a0f703a59aab1172e5f81f4347e8bef28af9bdd9a470ca8b59fba4682661ea4817fcf273c02400c3ecff
+  _blunderMoves: 50060000cb04000034090000080400002d0700004a0900003d0d000015090000820900000c0500002a090000f70b0000990200002b090000ff0b0000f30a0000bc0e00004d070000db080000cf0500008b040000d5060000e70000000904000015090000610a0000d2080000150900004e0100008b060000cf050000c308000034040000c40200005b040000cf0500004b060000e20600006902000089040000ed080000cf050000c3060000cf070000660d00002b090000b70f0000e3060000
+  _bestMoves: 1509000043050000b20800000c050000f30800008a000000e4060000d50600008302000046050000f30a0000b60b00003d0d0000fa0c0000340b0000b30a0000f80e0000cf05000080000000cb06000081040000c10200002a090000030600001b090000210a00000c05000081040000ce0500004c0500008a0400009c040000f40e00001407000040000000c50000000d050000f70b0000b90a0000f30a00002a0800008e0500008a0400004d0700005a0d0000ad070000b70b0000340b0000
+  _names:
+  - Budapest Kieninger Trap in Budapest Gambit - Kieninger Trap
+  - "W\xFCrzburger Trap in Vienna Game - Vienna Gambit"
+  - Averbakh Fork Trap in King's Indian Defense (Averbakh Variation)
+  - Budapest Kieninger Trap in Budapest Gambit
+  - Monticelli Trap in Bogo-Indian Defense
+  - Queen Trapping Counter in London System - Early Qb6 Sideline
+  - Lolli Attack in Two Knights Defence - d4 Line
+  - Blackburne Shilling Trap in Italian Game - Kostic Gambit
+  - Benko Pin-and-Fork Trap in Benko Gambit (Accepted Main Line)
+  - Lasker Trap in Albin Countergambit
+  - Royal Fork Trap in Sokolsky Opening - Outflank Variation
+  - Lisitsyn Mate Trap in Bird's Opening - Lisitsyn Gambit
+  - Knight Trap in English Opening - Reversed Sicilian
+  - Pin Tactical Win in Nimzo-Larsen Attack - Modern Main Line
+  - Krejcik Mate Trap in Dutch Defense - Hopton Attack
+  - Rigel Trap in Petroff Defence - Kostic Trap Line
+  - Petrosian Pin Trap in Queen's Indian Defense (Petrosian System)
+  - Open Catalan Pin-and-Skewer Trap in Catalan (Open Catalan)
+  - "Exchange Bishop Sacrifice Counter Trap in Gr\xFCnfeld Defense (Exchange Variation)"
+  - Lasker's Mate in Bird's Opening - From's Gambit Accepted
+  - Englund Gambit Trap in Englund Gambit - Mainline Trap
+  - Tarrasch Trap in Ruy Lopez - Open Variation
+  - "L\xE9gal Trap in Italian Game / Bishop's Opening"
+  - "Queen Fork Trap in R\xE9ti Opening - R\xE9ti Gambit Accepted"
+  - Central Counter-Break Trap in King's Indian Defense (Four Pawns Attack)
+  - Leningrad Center Counter-Trap in Nimzo-Indian Defense (Leningrad Variation)
+  - Elephant Trap in Queen's Gambit Declined - Rubinstein Line
+  - Mortimer Trap in Ruy Lopez - Mortimer Defense
+  - Fianchetto Knight Discovery Trap in Queen's Indian Defense (Fianchetto Variation)
+  - Knight Fork Counter-Strike Trap in Modern Benoni (Classical Variation)
+  - Fishing Pole Trap in Ruy Lopez / Berlin Defence / Open Games
+  - Adler Counter-Attack Trap in Budapest Gambit (Adler Variation)
+  - "S\xE4misch Dark-Square Trap in King's Indian Defense (S\xE4misch Variation)"
+  - Rook Decoy Trap in Nimzo-Indian Defense (Classical Variation)
+  - Najdorf Poisoned Pawn Trap in Sicilian Defense
+  - Siberian Trap in Smith-Morra Gambit Accepted
+  - Lasker Trap in Albin Countergambit - Underpromotion Line
+  - Greek Gift Attack in Bogo-Indian Defense (Nimzowitsch Variation)
+  - Najdorf Poisoned Pawn Trap in Sicilian Najdorf - Na4 Queen Trap
+  - Queen Trapping Line in Trompowsky Attack - Poisoned Pawn 2...Ne4 Line
+  - Fried Liver / Fegatello Trap in Italian Game - Two Knights Defence
+  - Fajarowicz Knight Queen-Decoy Trap in Budapest Gambit (Fajarowicz Variation)
+  - Noah's Ark Trap in Ruy Lopez - Modern Steinitz Defence
+  - "Russian System King Hunt Trap in Gr\xFCnfeld Defense (Russian System)"
+  - Traxler Counterattack Trap in Italian Game - Two Knights Defence (Traxler)
+  - Magnus Smith Trap in Sicilian Defence - Classical Variation
+  - Greco Sacrifice Trap in Colle System - Traditional Main Line
+  - Alapin Trap in Sicilian Defence - Alapin Variation
+  _schemeVersion: 5400580076393095345

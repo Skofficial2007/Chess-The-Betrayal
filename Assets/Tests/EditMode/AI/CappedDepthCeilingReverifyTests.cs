@@ -64,8 +64,14 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
 
         /// <summary>Runs one search exactly the way AsyncAIAgent does in a real match — a hard-budget
         /// cancellation timer plus the settle-early logic — and prints the position/tier/depth/
-        /// stop-reason/node-count line this whole harness exists to produce.</summary>
-        private void CaptureOne(string positionName, BoardState board, string tierId)
+        /// stop-reason/node-count line this whole harness exists to produce.
+        ///
+        /// The first-move-cutoff rate rides along because it is the one signal that tells a depth
+        /// change apart from an ordering change: a reduction or pruning tweak that reaches deeper
+        /// while ordering holds steady is a real gain, whereas one that reaches deeper only because
+        /// ordering collapsed elsewhere is borrowing from the same budget it claims to have saved.
+        /// Reading it here costs nothing — the counters are already maintained for editor builds.</summary>
+        private int CaptureOne(string positionName, BoardState board, string tierId)
         {
             AIProfile profile = FindProfile(tierId);
             var search = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator(),
@@ -83,15 +89,76 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 $"[capped-reverify] position={positionName} tier={tierId} maxDepth={profile.MaxDepth} " +
                 $"softMs={settings.TimeBudget.SoftMs} hardMs={settings.TimeBudget.HardMs} " +
                 $"stopReason={stats.StopReason} lastDepth={stats.LastCompletedDepth} " +
-                $"nodes={stats.NodesVisited} qnodes={stats.QNodesVisited}");
+                $"nodes={stats.NodesVisited} qnodes={stats.QNodesVisited} " +
+                $"cutoffRate={stats.FirstMoveCutoffRate():F3}");
+
+            return stats.LastCompletedDepth;
         }
 
         [Test]
         public void CapturePositionSweep_AllDeepTiers()
         {
+            // Total and mean depth across every cell are printed as one line at the end because that
+            // is the number a search change is actually judged on. A change that trades a ply on one
+            // position for a ply on another has bought nothing, and per-cell lines alone make that
+            // easy to misread as an improvement — a single total cannot be cherry-picked.
+            int totalDepth = 0;
+            int cells = 0;
+
             foreach ((string name, System.Func<BoardState> build) in Positions)
                 foreach (string tierId in DeepTierIds)
-                    CaptureOne(name, build(), tierId);
+                {
+                    totalDepth += CaptureOne(name, build(), tierId);
+                    cells++;
+                }
+
+            System.Console.WriteLine(
+                $"[capped-reverify] SUMMARY cells={cells} totalDepth={totalDepth} " +
+                $"meanDepth={(double)totalDepth / cells:F3}");
         }
+
+        /// <summary>
+        /// The same measurement over every curated opening the sweep above does NOT sample, as a
+        /// check against tuning a search constant into the eight positions that were used to pick it.
+        ///
+        /// A search change judged only on the positions it was tuned against cannot distinguish a
+        /// real improvement from one fitted to those positions' quirks, and this codebase has a
+        /// worked example of the difference mattering: an earlier lever measured a large node-count
+        /// win on a handful of hand-built shapes and then bought no depth at all once a wider set of
+        /// real opening lines was measured under the same budget. These lines are held out precisely
+        /// so that comparison is available before a change ships rather than after.
+        ///
+        /// Reported as its own total so it is read as a second, independent number — a change that
+        /// gains on the tuning set while losing here has not earned its place regardless of what the
+        /// first total says.
+        /// </summary>
+        [Test]
+        [Timeout(1800000)]
+        public void CaptureHeldOutOpeningSweep_AllDeepTiers()
+        {
+            int totalDepth = 0;
+            int cells = 0;
+
+            for (int index = 0; index < CuratedPositionSuite.Count; index++)
+            {
+                if (IsSampledByTheTuningSweep(index)) continue;
+
+                foreach (string tierId in DeepTierIds)
+                {
+                    totalDepth += CaptureOne($"heldout-{index}", CuratedPositionSuite.Build(index), tierId);
+                    cells++;
+                }
+            }
+
+            System.Console.WriteLine(
+                $"[capped-heldout] SUMMARY cells={cells} totalDepth={totalDepth} " +
+                $"meanDepth={(double)totalDepth / cells:F3}");
+        }
+
+        /// <summary>True for the curated openings the tuning sweep above already measures, which are
+        /// therefore excluded from the held-out set. Kept next to the Positions table it mirrors so
+        /// the two cannot drift apart unnoticed.</summary>
+        private static bool IsSampledByTheTuningSweep(int index) =>
+            index == 0 || index == 8 || index == 12;
     }
 }

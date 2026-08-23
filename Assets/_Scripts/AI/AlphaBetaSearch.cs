@@ -58,6 +58,53 @@ namespace ChessTheBetrayal.AI
         private static int NullMoveReduction(int depth) => NullMoveBaseReduction + depth / 6;
         private static int NullMoveMinDepth(int depth) => NullMoveReduction(depth) + 2; // guard 3: depth >= R + 2
 
+        // Late Move Reduction: how many plies to shave off a move that ordering has already placed
+        // late in the list. The amount grows with BOTH how far from the horizon the node is and how
+        // far down the list the move sits, for the same reason null-move pruning scales its own
+        // reduction with depth — the further down an ordered list a move is, the more evidence
+        // there already is that it isn't the best one, and the more plies remain below it, the more
+        // a wasted full-depth search of it costs.
+        //
+        // A fixed one-ply reduction, which is what this replaced, spends the same on the third move
+        // at the root as on the thirtieth move near the horizon, even though those two are nowhere
+        // near equally likely to matter. Anything reduced here is still searched — a reduced move
+        // that comes back above alpha is immediately re-searched at full depth, so this changes how
+        // fast the search reaches its answer, never which answer it reaches.
+        //
+        // The divisors were picked by measuring capped searches at real match budgets across a mix
+        // of hand-built shapes and real opening lines, not by theory: reducing harder than this
+        // starts costing more in full-depth re-searches than it saves, and reducing more gently
+        // leaves depth on the table on exactly the crowded opening positions that need it most.
+        // The floor of 1 guarantees a reduced child still searches at least one real ply rather
+        // than dropping straight into quiescence.
+        //
+        // The list-position term deliberately measures how far THROUGH the move list a move sits
+        // rather than its raw index, because the two only agree when the list is long. In a bare
+        // endgame the whole list can be shorter than a single step of a raw-index scale, so every
+        // legal move would land in the same bucket and the scale would silently stop working -
+        // while in a crowded midgame the same raw index means something quite different. Being
+        // tenth of twelve moves is real evidence that ordering has already dismissed a move;
+        // being tenth of forty is not.
+        //
+        // This matters most in exactly the place it is easiest to miss, and it was found by a test
+        // rather than by reasoning. Forcing a bare king into a mate is done with quiet king and
+        // rook moves, which is precisely what this reduces, and a position with almost no pieces
+        // left generates almost no moves - so a raw-index scale reduced the mating manoeuvre
+        // hardest at the moment it needed the most depth. Won endgames stalled out short of mate
+        // with the enemy king already confined.
+        private const int LateMoveReductionMinimum = 1;
+        private const int LateMoveReductionListBuckets = 6;
+
+        // Total pieces left on the board, both sides, at or below which no move is reduced at all.
+        // Six covers the classic won endings (two kings plus a queen or rook, with a little room for
+        // a pawn or a second piece) without switching reduction off for anything still resembling a
+        // real middlegame - by the time a board is down to six pieces the move lists are short
+        // enough that reduction was saving very little anyway.
+        private const int MinimumPiecesForReduction = 6;
+        private static int LateMoveReduction(int depth, int moveIndex, int moveCount) =>
+            LateMoveReductionMinimum + depth / 5
+            + moveIndex * LateMoveReductionListBuckets / Math.Max(moveCount, 1) / 2;
+
         // Reverse futility pruning (a.k.a. static null-move pruning): only attempted within this many
         // plies of the horizon — beyond that the static eval is too weak a proxy for "this node is
         // hopeless for the opponent" to trust without search. Margin grows with depth so a node
@@ -100,6 +147,13 @@ namespace ChessTheBetrayal.AI
         // Depth spent uniformly buys more strength than depth spent there, so the cap is 0. The
         // machinery stays wired so re-enabling is a one-constant change if a future measured pass
         // finds positions where it earns its cost.
+        //
+        // Re-measured since, under real match budgets across eight positions and four deep tiers.
+        // Allowing two extensions per line cost a ply on four of the thirty-two and won one back on
+        // a single one, for a net loss. The reason is that the extension spends its depth inside
+        // Betrayal lines, while the positions actually short of depth are crowded quiet ones where
+        // no Betrayal is pending at all - so it deepens the searches that were already comfortable
+        // and takes budget from the ones that were not. Still 0.
         private const int MaxBetrayalExtensionsPerLine = 0;
 
         // Hard backstop for quiescence recursion. A Betrayal sub-phase (Act -> Retribution/Defection
@@ -155,6 +209,33 @@ namespace ChessTheBetrayal.AI
         // tie-break windows run 10-30cp). The minimum-depth floor reuses AIProfileGuardrails' own
         // "a shallow search can't be trusted" threshold rather than inventing a second one.
         private const int StabilityThresholdCp = 25;
+
+        // Both settle signals above read the same evidence: the best move at the root stopped
+        // changing. That is only evidence of convergence when the search was ordering its moves
+        // well enough to have found the refutation if one existed. When ordering is poor the root
+        // move also stops changing — but for the opposite reason, because the search is not seeing
+        // deep enough to dislodge it. Move persistence looks identical in both cases and the
+        // settle rule cannot tell them apart on its own.
+        //
+        // That failure is not hypothetical and it lands on the worst positions. Measured across a
+        // mix of hand-built shapes and real opening lines under real match budgets, the three
+        // positions with the weakest move ordering were precisely the ones stopping two plies short
+        // of their ceiling with most of their time unspent, while well-ordered positions ran on.
+        // The budget was being spent backwards: the searches that needed extra depth most were the
+        // ones giving it up first.
+        //
+        // So a settle is only trusted when the first-move cutoff rate says ordering is actually
+        // doing its job. Below this share of cutoffs won on the first move tried, the root's
+        // apparent stability is treated as unproven and the search keeps going on its remaining
+        // time. This never extends past the hard budget — an unhealthy search gets the rest of its
+        // existing budget, never more, so the per-move ceiling the whole engine is held to is
+        // untouched.
+        //
+        // The threshold sits below where healthy positions in that measurement sat and above where
+        // the starved ones did, which is what makes it separate the two cases rather than simply
+        // disabling early exit. Raising it makes the engine more willing to spend its full budget;
+        // lowering it toward zero restores the previous always-trust-the-settle behaviour.
+        private const double MinimumCutoffRateToTrustSettle = 0.42;
 
         // Aspiration windows (experimental, off by default — see FindBestMove's own doc comment):
         // instead of always searching a fresh depth with the full [-Infinity, +Infinity] window,
@@ -242,6 +323,24 @@ namespace ChessTheBetrayal.AI
         // same ceiling as _moveBuffers' individual lists and grown lazily on the same "never shrink"
         // policy as _rootScores.
         private int[] _seeScoreCache = new int[64];
+
+        // Move-ordering health for the current search, counted on every build rather than only in
+        // the editor. SearchStats carries the same two numbers, but everything in there is compiled
+        // out of a release build because it exists purely to be read by tests — and the settle-early
+        // decision below has to make the SAME choice in a shipped game that it makes under
+        // measurement. A search whose stopping rule quietly changes between the build being measured
+        // and the build being played is not measurable at all, so these two live here instead, as
+        // ordinary fields the search itself owns and reads. Two long increments per beta cutoff,
+        // no allocation.
+        private long _betaCutoffs;
+        private long _firstMoveBetaCutoffs;
+
+        /// <summary>Share of this search's beta cutoffs that were won by the first move tried, in
+        /// 0..1 — the standard signal for whether move ordering is doing its job. Returns 1 before
+        /// any cutoff has happened, so a search with no evidence yet is treated as healthy rather
+        /// than being held back by a statistic it has not had the chance to earn.</summary>
+        private double CurrentFirstMoveCutoffRate =>
+            _betaCutoffs <= 0 ? 1.0 : (double)_firstMoveBetaCutoffs / _betaCutoffs;
 
         public AlphaBetaSearch(IChessEngine engine, IPositionEvaluator evaluator, int maxSupportedDepth = 32,
                                 TranspositionTable transpositionTable = null)
@@ -391,6 +490,12 @@ namespace ChessTheBetrayal.AI
 #endif
             _tt.NewSearch();
             Array.Clear(_historyScores, 0, _historyScores.Length);
+
+            // Ordering health is per-search, so it resets here rather than with the editor-only
+            // telemetry above — the settle-early rule reads it on every build and must never see a
+            // previous search's cutoffs.
+            _betaCutoffs = 0;
+            _firstMoveBetaCutoffs = 0;
 
             // Build the root move list ONCE. This is where the agent-level Betrayal policy applies.
             BuildRootMoves(board, rootTeam, settings.BetrayalUsage);
@@ -615,7 +720,16 @@ namespace ChessTheBetrayal.AI
                             bool converged = hasPriorCompletedDepth
                                 && IsRootStable(bestScore, previousCompletedScore, bestMove, previousCompletedBestMove);
                             bool moveWellSettled = consecutiveStableDepths >= StableDepthsToSettle;
-                            bool stable = converged || moveWellSettled;
+
+                            // Both signals above are only meaningful if move ordering was healthy
+                            // enough for a refutation to have surfaced had one existed — see
+                            // MinimumCutoffRateToTrustSettle. A poorly-ordered search holds onto the
+                            // same root move because it cannot see past it, which is the opposite of
+                            // having converged on it, and the two are indistinguishable from move
+                            // persistence alone.
+                            bool orderingHealthyEnoughToTrustSettle =
+                                CurrentFirstMoveCutoffRate >= MinimumCutoffRateToTrustSettle;
+                            bool stable = (converged || moveWellSettled) && orderingHealthyEnoughToTrustSettle;
 
                             // Settled and past the soft target: further search is unlikely to change
                             // the answer, so stop now rather than spend the rest of the budget.
@@ -1037,7 +1151,20 @@ namespace ChessTheBetrayal.AI
             // LMR eligibility for THIS node is fixed once, before the loop: a pending Betrayer means
             // every child here is part of a forced tactical sequence (same reasoning as the null-move
             // guard above), so nothing at this node may ever be reduced.
-            bool nodeAllowsReduction = depth >= 3 && !board.PendingBetrayerSquare.HasValue;
+            //
+            // A position stripped down to a bare king and a piece or two is also exempt, because the
+            // assumption reduction rests on has stopped holding there. Reducing late moves is a bet
+            // that a move ordering has already ranked low is unlikely to be best - reasonable when
+            // there are captures, threats and developing moves to rank against each other. Forcing a
+            // lone king to mate has none of that: the whole technique is quiet king and rook moves
+            // that look identical to a move ordering heuristic, and the one that matters is often not
+            // the one tried first. Reduce there and the search confines the enemy king, then shuffles
+            // forever without finding the mate.
+            bool endgameTooSparseToReduce =
+                board.GetPieceIndices(Team.White).Count + board.GetPieceIndices(Team.Black).Count
+                    <= MinimumPiecesForReduction;
+            bool nodeAllowsReduction = depth >= 3 && !board.PendingBetrayerSquare.HasValue
+                && !endgameTooSparseToReduce;
 
             // Move-count pruning and frontier futility are both members of the forward-pruning
             // family gated by the same shared guard as NMP/reverse-futility above. A node with only
@@ -1117,7 +1244,15 @@ namespace ChessTheBetrayal.AI
                 if (reduce) _tt.Stats.LmrReductions++;
 #endif
 
-                int searchDepth = reduce ? depth - 2 : depth - 1;
+                // Clamped so a reduced child never falls below one real ply of search — dropping it
+                // straight into quiescence would judge a quiet move purely on captures, which is
+                // exactly the blind spot quiescence exists to have.
+                int searchDepth = depth - 1;
+                if (reduce)
+                {
+                    int reduction = LateMoveReduction(depth, i, moves.Count);
+                    searchDepth = Math.Max(depth - 1 - reduction, LateMoveReductionMinimum);
+                }
 
                 ApplyMoveAndTurn(board, move);
 
@@ -1211,11 +1346,15 @@ namespace ChessTheBetrayal.AI
                 // a betrayal sequence is still a cutoff for the same maximizer that owns this node.
                 if (alpha >= beta)
                 {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
                     // How often the very first move tried is the one that closes the node out — the
                     // signature of move ordering doing its job. A falling rate at a given depth means
                     // later moves are winning cutoffs more often, i.e. ordering is losing its grip as
-                    // the tree gets deeper.
+                    // the tree gets deeper. Counted on every build because iterative deepening reads
+                    // it to decide whether this search's apparent stability can be trusted; the
+                    // telemetry copy alongside it stays editor-only like the rest of SearchStats.
+                    _betaCutoffs++;
+                    if (i == 0) _firstMoveBetaCutoffs++;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
                     _tt.Stats.BetaCutoffs++;
                     if (i == 0) _tt.Stats.FirstMoveBetaCutoffs++;
 #endif

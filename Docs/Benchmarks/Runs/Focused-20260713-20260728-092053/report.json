@@ -1,0 +1,119 @@
+{
+    "RunSeed": 20260713,
+    "Mode": "Focused",
+    "PairResults": [
+        {
+            "Subject": "extreme",
+            "Opponent": "hard",
+            "Games": 320,
+            "SubjectWins": 112,
+            "OpponentWins": 98,
+            "Draws": 110,
+            "SubjectWinRate": 0.5218750238418579
+        },
+        {
+            "Subject": "impossible",
+            "Opponent": "extreme",
+            "Games": 320,
+            "SubjectWins": 106,
+            "OpponentWins": 100,
+            "Draws": 114,
+            "SubjectWinRate": 0.5093749761581421
+        }
+    ],
+    "TierPerformances": [
+        {
+            "ProfileId": "extreme",
+            "MovesSampled": 26342,
+            "MeanNodesPerMove": 133420.1864323134,
+            "MeanMsPerMove": 2741.1409197327457,
+            "DeepestCompletedDepth": 9,
+            "MeanCompletedDepth": 7.658264368688786,
+            "ShallowestCompletedDepth": 1,
+            "DepthHistogram": [
+                0,
+                9,
+                42,
+                1,
+                8,
+                986,
+                4929,
+                5517,
+                5167,
+                9683,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+            ],
+            "ObservedBlunderActuationRate": 0.0,
+            "ActsPlayed": 37,
+            "ActsResolvedByRetribution": 34,
+            "ActsResolvedByDefection": 3
+        },
+        {
+            "ProfileId": "hard",
+            "MovesSampled": 13519,
+            "MeanNodesPerMove": 129612.60795916859,
+            "MeanMsPerMove": 2571.500627657372,
+            "DeepestCompletedDepth": 8,
+            "MeanCompletedDepth": 7.32139951179821,
+            "ShallowestCompletedDepth": 1,
+            "DepthHistogram": [
+                0,
+                1,
+                16,
+                0,
+                4,
+                462,
+                2347,
+                2975,
+                7714,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+            ],
+            "ObservedBlunderActuationRate": 0.012391573749482632,
+            "ActsPlayed": 18,
+            "ActsResolvedByRetribution": 16,
+            "ActsResolvedByDefection": 2
+        },
+        {
+            "ProfileId": "impossible",
+            "MovesSampled": 12880,
+            "MeanNodesPerMove": 88507.04681677019,
+            "MeanMsPerMove": 2006.2436232608713,
+            "DeepestCompletedDepth": 9,
+            "MeanCompletedDepth": 7.691537267080745,
+            "ShallowestCompletedDepth": 1,
+            "DepthHistogram": [
+                0,
+                7,
+                23,
+                0,
+                7,
+                506,
+                2081,
+                2817,
+                2700,
+                4739,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+            ],
+            "ObservedBlunderActuationRate": 0.0,
+            "ActsPlayed": 29,
+            "ActsResolvedByRetribution": 27,
+            "ActsResolvedByDefection": 2
+        }
+    ]
+}

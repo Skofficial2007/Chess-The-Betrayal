@@ -28,12 +28,10 @@ namespace ChessTheBetrayal.EditorTools.OpeningBook
             if (string.IsNullOrEmpty(outputPath))
                 return;
 
-            string sourceText = File.ReadAllText(sourcePath);
-
-            (ulong[] keys, uint[] packedMoves, ushort[] weights, ulong schemeVersion) compiled;
+            int positions;
             try
             {
-                compiled = OpeningBookCompiler.Compile(sourceText);
+                positions = OpeningBookBuilder.CompileInto(File.ReadAllText(sourcePath), outputPath);
             }
             catch (OpeningBookParseException ex)
             {
@@ -41,18 +39,7 @@ namespace ChessTheBetrayal.EditorTools.OpeningBook
                 return;
             }
 
-            OpeningBookAsset asset = AssetDatabase.LoadAssetAtPath<OpeningBookAsset>(outputPath);
-            if (asset == null)
-            {
-                asset = ScriptableObject.CreateInstance<OpeningBookAsset>();
-                AssetDatabase.CreateAsset(asset, outputPath);
-            }
-
-            asset.SetEntries(compiled.keys, compiled.packedMoves, compiled.weights, compiled.schemeVersion);
-            EditorUtility.SetDirty(asset);
-            AssetDatabase.SaveAssets();
-
-            Debug.Log($"Compiled opening book: {compiled.keys.Length} position(s) from '{sourcePath}' -> '{outputPath}'.");
+            Debug.Log($"Compiled opening book: {positions} position(s) from '{sourcePath}' -> '{outputPath}'.");
         }
     }
 }

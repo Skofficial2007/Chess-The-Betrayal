@@ -53,7 +53,10 @@ namespace ChessTheBetrayal.EditorTools.OpeningBook
 
             var moves = new List<(Vector2Int, Vector2Int, ChessPieceType)>(tokens.Length);
             foreach (string token in tokens)
-                moves.Add(ParseToken(token, sourceLineNumber));
+            {
+                moves.Add(CoordinateNotation.ParseToken(
+                    token, reason => new OpeningBookParseException(sourceLineNumber, reason)));
+            }
 
             return new OpeningBookLine(sourceLineNumber, moves, weight);
         }
@@ -84,59 +87,6 @@ namespace ChessTheBetrayal.EditorTools.OpeningBook
             return weight;
         }
 
-        /// <summary>
-        /// Parses one coordinate-notation token: two squares, e.g. "e2e4", with an optional
-        /// trailing promotion letter for a pawn reaching the last rank, e.g. "e7e8q".
-        /// </summary>
-        private static (Vector2Int From, Vector2Int To, ChessPieceType Promotion) ParseToken(
-            string token, int sourceLineNumber)
-        {
-            if (token.Length != 4 && token.Length != 5)
-            {
-                throw new OpeningBookParseException(
-                    sourceLineNumber,
-                    $"Move '{token}' isn't in coordinate notation (expected something like 'e2e4' or 'e7e8q').");
-            }
-
-            Vector2Int from = ParseSquare(token.Substring(0, 2), token, sourceLineNumber);
-            Vector2Int to = ParseSquare(token.Substring(2, 2), token, sourceLineNumber);
-
-            ChessPieceType promotion = ChessPieceType.None;
-            if (token.Length == 5)
-                promotion = ParsePromotionLetter(token[4], token, sourceLineNumber);
-
-            return (from, to, promotion);
-        }
-
-        private static Vector2Int ParseSquare(string square, string token, int sourceLineNumber)
-        {
-            char file = char.ToLowerInvariant(square[0]);
-            char rank = square[1];
-
-            if (file < 'a' || file > 'h' || rank < '1' || rank > '8')
-            {
-                throw new OpeningBookParseException(
-                    sourceLineNumber,
-                    $"Move '{token}' contains an out-of-range square '{square}'.");
-            }
-
-            return new Vector2Int(file - 'a', rank - '1');
-        }
-
-        private static ChessPieceType ParsePromotionLetter(char letter, string token, int sourceLineNumber)
-        {
-            switch (char.ToLowerInvariant(letter))
-            {
-                case 'q': return ChessPieceType.Queen;
-                case 'r': return ChessPieceType.Rook;
-                case 'b': return ChessPieceType.Bishop;
-                case 'n': return ChessPieceType.Knight;
-                default:
-                    throw new OpeningBookParseException(
-                        sourceLineNumber,
-                        $"Move '{token}' has an unrecognized promotion letter '{letter}' (expected q, r, b, or n).");
-            }
-        }
     }
 
     /// <summary>Thrown for any source line that can't be parsed or, once replayed, isn't legal.</summary>

@@ -34,22 +34,27 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
         private static void RunTopOfLadderFromMenu() =>
             RunAndLog(BenchmarkMode.Full, TopOfLadderRepeats, TopOfLadderPairings);
 
-        [MenuItem("Chess: The Betrayal/AI/Update Benchmark Baseline...")]
-        private static void UpdateBaselineFromMenu()
+        [MenuItem("Chess: The Betrayal/AI/Propose Benchmark Baseline Update...")]
+        private static void ProposeBaselineFromMenu()
         {
             bool confirmed = EditorUtility.DisplayDialog(
-                "Update benchmark baseline",
-                "This runs a Full benchmark pass (several minutes) and OVERWRITES Docs/Benchmarks/baseline.json " +
-                "with the result. Only do this after deliberately reviewing the new numbers — the baseline is " +
-                "what every future run diffs against.",
-                "Run and overwrite", "Cancel");
+                "Propose a baseline update",
+                "This runs a Full benchmark pass (around an hour) and writes the result to " +
+                "Docs/Benchmarks/baseline.proposed.json for review. It does NOT touch the committed " +
+                "baseline — see the note on BenchmarkBaselineIO for why that is a hand-merged file.",
+                "Run", "Cancel");
             if (!confirmed) return;
 
             BenchmarkReport report = BenchmarkRunner.RunAll(DefaultRunSeed, BenchmarkMode.Full,
-                AIProfileTable.BuiltIn, progress: new DebugLogProgressSink("Update Baseline"));
-            BenchmarkBaselineIO.Write(report, BenchmarkBaselineIO.DefaultPath);
+                AIProfileTable.BuiltIn, progress: new DebugLogProgressSink("Propose Baseline"),
+                persistRunsUnderDirectory: RunsDirectory, logGamesToConsole: true);
 
-            Debug.Log($"Benchmark baseline updated: {report.PairResults.Count} pairing(s), {report.TierPerformances.Count} tier(s) recorded.");
+            BenchmarkBaselineIO.Write(report, BenchmarkBaselineIO.ProposedPath);
+
+            BenchmarkReport committed = BenchmarkBaselineIO.TryRead(BenchmarkBaselineIO.DefaultPath);
+            Debug.Log(BenchmarkReportFormatter.ToPlainText(report, committed));
+            Debug.Log($"Proposed baseline written to '{BenchmarkBaselineIO.ProposedPath}'. Review it against " +
+                      "the committed baseline, then copy across the rows this run actually improves on.");
         }
 
         private static void RunAndLog(BenchmarkMode mode, int repeats = 1,

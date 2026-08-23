@@ -160,6 +160,52 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 $"took {stopwatch.Elapsed.TotalMilliseconds:F0}ms against a {hardBudgetMs}ms hard budget.");
         }
 
+        /// <summary>A real opening line — the Dutch Defence, a few moves in. Closed and crowded, with
+        /// no captures or checks for move ordering to rank candidates by, so ordering heuristics fall
+        /// back on weak signals: measured across the deep tiers this position wins barely a third of
+        /// its cutoffs on the first move tried, against roughly half on the open shapes above and
+        /// more than three fifths on tactical ones. Taken from the shared curated suite rather than
+        /// hand-placed, both because these are the positions the effect was actually measured on and
+        /// so the test moves with the suite instead of pinning a private copy of it.</summary>
+        private static BoardState PoorlyOrderedPosition() => CuratedPositionSuite.Build(12);
+
+        [Test]
+        public void FindBestMove_PoorlyOrderedRoot_KeepsSearchingInsteadOfSettlingEarly()
+        {
+            // The stopping rule reads "the best move stopped changing" as convergence. On a position
+            // where move ordering is weak that reading is wrong: the root move holds steady because
+            // the search cannot see far enough to dislodge it, which is the opposite of having
+            // decided. Before ordering health was consulted, these were indistinguishable and the
+            // weakest-ordered positions gave up most of their budget while well-ordered ones ran on.
+            //
+            // Proven by comparison rather than by asserting a stop reason, so this stays a statement
+            // about behaviour: under a budget with real room above the soft target, a poorly-ordered
+            // root must not stop at the shallow depth it would have reached if the soft budget alone
+            // had ended it.
+            var settings = new AISearchSettings(maxDepth: 9, new AITimeBudget(250, 3000), BetrayalUsage.Full);
+
+            var search = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator());
+            using var cts = new CancellationTokenSource();
+            cts.CancelAfter(settings.TimeBudget.HardMs);
+            search.FindBestMove(PoorlyOrderedPosition(), settings, cts.Token,
+                enableInstabilityTimeManagement: true);
+
+            var settledReference = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator());
+            using var referenceCts = new CancellationTokenSource();
+            referenceCts.CancelAfter(settings.TimeBudget.HardMs);
+            settledReference.FindBestMove(QuietPosition(), settings, referenceCts.Token,
+                enableInstabilityTimeManagement: true);
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            Assert.That(settledReference.Stats.StopReason, Is.EqualTo(SearchStopReason.SettledEarly),
+                "Sanity check: the well-ordered control position must still settle early, otherwise " +
+                "this test proves nothing about ordering being what separates the two cases.");
+            Assert.That(search.Stats.StopReason, Is.Not.EqualTo(SearchStopReason.SettledEarly),
+                "A root whose move ordering is too weak to trust must not report itself settled — " +
+                "its steady best move is evidence of a shallow search, not of a decided position.");
+#endif
+        }
+
         [Test]
         public void FindBestMove_FlagOmitted_IsByteIdenticalToBeforeInstabilityTimeManagementExisted()
         {
