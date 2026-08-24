@@ -110,14 +110,20 @@ namespace ChessTheBetrayal.AI
         /// got cut off partway" without changing FindBestMove's return type, and is the only way
         /// to compare search throughput across two runs that both hit the same wall-clock budget
         /// cap (e.g. two devices both capped at a profile's TimeBudget) — the elapsed time
-        /// alone is identical in that case, but the depth reached is not.</summary>
+        /// alone is identical in that case, but the depth reached is not.
+        ///
+        /// A copy, for callers already reading the rest of this struct. The value itself is owned
+        /// by AlphaBetaSearch.LastCompletedDepth, which is available on every build; this one is
+        /// compiled out of a release build along with everything else here.</summary>
         public int LastCompletedDepth;
 
         /// <summary>Why FindBestMove stopped where it did. A budget-capped run and a settled-early
         /// run can land on the same LastCompletedDepth for entirely different reasons — one ran out
         /// of time, the other decided further search wouldn't change the answer — and those two
         /// cases mean opposite things for whether a deeper MaxDepth would ever actually get used.
-        /// Written once per search, at whichever exit the loop actually takes.</summary>
+        ///
+        /// Same arrangement as LastCompletedDepth above: the real value lives on
+        /// AlphaBetaSearch.StopReason and is copied here once the search returns.</summary>
         public SearchStopReason StopReason;
 
         // Per-depth cumulative node count (main + quiescence) at the moment each iterative-deepening
@@ -299,6 +305,30 @@ namespace ChessTheBetrayal.AI
                 case 10: ElapsedMsAfterDepth10 = elapsedMs; break;
                 case 11: ElapsedMsAfterDepth11 = elapsedMs; break;
                 case 12: ElapsedMsAfterDepth12 = elapsedMs; break;
+            }
+        }
+
+        /// <summary>The cumulative wall-clock milliseconds recorded when the given depth completed, or
+        /// 0 for a depth outside 1..12 or one the search never reached. The companion to
+        /// <see cref="NodesAfterDepth"/>, so a caller can walk the curve by depth rather than naming
+        /// one of the twelve fields and having to keep that name in step with the depth it means.</summary>
+        public long ElapsedMsAfterDepth(int depth)
+        {
+            switch (depth)
+            {
+                case 1: return ElapsedMsAfterDepth1;
+                case 2: return ElapsedMsAfterDepth2;
+                case 3: return ElapsedMsAfterDepth3;
+                case 4: return ElapsedMsAfterDepth4;
+                case 5: return ElapsedMsAfterDepth5;
+                case 6: return ElapsedMsAfterDepth6;
+                case 7: return ElapsedMsAfterDepth7;
+                case 8: return ElapsedMsAfterDepth8;
+                case 9: return ElapsedMsAfterDepth9;
+                case 10: return ElapsedMsAfterDepth10;
+                case 11: return ElapsedMsAfterDepth11;
+                case 12: return ElapsedMsAfterDepth12;
+                default: return 0;
             }
         }
 

@@ -215,6 +215,16 @@ namespace ChessTheBetrayal.Gameplay.Manager
             _moveExecutor.OnPromotionRequired += _onExecutorPromotionRequired;
             _moveExecutor.OnRetributionSkipConfirmed += _matchDriver.RequestRetributionSkip;
 
+            // Every match starts with no AI configured, unconditionally, before either branch
+            // below runs — only the Practice-settings branch opts back in. This is deliberately
+            // NOT "reset in the else branch": a match kind added later (multiplayer, or anything
+            // else that reaches this method with no PracticeMatchSettings) inherits a clean slate
+            // for free, rather than needing to remember the same reset the plain-match branch
+            // needed today. Harmless for the AI branch too — SetAIMode below immediately rebuilds
+            // everything this clears.
+            IsAiMode = false;
+            _aiCoordinator.ClearAIMode();
+
             // Practice Match Setup was confirmed for this match: apply every board/AI-level choice
             // now, at the one true match-init seam.
             if (settings.HasValue)

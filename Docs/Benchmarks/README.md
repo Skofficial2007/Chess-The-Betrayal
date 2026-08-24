@@ -73,3 +73,9 @@ forever, and says so in the log.
 
 The committed reference point every run diffs against, updated deliberately (never as a side effect
 of a routine run) via `Chess: The Betrayal/AI/Update Benchmark Baseline...` in the Editor menu.
+
+## Docs/Benchmarks/mobile-device-benchmark.md
+
+Everything above runs on a desktop. That page is the separate record of on-device search speed and
+depth — a different instrument answering a different question (how fast, not who wins) — with its
+own capability statement and per-device results as they come in.

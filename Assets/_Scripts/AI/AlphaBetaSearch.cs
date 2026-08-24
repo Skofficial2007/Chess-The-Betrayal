@@ -342,6 +342,30 @@ namespace ChessTheBetrayal.AI
         private double CurrentFirstMoveCutoffRate =>
             _betaCutoffs <= 0 ? 1.0 : (double)_firstMoveBetaCutoffs / _betaCutoffs;
 
+        // How far the last search got, and what stopped it. Recorded on every build, for the same
+        // reason the ordering counters above are: these two are the only things that tell one
+        // machine's search apart from another's once both are running under the same time cap. On
+        // any position hard enough to use that cap, two machines report the same elapsed time by
+        // construction — a fast one and a slow one are indistinguishable on the clock alone, and
+        // differ only in how deep they got and in whether they ran out of time or decided they were
+        // finished. Answering that on a phone means measuring the build the player runs, which is
+        // exactly the build the telemetry struct is compiled out of. One write per completed depth
+        // and one per exit, no allocation.
+        //
+        // These fields are the only place either value is written. The telemetry copy is taken from
+        // them once, at the end of the search, so the two can never disagree about what happened.
+        private int _lastCompletedDepth;
+        private SearchStopReason _stopReason;
+
+        /// <summary>The deepest iterative-deepening depth the last <see cref="FindBestMove"/> call
+        /// fully completed, or 0 if it never completed one. Read after the call returns.</summary>
+        public int LastCompletedDepth => _lastCompletedDepth;
+
+        /// <summary>Why the last <see cref="FindBestMove"/> call stopped where it did. Two searches
+        /// can end on the same depth for opposite reasons — one out of time, the other satisfied it
+        /// had the answer — and only this tells them apart.</summary>
+        public SearchStopReason StopReason => _stopReason;
+
         public AlphaBetaSearch(IChessEngine engine, IPositionEvaluator evaluator, int maxSupportedDepth = 32,
                                 TranspositionTable transpositionTable = null)
         {
@@ -493,9 +517,13 @@ namespace ChessTheBetrayal.AI
 
             // Ordering health is per-search, so it resets here rather than with the editor-only
             // telemetry above — the settle-early rule reads it on every build and must never see a
-            // previous search's cutoffs.
+            // previous search's cutoffs. The depth and stop reason reset here for the same reason:
+            // they are reported on every build, so a search that ends without completing a single
+            // depth must say so rather than leave the previous call's answer standing.
             _betaCutoffs = 0;
             _firstMoveBetaCutoffs = 0;
+            _lastCompletedDepth = 0;
+            _stopReason = SearchStopReason.Unset;
 
             // Build the root move list ONCE. This is where the agent-level Betrayal policy applies.
             BuildRootMoves(board, rootTeam, settings.BetrayalUsage);
@@ -515,7 +543,6 @@ namespace ChessTheBetrayal.AI
             MoveToFrontByPackedMove(rootTTMove);
 
             MoveCommand bestMove = _rootMoves.Count > 0 ? _rootMoves[0] : default;
-            int lastCompletedDepth = 0;
 
             // Only meaningful when enableInstabilityTimeManagement is on — tracks what the
             // PREVIOUS completed depth found, so the next depth's completion can compare against
@@ -543,9 +570,7 @@ namespace ChessTheBetrayal.AI
             {
                 if (ct.IsCancellationRequested)
                 {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-                    _tt.Stats.StopReason = SearchStopReason.Budget;
-#endif
+                    _stopReason = SearchStopReason.Budget;
                     break;
                 }
 
@@ -643,10 +668,7 @@ namespace ChessTheBetrayal.AI
                 if (completed)
                 {
                     bestMove = bestThisDepth;
-                    lastCompletedDepth = depth;
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-                    _tt.Stats.LastCompletedDepth = depth;
-#endif
+                    _lastCompletedDepth = depth;
 
                     // Commit BEFORE MoveToFront, in the pre-permutation index order the scratch
                     // array was just written in — MoveToFront below then shuffles _rootScores in
@@ -676,9 +698,7 @@ namespace ChessTheBetrayal.AI
                     // nowhere near this positive band, so only a winning mate ever triggers it.
                     if (bestScore >= MateScore - MateScoreBand)
                     {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-                        _tt.Stats.StopReason = SearchStopReason.MateFound;
-#endif
+                        _stopReason = SearchStopReason.MateFound;
                         break;
                     }
 
@@ -735,9 +755,7 @@ namespace ChessTheBetrayal.AI
                             // the answer, so stop now rather than spend the rest of the budget.
                             if (stable && elapsedMs >= settings.TimeBudget.SoftMs)
                             {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-                                _tt.Stats.StopReason = SearchStopReason.SettledEarly;
-#endif
+                                _stopReason = SearchStopReason.SettledEarly;
                                 break;
                             }
 
@@ -747,9 +765,7 @@ namespace ChessTheBetrayal.AI
                             // never disagree about what "hard" means.
                             if (!stable && elapsedMs >= settings.TimeBudget.HardMs)
                             {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-                                _tt.Stats.StopReason = SearchStopReason.Budget;
-#endif
+                                _stopReason = SearchStopReason.Budget;
                                 break;
                             }
                         }
@@ -761,7 +777,6 @@ namespace ChessTheBetrayal.AI
                 }
             }
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
             // None of the loop's own break sites fired. That usually means depth ran all the way
             // through MaxDepth on its own, but not always: when cancellation lands while the LAST
             // configured depth is still in flight, that depth is abandoned without committing, and
@@ -769,15 +784,23 @@ namespace ChessTheBetrayal.AI
             // the top — so no break site runs even though the clock is what actually stopped the
             // search. Completing every configured depth is the honest test for a ceiling stop, and
             // it separates the two cases exactly.
-            if (_tt.Stats.StopReason == SearchStopReason.Unset)
+            if (_stopReason == SearchStopReason.Unset)
             {
-                _tt.Stats.StopReason = lastCompletedDepth >= settings.MaxDepth
+                _stopReason = _lastCompletedDepth >= settings.MaxDepth
                     ? SearchStopReason.Ceiling
                     : SearchStopReason.Budget;
             }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            // The telemetry struct carries its own copy of both so the measurement suites can read
+            // the whole picture from one place. Copied here rather than written alongside each of
+            // the exits above, so there is exactly one assignment per value and no way for a future
+            // exit path to set one and forget the other.
+            _tt.Stats.LastCompletedDepth = _lastCompletedDepth;
+            _tt.Stats.StopReason = _stopReason;
 #endif
 
-            RescoreCandidatesWithFullWindow(board, rootTeam, lastCompletedDepth, candidateRescoreMarginCp, ct);
+            RescoreCandidatesWithFullWindow(board, rootTeam, _lastCompletedDepth, candidateRescoreMarginCp, ct);
 
             return bestMove;
         }

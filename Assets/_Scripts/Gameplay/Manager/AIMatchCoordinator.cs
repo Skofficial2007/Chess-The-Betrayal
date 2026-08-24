@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using ChessTheBetrayal.AI;
+using ChessTheBetrayal.AI.MatchTelemetry;
 using ChessTheBetrayal.AI.OpeningBook;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Diagnostics;
@@ -70,6 +71,20 @@ namespace ChessTheBetrayal.Gameplay.Manager
         /// <summary>Fires when the AI's background search worker throws. TEMP debug surface (see AsyncAIAgent) — GameManager routes it to Debug.LogError.</summary>
         public event Action<string> OnSearchException;
 
+        /// <summary>Off by default — set by the composition root (GameManager) if it wants a real
+        /// match's AI moves recorded for later sharing. Checked when a move is about to be
+        /// recorded, not when the agent is configured, so flipping it has no effect on whichever
+        /// search happens to already be in flight.</summary>
+        public bool RecordTelemetry { get; set; }
+
+        /// <summary>What the AI has done so far this match. Rebuilt fresh every SetAIMode call so a
+        /// second match (Replay) never blends its move history with the one before it, and survives
+        /// past TearDownAgent so it can still be read after the match ends — only the next
+        /// SetAIMode call replaces it. Recording into it is gated by RecordTelemetry; the object
+        /// itself always exists once a session has started, so a reader never has to null-check
+        /// mid-match, only before the first SetAIMode call.</summary>
+        public AiMatchTelemetry Telemetry { get; private set; }
+
         public AIMatchCoordinator(IChessEngine engine, BoardState board, Action<MoveCommand> playMove, IDomainLogger logger = null)
             : this(engine, board, playMove, AISearchSettings.FromProfile, new AIProfileTableProvider(), logger)
         {
@@ -127,6 +142,8 @@ namespace ChessTheBetrayal.Gameplay.Manager
             agent.OnBookMovePlayed += HandleBookMovePlayed;
             agent.OnLeftOpeningBook += HandleLeftOpeningBook;
             _aiAgent = agent;
+
+            Telemetry = new AiMatchTelemetry(DateTime.Now.ToString("yyyyMMdd-HHmmss"));
         }
 
         /// <summary>Call once it's aiTeam's turn in a live match to kick off a background search.</summary>
@@ -183,16 +200,32 @@ namespace ChessTheBetrayal.Gameplay.Manager
             if (_searchStopwatch.IsRunning) _searchStopwatch.Stop();
             Activity = AgentActivity.ResultReady;
 
+            // ElapsedMilliseconds is a long; clamp into the int payload both the log line and the
+            // telemetry record use. A search that somehow ran >24 days to overflow int is a bug
+            // worth seeing pinned at int.MaxValue, not silently wrapping negative.
+            long elapsedMs = _searchStopwatch.ElapsedMilliseconds;
+            int auxMs = elapsedMs > int.MaxValue ? int.MaxValue : (int)elapsedMs;
+
             if (_logger != null && _logger.IsVerbose)
             {
-                // ElapsedMilliseconds is a long; clamp into the int AuxInt payload. A search that
-                // somehow ran >24 days to overflow int is a bug worth seeing pinned at int.MaxValue.
-                long elapsedMs = _searchStopwatch.ElapsedMilliseconds;
-                int auxMs = elapsedMs > int.MaxValue ? int.MaxValue : (int)elapsedMs;
-                _logger.LogInfo(new DomainLogEvent(DomainEventCode.AI_MoveDecided, message: $"{_aiTeam} plays {move}", auxInt: auxMs));
+                // _aiAgent is typed as the narrow IAIAgent interface, but depth/stop-reason are an
+                // AsyncAIAgent-specific reading of its own last completed search, not something every
+                // IAIAgent implementation has to carry — same reasoning Tick() already applies below
+                // for ConsumeLastSearchException.
+                string message = _aiAgent is AsyncAIAgent loggingAgent
+                    ? $"{_aiTeam} plays {move} (depth {loggingAgent.LastCompletedDepth}, {loggingAgent.StopReason})"
+                    : $"{_aiTeam} plays {move}";
+                _logger.LogInfo(new DomainLogEvent(DomainEventCode.AI_MoveDecided, message: message, auxInt: auxMs));
             }
 
             _playMove(move);
+
+            if (RecordTelemetry && _aiAgent is AsyncAIAgent recordingAgent)
+            {
+                Telemetry.RecordMove(new AiMoveRecord(_board.FullMoveNumber, _aiTeam, move, fromBook: false,
+                    auxMs, recordingAgent.LastCompletedDepth, recordingAgent.StopReason));
+            }
+
             Activity = AgentActivity.Idle;
         }
 
@@ -212,6 +245,13 @@ namespace ChessTheBetrayal.Gameplay.Manager
             }
 
             _playMove(move);
+
+            if (RecordTelemetry)
+            {
+                Telemetry.RecordMove(new AiMoveRecord(_board.FullMoveNumber, _aiTeam, move, fromBook: true,
+                    elapsedMs: 0, completedDepth: 0, stopReason: SearchStopReason.Unset));
+            }
+
             Activity = AgentActivity.Idle;
         }
 
@@ -227,6 +267,21 @@ namespace ChessTheBetrayal.Gameplay.Manager
                 _logger.LogInfo(new DomainLogEvent(DomainEventCode.AI_LeftOpeningBook,
                     message: $"{_aiTeam} is out of book"));
             }
+        }
+
+        /// <summary>
+        /// Configures the session for a match with no AI team at all — a plain match today, and a
+        /// future multiplayer one. Tears down any agent left over from a previous AI match and
+        /// clears its telemetry, so neither can leak into a match the AI was never part of: without
+        /// this, a plain match played right after an AI one would still carry the old match's
+        /// recorded moves, and a caller reading Telemetry would have no way to tell they belong to
+        /// a different game. Idempotent — safe to call even when no AI match has run yet this
+        /// session, which is exactly the state a fresh coordinator is already in.
+        /// </summary>
+        public void ClearAIMode()
+        {
+            TearDownAgent();
+            Telemetry = null;
         }
 
         private void TearDownAgent()

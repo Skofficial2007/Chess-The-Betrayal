@@ -1,8 +1,10 @@
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Threading;
 using NUnit.Framework;
 using ChessTheBetrayal.AI;
+using ChessTheBetrayal.AI.MatchTelemetry;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Diagnostics;
 using ChessTheBetrayal.Core.Engine;
@@ -172,6 +174,112 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         }
 
         [Test]
+        public void ClearAIMode_TearsDownTheAgentAndClearsTelemetry()
+        {
+            _board.CurrentTurn = Team.Black;
+            _coordinator.SetAIMode(Team.Black, BetrayalUsage.Full, "normal");
+            Assert.That(_coordinator.Telemetry, Is.Not.Null, "Sanity check.");
+            Assert.That(_coordinator.IsAiMode, Is.True, "Sanity check.");
+
+            _coordinator.ClearAIMode();
+
+            Assert.That(_coordinator.Telemetry, Is.Null,
+                "A coordinator configured for no AI at all must not still be holding a previous " +
+                "match's recorded moves — that's what let a plain match offer to share the wrong report.");
+            Assert.That(_coordinator.IsAiMode, Is.False);
+        }
+
+        [Test]
+        public void ClearAIMode_OnACoordinatorThatNeverConfiguredAI_IsASafeNoOp()
+        {
+            Assert.DoesNotThrow(() => _coordinator.ClearAIMode());
+            Assert.That(_coordinator.Telemetry, Is.Null);
+        }
+
+        [Test]
+        public void SetAIMode_AlwaysConstructsAFreshTelemetry_SoAReplayNeverBlendsWithThePriorMatch()
+        {
+            _board.CurrentTurn = Team.Black;
+            _coordinator.SetAIMode(Team.Black, BetrayalUsage.Full, "normal");
+            AiMatchTelemetry first = _coordinator.Telemetry;
+
+            _coordinator.SetAIMode(Team.Black, BetrayalUsage.Full, "normal");
+            AiMatchTelemetry second = _coordinator.Telemetry;
+
+            Assert.That(first, Is.Not.Null);
+            Assert.That(second, Is.Not.Null);
+            Assert.That(second, Is.Not.SameAs(first),
+                "A second match (e.g. Replay) must get its own telemetry object, not keep recording into the first one's.");
+        }
+
+        [Test]
+        public void RecordTelemetry_OffByDefault_NeverRecordsAMove_EvenAfterDelivery()
+        {
+            _board.CurrentTurn = Team.Black;
+            _coordinator.SetAIMode(Team.Black, BetrayalUsage.Full, "normal");
+            // RecordTelemetry is left at its default (false) — this is the composition root's
+            // opt-in feature flag, off unless something explicitly turns it on.
+
+            _coordinator.TryRequestMove(isGameActive: true);
+            PumpTickUntil(() => _lastPlayedMove.HasValue);
+
+            Assert.That(_coordinator.Telemetry.MoveCount, Is.Zero,
+                "Nothing must be recorded unless RecordTelemetry was explicitly turned on.");
+        }
+
+        [Test]
+        public void RecordTelemetry_On_RecordsTheSearchedMovesDepthAndElapsed()
+        {
+            _board.CurrentTurn = Team.Black;
+            _coordinator.SetAIMode(Team.Black, BetrayalUsage.Full, "normal");
+            _coordinator.RecordTelemetry = true;
+
+            _coordinator.TryRequestMove(isGameActive: true);
+            PumpTickUntil(() => _lastPlayedMove.HasValue);
+
+            Assert.That(_coordinator.Telemetry.MoveCount, Is.EqualTo(1));
+
+            string report = _coordinator.Telemetry.Render();
+            Assert.That(report, Does.Contain("1 moves total (0 from the opening book, 1 searched)"));
+            Assert.That(report, Does.Contain("depth 1,"));
+            Assert.That(report, Does.Not.Contain("(book)"));
+        }
+
+        [Test]
+        public void RecordTelemetry_On_ReadsThePlyNumberFromTheBoardOnceTheMoveIsActuallyApplied()
+        {
+            // The shared fixture's playMove stub above only records the move for assertions and
+            // never touches the board, so BoardState.FullMoveNumber would never move off zero
+            // there. This test uses a playMove that actually applies the move, the way MatchDriver
+            // does in production, so the recorded ply number reflects something real.
+            var engine = new ChessEngineAdapter();
+            var board = TestBoardSetupUtility.CreateStandard();
+            board.CurrentTurn = Team.Black;
+            var coordinator = new AIMatchCoordinator(
+                engine, board, move => new TurnResolver().Advance(board, move), ShallowSettings, ProfileProvider);
+
+            try
+            {
+                coordinator.SetAIMode(Team.Black, BetrayalUsage.Full, "normal");
+                coordinator.RecordTelemetry = true;
+                coordinator.TryRequestMove(isGameActive: true);
+
+                var stopwatch = Stopwatch.StartNew();
+                while (coordinator.Telemetry.MoveCount == 0 && stopwatch.ElapsedMilliseconds < PollTimeoutMs)
+                {
+                    coordinator.Tick();
+                    Thread.Sleep(PollIntervalMs);
+                }
+
+                Assert.That(coordinator.Telemetry.Render(), Does.Contain("ply 1:"));
+            }
+            finally
+            {
+                coordinator.Dispose();
+            }
+        }
+
+        [Test]
         public void TryRequestMove_ThenDelivery_EmitsSearchRequestedAndMoveDecided()
         {
             var logger = new CapturingLogger();
@@ -196,6 +304,41 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
                 Assert.That(_lastPlayedMove, Is.Not.Null);
                 Assert.That(logger.Codes, Contains.Item(DomainEventCode.AI_MoveDecided),
                     "Delivering a move must log AI_MoveDecided (with elapsed ms) so the search cost is visible.");
+            }
+            finally
+            {
+                coordinator.Dispose();
+            }
+        }
+
+        [Test]
+        public void TryRequestMove_ThenDelivery_MoveDecidedMessageNamesTheDepthAndStopReason()
+        {
+            var logger = new CapturingLogger();
+            var coordinator = new AIMatchCoordinator(_engine, _board, move => _lastPlayedMove = move, ShallowSettings, ProfileProvider, logger);
+            _board.CurrentTurn = Team.Black;
+
+            try
+            {
+                coordinator.SetAIMode(Team.Black, BetrayalUsage.Full, "normal");
+                coordinator.TryRequestMove(isGameActive: true);
+
+                var stopwatch = Stopwatch.StartNew();
+                while (!_lastPlayedMove.HasValue && stopwatch.ElapsedMilliseconds < PollTimeoutMs)
+                {
+                    coordinator.Tick();
+                    Thread.Sleep(PollIntervalMs);
+                }
+
+                Assert.That(_lastPlayedMove, Is.Not.Null);
+                DomainLogEvent moveDecided = logger.Events.First(e => e.Code == DomainEventCode.AI_MoveDecided);
+
+                // ShallowSettings caps MaxDepth at 1, so a search that completed normally must
+                // report exactly that depth back through the log line.
+                Assert.That(moveDecided.Message, Does.Contain("depth 1,"),
+                    "AI_MoveDecided must name the depth the search actually completed, not just that a move was played.");
+                Assert.That(moveDecided.Message, Does.Not.Contain("Unset"),
+                    "A real search always sets a concrete stop reason; Unset would mean the depth/reason wiring never ran.");
             }
             finally
             {
@@ -271,16 +414,23 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         private sealed class CapturingLogger : IDomainLogger
         {
             private readonly object _lock = new object();
-            private readonly List<DomainEventCode> _codes = new List<DomainEventCode>();
+            private readonly List<DomainLogEvent> _events = new List<DomainLogEvent>();
 
             public bool IsVerbose => true;
 
             public IReadOnlyList<DomainEventCode> Codes
             {
-                get { lock (_lock) { return new List<DomainEventCode>(_codes); } }
+                get { lock (_lock) { return _events.Select(e => e.Code).ToList(); } }
             }
 
-            private void Add(DomainLogEvent evt) { lock (_lock) { _codes.Add(evt.Code); } }
+            /// <summary>The full events, message and AuxInt included — Codes above only carries
+            /// enough to assert an event fired at all, not what it said.</summary>
+            public IReadOnlyList<DomainLogEvent> Events
+            {
+                get { lock (_lock) { return new List<DomainLogEvent>(_events); } }
+            }
+
+            private void Add(DomainLogEvent evt) { lock (_lock) { _events.Add(evt); } }
 
             public void LogInfo(DomainLogEvent evt) => Add(evt);
             public void LogWarning(DomainLogEvent evt) => Add(evt);

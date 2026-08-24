@@ -170,6 +170,31 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         }
 
         [Test]
+        public void ConfigureMatch_PlainMatchAfterAnAiOne_ClearsIsAiModeAndTheAiCoordinatorsTelemetry()
+        {
+            // Deliberately does NOT go through HandleGameReset (the Exit path, which already reset
+            // IsAiMode correctly) -- ConfigureMatch(null) is exactly what HandleTeamAnimationComplete
+            // calls for a hot-seat game with no pending Practice settings, and that path used to
+            // leave both IsAiMode and the coordinator's Telemetry holding the previous AI match's
+            // state, which is what let a plain game still offer to share the wrong match's report.
+            var settings = new PracticeMatchSettings(
+                betrayalEnabled: true, aiDefendOnly: false, retributionSkipAllowed: true, aiProfileId: "normal");
+            _matchFlow.SetPracticeMatchSettings(settings);
+            _matchFlow.HandleTeamRollRequested();
+            _matchFlow.HandleTeamAnimationComplete();
+
+            Assert.That(_matchFlow.IsAiMode, Is.True, "Sanity check: this must actually be an AI match first.");
+            Assert.That(_aiCoordinator.Telemetry, Is.Not.Null, "Sanity check: SetAIMode must have constructed telemetry for it.");
+
+            _matchFlow.ConfigureMatch(null);
+
+            Assert.That(_matchFlow.IsAiMode, Is.False,
+                "A plain match must never read as AI mode just because the previous one was.");
+            Assert.That(_aiCoordinator.Telemetry, Is.Null,
+                "The previous AI match's recorded moves must not survive into a match the AI was never part of.");
+        }
+
+        [Test]
         public void CanUndo_TrueOnlyAfterAPracticeMatchTurnCompletes()
         {
             // RollTeams randomizes which seat draws White (see HandleTeamRollRequested_..._Test above,

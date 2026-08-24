@@ -43,7 +43,7 @@ namespace ChessTheBetrayal.App
     /// Normal/ForcedSave (result.DidDefect) | DefectionOccurred
     /// ForcedSave            | ForcedSaveActive
     /// </summary>
-    public class GameManager : MonoBehaviour, IMatchFlow, IBoardQuery
+    public class GameManager : MonoBehaviour, IMatchFlow, IBoardQuery, IAiMatchTelemetryProvider
     {
         #region Inspector Fields
 
@@ -54,8 +54,19 @@ namespace ChessTheBetrayal.App
         [Header("Debug")]
         [SerializeField] private bool logMoves = true;
 
+        // Off by default. The QA button on MainMenuUI navigates to DeviceBenchmark.unity, which
+        // ships in every build now that this exists — a tester never sees the button unless this is
+        // turned on for their build.
+        [SerializeField] private bool enableQAButton = false;
+
         [Header("AI")]
         [SerializeField] private ChessTheBetrayal.AI.OpeningBook.OpeningBookAsset _openingBook;
+
+        // Off by default. When on, AIMatchCoordinator records what the AI did over the course of a
+        // real match (depth/elapsed/stop-reason per move) so GameOverUI can offer to share it —
+        // real-match numbers a synthetic benchmark can't produce, since it never renders a board or
+        // reuses a table across a whole game the way a real one does.
+        [SerializeField] private bool enableAiTelemetrySharing = false;
 
         [Header("Betrayal Time Bounty (milliseconds)")]
         [SerializeField] private long _betrayalBountyBulletMs = 3_000L;   // Bullet 1|0
@@ -184,6 +195,7 @@ namespace ChessTheBetrayal.App
             // the concrete GameManager (which would recreate the assembly cycle this rework removed).
             ServiceLocator.Instance.Register<IBoardQuery>(this);
             ServiceLocator.Instance.Register<IMatchFlow>(this);
+            ServiceLocator.Instance.Register<IAiMatchTelemetryProvider>(this);
 
             ValidateRequiredFields();
 
@@ -228,6 +240,7 @@ namespace ChessTheBetrayal.App
             _moveVisualPacingGate = new MoveVisualPacingGate(_matchDriver.PlayMove, ChessTheBetrayal.Core.Match.MoveVisualDurationEstimator.EstimateSeconds);
 
             _aiCoordinator = new AIMatchCoordinator(_engine, LiveBoard, _moveVisualPacingGate.Enqueue, _domainLogger);
+            _aiCoordinator.RecordTelemetry = enableAiTelemetrySharing;
             _aiCoordinator.OnSearchException += HandleAISearchException;
 
             // Continue the AI through its own forced Betrayal sub-sequence (Act -> Retribution, or
@@ -259,6 +272,17 @@ namespace ChessTheBetrayal.App
             _turnChangedChannel?.Register(OnTurnChangedForAI);
         }
 
+        // DeviceBenchmark.unity — the QA button's whole destination — only means anything on
+        // Android: its portrait lock, its MediaStore/share-sheet code, and the whole per-move
+        // budget it measures are all Android concerns. A runtime check rather than #if UNITY_ANDROID
+        // so this stays a config toggle, not a recompile, and Application.isEditor keeps the button
+        // testable in the Editor before an Android build exists to test it on — the same "verify in
+        // the Editor first" approach this feature's own benchmark reports are built around. A real
+        // non-Android build (iOS, Windows/Mac/Linux standalone) never shows it regardless of
+        // enableQAButton.
+        private static bool QAButtonPlatformAllowed =>
+            Application.isEditor || Application.platform == RuntimePlatform.Android;
+
         private void Start()
         {
             if (!ServiceLocator.Instance.TryResolve(out _uiManager))
@@ -275,6 +299,8 @@ namespace ChessTheBetrayal.App
             _uiManager.OnPracticeMatchSettingsConfirmed += HandlePracticeMatchSettingsConfirmed;
             _uiManager.OnRetributionSkipRequested += RequestRetributionSkip;
             _uiManager.OnUndoRequested += HandleUndoRequested;
+
+            _uiManager.SetQAButtonVisible(enableQAButton && QAButtonPlatformAllowed);
 
             if (logMoves)
             {
@@ -434,6 +460,23 @@ namespace ChessTheBetrayal.App
         void IMatchFlow.ReturnToModeSelect() => _matchFlow.ReturnToModeSelect();
 
         void IMatchFlow.ReturnToAIMatchSettings() => _matchFlow.ReturnToAIMatchSettings();
+
+        #endregion
+
+        #region IAiMatchTelemetryProvider
+
+        // Three independent reasons there might be nothing to share, checked explicitly rather
+        // than trusting any one of them to already imply the others: the composition root never
+        // turned sharing on at all; the match that just ended genuinely wasn't an AI match (normal
+        // play, and in the future a multiplayer match — MatchFlowCoordinator.IsAiMode is the one
+        // place that already knows this reliably); or telemetry was on but the AI never actually
+        // got a turn (Telemetry is null before the first SetAIMode call, and MoveCount is 0 for a
+        // game that ended before the AI moved).
+        string IAiMatchTelemetryProvider.GetLastAiMatchReport() =>
+            enableAiTelemetrySharing && _matchFlow.IsAiMode
+                && _aiCoordinator.Telemetry != null && _aiCoordinator.Telemetry.MoveCount > 0
+                ? _aiCoordinator.Telemetry.Render()
+                : null;
 
         #endregion
 

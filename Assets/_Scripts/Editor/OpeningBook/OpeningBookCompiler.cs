@@ -159,32 +159,12 @@ namespace ChessTheBetrayal.EditorTools.OpeningBook
             CoordinateNotation.ToToken(from, to, promotion);
 
         /// <summary>
-        /// Builds the standard chess starting position directly (no Betrayal state, full castling
-        /// rights) — every book line starts here, since the book only ever covers openings from
-        /// the game's actual opening position.
+        /// The standard chess starting position, with the Betrayal right live and full castling rights.
+        /// Every book line starts here, since the book only ever covers openings from the game's actual
+        /// opening position — and because the book is keyed by position hash, this has to be the same
+        /// board the game itself starts from or nothing compiled here would ever be found at runtime.
         /// </summary>
-        internal static BoardState CreateStandardStartingPosition()
-        {
-            var board = new BoardState(8, 8);
-            board.Clear();
-
-            ChessPieceType[] backRank =
-            {
-                ChessPieceType.Rook, ChessPieceType.Knight, ChessPieceType.Bishop, ChessPieceType.Queen,
-                ChessPieceType.King, ChessPieceType.Bishop, ChessPieceType.Knight, ChessPieceType.Rook
-            };
-
-            for (int x = 0; x < 8; x++)
-            {
-                board.SetPiece(new PieceData(Team.White, backRank[x], 1, 0), x, 0);
-                board.SetPiece(new PieceData(Team.White, ChessPieceType.Pawn, 1, 1), x, 1);
-                board.SetPiece(new PieceData(Team.Black, ChessPieceType.Pawn, -1, 6), x, 6);
-                board.SetPiece(new PieceData(Team.Black, backRank[x], -1, 7), x, 7);
-            }
-
-            board.BetrayalRightAvailable = true;
-            board.ComputeFullZobristHash();
-            return board;
-        }
+        internal static BoardState CreateStandardStartingPosition() =>
+            StandardChessPosition.Create(betrayalRightAvailable: true);
     }
 }

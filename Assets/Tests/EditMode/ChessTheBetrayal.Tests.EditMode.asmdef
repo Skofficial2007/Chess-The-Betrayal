@@ -7,7 +7,10 @@
     "ChessTheBetrayal.AI",
     "ChessTheBetrayal.Events",
     "ChessTheBetrayal.Tests.Utilities",
-    "ChessTheBetrayal.EditorTools"
+    "ChessTheBetrayal.EditorTools",
+    "ChessTheBetrayal.UI.SafeArea",
+    "ChessTheBetrayal.UI",
+    "ChessTheBetrayal.Infrastructure"
   ],
   "includePlatforms": ["Editor"],
   "excludePlatforms": [],

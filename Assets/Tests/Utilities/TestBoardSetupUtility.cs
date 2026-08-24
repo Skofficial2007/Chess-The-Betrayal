@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ChessTheBetrayal.AI;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 
@@ -30,33 +31,11 @@ namespace ChessTheBetrayal.Tests.Utilities
         /// including all 32 pieces, full castling rights, and a freshly computed
         /// Zobrist hash. Equivalent to the opening position after no moves.
         /// </summary>
-        public static BoardState CreateStandard()
-        {
-            BoardState board = new BoardState(8, 8);
-            board.Clear(); // Clears board and sets CastlingRights to CastlingAllRights (15)
-
-            ChessPieceType[] backRank = new ChessPieceType[]
-            {
-                ChessPieceType.Rook,   ChessPieceType.Knight, ChessPieceType.Bishop,
-                ChessPieceType.Queen,  ChessPieceType.King,   ChessPieceType.Bishop,
-                ChessPieceType.Knight, ChessPieceType.Rook
-            };
-
-            for (int x = 0; x < 8; x++)
-            {
-                // White setup
-                board.SetPiece(new PieceData(Team.White, backRank[x], 1, 0), x, 0);
-                board.SetPiece(new PieceData(Team.White, ChessPieceType.Pawn, 1, 1), x, 1);
-
-                // Black setup
-                board.SetPiece(new PieceData(Team.Black, ChessPieceType.Pawn, -1, 6), x, 6);
-                board.SetPiece(new PieceData(Team.Black, backRank[x], -1, 7), x, 7);
-            }
-
-            board.BetrayalRightAvailable = false; // Isolate standard tests from Betrayal logic
-            board.ComputeFullZobristHash();
-            return board;
-        }
+        public static BoardState CreateStandard() =>
+            // Betrayal right spent, which is what isolates the ordinary-chess fixtures that call this
+            // from the Betrayal mechanic. The placement itself is shared — see StandardChessPosition
+            // for why it is not written out a second time here.
+            StandardChessPosition.Create(betrayalRightAvailable: false);
 
         /// <summary>
         /// Places a single piece at the specified algebraic coordinate and returns the
