@@ -20,10 +20,15 @@ namespace ChessTheBetrayal.View
     }
 
     /// <summary>
-    /// The visual feel of a board-move glide. Quiet is a plain slide; Capture adds a landing
-    /// impact punch to sell contact; Knight arcs over the board (it "hops" rather than slides
-    /// through occupied squares, matching how the piece actually moves); Promotion is a slower,
-    /// punch-free glide since the morph itself (PlayTransitionOut/In) is the payoff beat.
+    /// The visual feel of a board-move glide. Quiet is a plain slide, and the only one whose
+    /// duration follows the distance covered; Knight arcs over the board (it "hops" rather than
+    /// slides through occupied squares, matching how the piece actually moves); Promotion is a
+    /// slower, punch-free glide since the morph itself (PlayTransitionOut/In) is the payoff beat.
+    ///
+    /// Capture adds a landing impact punch to sell contact, but it is no longer how most captures
+    /// look: a piece landing on its victim plays the far heavier stamp instead (PlayCaptureStamp).
+    /// What is left for this style is en passant, where the attacker lands beside its victim rather
+    /// than on it, and a takeback, where the victim has already gone and there is nothing to land on.
     /// </summary>
     public enum MoveStyle
     {
@@ -31,6 +36,29 @@ namespace ChessTheBetrayal.View
         Capture,
         Knight,
         Promotion
+    }
+
+    /// <summary>
+    /// The travel leg in front of a capture, for an attacker that has ground to make up before it
+    /// can strike. Default means none: the victim is already next door, which is every pawn and
+    /// king capture, and the strike plays from where the piece stands.
+    /// </summary>
+    public readonly struct CaptureRunUp
+    {
+        /// <summary>Where the attacker strikes from — the square beside its victim.</summary>
+        public readonly Vector3 LaunchFrom;
+
+        /// <summary>Squares between the attacker and that square, so the glide can be paced.</summary>
+        public readonly int SquaresToCover;
+
+        public readonly bool HasGroundToCover;
+
+        public CaptureRunUp(Vector3 launchFrom, int squaresToCover)
+        {
+            LaunchFrom = launchFrom;
+            SquaresToCover = squaresToCover;
+            HasGroundToCover = true;
+        }
     }
 
     /// <summary>
@@ -53,8 +81,13 @@ namespace ChessTheBetrayal.View
         /// Slides the piece toward worldPos with a specific move feel — see MoveStyle. This is the
         /// board-move entry point (AnimateMove); the plain MoveTo above stays for callers that
         /// don't carry move context (death-pile placement, selection snap-back).
+        ///
+        /// squaresTravelled is how far the move covers, counting a diagonal step as one, so a glide
+        /// can be paced against the ground it has to make up instead of every move taking the same
+        /// time whatever its length. Callers that aren't moving a piece across the board (a
+        /// promotion swap in place, a snap-back) can leave it alone.
         /// </summary>
-        void MoveTo(Vector3 worldPos, MoveStyle style, bool force = false);
+        void MoveTo(Vector3 worldPos, MoveStyle style, int squaresTravelled = 1, bool force = false);
 
         /// <summary>
         /// The rook's half of a castling move: an InOutCubic glide identical in feel to
@@ -68,6 +101,14 @@ namespace ChessTheBetrayal.View
         void MoveToForCastle(Vector3 worldPos, float startDelay, Action onSettled = null);
 
         /// <summary>
+        /// Walks a promoting pawn onto the last rank and reports when it gets there, so the morph
+        /// that replaces it can wait until it has been seen arriving. A pawn that is already
+        /// standing on the square reports immediately rather than tweening nowhere — that is the
+        /// human's pawn, which walks across while the promotion prompt is still open.
+        /// </summary>
+        void PlayPromotionApproach(Vector3 worldPos, int squaresTravelled, Action onArrived);
+
+        /// <summary>
         /// Plays a small (millimeter-scale) settle bob in place — the tail end of the castling
         /// choreography once a piece has already arrived at its destination. Not a standalone
         /// move; callers are expected to have already positioned the piece.
@@ -78,7 +119,12 @@ namespace ChessTheBetrayal.View
         /// The attacker's half of a capture "stamp": anticipation pull-back, a leap that clears the
         /// victim's head while swelling ~1.15x mid-air, a straight drop onto the target, a hard
         /// flat impact squash, and an overshoot recovery back to rest scale — a cartoon
-        /// power-stomp rather than a plain slide. Fires onDescentStart the frame the downward leg
+        /// power-stomp rather than a plain slide.
+        ///
+        /// Pass a runUp when the attacker is not already beside its victim (see CaptureApproach):
+        /// the piece glides in first and the pounce plays from the square next door, so the leap
+        /// stays the short, close-quarters strike it is built as instead of being stretched across
+        /// however much board lay between them. Fires onDescentStart the frame the downward leg
         /// of the leap begins (NOT at impact): the victim's cower-shrink (PlayStompedDeath) is
         /// timed to the same fall-duration constant, so starting it at descent guarantees the
         /// victim is already small when the attacker arrives — the two never overlap at full size.
@@ -87,7 +133,7 @@ namespace ChessTheBetrayal.View
         /// capture reads as complete (e.g. a Betrayal Defection spin queued on the same piece — see
         /// BoardVisuals.SwapPieceTeam). See PrimeTweenPieceAnimator for the full timing breakdown.
         /// </summary>
-        void PlayCaptureStamp(Vector3 worldPos, Action onDescentStart = null, Action onSettled = null);
+        void PlayCaptureStamp(Vector3 worldPos, CaptureRunUp runUp = default, Action onDescentStart = null, Action onSettled = null);
 
         /// <summary>
         /// The victim's half of a capture "stamp", started at the attacker's DESCENT (not impact):
@@ -108,6 +154,18 @@ namespace ChessTheBetrayal.View
         /// scale/facing there (mirroring PlayStompedDeath's onVanished pattern).
         /// </summary>
         void PlayEnPassantDeath(Vector3 graveyardWorldPos, Action onArrived);
+
+        /// <summary>
+        /// A captured piece coming back to the board because its capture was taken back: the same
+        /// hop-and-glide as the death above, run the other way — travelling from the death pile to
+        /// boardWorldPos while growing from its shrunken graveyard size back to restScale, arriving
+        /// with a small overshoot like every other landing. Calls onArrived once it is home, the
+        /// moment BoardVisuals should treat it as standing on the board again.
+        ///
+        /// Deliberately not the capture stamp reversed: nothing is lifting this piece back up, and
+        /// a crush played backwards reads as the victim inflating rather than returning.
+        /// </summary>
+        void PlayGraveyardReturn(Vector3 boardWorldPos, Vector3 restScale, Action onArrived);
 
         /// <summary>
         /// Scales the piece toward scale. force = true snaps instantly with no interpolation

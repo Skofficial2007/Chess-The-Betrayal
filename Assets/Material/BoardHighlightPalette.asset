@@ -1,0 +1,90 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 36d760726e4429f4bb991947e4c2d300, type: 3}
+  m_Name: BoardHighlightPalette
+  m_EditorClassIdentifier: 
+  highlightShader: {fileID: 4800000, guid: 4756b053f405f4f4fa979c18212194ff, type: 3}
+  quietMove:
+    Colour: {r: 0.35, g: 0.85, b: 0.45, a: 0.72}
+    Glow: 0
+  capture:
+    Colour: {r: 0.95, g: 0.25, b: 0.18, a: 0.85}
+    Glow: 0.4
+  betrayalTarget:
+    Colour: {r: 0.72, g: 0.36, b: 0.98, a: 0.85}
+    Glow: 1.4
+  betrayerAtLarge:
+    Colour: {r: 1, g: 0.13, b: 0.22, a: 0.92}
+    Glow: 1.8
+  betrayerTargeted:
+    Colour: {r: 1, g: 0.28, b: 0.14, a: 1}
+    Glow: 2.4
+  check:
+    Colour: {r: 1, g: 0.22, b: 0.16, a: 0.9}
+    Glow: 2
+  selectedMarker:
+    Colour: {r: 1, g: 0.78, b: 0.25, a: 0.95}
+    Glow: 0.2
+  selectedTint:
+    Colour: {r: 1, g: 0.78, b: 0.25, a: 0.22}
+    Glow: 0
+  hoverTint:
+    Colour: {r: 1, g: 1, b: 1, a: 0.1}
+    Glow: 0
+  lastMoveFromTint:
+    Colour: {r: 0.35, g: 0.65, b: 1, a: 0.5}
+    Glow: 0
+  lastMoveToTint:
+    Colour: {r: 0.35, g: 0.65, b: 1, a: 0.85}
+    Glow: 0
+  dotRadiusRatio: 0.42
+  captureRingRadiusRatio: 0.43
+  captureRingThicknessRatio: 0.07
+  captureRingTickLengthRatio: 0.07
+  captureRingTickThicknessRatio: 0.025
+  markerBracketSpanRatio: 0.97
+  markerBracketLengthRatio: 0.16
+  markerBracketThicknessRatio: 0.07
+  betrayalRingRadiusRatio: 0.46
+  betrayerRingRadiusRatio: 0.4
+  betrayalDiamondRatio: 0.16
+  betrayerChevronLengthRatio: 0.14
+  betrayerChevronHalfWidthRatio: 0.05
+  betrayerTargetedChevronLengthRatio: 0.26
+  checkFrameSizeRatio: 0.92
+  checkFrameThicknessRatio: 0.09
+  cornerTickLengthRatio: 0.22
+  cornerTickThicknessRatio: 0.055
+  cornerTickClampStartRatio: 1.45
+  tintSizeRatio: 0.97
+  lastMoveThicknessRatio: 0.05
+  lastMoveFromSpanRatio: 0.9
+  lastMoveTaperRatio: 0.07
+  circleSegments: 24
+  appearDuration: 0.18
+  appearStaggerPerSquare: 0.012
+  cornerTickClampDuration: 0.24
+  cornerTickClampOvershoot: 1.15
+  cornerTickClampStagger: 0.03
+  checkPulsePeriod: 1.1
+  checkPulseGlowAmount: 1.2
+  captureBreathePeriod: 2.2
+  captureBreatheGlowAmount: 0.35
+  captureRingSpinSpeed: 18
+  betrayerPulsePeriod: 0.9
+  betrayerPulseGlowAmount: 1.4
+  betrayerChevronRotationSpeed: 25
+  betrayerTargetedPulsePeriod: 0.45
+  betrayerLockOnPunchScale: 1.18
+  betrayerLockOnPunchDuration: 0.13
+  betrayerLockBracketScale: 0.78
+  betrayerLockBracketDuration: 0.2

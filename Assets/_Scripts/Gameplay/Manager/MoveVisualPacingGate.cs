@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using ChessTheBetrayal.Core.Engine;
 
 namespace ChessTheBetrayal.Gameplay.Manager
@@ -25,62 +24,36 @@ namespace ChessTheBetrayal.Gameplay.Manager
     /// </summary>
     public sealed class MoveVisualPacingGate
     {
-        private readonly Action<MoveCommand> _playMove;
-        private readonly Func<MoveCommand, float> _estimateAnimationSeconds;
-
-        // Pre-sized once and reused for the life of the match — a queue this shallow (a handful of
-        // pending moves at most; in practice almost always 0 or 1) never needs to grow, so no
-        // per-move allocation happens here regardless of match length.
-        private readonly Queue<MoveCommand> _pending = new Queue<MoveCommand>(8);
-
-        // Counts down in Tick(); a move is playable again once this reaches zero. Time-based
-        // rather than frame-based so pacing stays correct regardless of framerate.
-        private float _remainingPaceSeconds;
+        private readonly PacedQueue<MoveCommand> _queue;
 
         public MoveVisualPacingGate(Action<MoveCommand> playMove, Func<MoveCommand, float> estimateAnimationSeconds)
         {
-            _playMove = playMove;
-            _estimateAnimationSeconds = estimateAnimationSeconds;
+            _queue = new PacedQueue<MoveCommand>(playMove, estimateAnimationSeconds);
         }
 
         /// <summary>True while a move is still pacing out its animation window or waiting behind one that is.</summary>
-        public bool IsPacing => _remainingPaceSeconds > 0f || _pending.Count > 0;
+        public bool IsPacing => _queue.IsBusy;
 
         /// <summary>
         /// Accepts a move from any source (human, AI, future network). Plays it immediately if the
         /// gate is idle; otherwise holds it until every move ahead of it has finished pacing, then
-        /// plays it in the order it arrived. Never drops or rejects a move — see the class's own
-        /// enqueue-not-reject design note.
+        /// plays it in the order it arrived. A move is never dropped to make room for another one —
+        /// the queue only ever empties by playing, or by an explicit Clear().
         /// </summary>
-        public void Enqueue(MoveCommand move)
-        {
-            _pending.Enqueue(move);
-            if (_pending.Count == 1 && _remainingPaceSeconds <= 0f)
-            {
-                PlayNext();
-            }
-        }
+        public void Enqueue(MoveCommand move) => _queue.Enqueue(move);
 
         /// <summary>Advances the pacing timer. Call once per frame from a MonoBehaviour Update(), same as AIMatchCoordinator.Tick().</summary>
-        public void Tick(float deltaSeconds)
-        {
-            if (_remainingPaceSeconds <= 0f) return;
+        public void Tick(float deltaSeconds) => _queue.Tick(deltaSeconds);
 
-            _remainingPaceSeconds -= deltaSeconds;
-            if (_remainingPaceSeconds <= 0f)
-            {
-                _remainingPaceSeconds = 0f;
-                PlayNext();
-            }
-        }
-
-        private void PlayNext()
-        {
-            if (_pending.Count == 0) return;
-
-            MoveCommand move = _pending.Dequeue();
-            _remainingPaceSeconds = _estimateAnimationSeconds(move);
-            _playMove(move);
-        }
+        /// <summary>
+        /// Throws away every queued move and reopens the gate immediately.
+        ///
+        /// Undo is the caller this exists for. A move waiting in here has been decided but has NOT
+        /// reached the board yet, so it was chosen against a position that an undo is about to
+        /// destroy — letting the timer expire afterwards would apply it to a board that has already
+        /// been rewound underneath it. Abandoning the queue is the only correct answer: there is no
+        /// position left for those moves to be legal in.
+        /// </summary>
+        public void Clear() => _queue.Clear();
     }
 }

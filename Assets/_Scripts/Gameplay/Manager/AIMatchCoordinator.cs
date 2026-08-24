@@ -161,10 +161,19 @@ namespace ChessTheBetrayal.Gameplay.Manager
             _aiAgent.RequestBestMove(_board, _aiTeam);
         }
 
-        /// <summary>Cancels an in-flight search without tearing down the agent — used by Undo's cancel-before-pop ordering, so the agent stays usable for the player's very next move.</summary>
+        /// <summary>
+        /// Discards whatever reply the AI still owes — a running search, or a move already decided
+        /// but not yet delivered — without tearing down the agent, so it stays usable for the
+        /// player's very next move. Used by Undo's cancel-before-pop ordering.
+        ///
+        /// Both states have to be checked. An opening-book reply never starts a search, so it is
+        /// undelivered while IsSearching is false; gating this on IsSearching alone let a book move
+        /// survive an Undo and then land on the rewound board a frame later.
+        /// </summary>
         public void CancelInFlightSearch()
         {
-            if (_aiAgent is not AsyncAIAgent asyncAgent || !asyncAgent.IsSearching) return;
+            if (_aiAgent is not AsyncAIAgent asyncAgent) return;
+            if (!asyncAgent.IsSearching && !asyncAgent.HasUndeliveredResult) return;
 
             asyncAgent.CancelSearch();
             _searchStopwatch.Reset();

@@ -4,6 +4,7 @@ using PrimeTween;
 using UnityEngine;
 using UnityEngine.Rendering;
 using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.Core.Match;
 
 namespace ChessTheBetrayal.View
 {
@@ -24,11 +25,12 @@ namespace ChessTheBetrayal.View
         private static readonly Ease MoveEase = Ease.OutQuad;
         private static readonly Ease ScaleEase = Ease.OutQuad;
 
-        // Per-style board-move feel. Quiet/Capture are both slightly longer than the legacy flat
-        // MoveDuration so the glide reads as deliberate motion rather than a snap; Knight is a
-        // touch slower still to give the arc room to read. Capture gets a brief landing punch;
-        // Knight arcs over the board via an extra Y-height tween run in parallel with the XZ slide.
-        private const float QuietMoveDuration = 0.22f;
+        // Per-style board-move feel. A quiet glide is the one style that can cross any distance, so
+        // its duration comes from MoveTravelTiming rather than a constant — a king stepping one
+        // square and a rook crossing the board used to take the same time, which made the rook read
+        // as a jump cut. The others each only ever cover a square or two: en passant is a single
+        // diagonal, a promotion is a step onto the back rank, and every knight move is two squares
+        // by definition, so an arc that needs a little extra room to read stays a fixed value.
         private const float CaptureMoveDuration = 0.2f;
         private const float KnightMoveDuration = 0.26f;
         private const float PromotionMoveDuration = 0.28f;
@@ -237,6 +239,7 @@ namespace ChessTheBetrayal.View
         private Tween _scaleTween;
         private Sequence _transitionSequence;
         private Sequence _castleSequence;
+        private Sequence _promotionApproachSequence;
         private Tween _settleBobTween;
         private float? _settleBobBaseY;
         private Sequence _stampSequence;
@@ -272,7 +275,7 @@ namespace ChessTheBetrayal.View
             MoveToInternal(worldPos, MoveDuration, MoveEase, punch: false, arc: false, force);
         }
 
-        public void MoveTo(Vector3 worldPos, MoveStyle style, bool force = false)
+        public void MoveTo(Vector3 worldPos, MoveStyle style, int squaresTravelled = 1, bool force = false)
         {
             switch (style)
             {
@@ -287,7 +290,7 @@ namespace ChessTheBetrayal.View
                     break;
                 case MoveStyle.Quiet:
                 default:
-                    MoveToInternal(worldPos, QuietMoveDuration, BoardMoveEase, punch: false, arc: false, force);
+                    MoveToInternal(worldPos, MoveTravelTiming.SecondsForSquares(squaresTravelled), BoardMoveEase, punch: false, arc: false, force);
                     break;
             }
         }
@@ -405,6 +408,42 @@ namespace ChessTheBetrayal.View
                 });
         }
 
+        public void PlayPromotionApproach(Vector3 worldPos, int squaresTravelled, Action onArrived)
+        {
+            if (!IsFinite(worldPos))
+            {
+                Debug.LogWarning($"[{nameof(PrimeTweenPieceAnimator)}] PlayPromotionApproach given non-finite vector for {_transform.name}. Ignoring.");
+                onArrived?.Invoke();
+                return;
+            }
+
+            _moveTween.Stop();
+            _punchSequence.Stop();
+            _castleSequence.Stop();
+            _settleBobTween.Stop();
+            _settleBobBaseY = null;
+            _stampSequence.Stop();
+            _promotionApproachSequence.Stop();
+            StopLiftTweens();
+            _liftRestPosition = null;
+            HideSelectionOutline(instant: true);
+
+            // Already standing there, so there is nothing to watch and the morph should start now.
+            // This is the human's pawn: it walks onto the square while the promotion prompt is
+            // open, so by the time a choice comes back it has long since arrived. Reporting
+            // straight away keeps that path exactly as it was rather than making the player wait
+            // through a second walk they already watched.
+            if (_transform.position == worldPos)
+            {
+                onArrived?.Invoke();
+                return;
+            }
+
+            _promotionApproachSequence = Sequence.Create(useUnscaledTime: true)
+                .Chain(Tween.Position(_transform, worldPos, MoveTravelTiming.SecondsForSquares(squaresTravelled), BoardMoveEase, useUnscaledTime: true))
+                .ChainCallback(() => onArrived?.Invoke());
+        }
+
         public void PlaySettleBob()
         {
             // Restore Y to whatever it was before the previous bob started (if one is still
@@ -429,9 +468,9 @@ namespace ChessTheBetrayal.View
                 .OnComplete(this, self => self._settleBobBaseY = null);
         }
 
-        public void PlayCaptureStamp(Vector3 worldPos, Action onDescentStart = null, Action onSettled = null)
+        public void PlayCaptureStamp(Vector3 worldPos, CaptureRunUp runUp = default, Action onDescentStart = null, Action onSettled = null)
         {
-            if (!IsFinite(worldPos))
+            if (!IsFinite(worldPos) || (runUp.HasGroundToCover && !IsFinite(runUp.LaunchFrom)))
             {
                 Debug.LogWarning($"[{nameof(PrimeTweenPieceAnimator)}] PlayCaptureStamp given non-finite vector for {_transform.name}. Ignoring.");
                 onDescentStart?.Invoke();
@@ -450,7 +489,11 @@ namespace ChessTheBetrayal.View
             HideSelectionOutline(instant: true);
 
             Vector3 restScale = _transform.localScale;
-            Vector3 startPos = _transform.position;
+            // Where the strike begins. With ground to cover that is the square next to the victim,
+            // not the square the piece is standing on — so the wind-up, the arc and its peak are
+            // all measured from there, and the leap stays the short pounce it was built as however
+            // far away the attacker started.
+            Vector3 startPos = runUp.HasGroundToCover ? runUp.LaunchFrom : _transform.position;
             Vector3 landPos = worldPos;
             float peakY = Mathf.Max(startPos.y, landPos.y) + StampLeapHeight;
 
@@ -476,9 +519,23 @@ namespace ChessTheBetrayal.View
             // useUnscaledTime — mixing an unscaled child into a scaled-time sequence (or vice
             // versa) is silently dropped by PrimeTween, so the sequence itself must be created
             // with useUnscaledTime up front rather than inferred from its first child.
-            _stampSequence = Sequence.Create(useUnscaledTime: true)
+            _stampSequence = Sequence.Create(useUnscaledTime: true);
+
+            // 0. The run-up, when there is one: the attacker walks in and strikes from next door.
+            // Stretched across half a board the leap stops being a pounce — a bishop leaving c1 for
+            // g5 covers eight units in the same third of a second and simply appears on top of its
+            // victim. Closing the distance first is also the honest read: the piece really did
+            // travel that far. Same glide vocabulary as any other board move, at charge pace,
+            // ending in a dead stop that the wind-up below then loads against.
+            if (runUp.HasGroundToCover)
+            {
+                _stampSequence.Chain(Tween.Position(_transform, startPos,
+                    MoveTravelTiming.ChargeSecondsForSquares(runUp.SquaresToCover), BoardMoveEase, useUnscaledTime: true));
+            }
+
+            _stampSequence
                 // 1. Anticipation: pull back and crouch down — a held breath before the pounce.
-                .Group(Tween.Position(_transform, pullBackPos, StampAnticipationDuration, StampAnticipationEase, useUnscaledTime: true))
+                .Chain(Tween.Position(_transform, pullBackPos, StampAnticipationDuration, StampAnticipationEase, useUnscaledTime: true))
                 .Group(Tween.Scale(_transform, crouchScale, StampAnticipationDuration, StampAnticipationEase, useUnscaledTime: true))
                 // 2. Leap, first half (0 -> 0.5): one driver tween computes XZ (lerp) and Y (the
                 // rising half of a parabola) from the same progress value every frame, so
@@ -502,7 +559,13 @@ namespace ChessTheBetrayal.View
                 // ...then recover with a big springy overshoot back down to rest scale — this is
                 // the "settling back to its normal size" beat that closes the whole arc.
                 .Chain(Tween.Scale(_transform, restScale, StampImpactRecoverDuration, Easing.Overshoot(StampRecoverOvershoot), useUnscaledTime: true))
+                // The bob is the last thing anyone sees of the capture, so onSettled waits it out
+                // rather than firing as it starts. Callers use that moment to begin an animation
+                // that must not overlap this one — a Defection spin queued on the piece that just
+                // captured — and starting one on top of a piece still bobbing is the overlap they
+                // were trying to avoid.
                 .ChainCallback(PlaySettleBob)
+                .Chain(Tween.Delay(SettleBobDuration, useUnscaledTime: true))
                 .ChainCallback(() => onSettled?.Invoke());
         }
 
@@ -618,6 +681,44 @@ namespace ChessTheBetrayal.View
                     .Chain(Tween.PositionY(_transform, startPos.y + EnPassantDeathHopHeight, EnPassantDeathDuration * 0.5f, EnPassantDeathHopEase, useUnscaledTime: true))
                     .Chain(Tween.PositionY(_transform, graveyardWorldPos.y, EnPassantDeathDuration * 0.5f, Ease.InQuad, useUnscaledTime: true)))
                 .ChainCallback(() => onArrived?.Invoke());
+        }
+
+        public void PlayGraveyardReturn(Vector3 boardWorldPos, Vector3 restScale, Action onArrived)
+        {
+            if (!IsFinite(boardWorldPos) || !IsFinite(restScale))
+            {
+                Debug.LogWarning($"[{nameof(PrimeTweenPieceAnimator)}] PlayGraveyardReturn given non-finite vector for {_transform.name}. Ignoring.");
+                onArrived?.Invoke();
+                return;
+            }
+
+            _moveTween.Stop();
+            _punchSequence.Stop();
+            _castleSequence.Stop();
+            _settleBobTween.Stop();
+            _settleBobBaseY = null;
+            _stampSequence.Stop();
+            StopLiftTweens();
+            _liftRestPosition = null;
+            HideSelectionOutline(instant: true);
+
+            Vector3 startPos = _transform.position;
+
+            // The death glide read backwards: the same InOutCubic travel and the same hop, with the
+            // piece swelling back to full size across it instead of shrinking away. The arrival
+            // overshoots where the death eased flat, because this one lands somewhere — a piece
+            // returning to the board should look like it means to be there.
+            _stampSequence = Sequence.Create(useUnscaledTime: true)
+                .Group(Tween.Position(_transform, new Vector3(boardWorldPos.x, startPos.y, boardWorldPos.z), EnPassantDeathDuration, EnPassantDeathMoveEase, useUnscaledTime: true))
+                .Group(Tween.Scale(_transform, restScale, EnPassantDeathDuration, Easing.Overshoot(1.4f), useUnscaledTime: true))
+                .Group(Sequence.Create(useUnscaledTime: true)
+                    .Chain(Tween.PositionY(_transform, startPos.y + EnPassantDeathHopHeight, EnPassantDeathDuration * 0.5f, EnPassantDeathHopEase, useUnscaledTime: true))
+                    .Chain(Tween.PositionY(_transform, boardWorldPos.y, EnPassantDeathDuration * 0.5f, Ease.OutBack, useUnscaledTime: true)))
+                .ChainCallback(() =>
+                {
+                    onArrived?.Invoke();
+                    PlaySettleBob();
+                });
         }
 
         public void ScaleTo(Vector3 scale, bool force = false)

@@ -87,6 +87,8 @@ namespace ChessTheBetrayal.App
         [SerializeField] private ChessTheBetrayal.Events.GameOverEventChannel _gameOverChannel;
         [SerializeField] private ChessTheBetrayal.Events.TurnChangedEventChannel _turnChangedChannel;
         [SerializeField] private ChessTheBetrayal.Events.MoveExecutedEventChannel _moveExecutedChannel;
+        [Tooltip("Announces each ply of a takeback as it comes back off the board, so the view can play the move in reverse. Leave unassigned and an undo falls back to rebuilding the position instead — correct, but the player only sees the result.")]
+        [SerializeField] private ChessTheBetrayal.Events.MoveUndoneEventChannel _moveUndoneChannel;
         [SerializeField] private ChessTheBetrayal.Events.MoveRejectedEventChannel _moveRejectedChannel;
         [SerializeField] private ChessTheBetrayal.Events.PromotionRequiredEventChannel _promotionRequiredChannel;
         [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _checkDetectedChannel;
@@ -153,6 +155,11 @@ namespace ChessTheBetrayal.App
         // _matchDriver.PlayMove directly, so a move only ever plays once the previous one has had
         // time to finish animating — see MoveVisualPacingGate's class doc for why.
         private MoveVisualPacingGate _moveVisualPacingGate;
+
+        // Paces a takeback out ply by ply so the player can watch it. Only built when there's a
+        // channel to announce those plies on — without one there is nothing to watch it with, and
+        // MatchFlowCoordinator falls back to rebuilding the position.
+        private UndoPlaybackSequencer _undoPlayback;
 
         // Practice-mode (AI) Undo. Subscribes to _matchDriver.OnTurnCompleted to record each
         // finished turn; null-safe everywhere since human-vs-human sessions never touch it.
@@ -239,6 +246,13 @@ namespace ChessTheBetrayal.App
 
             _moveVisualPacingGate = new MoveVisualPacingGate(_matchDriver.PlayMove, ChessTheBetrayal.Core.Match.MoveVisualDurationEstimator.EstimateSeconds);
 
+            if (_moveUndoneChannel != null)
+            {
+                _undoPlayback = new UndoPlaybackSequencer(
+                    payload => _moveUndoneChannel.Raise(payload),
+                    ChessTheBetrayal.Core.Match.MoveVisualDurationEstimator.EstimateSeconds);
+            }
+
             _aiCoordinator = new AIMatchCoordinator(_engine, LiveBoard, _moveVisualPacingGate.Enqueue, _domainLogger);
             _aiCoordinator.RecordTelemetry = enableAiTelemetrySharing;
             _aiCoordinator.OnSearchException += HandleAISearchException;
@@ -264,7 +278,9 @@ namespace ChessTheBetrayal.App
                 raiseBoardResyncRequired: () => _boardResyncRequiredChannel?.Raise(),
                 setSharedBoardState: board => _sharedBoardState?.Set(board),
                 clearSharedBoardState: () => _sharedBoardState?.Clear(),
-                raiseGameReset: () => _gameResetChannel?.Raise());
+                raiseGameReset: () => _gameResetChannel?.Raise(),
+                abandonQueuedMoves: _moveVisualPacingGate.Clear,
+                undoPlayback: _undoPlayback);
             _matchFlow.OpeningBook = _openingBook;
 
             _gameOverChannel?.Register(OnGameOverRaised);
@@ -390,6 +406,9 @@ namespace ChessTheBetrayal.App
 
             // Drain any move that arrived while the previous one was still animating.
             _moveVisualPacingGate.Tick(Time.deltaTime);
+
+            // Let a takeback in progress release its next ply.
+            _undoPlayback?.Tick(Time.deltaTime);
         }
 
         // A search exception on the worker thread would otherwise vanish silently, since nothing

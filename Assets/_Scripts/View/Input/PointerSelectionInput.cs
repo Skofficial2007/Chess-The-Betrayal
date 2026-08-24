@@ -1,6 +1,5 @@
 using System;
 using UnityEngine;
-using UnityEngine.InputSystem;
 using ChessTheBetrayal.UI;
 using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.Gameplay.Interaction;
@@ -17,12 +16,15 @@ namespace ChessTheBetrayal.View
     ///
     /// This script knows nothing about chess rules or selection state — it only resolves screen
     /// space to a board tile and reports taps. SelectionController interprets what a tap means.
+    /// The hardware read lives behind IPointerDevice and the tap rules in PointerTapRecognizer, so
+    /// what remains here is the part that genuinely needs a scene: a camera, a raycast, and the
+    /// hover highlight.
     /// </summary>
     public class PointerSelectionInput : MonoBehaviour, ISelectionInput
     {
         [Header("Input Settings")]
         [SerializeField] private LayerMask raycastMask = ~0; // Default: raycast everything
-        [Tooltip("Minimum real-time seconds between two accepted tile activations. A single physical tap can only ever produce one activation already (see WasPointerReleased), but this guards against rapid double-taps/mashing — e.g. a fast player tapping twice before the first tap's animation has visually settled — from both being processed as separate activations.")]
+        [Tooltip("Minimum real-time seconds between two accepted tile activations. A single physical tap can only ever produce one activation already, but this guards against rapid double-taps/mashing — e.g. a fast player tapping twice before the first tap's animation has visually settled — from both being processed as separate activations.")]
         [SerializeField, Range(0f, 0.5f)] private float minTimeBetweenActivations = 0.15f;
 
         [Header("Debug")]
@@ -35,14 +37,8 @@ namespace ChessTheBetrayal.View
         private IBoardQuery _gameManager;
         private IBoardHitTest _boardHitTest;
 
-        // Tracks the tile a press started on, so release can confirm it landed on the same tile.
-        private bool _isPressed;
-        private Vector2Int _pressStartTile = Vector2Int.Invalid;
-
-        // Debounce: the last time OnTileActivated actually fired, in unscaled real time (so it
-        // isn't affected by Time.timeScale, matching every animation tween in this codebase which
-        // runs useUnscaledTime). See minTimeBetweenActivations' doc comment for why this exists.
-        private float _lastActivationRealtime = float.NegativeInfinity;
+        private IPointerDevice _pointer;
+        private PointerTapRecognizer _recognizer;
 
         private void Awake()
         {
@@ -51,6 +47,9 @@ namespace ChessTheBetrayal.View
             {
                 Debug.LogError("[PointerSelectionInput] No main camera found!");
             }
+
+            _pointer = new UnityPointerDevice();
+            _recognizer = new PointerTapRecognizer(minTimeBetweenActivations);
         }
 
         private void Start()
@@ -66,34 +65,27 @@ namespace ChessTheBetrayal.View
             if (_uiBlockingState.IsUIBlocking()) return;
             if (!_gameManager.IsGameActive) return;
 
-            if (!TryGetPointerPosition(out Vector2 pointerPos)) return;
+            if (!PointerTapRecognizer.HasUsablePosition(_pointer.ReportsPositionWhileIdle, _pointer.IsPressed, _pointer.WasReleased))
+            {
+                // Nothing is on the glass, so nothing is hovered. Left lit, the last square a
+                // finger touched would keep glowing for the rest of the game.
+                _boardHitTest.ClearHoverHighlight();
+                return;
+            }
 
-            HandlePointer(pointerPos);
+            Vector2Int tile = ResolveTileUnderPointer(_pointer.Position);
+
+            if (_recognizer.Observe(_pointer.WasPressed, _pointer.WasReleased, tile, Time.unscaledTime))
+            {
+                OnTileActivated?.Invoke(tile);
+            }
         }
 
         /// <summary>
-        /// Attempts to get the current pointer position supporting both PC (Mouse) and Mobile (Touch).
-        /// Returns true if an active input device is found.
+        /// Casts into the board and reports which tile the pointer is over, updating the hover
+        /// highlight to match. Returns Vector2Int.Invalid when the pointer is off the board.
         /// </summary>
-        private bool TryGetPointerPosition(out Vector2 pos)
-        {
-            if (Touchscreen.current != null && Touchscreen.current.primaryTouch.press.isPressed)
-            {
-                pos = Touchscreen.current.primaryTouch.position.ReadValue();
-                return true;
-            }
-
-            if (Mouse.current != null)
-            {
-                pos = Mouse.current.position.ReadValue();
-                return true;
-            }
-
-            pos = Vector2.zero;
-            return false;
-        }
-
-        private void HandlePointer(Vector2 screenPos)
+        private Vector2Int ResolveTileUnderPointer(Vector2 screenPos)
         {
             Ray ray = mainCamera.ScreenPointToRay(screenPos);
 
@@ -102,73 +94,15 @@ namespace ChessTheBetrayal.View
                 Debug.DrawRay(ray.origin, ray.direction * 100f, Color.yellow);
             }
 
-            bool hitSomething = Physics.Raycast(ray, out RaycastHit hit, 200f, raycastMask);
-            Vector2Int hoverIndex = Vector2Int.Invalid;
-
-            if (hitSomething)
-            {
-                hoverIndex = _boardHitTest.GetTileIndexFromTransform(hit.transform);
-                _boardHitTest.UpdateHoverHighlight(hoverIndex);
-            }
-            else
+            if (!Physics.Raycast(ray, out RaycastHit hit, 200f, raycastMask))
             {
                 _boardHitTest.ClearHoverHighlight();
+                return Vector2Int.Invalid;
             }
 
-            if (WasPointerPressed())
-            {
-                _isPressed = true;
-                _pressStartTile = hoverIndex;
-            }
-
-            if (WasPointerReleased())
-            {
-                // A tap requires press and release on the same valid tile. Anything else
-                // (released off-board, or dragged to a different tile before release) is not
-                // a tile activation — the two-tap model has no use for drag gestures.
-                if (_isPressed && hoverIndex != Vector2Int.Invalid && hoverIndex == _pressStartTile)
-                {
-                    // Debounced: a fast double-tap/mash landing within minTimeBetweenActivations of
-                    // the last ACCEPTED activation is dropped rather than forwarded. Every downstream
-                    // consumer (SelectionController's two-tap state machine, GameManager.RequestMove)
-                    // already validates against authoritative logical state and is individually
-                    // reentrancy-safe, so this isn't fixing a correctness bug — it's closing the gap
-                    // where a fast repeated tap could visually interact with a piece/tile whose
-                    // previous move animation (slide, capture stamp, castle rook, promotion swap,
-                    // defection spin) hasn't settled yet, before it's even had a chance to read as
-                    // finished on screen.
-                    if (Time.unscaledTime - _lastActivationRealtime >= minTimeBetweenActivations)
-                    {
-                        _lastActivationRealtime = Time.unscaledTime;
-                        OnTileActivated?.Invoke(hoverIndex);
-                    }
-                }
-
-                _isPressed = false;
-                _pressStartTile = Vector2Int.Invalid;
-            }
-        }
-
-        private bool WasPointerPressed()
-        {
-            if (Touchscreen.current != null && Touchscreen.current.primaryTouch.press.wasPressedThisFrame)
-                return true;
-
-            if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
-                return true;
-
-            return false;
-        }
-
-        private bool WasPointerReleased()
-        {
-            if (Touchscreen.current != null && Touchscreen.current.primaryTouch.press.wasReleasedThisFrame)
-                return true;
-
-            if (Mouse.current != null && Mouse.current.leftButton.wasReleasedThisFrame)
-                return true;
-
-            return false;
+            Vector2Int tile = _boardHitTest.GetTileIndexFromTransform(hit.transform);
+            _boardHitTest.UpdateHoverHighlight(tile);
+            return tile;
         }
     }
 }

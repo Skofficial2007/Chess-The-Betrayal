@@ -80,10 +80,12 @@ namespace ChessTheBetrayal.View
         /// Same as SetPosition, but with an explicit MoveStyle (quiet slide, capture punch, knight
         /// arc, promotion glide) so a board move can carry its intended feel through to the
         /// animator without BoardVisuals needing to know how each style is actually tweened.
+        /// squaresTravelled lets a glide be paced against the distance it covers — see
+        /// IPieceAnimator.MoveTo.
         /// </summary>
-        public void SetPosition(Vector3 worldPos, MoveStyle style, bool force = false)
+        public void SetPosition(Vector3 worldPos, MoveStyle style, int squaresTravelled = 1, bool force = false)
         {
-            _animator.MoveTo(worldPos, style, force);
+            _animator.MoveTo(worldPos, style, squaresTravelled, force);
         }
 
         /// <summary>
@@ -95,6 +97,16 @@ namespace ChessTheBetrayal.View
         public void PlayCastleMove(Vector3 worldPos, float startDelay, Action onSettled = null)
         {
             _animator.MoveToForCastle(worldPos, startDelay, onSettled);
+        }
+
+        /// <summary>
+        /// Walks a promoting pawn onto the last rank and reports when it arrives, so the swap into
+        /// its new piece can wait for it. Reports immediately if the pawn is already standing there
+        /// — see PrimeTweenPieceAnimator.PlayPromotionApproach.
+        /// </summary>
+        public void PlayPromotionApproach(Vector3 worldPos, int squaresTravelled, Action onArrived)
+        {
+            _animator.PlayPromotionApproach(worldPos, squaresTravelled, onArrived);
         }
 
         /// <summary>
@@ -116,9 +128,9 @@ namespace ChessTheBetrayal.View
         /// happen strictly AFTER this capture reads as complete (e.g. a queued Betrayal Defection
         /// spin on this same piece).
         /// </summary>
-        public void PlayCaptureStamp(Vector3 worldPos, Action onDescentStart = null, Action onSettled = null)
+        public void PlayCaptureStamp(Vector3 worldPos, CaptureRunUp runUp = default, Action onDescentStart = null, Action onSettled = null)
         {
-            _animator.PlayCaptureStamp(worldPos, onDescentStart, onSettled);
+            _animator.PlayCaptureStamp(worldPos, runUp, onDescentStart, onSettled);
         }
 
         /// <summary>
@@ -141,6 +153,15 @@ namespace ChessTheBetrayal.View
         public void PlayEnPassantDeath(Vector3 graveyardWorldPos, Action onArrived)
         {
             _animator.PlayEnPassantDeath(graveyardWorldPos, onArrived);
+        }
+
+        /// <summary>
+        /// Brings this piece back from the death pile onto boardWorldPos at restScale, because the
+        /// capture that put it there was taken back.
+        /// </summary>
+        public void PlayGraveyardReturn(Vector3 boardWorldPos, Vector3 restScale, Action onArrived)
+        {
+            _animator.PlayGraveyardReturn(boardWorldPos, restScale, onArrived);
         }
 
         /// <summary>
@@ -169,6 +190,18 @@ namespace ChessTheBetrayal.View
             if (_col != null)
             {
                 _col.enabled = false;
+            }
+        }
+
+        /// <summary>
+        /// Turns the collider back on — for a piece returning to the board from the graveyard when
+        /// its capture is taken back. Without this it would stand on its square untouchable.
+        /// </summary>
+        public void EnableCollider()
+        {
+            if (_col != null)
+            {
+                _col.enabled = true;
             }
         }
 

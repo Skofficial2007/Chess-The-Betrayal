@@ -50,10 +50,10 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         }
 
         [Test]
-        public void RequestUndo_AiSearchNotInFlight_PopsBothPlayerAndAiTurn()
+        public void RequestUndo_AfterAiHasReplied_PopsBothPlayerAndAiTurn()
         {
-            // Player: a2-a3. AI (Black): a7-a6. Undo (search finished) must restore both pawns
-            // and hand the turn back to White, exactly as it stood before either move.
+            // Player: a2-a3. AI (Black): a7-a6. Undo must restore both pawns and hand the turn back
+            // to White, exactly as it stood before either move.
             ulong hashBefore = _board.ZobristHash;
 
             _matchDriver.PlayMove(StandardMove(_board, "a2", "a3"));
@@ -61,7 +61,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
 
             Assert.That(_board.CurrentTurn, Is.EqualTo(Team.White));
 
-            _undoService.RequestUndo(isAIMode: true, currentPhase: _matchDriver.CurrentPhase, aiSearchInFlight: false, aiMovesFirst: false);
+            _undoService.RequestUndo(isAIMode: true, currentPhase: _matchDriver.CurrentPhase, humanTeam: Team.White, aiMovesFirst: false);
 
             Assert.That(_board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("a2")).Type, Is.EqualTo(ChessPieceType.Pawn));
             Assert.That(_board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("a7")).Type, Is.EqualTo(ChessPieceType.Pawn));
@@ -93,7 +93,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             Assert.That(_matchDriver.MoveLog.Entries.Count, Is.EqualTo(4));
 
             // First press: pop turn-pair 2, back to the position after turn 1.
-            _undoService.RequestUndo(isAIMode: true, currentPhase: _matchDriver.CurrentPhase, aiSearchInFlight: false, aiMovesFirst: false);
+            _undoService.RequestUndo(isAIMode: true, currentPhase: _matchDriver.CurrentPhase, humanTeam: Team.White, aiMovesFirst: false);
             Assert.That(_board.CurrentTurn, Is.EqualTo(Team.White));
             Assert.That(_board.ZobristHash, Is.EqualTo(hashAfterTurn1));
             Assert.That(_matchDriver.MoveLog.Entries.Count, Is.EqualTo(2));
@@ -101,7 +101,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
                 "Still one turn-pair on the stack — Undo must stay available.");
 
             // Second press: pop turn-pair 1, back to the opening position.
-            _undoService.RequestUndo(isAIMode: true, currentPhase: _matchDriver.CurrentPhase, aiSearchInFlight: false, aiMovesFirst: false);
+            _undoService.RequestUndo(isAIMode: true, currentPhase: _matchDriver.CurrentPhase, humanTeam: Team.White, aiMovesFirst: false);
             Assert.That(_board.CurrentTurn, Is.EqualTo(Team.White));
             Assert.That(_board.ZobristHash, Is.EqualTo(hashAtStart));
             Assert.That(_matchDriver.MoveLog.Entries.Count, Is.EqualTo(0));
@@ -128,7 +128,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
 
             // One press pops the AI reply + the human's turn under it, landing back on Black with only
             // the protected White opening left on the stack.
-            _undoService.RequestUndo(isAIMode: true, currentPhase: _matchDriver.CurrentPhase, aiSearchInFlight: false, aiMovesFirst: true);
+            _undoService.RequestUndo(isAIMode: true, currentPhase: _matchDriver.CurrentPhase, humanTeam: Team.Black, aiMovesFirst: true);
 
             Assert.That(_board.CurrentTurn, Is.EqualTo(Team.Black), "Undo must land on the human's turn, not the AI's.");
             Assert.That(_board.ZobristHash, Is.EqualTo(hashAfterAiOpening), "Board is back to just after the AI's opening.");
@@ -140,26 +140,58 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             Assert.That(_undoService.CanUndo(isAIMode: true, _matchDriver.CurrentPhase, aiMovesFirst: true), Is.False,
                 "Only the AI's protected opening remains — Undo must be unavailable (the 'stuck on first move' bug).");
 
-            _undoService.RequestUndo(isAIMode: true, currentPhase: _matchDriver.CurrentPhase, aiSearchInFlight: false, aiMovesFirst: true);
+            _undoService.RequestUndo(isAIMode: true, currentPhase: _matchDriver.CurrentPhase, humanTeam: Team.Black, aiMovesFirst: true);
             Assert.That(_board.CurrentTurn, Is.EqualTo(Team.Black), "A no-op Undo must not flip the board onto the AI's turn.");
             Assert.That(_board.ZobristHash, Is.EqualTo(hashAfterAiOpening), "A no-op Undo must not change the board.");
         }
 
         [Test]
-        public void RequestUndo_AiSearchInFlight_PopsOnlyPlayerTurn()
+        public void RequestUndo_AiHasNotRepliedYet_PopsOnlyPlayerTurn()
         {
-            // AI's reply never arrived (search still running when Undo was pressed), so only the
-            // player's own last turn needs unwinding — CurrentTurn must land back on White.
+            // The AI's reply never reached the board, so the player's own turn is still on top and
+            // only it needs unwinding — CurrentTurn must land back on White. Nothing tells the
+            // service this; it reads it off the board, which is already sitting on the AI's turn.
             _matchDriver.PlayMove(StandardMove(_board, "a2", "a3"));
             Assert.That(_board.CurrentTurn, Is.EqualTo(Team.Black));
 
-            _undoService.RequestUndo(isAIMode: true, currentPhase: _matchDriver.CurrentPhase, aiSearchInFlight: true, aiMovesFirst: false);
+            _undoService.RequestUndo(isAIMode: true, currentPhase: _matchDriver.CurrentPhase, humanTeam: Team.White, aiMovesFirst: false);
 
             Assert.That(_board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("a2")).Type, Is.EqualTo(ChessPieceType.Pawn));
             Assert.That(_board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("a3")).IsEmpty, Is.True);
             Assert.That(_board.CurrentTurn, Is.EqualTo(Team.White));
             Assert.That(_matchDriver.CurrentPhase, Is.EqualTo(TurnPhase.Normal));
             Assert.That(_matchDriver.MoveLog.Entries.Count, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// The AI's reply hasn't landed, but there is plenty of history underneath — so nothing but
+        /// the turn count itself can stop the walk-back going one turn too far. Popping the pair
+        /// here would rewind past a move the player never asked to take back AND leave the board on
+        /// the AI's turn, which is the state an Undo is supposed to be incapable of producing.
+        ///
+        /// This is the shape a queued-but-unplayed AI reply produces, and it is why the pop count is
+        /// read off the board rather than taken as an argument.
+        /// </summary>
+        [Test]
+        public void RequestUndo_AiHasNotRepliedYet_WithHistoryBeneath_StillPopsOnlyOneTurn()
+        {
+            _matchDriver.PlayMove(StandardMove(_board, "a2", "a3")); // White (human) turn 1
+            _matchDriver.PlayMove(StandardMove(_board, "a7", "a6")); // Black (AI) turn 1
+            ulong hashAfterAiReply = _board.ZobristHash;
+
+            _matchDriver.PlayMove(StandardMove(_board, "a3", "a4")); // White (human) turn 2
+
+            Assert.That(_board.CurrentTurn, Is.EqualTo(Team.Black), "Guard: the AI is on the move and has not replied.");
+            Assert.That(_undoService.TurnCount, Is.EqualTo(3), "Guard: there is history beneath, so only the turn rule can stop the walk-back.");
+
+            _undoService.RequestUndo(isAIMode: true, currentPhase: _matchDriver.CurrentPhase, humanTeam: Team.White, aiMovesFirst: false);
+
+            Assert.That(_board.CurrentTurn, Is.EqualTo(Team.White));
+            Assert.That(_undoService.TurnCount, Is.EqualTo(2), "Only the player's own unanswered turn comes off.");
+            Assert.That(_board.ZobristHash, Is.EqualTo(hashAfterAiReply),
+                "The board must land exactly where the AI's last reply left it, not a turn earlier.");
+            Assert.That(_board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("a6")).Type, Is.EqualTo(ChessPieceType.Pawn),
+                "The AI's own earlier reply must survive — it was never part of this takeback.");
         }
 
         [Test]
@@ -193,7 +225,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             Assert.That(_board.CurrentTurn, Is.EqualTo(Team.Black));
             Assert.That(_matchDriver.CurrentPhase, Is.EqualTo(TurnPhase.Normal));
 
-            _undoService.RequestUndo(isAIMode: true, currentPhase: _matchDriver.CurrentPhase, aiSearchInFlight: true, aiMovesFirst: false);
+            _undoService.RequestUndo(isAIMode: true, currentPhase: _matchDriver.CurrentPhase, humanTeam: Team.White, aiMovesFirst: false);
 
             Assert.That(_board.CurrentTurn, Is.EqualTo(Team.White));
             Assert.That(_board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("b1")).Type, Is.EqualTo(ChessPieceType.Knight));
@@ -233,7 +265,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             Assert.That(_board.CurrentTurn, Is.EqualTo(Team.Black), "Defection with no ForcedSave must pass the turn.");
             Assert.That(_board.PendingBetrayerSquare, Is.Null);
 
-            _undoService.RequestUndo(isAIMode: true, currentPhase: _matchDriver.CurrentPhase, aiSearchInFlight: true, aiMovesFirst: false);
+            _undoService.RequestUndo(isAIMode: true, currentPhase: _matchDriver.CurrentPhase, humanTeam: Team.White, aiMovesFirst: false);
 
             Assert.That(_board.CurrentTurn, Is.EqualTo(Team.White),
                 "Undo must restore White to move — the pre-fix bug left CurrentTurn on Black because " +
@@ -243,6 +275,116 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             Assert.DoesNotThrow(() => _board.AssertZobristConsistency());
             Assert.That(_board.ZobristHash, Is.EqualTo(hashBefore));
             Assert.That(_matchDriver.MoveLog.Entries.Count, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// CanUndo deliberately allows TurnPhase.GameOver, so taking back a checkmate is a supported
+        /// press. Unmaking the moves is not enough on its own: BoardState.IsGameOver is set by
+        /// MatchDriver.EndGame and no engine unmake ever clears it, and while it is true both
+        /// MatchDriver.CanSelectPiece and the coordinator's RequestMove refuse everything — so the
+        /// board came back to a legal position that the player could not touch.
+        /// </summary>
+        [Test]
+        public void RequestUndo_AfterCheckmate_LeavesTheBoardPlayableAgain()
+        {
+            // Black king boxed in on h8 by its own pawns; White mates down the open a-file onto the
+            // back rank. Betrayal is switched off, or the king escapes by capturing its own g7 pawn
+            // and the position is no longer mate at all.
+            ClearSquares("a2", "a7", "e8");
+            _board.WithPiece("h8", Team.Black, ChessPieceType.King);
+            _board.WithPiece("g7", Team.Black, ChessPieceType.Pawn);
+            _board.WithPiece("h7", Team.Black, ChessPieceType.Pawn);
+            _board.WithPiece("a1", Team.White, ChessPieceType.Rook);
+            _board.WithBetrayalRight(false);
+            _board.ComputeFullZobristHash();
+
+            _matchDriver.PlayMove(StandardMove(_board, "a1", "a8"));
+
+            Assert.That(_board.IsGameOver, Is.True, "Guard: the position must actually be checkmate for this test to mean anything.");
+            Assert.That(_matchDriver.CurrentPhase, Is.EqualTo(TurnPhase.GameOver));
+
+            _undoService.RequestUndo(isAIMode: true, currentPhase: _matchDriver.CurrentPhase, humanTeam: Team.White, aiMovesFirst: false);
+
+            Assert.That(_board.IsGameOver, Is.False);
+            Assert.That(_board.Winner, Is.Null);
+            Assert.That(_matchDriver.CurrentPhase, Is.EqualTo(TurnPhase.Normal));
+            Assert.That(_board.CurrentTurn, Is.EqualTo(Team.White));
+            Assert.That(_matchDriver.CanSelectPiece(TestBoardSetupUtility.AlgebraicToVector("a1")), Is.True,
+                "The rook is back on a1 and it is White's turn — the player must be able to pick it up again.");
+        }
+
+        /// <summary>
+        /// Anything replaying a takeback has to walk history backwards, because a captured piece
+        /// only goes back where it came from while the plies come off newest-first. The order is
+        /// reported rather than left to be worked out, so this pins it.
+        /// </summary>
+        [Test]
+        public void RequestUndo_ReportsEveryUnmadePly_NewestFirst()
+        {
+            _matchDriver.PlayMove(StandardMove(_board, "a2", "a3")); // White (human)
+            _matchDriver.PlayMove(StandardMove(_board, "a7", "a6")); // Black (AI)
+
+            var unmade = new System.Collections.Generic.List<MoveCommand>();
+            _undoService.RequestUndo(isAIMode: true, currentPhase: _matchDriver.CurrentPhase,
+                humanTeam: Team.White, aiMovesFirst: false, unmadeMoves: unmade);
+
+            Assert.That(unmade, Has.Count.EqualTo(2));
+            Assert.That(unmade[0].StartPosition, Is.EqualTo(TestBoardSetupUtility.AlgebraicToVector("a7")),
+                "The AI's reply came off first, so it must be reported first.");
+            Assert.That(unmade[1].StartPosition, Is.EqualTo(TestBoardSetupUtility.AlgebraicToVector("a2")),
+                "The player's own move came off underneath it.");
+        }
+
+        /// <summary>
+        /// A Betrayal turn is more than one ply, and all of them belong to the single turn a press
+        /// takes back — so every one has to be reported, still newest-first, or a replay would show
+        /// part of a turn undoing itself.
+        /// </summary>
+        [Test]
+        public void RequestUndo_BetrayalTurn_ReportsEveryPlyOfThatTurn()
+        {
+            ClearSquares("a2");
+            _board.WithPiece("b1", Team.White, ChessPieceType.Knight);
+            _board.WithPiece("a1", Team.White, ChessPieceType.Rook);
+            _board.WithPiece("a3", Team.White, ChessPieceType.Pawn); // Betrayal victim
+            _board.WithBetrayalRight(true);
+            _board.ComputeFullZobristHash();
+
+            var actMoves = new System.Collections.Generic.List<MoveCommand>();
+            ChessEngine.GetBetrayalTargets(_board, TestBoardSetupUtility.AlgebraicToVector("b1"), actMoves);
+            _matchDriver.PlayMove(actMoves[0]);
+
+            var retMoves = new System.Collections.Generic.List<MoveCommand>();
+            _engine.GetRetributionMoves(_board, Team.White, _board.PendingBetrayerSquare.Value, retMoves);
+            _matchDriver.PlayMove(retMoves[0]);
+
+            var unmade = new System.Collections.Generic.List<MoveCommand>();
+            _undoService.RequestUndo(isAIMode: true, currentPhase: _matchDriver.CurrentPhase,
+                humanTeam: Team.White, aiMovesFirst: false, unmadeMoves: unmade);
+
+            Assert.That(unmade, Has.Count.EqualTo(2), "Act and Retribution are one turn, but two plies to replay.");
+            Assert.That(unmade[0].Stage, Is.EqualTo(BetrayalStage.Retribution), "The turn's last ply comes off first.");
+            Assert.That(unmade[1].Stage, Is.EqualTo(BetrayalStage.Act));
+        }
+
+        [Test]
+        public void RequestUndo_NothingToUndo_ReportsNoPlies()
+        {
+            var unmade = new System.Collections.Generic.List<MoveCommand> { StandardMove(_board, "a2", "a3") };
+
+            _undoService.RequestUndo(isAIMode: true, currentPhase: TurnPhase.Normal,
+                humanTeam: Team.White, aiMovesFirst: false, unmadeMoves: unmade);
+
+            Assert.That(unmade, Is.Empty, "A press with nothing to take back must not leave stale plies for a replay to act on.");
+        }
+
+        private void ClearSquares(params string[] squares)
+        {
+            for (int i = 0; i < squares.Length; i++)
+            {
+                Vector2Int square = TestBoardSetupUtility.AlgebraicToVector(squares[i]);
+                _board.SetPiece(PieceData.Empty, square.x, square.y);
+            }
         }
 
         [Test]
