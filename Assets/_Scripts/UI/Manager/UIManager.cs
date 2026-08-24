@@ -2,11 +2,11 @@ using System;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using ChessTheBetrayal.Core.Data;
-using ChessTheBetrayal.Core.Diagnostics;
 using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.Infrastructure;
+using ChessTheBetrayal.UI.Panels;
 
-namespace ChessTheBetrayal.UI
+namespace ChessTheBetrayal.UI.Manager
 {
     /// <summary>
     /// The traffic controller for all UI panels. It knows which panels should be open at any given time and listens to UI events to pass player choices (team selection, promotions) up to GameManager.
@@ -26,10 +26,10 @@ namespace ChessTheBetrayal.UI
         [SerializeField] private ChessTheBetrayal.UI.Controls.WarningPopup warningPopup;
 
         [Header("Event Channels")]
-        [SerializeField] private ChessTheBetrayal.Events.TeamSelectedEventChannel _teamSelectedChannel;
-        [SerializeField] private ChessTheBetrayal.Events.PromotionRequiredEventChannel _promotionRequiredChannel;
-        [SerializeField] private ChessTheBetrayal.Events.GameOverEventChannel _gameOverChannel;
-        [SerializeField] private ChessTheBetrayal.Events.GameModeConfiguredEventChannel _gameModeConfiguredChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.TeamSelectedEventChannel _teamSelectedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.PromotionRequiredEventChannel _promotionRequiredChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.GameOverEventChannel _gameOverChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.GameModeConfiguredEventChannel _gameModeConfiguredChannel;
 
         // Events
         public event Action<GameModeConfig> OnGameModeSelected;

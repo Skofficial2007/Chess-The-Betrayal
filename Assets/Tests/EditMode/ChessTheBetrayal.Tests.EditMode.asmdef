@@ -1,5 +1,6 @@
 {
   "name": "ChessTheBetrayal.Tests.EditMode",
+  "rootNamespace": "ChessTheBetrayal.Tests.EditMode",
   "references": [
     "ChessTheBetrayal.Core",
     "ChessTheBetrayal.Gameplay.Flow",
@@ -7,7 +8,7 @@
     "ChessTheBetrayal.Gameplay.Manager",
     "ChessTheBetrayal.AI",
     "ChessTheBetrayal.Events",
-    "ChessTheBetrayal.Tests.Utilities",
+    "ChessTheBetrayal.Tooling",
     "ChessTheBetrayal.EditorTools",
     "ChessTheBetrayal.UI.SafeArea",
     "ChessTheBetrayal.UI",

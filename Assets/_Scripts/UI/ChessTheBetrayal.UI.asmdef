@@ -1,5 +1,6 @@
 {
   "name": "ChessTheBetrayal.UI",
+  "rootNamespace": "ChessTheBetrayal.UI",
   "references": [
     "ChessTheBetrayal.Core",
     "ChessTheBetrayal.AI",

@@ -3,7 +3,7 @@ using NUnit.Framework;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Diagnostics;
 using ChessTheBetrayal.Core.Engine;
-using ChessTheBetrayal.Tests.Utilities;
+using ChessTheBetrayal.Tooling;
 
 namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
 {
@@ -25,7 +25,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
         /// BetrayalInitiator stays White (who initiated the original Betrayal), matching what
         /// ChessEngine.ResolveDefection leaves behind when RequiresForcedSave is true.</summary>
         private static BoardState ForcedSavePendingBoard() =>
-            TestBoardSetupUtility.CreateEmpty()
+            BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e4", Team.Black, ChessPieceType.Rook) // defected: now Black, still marked pending
                 .WithPiece("h4", Team.White, ChessPieceType.Rook) // can capture the defected piece
@@ -85,7 +85,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
         public void GetForcedSaveMoves_RetributionStillPending_ThrowsTheInvariantViolation()
         {
             // The OTHER pending state — Betrayer has NOT defected yet — must still be rejected loudly.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e4", Team.White, ChessPieceType.Rook) // still White: not defected
                 .WithTurn(Team.Black)
@@ -115,7 +115,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
             // condition the search resolves itself (see AlphaBetaSearch.PlayForcedSaveMoves scoring
             // an empty save list as mate) — EvaluateGameState must not also try to call it, since it
             // has no Betrayal-aware move generator of its own to check against.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithPiece("b1", Team.White, ChessPieceType.Rook)
                 .WithPiece("a2", Team.White, ChessPieceType.Pawn)

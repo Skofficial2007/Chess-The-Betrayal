@@ -3,7 +3,7 @@ using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Events.Payloads;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
-namespace ChessTheBetrayal.View
+namespace ChessTheBetrayal.View.Board
 {
     /// <summary>
     /// Lifts the selected piece on PieceSelected and lowers it back on SelectionCleared. Pure
@@ -15,8 +15,8 @@ namespace ChessTheBetrayal.View
         [SerializeField] private BoardVisuals boardVisuals;
 
         [Header("Event Channels")]
-        [SerializeField] private ChessTheBetrayal.Events.PieceSelectedEventChannel _pieceSelectedChannel;
-        [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _selectionClearedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.PieceSelectedEventChannel _pieceSelectedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.GameEventChannel _selectionClearedChannel;
 
         // SelectionClearedEvent carries no payload, so we remember what we lifted.
         private Vector2Int _liftedTile = Vector2Int.Invalid;

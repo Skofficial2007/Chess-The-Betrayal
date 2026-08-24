@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 
-namespace ChessTheBetrayal.Core.Movement
+namespace ChessTheBetrayal.Core.Engine.Movement
 {
     /// <summary>
     /// Movement strategy for the Queen piece.
@@ -10,7 +10,7 @@ namespace ChessTheBetrayal.Core.Movement
     /// Cannot jump over pieces - stops when encountering any piece.
     /// Most powerful piece in standard chess.
     /// </summary>
-    public class QueenMovement : IPieceMovement
+    internal sealed class QueenMovement : IPieceMovement
     {
         // All 8 directions combined (4 straight + 4 diagonal)
         private static readonly int[,] Directions = new int[,]

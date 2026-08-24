@@ -4,7 +4,7 @@ using TMPro;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Logic;
 
-namespace ChessTheBetrayal.UI
+namespace ChessTheBetrayal.UI.Panels
 {
     /// <summary>
     /// Shows the remaining time for each side on the clock HUD.
@@ -23,7 +23,7 @@ namespace ChessTheBetrayal.UI
         [SerializeField] private long _lowTimeFlashThresholdMs = 10_000L;
 
         [Header("Data Source")]
-        [SerializeField] private ChessTheBetrayal.Events.SharedClockStateSO _sharedClockState;
+        [SerializeField] private ChessTheBetrayal.Events.State.SharedClockStateSO _sharedClockState;
 
         // Reused each frame so the per-frame time update does not build a new string.
         private readonly StringBuilder _sb = new StringBuilder(8);

@@ -1,6 +1,6 @@
 using ChessTheBetrayal.Core.Match;
 
-namespace ChessTheBetrayal.Network
+namespace ChessTheBetrayal.Network.Flow
 {
     /// <summary>
     /// TODO(Multiplayer): request a rematch from the opponent under the same mode that was played,

@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using ChessTheBetrayal.AI;
+using ChessTheBetrayal.AI.Search;
+using ChessTheBetrayal.AI.Profiles;
+using ChessTheBetrayal.AI.Evaluation;
+using ChessTheBetrayal.AI.Agent;
 using ChessTheBetrayal.AI.MatchTelemetry;
 using ChessTheBetrayal.AI.OpeningBook;
 using ChessTheBetrayal.Core.Data;

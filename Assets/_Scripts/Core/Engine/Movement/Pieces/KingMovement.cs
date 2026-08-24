@@ -2,14 +2,14 @@ using System.Collections.Generic;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 
-namespace ChessTheBetrayal.Core.Movement
+namespace ChessTheBetrayal.Core.Engine.Movement
 {
     /// <summary>
     /// Movement strategy for the King piece.
     /// Kings move one square in any direction (8 possible moves).
     /// Special move: Castling (with Rook) under specific conditions.
     /// </summary>
-    public class KingMovement : IPieceMovement
+    internal sealed class KingMovement : IPieceMovement
     {
         // 8 adjacent squares (one step in each direction)
         private static readonly int[,] Offsets = new int[,]

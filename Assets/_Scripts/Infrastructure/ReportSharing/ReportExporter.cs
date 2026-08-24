@@ -1,12 +1,9 @@
 using System;
 using System.IO;
-using System.Runtime.CompilerServices;
 using System.Text;
 using UnityEngine;
 
-[assembly: InternalsVisibleTo("ChessTheBetrayal.Tests.EditMode")]
-
-namespace ChessTheBetrayal.Infrastructure
+namespace ChessTheBetrayal.Infrastructure.ReportSharing
 {
     /// <summary>What came of trying to get a report to the tester, in terms a person can be shown.</summary>
     public readonly struct ReportExportResult

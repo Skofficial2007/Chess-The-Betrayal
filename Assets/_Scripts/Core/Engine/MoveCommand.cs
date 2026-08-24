@@ -37,10 +37,10 @@ namespace ChessTheBetrayal.Core.Engine
     /// Because it's a readonly struct, it's safe to store and pass around without worrying about data being changed underneath you.
     /// </summary>
     /// <remarks>
-    /// TODO: this struct is deliberately full-fidelity, which makes it fairly large. When the AI
-    /// search work happens, the plan is to add a compact packed move type for the search tree only
-    /// and expand it back into a MoveCommand when a move is actually applied. Don't shrink this
-    /// type before then — game execution and network serialization need the full data.
+    /// Deliberately full-fidelity, which makes it fairly large. Don't shrink it — undo, game
+    /// execution and network serialization all need every field. Where only a move's identity is
+    /// wanted rather than its full state, PackedMove squeezes the four fields that identify one
+    /// into nineteen bits; that form is lossy and is never expanded back into a MoveCommand.
     /// </remarks>
     public readonly struct MoveCommand
     {

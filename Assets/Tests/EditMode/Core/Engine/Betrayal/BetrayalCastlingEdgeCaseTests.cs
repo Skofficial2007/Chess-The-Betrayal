@@ -2,7 +2,7 @@ using NUnit.Framework;
 using System.Collections.Generic;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
-using ChessTheBetrayal.Tests.Utilities;
+using ChessTheBetrayal.Tooling;
 
 namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
 {
@@ -28,7 +28,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
             // Arrange: White King on e1, White Rook on h1. 
             // A Betrayer sits on g1 (the exact destination square for White Kingside castling).
             // A friendly Queen sits on g4, able to legally execute the Betrayer.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("h1", Team.White, ChessPieceType.Rook)
                 .WithPiece("g4", Team.White, ChessPieceType.Queen)
@@ -40,7 +40,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
             board.CastlingRights = BoardState.CastlingWhiteKingside;
 
             // Act
-            ChessEngine.GetRetributionMoves(board, Team.White, TestBoardSetupUtility.AlgebraicToVector("g1"), _moveBuffer);
+            ChessEngine.GetRetributionMoves(board, Team.White, BoardSetup.AlgebraicToVector("g1"), _moveBuffer);
 
             // Assert
             Assert.That(_moveBuffer.Count, Is.GreaterThan(0), "There should be valid execution moves (e.g., from the Queen).");
@@ -56,7 +56,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
         {
             // Arrange: Black King on e8, Black Rook on a8. 
             // A Betrayer sits on c8 (the exact destination square for Black Queenside castling).
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("a8", Team.Black, ChessPieceType.Rook)
                 .WithPiece("c4", Team.Black, ChessPieceType.Rook) // An executioner
@@ -68,7 +68,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
             board.CastlingRights = BoardState.CastlingBlackQueenside;
 
             // Act
-            ChessEngine.GetRetributionMoves(board, Team.Black, TestBoardSetupUtility.AlgebraicToVector("c8"), _moveBuffer);
+            ChessEngine.GetRetributionMoves(board, Team.Black, BoardSetup.AlgebraicToVector("c8"), _moveBuffer);
 
             // Assert
             Assert.That(_moveBuffer.Count, Is.GreaterThan(0), "There should be valid execution moves (e.g., from the Rook).");
@@ -85,7 +85,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
             // Arrange: White King on e1, White Rook on h1. 
             // A friendly Knight sits on g1 (in the castling path).
             // Proves that castling mechanics cannot be exploited to "betray" the Knight.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("h1", Team.White, ChessPieceType.Rook)
                 .WithPiece("g1", Team.White, ChessPieceType.Knight) // Friendly piece in castling path
@@ -95,7 +95,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
             board.CastlingRights = BoardState.CastlingWhiteKingside;
 
             // Act
-            ChessEngine.GetBetrayalTargets(board, TestBoardSetupUtility.AlgebraicToVector("e1"), _moveBuffer);
+            ChessEngine.GetBetrayalTargets(board, BoardSetup.AlgebraicToVector("e1"), _moveBuffer);
 
             // Assert
             Assert.That(_moveBuffer.Count, Is.EqualTo(0), "The King is fundamentally excluded from acting as a Betrayer, therefore castling as an Act is impossible.");

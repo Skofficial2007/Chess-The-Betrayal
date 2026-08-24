@@ -7,8 +7,9 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.Events;
+using ChessTheBetrayal.Events.Channels;
 
-namespace ChessTheBetrayal.Events.Editor
+namespace ChessTheBetrayal.EditorTools
 {
     /// <summary>
     /// One-shot static audit of the open scene's Inspector wiring. Reports every unassigned

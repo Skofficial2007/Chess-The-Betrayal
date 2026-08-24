@@ -56,13 +56,10 @@ namespace ChessTheBetrayal.EditorTools.OpeningBook
         private static Vector2Int ParseSquare(
             string square, string token, System.Func<string, System.Exception> failure)
         {
-            char file = char.ToLowerInvariant(square[0]);
-            char rank = square[1];
-
-            if (file < 'a' || file > 'h' || rank < '1' || rank > '8')
+            if (!SquareNotation.TryParse(square, out Vector2Int parsed))
                 throw failure($"Move '{token}' contains an out-of-range square '{square}'.");
 
-            return new Vector2Int(file - 'a', rank - '1');
+            return parsed;
         }
 
         private static ChessPieceType ParsePromotionLetter(

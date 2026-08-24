@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using ChessTheBetrayal.AI.Positions;
+using ChessTheBetrayal.AI.Profiles;
 
 namespace ChessTheBetrayal.AI.DeviceBenchmark
 {

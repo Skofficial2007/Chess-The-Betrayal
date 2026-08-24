@@ -5,11 +5,11 @@ using UnityEngine.SceneManagement;
 using UnityEngine.Serialization;
 using UnityEngine.UI;
 using ChessTheBetrayal.AI.DeviceBenchmark;
-using ChessTheBetrayal.Core.Diagnostics;
 using ChessTheBetrayal.Infrastructure;
+using ChessTheBetrayal.Infrastructure.ReportSharing;
 using ChessTheBetrayal.UI.Controls;
 
-namespace ChessTheBetrayal.UI
+namespace ChessTheBetrayal.UI.DeviceBenchmark
 {
     /// <summary>
     /// The on-screen face of the device benchmark: two buttons that each start a different run, a

@@ -66,7 +66,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
         }
 
         /// <summary>Writes the latest clock snapshot to the shared bridge. No-op (bridge left untouched) when no clock is active.</summary>
-        public void PushSnapshotTo(ChessTheBetrayal.Events.SharedClockStateSO sharedClockState)
+        public void PushSnapshotTo(ChessTheBetrayal.Events.State.SharedClockStateSO sharedClockState)
         {
             if (_clockController == null) return;
             sharedClockState?.Set(Current);

@@ -2,7 +2,7 @@ using ChessTheBetrayal.Events.Payloads;
 using ChessTheBetrayal.Core.Data;
 using UnityEngine;
 
-namespace ChessTheBetrayal.Events
+namespace ChessTheBetrayal.Events.Channels
 {
     [CreateAssetMenu(menuName = "Chess/Events/Low Time Alert", fileName = "LowTimeAlertEvent")]
     public sealed class LowTimeAlertEventChannel : GameEventChannel<LowTimeAlertPayload>

@@ -2,14 +2,14 @@ using System.Collections.Generic;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 
-namespace ChessTheBetrayal.Core.Movement
+namespace ChessTheBetrayal.Core.Engine.Movement
 {
     /// <summary>
     /// Movement strategy for the Bishop piece.
     /// Bishops move diagonally, any distance.
     /// Cannot jump over pieces - stops when encountering any piece.
     /// </summary>
-    public class BishopMovement : IPieceMovement
+    internal sealed class BishopMovement : IPieceMovement
     {
         // Diagonal directions: Up-Right, Up-Left, Down-Right, Down-Left
         private static readonly int[,] Directions = new int[,]

@@ -1,7 +1,7 @@
 using NUnit.Framework;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
-using ChessTheBetrayal.Tests.Utilities;
+using ChessTheBetrayal.Tooling;
 
 namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
 {
@@ -12,14 +12,14 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
         public void DefectPiece_FlipsTeamInPlace_PositionUnchanged()
         {
             // Arrange
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e4", Team.White, ChessPieceType.Knight);
 
             // Act
-            board.DefectPiece(TestBoardSetupUtility.AlgebraicToVector("e4"));
+            board.DefectPiece(BoardSetup.AlgebraicToVector("e4"));
 
             // Assert
-            PieceData piece = board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("e4"));
+            PieceData piece = board.GetPiece(BoardSetup.AlgebraicToVector("e4"));
             Assert.That(piece.Team, Is.EqualTo(Team.Black));
             Assert.That(piece.Type, Is.EqualTo(ChessPieceType.Knight));
         }
@@ -28,11 +28,11 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
         public void DefectPiece_UpdatesPieceIndices_OldTeamListShrinks_NewTeamListGrows()
         {
             // Arrange
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e4", Team.White, ChessPieceType.Knight);
 
             // Act
-            board.DefectPiece(TestBoardSetupUtility.AlgebraicToVector("e4"));
+            board.DefectPiece(BoardSetup.AlgebraicToVector("e4"));
 
             // Assert
             Assert.That(board.GetPieceIndices(Team.White).Count, Is.EqualTo(0));
@@ -45,7 +45,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
             // Arrange: a pending Betrayer with no legal executioner, so ResolveFailedRetribution
             // produces a real Defection MoveCommand — the only production-correct way to make and
             // then unmake a Defection is ApplyMoveToBoard/UndoMoveOnBoard driven by that move.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e4", Team.White, ChessPieceType.Knight)
                 .WithPendingBetrayer("e4", Team.White);
@@ -57,7 +57,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
             ChessEngine.UndoMoveOnBoard(board, outcome.DefectionMove, recordHistory: false);
 
             // Assert
-            Assert.That(board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("e4")).Team, Is.EqualTo(Team.White));
+            Assert.That(board.GetPiece(BoardSetup.AlgebraicToVector("e4")).Team, Is.EqualTo(Team.White));
             Assert.That(board.GetPieceIndices(Team.White).Count, Is.EqualTo(2)); // King + Knight
             Assert.That(board.ZobristHash, Is.EqualTo(originalHash), "UndoMoveOnBoard must restore exact Zobrist state after a Defection.");
         }
@@ -66,7 +66,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
         public void ResolveFailedRetribution_DefectionDoesNotCauseSelfCheck_RequiresForcedSaveIsFalse()
         {
             // Arrange
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithPiece("h8", Team.White, ChessPieceType.Knight) // Betrayer, defecting far from King
                 .WithPendingBetrayer("h8", Team.White);
@@ -76,14 +76,14 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
 
             // Assert
             Assert.That(outcome.RequiresForcedSave, Is.False);
-            Assert.That(outcome.DefectedSquare, Is.EqualTo(TestBoardSetupUtility.AlgebraicToVector("h8")));
+            Assert.That(outcome.DefectedSquare, Is.EqualTo(BoardSetup.AlgebraicToVector("h8")));
         }
 
         [Test]
         public void ResolveFailedRetribution_DefectionCausesSelfCheck_RequiresForcedSaveIsTrue()
         {
             // Arrange
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e4", Team.White, ChessPieceType.Rook) // Betrayer. Once it defects to Black, it checks e1.
                 .WithPendingBetrayer("e4", Team.White);

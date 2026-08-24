@@ -1,9 +1,7 @@
 using NUnit.Framework;
 using UnityEngine;
-using ChessTheBetrayal.AI;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
-using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.Gameplay.Manager;
 
 namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
@@ -45,7 +43,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
 
             _matchFlow = new MatchFlowCoordinator(
                 _board, new GameSetup(logMoves: false), _matchDriver, _matchDriver.PlayMove, engine, _undoService, _aiCoordinator, _clockCoordinator,
-                _host, boardSizeX: 8, boardSizeY: 8, logMoves: false,
+                _host, logMoves: false,
                 triggerTeamRoulette: _ => { },
                 showTeamSelection: () => { },
                 showGameModeSelection: () => { },

@@ -2,7 +2,7 @@ using NUnit.Framework;
 using System.Collections.Generic;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
-using ChessTheBetrayal.Tests.Utilities;
+using ChessTheBetrayal.Tooling;
 
 namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
 {
@@ -25,7 +25,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void EvaluateGameState_KingInCheckWithLegalEscapes_ReturnsCheck()
         {
             // Arrange
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.Rook) // Checks along e-file
                 .WithPiece("h8", Team.Black, ChessPieceType.King)
@@ -42,7 +42,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void GetAllLegalMoves_WhenCurrentTurnDoesNotMatchTeamParam_ReturnsMovesCorrectly()
         {
             // Arrange: Standard position with White's turn
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             board.CurrentTurn = Team.White;
             _masterBuffer.Clear();
 
@@ -66,7 +66,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void EvaluateGameState_KingInCheckWithNoLegalMoves_ReturnsCheckmate()
         {
             // Arrange: Recreate the Fool's Mate without manual movement noise.
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
 
             // Remove the f2 and g2 pawns to open the fatal diagonal
             board.SetPiece(PieceData.Empty, 5, 1); // f2
@@ -89,7 +89,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void EvaluateGameState_KingNotInCheckWithNoLegalMoves_ReturnsStalemate()
         {
             // Arrange: Classic stalemate position
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithPiece("b3", Team.Black, ChessPieceType.Queen) // Controls a2, b1, b2. Does NOT control a1.
                 .WithPiece("c2", Team.Black, ChessPieceType.King)  // Protects the Queen
@@ -106,7 +106,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void EvaluateGameState_KingNotInCheckWithLegalMoves_ReturnsNormal()
         {
             // Arrange
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             board.WithTurn(Team.White);
 
             // Act
@@ -120,7 +120,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void IsKingInCheck_KingAttackedByRook_ReturnsTrue()
         {
             // Arrange
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.Rook);
 
@@ -135,7 +135,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void IsKingInCheck_KingNotUnderAttack_ReturnsFalse()
         {
             // Arrange
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("d8", Team.Black, ChessPieceType.Rook) // Not on e-file
                 .WithPiece("h8", Team.Black, ChessPieceType.King);
@@ -151,7 +151,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void IsKingInCheck_KingProtectedByInterveningFriendlyPiece_ReturnsFalse()
         {
             // Arrange
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e4", Team.White, ChessPieceType.Rook) // Blocks the e-file
                 .WithPiece("e8", Team.Black, ChessPieceType.Rook)
@@ -168,7 +168,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void IsKingInCheck_DoubleCheck_ReturnsTrue()
         {
             // Arrange
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e4", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.Rook)   // Attack 1: Vertical
                 .WithPiece("h7", Team.Black, ChessPieceType.Bishop) // Attack 2: Diagonal
@@ -185,7 +185,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void EvaluateGameState_DoubleCheck_OnlyKingMoveIsLegal_ReturnsCheck()
         {
             // Arrange
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e4", Team.White, ChessPieceType.King)
                 .WithPiece("a4", Team.White, ChessPieceType.Rook)   // Could interpose a single check, but not double
                 .WithPiece("e8", Team.Black, ChessPieceType.Rook)   // Check 1
@@ -202,7 +202,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
             Assert.That(_masterBuffer.Count, Is.GreaterThan(0), "King must have an escape move.");
             foreach (var move in _masterBuffer)
             {
-                Assert.That(move.StartPosition, Is.EqualTo(TestBoardSetupUtility.AlgebraicToVector("e4")),
+                Assert.That(move.StartPosition, Is.EqualTo(BoardSetup.AlgebraicToVector("e4")),
                     "During double check, ONLY King moves are legal. Rook on a4 should not have generated moves.");
             }
         }
@@ -211,7 +211,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void EvaluateGameState_SmearedCheckmate_ReturnsCheckmate()
         {
             // Arrange
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithPiece("a3", Team.Black, ChessPieceType.Rook) // Checks a1, a2
                 .WithPiece("b3", Team.Black, ChessPieceType.Rook) // Controls b1, b2
@@ -229,14 +229,14 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void EvaluateGameState_PromotionDeliversCheck_ReturnsCheck()
         {
             // Arrange: White pawn promotes to Queen next to Black King, delivering check
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("d7", Team.White, ChessPieceType.Pawn, hasMoved: true)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithTurn(Team.White);
 
             // Get the promotion move
-            ChessEngine.GetLegalMoves(board, TestBoardSetupUtility.AlgebraicToVector("d7"), _masterBuffer);
+            ChessEngine.GetLegalMoves(board, BoardSetup.AlgebraicToVector("d7"), _masterBuffer);
             MoveCommand? promotionMove = null;
             foreach (var move in _masterBuffer)
             {
@@ -266,7 +266,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
             // White pawn at e7 captures Black Rook at f8, promotes to Queen
             // Black King at h8 is smothered by own pawns at g7 and h7
             // After exf8=Q: Queen checks along 8th rank, King has no escape
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e7", Team.White, ChessPieceType.Pawn, hasMoved: true)
                 .WithPiece("f8", Team.Black, ChessPieceType.Rook) // Will be captured
                 .WithPiece("h8", Team.Black, ChessPieceType.King)
@@ -276,7 +276,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
                 .WithTurn(Team.White);
 
             // Get the capture-promotion move
-            ChessEngine.GetLegalMoves(board, TestBoardSetupUtility.AlgebraicToVector("e7"), _masterBuffer);
+            ChessEngine.GetLegalMoves(board, BoardSetup.AlgebraicToVector("e7"), _masterBuffer);
             MoveCommand? capturePromotionMove = null;
             foreach (var move in _masterBuffer)
             {
@@ -303,12 +303,12 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void GetLegalMoves_CalledOnPieceNotBelongingToCurrentTurn_ReturnsEmpty()
         {
             // Arrange: It's White's turn, but we ask for moves of a Black piece
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             board.CurrentTurn = Team.White;
             _masterBuffer.Clear();
 
             // Act: Request legal moves for a Black pawn (at e7)
-            ChessEngine.GetLegalMoves(board, TestBoardSetupUtility.AlgebraicToVector("e7"), _masterBuffer);
+            ChessEngine.GetLegalMoves(board, BoardSetup.AlgebraicToVector("e7"), _masterBuffer);
 
             // Assert: Should return empty list
             Assert.That(_masterBuffer.Count, Is.EqualTo(0),
@@ -319,7 +319,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void TryFindKing_BoardWithNoKing_ReturnsFalseAndInvalidPosition()
         {
             // Arrange: Empty board with no kings
-            BoardState board = TestBoardSetupUtility.CreateEmpty();
+            BoardState board = BoardSetup.CreateEmpty();
 
             // Act: Try to find White's king
             bool found = board.TryFindKing(Team.White, out Vector2Int kingPos);
@@ -334,7 +334,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void GetMaterialAdvantage_AfterQueenCapture_ReturnsCorrectDelta()
         {
             // Arrange: Standard position minus White's Queen (d1)
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             board.SetPiece(PieceData.Empty, 3, 0); // Remove White Queen at d1
 
             // Act: Calculate material advantage

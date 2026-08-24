@@ -3,10 +3,10 @@ using UnityEngine;
 using UnityEngine.UI;
 using PrimeTween;
 using ChessTheBetrayal.Core.Data;
-using ChessTheBetrayal.Core.Diagnostics;
+using ChessTheBetrayal.Infrastructure;
 using ChessTheBetrayal.Events.Payloads;
 
-namespace ChessTheBetrayal.UI
+namespace ChessTheBetrayal.UI.Panels
 {
     /// <summary>
     /// Manages the in-game heads-up display, including clock visibility, exit controls, and the
@@ -22,12 +22,12 @@ namespace ChessTheBetrayal.UI
         [SerializeField] private ClockDisplayWidget _clockWidget;
 
         [Header("Event Channels")]
-        [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _checkDetectedChannel;
-        [SerializeField] private ChessTheBetrayal.Events.TurnChangedEventChannel _turnChangedChannel;
-        [SerializeField] private ChessTheBetrayal.Events.LowTimeAlertEventChannel _lowTimeAlertChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.GameEventChannel _checkDetectedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.TurnChangedEventChannel _turnChangedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.LowTimeAlertEventChannel _lowTimeAlertChannel;
 
         [Header("Retribution Skip")]
-        [SerializeField] private ChessTheBetrayal.Events.BetrayalEventChannel _betrayalChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.BetrayalEventChannel _betrayalChannel;
         [SerializeField] private RectTransform skipButtonRoot;
         [SerializeField] private Button skipButton;
         [SerializeField] private float _skipShowScale = 1f;

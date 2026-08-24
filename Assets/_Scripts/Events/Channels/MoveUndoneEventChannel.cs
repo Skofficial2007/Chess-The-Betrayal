@@ -1,7 +1,7 @@
 using ChessTheBetrayal.Events.Payloads;
 using UnityEngine;
 
-namespace ChessTheBetrayal.Events
+namespace ChessTheBetrayal.Events.Channels
 {
     /// <summary>
     /// Announces a single ply coming back off the board, so the view can play that move in reverse.

@@ -1,5 +1,6 @@
 {
   "name": "ChessTheBetrayal.Network",
+  "rootNamespace": "ChessTheBetrayal.Network",
   "references": [
     "ChessTheBetrayal.Core"
   ],

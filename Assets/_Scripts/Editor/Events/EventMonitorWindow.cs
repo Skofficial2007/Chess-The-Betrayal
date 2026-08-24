@@ -2,19 +2,19 @@
 using UnityEditor;
 using UnityEngine;
 using System.Collections.Generic;
-using System.Linq;
+using ChessTheBetrayal.Events.Channels;
 
-namespace ChessTheBetrayal.Events.Editor
+namespace ChessTheBetrayal.EditorTools.Events
 {
     /// <summary>
-    /// A live dashboard showing every GameEventChannel asset in the project.
+    /// A live dashboard showing every event channel asset in the project.
     /// Displays listener counts, trace toggles, and Ping buttons.
     /// Open via: Chess: The Betrayal > Event Monitor
     /// </summary>
     public sealed class EventMonitorWindow : EditorWindow
     {
         private Vector2 _scroll;
-        private List<GameEventChannel> _channels;
+        private List<EventChannelBase> _channels;
         private double _lastRefresh;
 
         [MenuItem("Chess: The Betrayal/Event Monitor")]
@@ -35,13 +35,17 @@ namespace ChessTheBetrayal.Events.Editor
             if (GUILayout.Button("Refresh", EditorStyles.toolbarButton)) RefreshChannelList();
             if (GUILayout.Button("Clear All Logs", EditorStyles.toolbarButton))
                 _channels?.ForEach(c => c.ClearDebugLog());
+            if (GUILayout.Button("Trace All", EditorStyles.toolbarButton))
+                EventChannelCatalog.SetTraceOnAll(_channels, true);
+            if (GUILayout.Button("Trace None", EditorStyles.toolbarButton))
+                EventChannelCatalog.SetTraceOnAll(_channels, false);
             GUILayout.FlexibleSpace();
             EditorGUILayout.EndHorizontal();
 
             _scroll = EditorGUILayout.BeginScrollView(_scroll);
             if (_channels == null || _channels.Count == 0)
             {
-                EditorGUILayout.HelpBox("No GameEventChannel assets found.", MessageType.Info);
+                EditorGUILayout.HelpBox("No event channel assets found.", MessageType.Info);
                 EditorGUILayout.EndScrollView();
                 return;
             }
@@ -74,16 +78,7 @@ namespace ChessTheBetrayal.Events.Editor
             EditorGUILayout.EndScrollView();
         }
 
-        private void RefreshChannelList()
-        {
-            _channels = AssetDatabase
-                .FindAssets("t:GameEventChannel")
-                .Select(guid => AssetDatabase.LoadAssetAtPath<GameEventChannel>(
-                    AssetDatabase.GUIDToAssetPath(guid)))
-                .Where(c => c != null)
-                .OrderBy(c => c.name)
-                .ToList();
-        }
+        private void RefreshChannelList() => _channels = EventChannelCatalog.FindAll();
     }
 }
 #endif

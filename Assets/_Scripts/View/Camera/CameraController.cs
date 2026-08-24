@@ -3,11 +3,9 @@ using PrimeTween;
 using UnityEngine;
 using Unity.Cinemachine;
 using ChessTheBetrayal.Infrastructure;
-using ChessTheBetrayal.UI;
 using ChessTheBetrayal.Core.Data;
-using ChessTheBetrayal.Core.Diagnostics;
 
-namespace ChessTheBetrayal.View
+namespace ChessTheBetrayal.View.Camera
 {
     /// <summary>
     /// Listens to UI events and shifts the Cinemachine priorities to 
@@ -40,9 +38,9 @@ namespace ChessTheBetrayal.View
         [SerializeField] private float introBlendTime = 2f;
 
         [Header("Event Channels")]
-        [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _matchStartRequestedChannel;
-        [SerializeField] private ChessTheBetrayal.Events.TeamSelectedEventChannel _teamSelectedChannel;
-        [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _gameResetChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.GameEventChannel _matchStartRequestedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.TeamSelectedEventChannel _teamSelectedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.GameEventChannel _gameResetChannel;
 
         private void Awake()
         {

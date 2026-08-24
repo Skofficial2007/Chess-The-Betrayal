@@ -2,7 +2,7 @@ using NUnit.Framework;
 using System.Collections.Generic;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
-using ChessTheBetrayal.Tests.Utilities;
+using ChessTheBetrayal.Tooling;
 
 namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
 {
@@ -21,7 +21,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void ZobristHash_InitialPosition_ComputedHashIsNonZero()
         {
             // Arrange
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
 
             // Act
             board.ComputeFullZobristHash();
@@ -35,13 +35,13 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void ZobristHash_TwoIdenticalPositions_ProduceSameHash()
         {
             // Arrange: Build the same 4-piece position on two separate BoardState instances
-            BoardState boardA = TestBoardSetupUtility.CreateEmpty()
+            BoardState boardA = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("d4", Team.White, ChessPieceType.Queen)
                 .WithPiece("f5", Team.Black, ChessPieceType.Knight);
 
-            BoardState boardB = TestBoardSetupUtility.CreateEmpty()
+            BoardState boardB = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("d4", Team.White, ChessPieceType.Queen)
@@ -60,14 +60,14 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void ZobristHash_AfterApplyMoveAndUndo_HashRestoredToOriginal()
         {
             // Arrange
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             board.ComputeFullZobristHash();
             ulong hashBefore = board.ZobristHash;
 
             // Act: GetLegalMoves internally calls ApplyMoveToBoard and UndoMoveOnBoard
             // for each candidate move to test if it leaves the king in check.
             // This exercises the make/unmake cycle without exposing private methods.
-            Vector2Int e2 = TestBoardSetupUtility.AlgebraicToVector("e2");
+            Vector2Int e2 = BoardSetup.AlgebraicToVector("e2");
             ChessEngine.GetLegalMoves(board, e2, _moveBuffer);
 
             // Assert: After GetLegalMoves completes, the board should be unchanged
@@ -80,12 +80,12 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void ZobristHash_DifferentTurns_ProduceDifferentHashes()
         {
             // Arrange: Same piece configuration, different turns
-            BoardState boardA = TestBoardSetupUtility.CreateEmpty()
+            BoardState boardA = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithTurn(Team.White);
 
-            BoardState boardB = TestBoardSetupUtility.CreateEmpty()
+            BoardState boardB = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithTurn(Team.Black);
@@ -103,7 +103,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void ZobristHash_ToggleTurnHash_XorIsInvolutory()
         {
             // Arrange
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             board.ComputeFullZobristHash();
             ulong hashBefore = board.ZobristHash;
 
@@ -120,7 +120,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void ZobristHash_TogglePieceHash_XorIsInvolutory()
         {
             // Arrange
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             board.ComputeFullZobristHash();
             ulong hashBefore = board.ZobristHash;
 
@@ -137,7 +137,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void ZobristHash_AfterApplyAndUndoCastling_HashRestoredExactly()
         {
             // Arrange: Set up castling scenario
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("h1", Team.White, ChessPieceType.Rook)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
@@ -149,7 +149,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
 
             // Act: GetLegalMoves on the king will generate castling moves and test them
             // via the internal make/unmake cycle
-            Vector2Int e1 = TestBoardSetupUtility.AlgebraicToVector("e1");
+            Vector2Int e1 = BoardSetup.AlgebraicToVector("e1");
             ChessEngine.GetLegalMoves(board, e1, _moveBuffer);
 
             // Assert
@@ -162,7 +162,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void ZobristHash_AfterApplyAndUndoEnPassant_HashRestoredExactly()
         {
             // Arrange: Set up en passant scenario
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e5", Team.White, ChessPieceType.Pawn, hasMoved: true)
                 .WithPiece("f5", Team.Black, ChessPieceType.Pawn, hasMoved: true)
                 .WithPiece("a1", Team.White, ChessPieceType.King)
@@ -174,7 +174,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
             ulong hashBefore = board.ZobristHash;
 
             // Act: GetLegalMoves will test en passant via make/unmake
-            Vector2Int e5 = TestBoardSetupUtility.AlgebraicToVector("e5");
+            Vector2Int e5 = BoardSetup.AlgebraicToVector("e5");
             ChessEngine.GetLegalMoves(board, e5, _moveBuffer);
             ulong hashDuring = board.ZobristHash;
 
@@ -199,13 +199,13 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void ZobristHash_CastlingRightsChange_AltersHash()
         {
             // Arrange: Two boards with identical pieces but different castling rights
-            BoardState boardA = TestBoardSetupUtility.CreateEmpty()
+            BoardState boardA = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("h1", Team.White, ChessPieceType.Rook)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithCastlingRights(BoardState.CastlingWhiteKingside);
 
-            BoardState boardB = TestBoardSetupUtility.CreateEmpty()
+            BoardState boardB = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("h1", Team.White, ChessPieceType.Rook)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
@@ -224,13 +224,13 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void ZobristHash_EnPassantFileChange_AltersHash()
         {
             // Arrange: Two boards with identical pieces but different en passant states
-            BoardState boardA = TestBoardSetupUtility.CreateEmpty()
+            BoardState boardA = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("e5", Team.White, ChessPieceType.Pawn)
                 .WithEnPassantFile(4); // e-file
 
-            BoardState boardB = TestBoardSetupUtility.CreateEmpty()
+            BoardState boardB = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("e5", Team.White, ChessPieceType.Pawn);
@@ -249,7 +249,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void ZobristHash_AfterApplyAndUndoPromotion_HashRestoredExactly()
         {
             // Arrange: Set up promotion scenario
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e7", Team.White, ChessPieceType.Pawn, hasMoved: true)
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithPiece("h8", Team.Black, ChessPieceType.King)
@@ -259,7 +259,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
             ulong hashBefore = board.ZobristHash;
 
             // Act: GetLegalMoves will test promotion via make/unmake
-            Vector2Int e7 = TestBoardSetupUtility.AlgebraicToVector("e7");
+            Vector2Int e7 = BoardSetup.AlgebraicToVector("e7");
             ChessEngine.GetLegalMoves(board, e7, _moveBuffer);
 
             // Assert
@@ -283,7 +283,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void BoardState_AssertZobristConsistency_DoesNotThrow_AfterTenMovePairs()
         {
             // Arrange: Standard position with a sequence of varied legal moves
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             board.ComputeFullZobristHash();
 
             // Define 10 algebraic moves covering varied piece types
@@ -306,8 +306,8 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
             {
                 string moveNotation = moveSequence[i];
                 string[] parts = moveNotation.Split('-');
-                Vector2Int from = TestBoardSetupUtility.AlgebraicToVector(parts[0]);
-                Vector2Int to = TestBoardSetupUtility.AlgebraicToVector(parts[1]);
+                Vector2Int from = BoardSetup.AlgebraicToVector(parts[0]);
+                Vector2Int to = BoardSetup.AlgebraicToVector(parts[1]);
 
                 PieceData piece = board.GetPiece(from);
                 Assert.That(piece.IsEmpty, Is.False, $"Move {i + 1} ({moveNotation}): No piece at {parts[0]}");
@@ -343,7 +343,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void AssertZobristConsistency_AfterSuccessfulCall_DoesNotMutateZobristHash()
         {
             // Arrange: Standard position with computed hash
-            BoardState board = TestBoardSetupUtility.CreateStandard();
+            BoardState board = BoardSetup.CreateStandard();
             board.ComputeFullZobristHash();
             ulong hashBeforeCall = board.ZobristHash;
 
@@ -367,7 +367,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
             // 1. Remove captured piece's hash
             // 2. Remove pawn hash from promotion square
             // 3. Add promoted piece (Queen) hash to promotion square
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e7", Team.White, ChessPieceType.Pawn, hasMoved: true)
                 .WithPiece("f8", Team.Black, ChessPieceType.Rook, hasMoved: false)
                 .WithPiece("a1", Team.White, ChessPieceType.King)
@@ -376,8 +376,8 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
             board.ComputeFullZobristHash();
 
             // Get the capture-promotion move
-            Vector2Int from = TestBoardSetupUtility.AlgebraicToVector("e7");
-            Vector2Int to = TestBoardSetupUtility.AlgebraicToVector("f8");
+            Vector2Int from = BoardSetup.AlgebraicToVector("e7");
+            Vector2Int to = BoardSetup.AlgebraicToVector("f8");
             PieceData pawn = board.GetPiece(from);
             PieceData rook = board.GetPiece(to);
             MoveCommand move = MoveCommand.CreatePromotionMove(from, to, pawn, ChessPieceType.Queen, rook, board);

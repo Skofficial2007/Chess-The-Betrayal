@@ -1,14 +1,13 @@
 using System.Collections.Generic;
 using UnityEngine;
-using ChessTheBetrayal.AI;
+using ChessTheBetrayal.AI.Search;
 using ChessTheBetrayal.AI.DeviceBenchmark;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
-using ChessTheBetrayal.Core.Logic;
 using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.Gameplay.Flow;
 using ChessTheBetrayal.Gameplay.Manager;
-using ChessTheBetrayal.UI;
+using ChessTheBetrayal.UI.Manager;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 using ChessTheBetrayal.Core.Diagnostics;
 using ChessTheBetrayal.Infrastructure;
@@ -47,10 +46,6 @@ namespace ChessTheBetrayal.App
     public class GameManager : MonoBehaviour, IMatchFlow, IBoardQuery, IAiMatchTelemetryProvider
     {
         #region Inspector Fields
-
-        [Header("Board Configuration")]
-        [SerializeField, Min(2)] private int boardSizeX = 8;
-        [SerializeField, Min(2)] private int boardSizeY = 8;
 
         [Header("Debug")]
         [SerializeField] private bool logMoves = true;
@@ -91,25 +86,25 @@ namespace ChessTheBetrayal.App
         [SerializeField] private bool _warnBeforeRetributionSkip = true;
 
         [Header("Shared State")]
-        [SerializeField] private ChessTheBetrayal.Events.SharedBoardStateSO _sharedBoardState;
-        [SerializeField] private ChessTheBetrayal.Events.SharedClockStateSO _sharedClockState;
+        [SerializeField] private ChessTheBetrayal.Events.State.SharedBoardStateSO _sharedBoardState;
+        [SerializeField] private ChessTheBetrayal.Events.State.SharedClockStateSO _sharedClockState;
 
         [Header("Event Channels")]
-        [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _gameStartedChannel;
-        [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _gameResetChannel;
-        [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _boardResyncRequiredChannel;
-        [SerializeField] private ChessTheBetrayal.Events.GameOverEventChannel _gameOverChannel;
-        [SerializeField] private ChessTheBetrayal.Events.TurnChangedEventChannel _turnChangedChannel;
-        [SerializeField] private ChessTheBetrayal.Events.MoveExecutedEventChannel _moveExecutedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.GameEventChannel _gameStartedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.GameEventChannel _gameResetChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.GameEventChannel _boardResyncRequiredChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.GameOverEventChannel _gameOverChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.TurnChangedEventChannel _turnChangedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.MoveExecutedEventChannel _moveExecutedChannel;
         [Tooltip("Announces each ply of a takeback as it comes back off the board, so the view can play the move in reverse. Leave unassigned and an undo falls back to rebuilding the position instead — correct, but the player only sees the result.")]
-        [SerializeField] private ChessTheBetrayal.Events.MoveUndoneEventChannel _moveUndoneChannel;
-        [SerializeField] private ChessTheBetrayal.Events.MoveRejectedEventChannel _moveRejectedChannel;
-        [SerializeField] private ChessTheBetrayal.Events.PromotionRequiredEventChannel _promotionRequiredChannel;
-        [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _checkDetectedChannel;
-        [SerializeField] private ChessTheBetrayal.Events.LowTimeAlertEventChannel _lowTimeAlertChannel;
-        [SerializeField] private ChessTheBetrayal.Events.GameModeConfiguredEventChannel _gameModeConfiguredChannel;
-        [SerializeField] private ChessTheBetrayal.Events.BetrayalEventChannel _betrayalChannel;
-        [SerializeField] private ChessTheBetrayal.Events.GameEventChannel _matchStartRequestedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.MoveUndoneEventChannel _moveUndoneChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.MoveRejectedEventChannel _moveRejectedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.PromotionRequiredEventChannel _promotionRequiredChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.GameEventChannel _checkDetectedChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.LowTimeAlertEventChannel _lowTimeAlertChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.GameModeConfiguredEventChannel _gameModeConfiguredChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.BetrayalEventChannel _betrayalChannel;
+        [SerializeField] private ChessTheBetrayal.Events.Channels.GameEventChannel _matchStartRequestedChannel;
 
         #endregion
 
@@ -244,7 +239,7 @@ namespace ChessTheBetrayal.App
 
             ValidateRequiredFields();
 
-            LiveBoard = new BoardState(boardSizeX, boardSizeY);
+            LiveBoard = new BoardState(StandardChessPosition.Files, StandardChessPosition.Ranks);
             _setup = new GameSetup(logMoves);
 
             // Construct and inject the domain logger before any engine method fires.
@@ -314,7 +309,7 @@ namespace ChessTheBetrayal.App
 
             _matchFlow = new MatchFlowCoordinator(
                 LiveBoard, _setup, _matchDriver, _moveVisualPacingGate.Enqueue, _engine, _undoService, _aiCoordinator, _clockCoordinator,
-                gameObject, boardSizeX, boardSizeY, logMoves,
+                gameObject, logMoves,
                 triggerTeamRoulette: team => _uiManager.TriggerTeamRoulette(team),
                 showTeamSelection: () => _uiManager.ShowTeamSelection(),
                 showGameModeSelection: () => _uiManager.ShowGameModeSelection(),

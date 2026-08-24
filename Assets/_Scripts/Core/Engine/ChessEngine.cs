@@ -1,11 +1,7 @@
 using System.Collections.Generic;
 using ChessTheBetrayal.Core.Data;
-using ChessTheBetrayal.Core.Movement;
-using System.Runtime.CompilerServices;
+using ChessTheBetrayal.Core.Engine.Movement;
 using ChessTheBetrayal.Core.Diagnostics;
-using MoveCommand = ChessTheBetrayal.Core.Engine.MoveCommand;
-
-[assembly: InternalsVisibleTo("ChessTheBetrayal.Tests.EditMode")]
 
 namespace ChessTheBetrayal.Core.Engine
 {

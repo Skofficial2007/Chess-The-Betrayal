@@ -1,5 +1,5 @@
 using System;
-using ChessTheBetrayal.Core.Utils;
+using ChessTheBetrayal.Core.Randomness;
 
 namespace ChessTheBetrayal.Gameplay.Manager
 {

@@ -1,4 +1,4 @@
-using ChessTheBetrayal.Core.Utils;
+using ChessTheBetrayal.Core.Randomness;
 
 namespace ChessTheBetrayal.Core.Match
 {

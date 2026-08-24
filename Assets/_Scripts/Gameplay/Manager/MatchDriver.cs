@@ -30,12 +30,12 @@ namespace ChessTheBetrayal.Gameplay.Manager
         private readonly bool _logMoves;
         private readonly UnityDomainLogger _domainLogger;
 
-        private readonly ChessTheBetrayal.Events.GameOverEventChannel _gameOverChannel;
-        private readonly ChessTheBetrayal.Events.TurnChangedEventChannel _turnChangedChannel;
-        private readonly ChessTheBetrayal.Events.MoveExecutedEventChannel _moveExecutedChannel;
-        private readonly ChessTheBetrayal.Events.MoveRejectedEventChannel _moveRejectedChannel;
-        private readonly ChessTheBetrayal.Events.GameEventChannel _checkDetectedChannel;
-        private readonly ChessTheBetrayal.Events.BetrayalEventChannel _betrayalChannel;
+        private readonly ChessTheBetrayal.Events.Channels.GameOverEventChannel _gameOverChannel;
+        private readonly ChessTheBetrayal.Events.Channels.TurnChangedEventChannel _turnChangedChannel;
+        private readonly ChessTheBetrayal.Events.Channels.MoveExecutedEventChannel _moveExecutedChannel;
+        private readonly ChessTheBetrayal.Events.Channels.MoveRejectedEventChannel _moveRejectedChannel;
+        private readonly ChessTheBetrayal.Events.Channels.GameEventChannel _checkDetectedChannel;
+        private readonly ChessTheBetrayal.Events.Channels.BetrayalEventChannel _betrayalChannel;
 
         private GameModeConfig _selectedMode = GameModeConfig.Unlimited;
         private ChessClock _clock;
@@ -126,12 +126,12 @@ namespace ChessTheBetrayal.Gameplay.Manager
             BoardState board,
             bool logMoves,
             UnityDomainLogger domainLogger,
-            ChessTheBetrayal.Events.GameOverEventChannel gameOverChannel,
-            ChessTheBetrayal.Events.TurnChangedEventChannel turnChangedChannel,
-            ChessTheBetrayal.Events.MoveExecutedEventChannel moveExecutedChannel,
-            ChessTheBetrayal.Events.MoveRejectedEventChannel moveRejectedChannel,
-            ChessTheBetrayal.Events.GameEventChannel checkDetectedChannel,
-            ChessTheBetrayal.Events.BetrayalEventChannel betrayalChannel)
+            ChessTheBetrayal.Events.Channels.GameOverEventChannel gameOverChannel,
+            ChessTheBetrayal.Events.Channels.TurnChangedEventChannel turnChangedChannel,
+            ChessTheBetrayal.Events.Channels.MoveExecutedEventChannel moveExecutedChannel,
+            ChessTheBetrayal.Events.Channels.MoveRejectedEventChannel moveRejectedChannel,
+            ChessTheBetrayal.Events.Channels.GameEventChannel checkDetectedChannel,
+            ChessTheBetrayal.Events.Channels.BetrayalEventChannel betrayalChannel)
         {
             _engine = engine;
             _board = board;
@@ -183,18 +183,13 @@ namespace ChessTheBetrayal.Gameplay.Manager
             {
                 result = _engine.Advance(_board, move);
             }
-            catch (BetrayalRuleViolationException ex)
-            {
-                // A Betrayal rule was violated — this is a bug at the call site.
-                // Log it, reject the move visually, and recover gracefully.
-                Debug.LogException(ex);
-                _moveRejectedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveRejectedPayload(move.StartPosition, move.EndPosition));
-                return;
-            }
             catch (DomainException ex)
             {
-                // Any other hard domain invariant violation.
+                // The board broke one of its own invariants partway through applying the move. The
+                // piece has already been lifted off its square by the visuals, so putting it back is
+                // part of failing here — otherwise the board is left showing a move nobody made.
                 Debug.LogException(ex);
+                _moveRejectedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveRejectedPayload(move.StartPosition, move.EndPosition));
                 return;
             }
             // Don't catch (Exception) here — genuine CLR crashes must surface.

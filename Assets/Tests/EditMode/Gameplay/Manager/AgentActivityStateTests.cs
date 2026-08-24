@@ -2,13 +2,14 @@ using System.Diagnostics;
 using System.Threading;
 using NUnit.Framework;
 using UnityEngine;
-using ChessTheBetrayal.AI;
+using ChessTheBetrayal.AI.Search;
+using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.AI.OpeningBook;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.EditorTools.OpeningBook;
 using ChessTheBetrayal.Gameplay.Manager;
-using ChessTheBetrayal.Tests.Utilities;
+using ChessTheBetrayal.Tooling;
 
 namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
 {
@@ -41,7 +42,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         public void Setup()
         {
             _engine = new ChessEngineAdapter();
-            _board = TestBoardSetupUtility.CreateStandard();
+            _board = BoardSetup.CreateStandard();
             _lastPlayedMove = null;
 
             _coordinator = new AIMatchCoordinator(_engine, _board, move => _lastPlayedMove = move, ShallowSettings, ProfileProvider);

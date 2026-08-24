@@ -84,43 +84,7 @@ namespace ChessTheBetrayal.Gameplay.Interaction
                 _legalMoves.Clear();
                 _engine.GetRetributionMoves(_board, _board.CurrentTurn, _board.PendingBetrayerSquare.Value, _legalMoves);
 
-                _movesToTarget.Clear();
-                for (int i = 0; i < _legalMoves.Count; i++)
-                {
-                    if (_legalMoves[i].StartPosition == from && _legalMoves[i].EndPosition == to)
-                    {
-                        _movesToTarget.Add(_legalMoves[i]);
-                    }
-                }
-
-                if (_movesToTarget.Count == 0)
-                {
-                    if (_logMoves) Debug.Log($"[LocalMoveExecutor] Move rejected: piece at {from} cannot legally execute the Betrayer");
-                    OnMoveRejected?.Invoke(from, to);
-                    return;
-                }
-
-                // Handle standard promotion flow for Retribution (e.g., Pawn captures Betrayer on the 8th rank)
-                bool isRetributionPromotion = false;
-                for (int i = 0; i < _movesToTarget.Count; i++)
-                {
-                    if (_movesToTarget[i].IsPromotion) { isRetributionPromotion = true; break; }
-                }
-
-                if (isRetributionPromotion)
-                {
-                    _pendingPromotionMove = _movesToTarget[0];
-                    _isAwaitingPromotion = true;
-                    OnPromotionRequired?.Invoke(_pendingPromotionMove.StartPosition, to, _pendingPromotionMove.IsCapture);
-                    return;
-                }
-
-                MoveCommand validRetribution = _movesToTarget[0];
-                ClockState? clockSnap = _clockSource?.Current;
-                if (clockSnap.HasValue) validRetribution = validRetribution.WithClockSnapshot(clockSnap.Value);
-
-                if (_logMoves) Debug.Log($"[LocalMoveExecutor] Retribution confirmed: {validRetribution}");
-                OnMoveConfirmed?.Invoke(validRetribution);
+                PlayFromTheMovesThisPhaseAllows(from, to, "Retribution", "cannot legally execute the Betrayer");
                 return;
             }
 
@@ -130,43 +94,7 @@ namespace ChessTheBetrayal.Gameplay.Interaction
                 _legalMoves.Clear();
                 _engine.GetForcedSaveMoves(_board, _board.CurrentTurn, _legalMoves);
 
-                _movesToTarget.Clear();
-                for (int i = 0; i < _legalMoves.Count; i++)
-                {
-                    if (_legalMoves[i].StartPosition == from && _legalMoves[i].EndPosition == to)
-                    {
-                        _movesToTarget.Add(_legalMoves[i]);
-                    }
-                }
-
-                if (_movesToTarget.Count == 0)
-                {
-                    if (_logMoves) Debug.Log($"[LocalMoveExecutor] Move rejected: piece at {from} cannot legally resolve the forced save check");
-                    OnMoveRejected?.Invoke(from, to);
-                    return;
-                }
-
-                // Handle standard promotion flow for Forced Save
-                bool isSavePromotion = false;
-                for (int i = 0; i < _movesToTarget.Count; i++)
-                {
-                    if (_movesToTarget[i].IsPromotion) { isSavePromotion = true; break; }
-                }
-
-                if (isSavePromotion)
-                {
-                    _pendingPromotionMove = _movesToTarget[0];
-                    _isAwaitingPromotion = true;
-                    OnPromotionRequired?.Invoke(_pendingPromotionMove.StartPosition, to, _pendingPromotionMove.IsCapture);
-                    return;
-                }
-
-                MoveCommand validSave = _movesToTarget[0];
-                ClockState? clockSnap = _clockSource?.Current;
-                if (clockSnap.HasValue) validSave = validSave.WithClockSnapshot(clockSnap.Value);
-
-                if (_logMoves) Debug.Log($"[LocalMoveExecutor] Forced Save confirmed: {validSave}");
-                OnMoveConfirmed?.Invoke(validSave);
+                PlayFromTheMovesThisPhaseAllows(from, to, "Forced Save", "cannot legally resolve the forced save check");
                 return;
             }
 
@@ -287,6 +215,51 @@ namespace ChessTheBetrayal.Gameplay.Interaction
         }
 
         /// <summary>
+        /// The half of answering a tap that both Betrayal sub-phases do the same way. By the time
+        /// this runs the caller has already filled the buffer with the only moves its phase permits,
+        /// so all that is left is finding the one the player asked for — and all that differs
+        /// between the two phases is which generator filled the buffer and what the move is called.
+        /// </summary>
+        private void PlayFromTheMovesThisPhaseAllows(
+            Vector2Int from, Vector2Int to, string phaseLabel, string whatItCannotDo)
+        {
+            _movesToTarget.Clear();
+            for (int i = 0; i < _legalMoves.Count; i++)
+            {
+                if (_legalMoves[i].StartPosition == from && _legalMoves[i].EndPosition == to)
+                {
+                    _movesToTarget.Add(_legalMoves[i]);
+                }
+            }
+
+            if (_movesToTarget.Count == 0)
+            {
+                if (_logMoves) Debug.Log($"[LocalMoveExecutor] Move rejected: piece at {from} {whatItCannotDo}");
+                OnMoveRejected?.Invoke(from, to);
+                return;
+            }
+
+            // A pawn arriving on the last rank while executing the Betrayer, or while saving its
+            // king, still promotes — only the Act itself never does.
+            for (int i = 0; i < _movesToTarget.Count; i++)
+            {
+                if (!_movesToTarget[i].IsPromotion) continue;
+
+                _pendingPromotionMove = _movesToTarget[0];
+                _isAwaitingPromotion = true;
+                OnPromotionRequired?.Invoke(_pendingPromotionMove.StartPosition, to, _pendingPromotionMove.IsCapture);
+                return;
+            }
+
+            MoveCommand move = _movesToTarget[0];
+            ClockState? clockSnap = _clockSource?.Current;
+            if (clockSnap.HasValue) move = move.WithClockSnapshot(clockSnap.Value);
+
+            if (_logMoves) Debug.Log($"[LocalMoveExecutor] {phaseLabel} confirmed: {move}");
+            OnMoveConfirmed?.Invoke(move);
+        }
+
+        /// <summary>
         /// The player meant it. The Act is worked out again from the board as it stands now rather
         /// than replayed from the one that was parked, because the question was on screen for as
         /// long as the player wanted it there: the clock kept running, and in a timed game it can
@@ -313,10 +286,11 @@ namespace ChessTheBetrayal.Gameplay.Interaction
                 return;
             }
 
-            _legalMoves.Clear();
+            DomainResult<MoveCommand> resolved;
             try
             {
-                _engine.GetLegalMoves(_board, from, _legalMoves);
+                resolved = MoveRequest.Resolve(
+                    _engine, _board, from, to, BetrayalStage.Act, scratch: _legalMoves);
             }
             catch (DomainException ex)
             {
@@ -325,23 +299,22 @@ namespace ChessTheBetrayal.Gameplay.Interaction
                 return;
             }
 
-            for (int i = 0; i < _legalMoves.Count; i++)
+            if (!resolved.IsSuccess)
             {
-                MoveCommand candidate = _legalMoves[i];
-                if (candidate.Stage != BetrayalStage.Act || candidate.EndPosition != to) continue;
-
-                // Stamped now, not when the question went up — the time spent deciding is the
-                // player's own, and the move has to say so.
-                ClockState? clockSnapshot = _clockSource?.Current;
-                if (clockSnapshot.HasValue) candidate = candidate.WithClockSnapshot(clockSnapshot.Value);
-
-                if (_logMoves) Debug.Log($"[LocalMoveExecutor] Betrayal Act confirmed: {candidate}");
-                OnMoveConfirmed?.Invoke(candidate);
+                if (_logMoves) Debug.Log($"[LocalMoveExecutor] Betrayal Act rejected: {resolved.ErrorDetail}");
+                OnMoveRejected?.Invoke(from, to);
                 return;
             }
 
-            if (_logMoves) Debug.Log($"[LocalMoveExecutor] Betrayal Act rejected: {from} -> {to} is no longer legal");
-            OnMoveRejected?.Invoke(from, to);
+            MoveCommand act = resolved.Value;
+
+            // Stamped now, not when the question went up — the time spent deciding is the
+            // player's own, and the move has to say so.
+            ClockState? clockSnapshot = _clockSource?.Current;
+            if (clockSnapshot.HasValue) act = act.WithClockSnapshot(clockSnapshot.Value);
+
+            if (_logMoves) Debug.Log($"[LocalMoveExecutor] Betrayal Act confirmed: {act}");
+            OnMoveConfirmed?.Invoke(act);
         }
 
         /// <summary>

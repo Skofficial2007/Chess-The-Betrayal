@@ -4,10 +4,9 @@ using UnityEngine;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Core.Match;
-using ChessTheBetrayal.Core.Utils;
-using ChessTheBetrayal.Events.Payloads;
+using ChessTheBetrayal.Core.Randomness;
 using ChessTheBetrayal.Gameplay.Manager;
-using ChessTheBetrayal.Tests.Utilities;
+using ChessTheBetrayal.Tooling;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
 namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
@@ -25,10 +24,10 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         public void PlyIndex_PlainMoves_IncrementsOncePerPly()
         {
             var engine = new ChessEngineAdapter();
-            var board = TestBoardSetupUtility.CreateStandard();
+            var board = BoardSetup.CreateStandard();
 
             var seenPlyIndexes = new List<int>();
-            var moveExecutedChannel = ScriptableObject.CreateInstance<ChessTheBetrayal.Events.MoveExecutedEventChannel>();
+            var moveExecutedChannel = ScriptableObject.CreateInstance<ChessTheBetrayal.Events.Channels.MoveExecutedEventChannel>();
             moveExecutedChannel.Register(payload => seenPlyIndexes.Add(payload.PlyIndex));
 
             var matchDriver = new MatchDriver(engine, board, logMoves: false, domainLogger: null,
@@ -37,13 +36,13 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             matchDriver.TransitionToPhase(TurnPhase.Normal);
 
             MoveCommand whitePush = MoveCommand.CreateStandardMove(
-                TestBoardSetupUtility.AlgebraicToVector("e2"), TestBoardSetupUtility.AlgebraicToVector("e4"),
-                board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("e2")), PieceData.Empty, board);
+                BoardSetup.AlgebraicToVector("e2"), BoardSetup.AlgebraicToVector("e4"),
+                board.GetPiece(BoardSetup.AlgebraicToVector("e2")), PieceData.Empty, board);
             matchDriver.PlayMove(whitePush);
 
             MoveCommand blackPush = MoveCommand.CreateStandardMove(
-                TestBoardSetupUtility.AlgebraicToVector("e7"), TestBoardSetupUtility.AlgebraicToVector("e5"),
-                board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("e7")), PieceData.Empty, board);
+                BoardSetup.AlgebraicToVector("e7"), BoardSetup.AlgebraicToVector("e5"),
+                board.GetPiece(BoardSetup.AlgebraicToVector("e7")), PieceData.Empty, board);
             matchDriver.PlayMove(blackPush);
 
             Assert.That(seenPlyIndexes, Is.EqualTo(new[] { 1, 2 }),
@@ -58,7 +57,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             // PlyIndex must increment on EVERY applied ply, including the Act/Retribution pair of
             // a Betrayal sub-sequence, where the turn does not flip between the two.
             var engine = new ChessEngineAdapter();
-            var board = TestBoardSetupUtility.CreateEmpty()
+            var board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("b1", Team.White, ChessPieceType.Knight)
@@ -69,7 +68,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             board.ComputeFullZobristHash();
 
             var seenPlyIndexes = new List<int>();
-            var moveExecutedChannel = ScriptableObject.CreateInstance<ChessTheBetrayal.Events.MoveExecutedEventChannel>();
+            var moveExecutedChannel = ScriptableObject.CreateInstance<ChessTheBetrayal.Events.Channels.MoveExecutedEventChannel>();
             moveExecutedChannel.Register(payload => seenPlyIndexes.Add(payload.PlyIndex));
 
             var matchDriver = new MatchDriver(engine, board, logMoves: false, domainLogger: null,
@@ -78,7 +77,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             matchDriver.TransitionToPhase(TurnPhase.Normal);
 
             var actMoves = new List<MoveCommand>();
-            ChessEngine.GetBetrayalTargets(board, TestBoardSetupUtility.AlgebraicToVector("b1"), actMoves);
+            ChessEngine.GetBetrayalTargets(board, BoardSetup.AlgebraicToVector("b1"), actMoves);
             matchDriver.PlayMove(actMoves[0]);
 
             var retMoves = new List<MoveCommand>();
@@ -206,7 +205,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         private sealed class MatchFlowFixture
         {
             public MatchFlowCoordinator MatchFlow;
-            public ChessTheBetrayal.Events.MoveExecutedEventChannel MoveExecutedChannel;
+            public ChessTheBetrayal.Events.Channels.MoveExecutedEventChannel MoveExecutedChannel;
             public int RaisedGameModeConfiguredCount;
             public int RaisedGameStartedCount;
             public int RaisedBoardResyncRequiredCount;
@@ -222,7 +221,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
 
                 var engine = new ChessEngineAdapter();
                 var board = new BoardState(8, 8);
-                fixture.MoveExecutedChannel = ScriptableObject.CreateInstance<ChessTheBetrayal.Events.MoveExecutedEventChannel>();
+                fixture.MoveExecutedChannel = ScriptableObject.CreateInstance<ChessTheBetrayal.Events.Channels.MoveExecutedEventChannel>();
 
                 var matchDriver = new MatchDriver(engine, board, logMoves: false, domainLogger: null,
                     gameOverChannel: null, turnChangedChannel: null, moveExecutedChannel: fixture.MoveExecutedChannel,
@@ -238,7 +237,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
 
                 fixture.MatchFlow = new MatchFlowCoordinator(
                     board, deterministicSetup, matchDriver, matchDriver.PlayMove, engine, undoService, fixture._aiCoordinator, clockCoordinator,
-                    fixture._host, boardSizeX: 8, boardSizeY: 8, logMoves: false,
+                    fixture._host, logMoves: false,
                     triggerTeamRoulette: _ => { },
                     showTeamSelection: () => { },
                     showGameModeSelection: () => { },

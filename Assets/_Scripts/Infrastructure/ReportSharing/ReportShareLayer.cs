@@ -1,4 +1,4 @@
-namespace ChessTheBetrayal.Infrastructure
+namespace ChessTheBetrayal.Infrastructure.ReportSharing
 {
     /// <summary>Which way a finished report actually reached the tester.</summary>
     internal enum ReportShareLayer

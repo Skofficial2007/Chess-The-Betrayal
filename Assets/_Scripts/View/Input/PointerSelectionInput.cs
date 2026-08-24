@@ -1,12 +1,12 @@
 using System;
 using UnityEngine;
-using ChessTheBetrayal.UI;
 using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.Gameplay.Interaction;
 using ChessTheBetrayal.Infrastructure;
+using ChessTheBetrayal.View.Board;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
-namespace ChessTheBetrayal.View
+namespace ChessTheBetrayal.View.Input
 {
     /// <summary>
     /// Mouse- and touch-driven ISelectionInput. Raises OnTileActivated on pointer-up as a tap:
@@ -32,7 +32,9 @@ namespace ChessTheBetrayal.View
 
         public event Action<Vector2Int> OnTileActivated;
 
-        private Camera mainCamera;
+        // Spelled out in full because this assembly has a Camera namespace of its own, which sits
+        // closer than the UnityEngine import and would otherwise be what the bare name finds.
+        private UnityEngine.Camera mainCamera;
         private IUiBlockingState _uiBlockingState;
         private IBoardQuery _gameManager;
         private IBoardHitTest _boardHitTest;
@@ -42,7 +44,7 @@ namespace ChessTheBetrayal.View
 
         private void Awake()
         {
-            mainCamera = Camera.main;
+            mainCamera = UnityEngine.Camera.main;
             if (mainCamera == null)
             {
                 Debug.LogError("[PointerSelectionInput] No main camera found!");

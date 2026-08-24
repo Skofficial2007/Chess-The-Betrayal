@@ -2,7 +2,7 @@
 using System;
 using UnityEngine;
 
-namespace ChessTheBetrayal.Infrastructure
+namespace ChessTheBetrayal.Infrastructure.ReportSharing
 {
     /// <summary>
     /// The Android-only half of exporting a report: everything that talks to the platform through

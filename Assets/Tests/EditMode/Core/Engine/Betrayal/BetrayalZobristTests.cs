@@ -1,7 +1,7 @@
 using NUnit.Framework;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
-using ChessTheBetrayal.Tests.Utilities;
+using ChessTheBetrayal.Tooling;
 
 namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
 {
@@ -12,8 +12,8 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
         public void ZobristHash_BetrayalRightConsumed_AltersHash()
         {
             // Arrange
-            BoardState boardWithRight = TestBoardSetupUtility.CreateStandard().WithBetrayalRight(true);
-            BoardState boardWithoutRight = TestBoardSetupUtility.CreateStandard().WithBetrayalRight(false);
+            BoardState boardWithRight = BoardSetup.CreateStandard().WithBetrayalRight(true);
+            BoardState boardWithoutRight = BoardSetup.CreateStandard().WithBetrayalRight(false);
 
             // Act
             boardWithRight.ComputeFullZobristHash();
@@ -28,7 +28,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
         public void ZobristHash_ActMoveThenFullUndo_RestoresOriginalHash()
         {
             // Arrange
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e4", Team.White, ChessPieceType.Rook)
                 .WithPiece("e5", Team.White, ChessPieceType.Pawn)
@@ -38,10 +38,10 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
             ulong originalHash = board.ZobristHash;
 
             MoveCommand actMove = MoveCommand.CreateStandardMove(
-                TestBoardSetupUtility.AlgebraicToVector("e4"),
-                TestBoardSetupUtility.AlgebraicToVector("e5"),
-                board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("e4")),
-                board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("e5")),
+                BoardSetup.AlgebraicToVector("e4"),
+                BoardSetup.AlgebraicToVector("e5"),
+                board.GetPiece(BoardSetup.AlgebraicToVector("e4")),
+                board.GetPiece(BoardSetup.AlgebraicToVector("e5")),
                 board).WithStage(BetrayalStage.Act);
 
             // Act
@@ -58,7 +58,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
         {
             // Arrange: drives Defection through the same ApplyMoveToBoard/UndoMoveOnBoard seam
             // an AI search uses, rather than the raw BoardState.DefectPiece primitive directly.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e4", Team.White, ChessPieceType.Knight)
                 .WithPendingBetrayer("e4", Team.White);
@@ -82,14 +82,14 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
             // the pending Betrayer. Without hashing PendingBetrayerSquare/BetrayalInitiator,
             // these would collide and poison the transposition table during the exact
             // high-branching Act/Retribution sub-phase where collisions are most costly.
-            BoardState boardBetrayerAtE4 = TestBoardSetupUtility.CreateEmpty()
+            BoardState boardBetrayerAtE4 = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e4", Team.White, ChessPieceType.Knight)
                 .WithPiece("d4", Team.White, ChessPieceType.Pawn)
                 .WithBetrayalRight(false)
                 .WithPendingBetrayer("e4", Team.White);
 
-            BoardState boardBetrayerAtD4 = TestBoardSetupUtility.CreateEmpty()
+            BoardState boardBetrayerAtD4 = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e4", Team.White, ChessPieceType.Knight)
                 .WithPiece("d4", Team.White, ChessPieceType.Pawn)
@@ -108,13 +108,13 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
         {
             // Same pending square, differing only in which side initiated — must also
             // produce distinct hashes, since GetRetributionMoves/GetForcedSaveMoves branch on it.
-            BoardState boardWhiteInitiator = TestBoardSetupUtility.CreateEmpty()
+            BoardState boardWhiteInitiator = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e4", Team.White, ChessPieceType.Knight)
                 .WithBetrayalRight(false)
                 .WithPendingBetrayer("e4", Team.White);
 
-            BoardState boardBlackInitiator = TestBoardSetupUtility.CreateEmpty()
+            BoardState boardBlackInitiator = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e4", Team.White, ChessPieceType.Knight)
                 .WithBetrayalRight(false)
@@ -131,7 +131,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
         public void ZobristHash_ActMoveTogglesSubState_UndoRestoresExactly()
         {
             // Arrange
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("b1", Team.White, ChessPieceType.Knight)
                 .WithPiece("a3", Team.White, ChessPieceType.Pawn)
@@ -141,10 +141,10 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
             ulong originalHash = board.ZobristHash;
 
             MoveCommand actMove = MoveCommand.CreateStandardMove(
-                TestBoardSetupUtility.AlgebraicToVector("b1"),
-                TestBoardSetupUtility.AlgebraicToVector("a3"),
-                board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("b1")),
-                board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("a3")),
+                BoardSetup.AlgebraicToVector("b1"),
+                BoardSetup.AlgebraicToVector("a3"),
+                board.GetPiece(BoardSetup.AlgebraicToVector("b1")),
+                board.GetPiece(BoardSetup.AlgebraicToVector("a3")),
                 board).WithStage(BetrayalStage.Act);
 
             // Act

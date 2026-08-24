@@ -2,8 +2,8 @@ using NUnit.Framework;
 using System.Collections.Generic;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
-using ChessTheBetrayal.Core.Movement;
-using ChessTheBetrayal.Tests.Utilities;
+using ChessTheBetrayal.Core.Engine.Movement;
+using ChessTheBetrayal.Tooling;
 
 namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
 {
@@ -126,7 +126,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
 
         private static BoardState RandomBetrayalPosition(Lcg rng, int pieceCount)
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty();
+            BoardState board = BoardSetup.CreateEmpty();
 
             // Kings are mandatory for legality checks; place them on fixed, mutually safe squares.
             board = board.WithPiece("a1", Team.White, ChessPieceType.King)
@@ -134,8 +134,8 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
 
             var occupied = new HashSet<Vector2Int>
             {
-                TestBoardSetupUtility.AlgebraicToVector("a1"),
-                TestBoardSetupUtility.AlgebraicToVector("h8")
+                BoardSetup.AlgebraicToVector("a1"),
+                BoardSetup.AlgebraicToVector("h8")
             };
 
             int placed = 0, guard = 0;

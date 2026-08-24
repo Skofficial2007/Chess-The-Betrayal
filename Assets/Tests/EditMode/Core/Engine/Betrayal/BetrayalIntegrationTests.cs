@@ -2,7 +2,7 @@ using NUnit.Framework;
 using System.Collections.Generic;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
-using ChessTheBetrayal.Tests.Utilities;
+using ChessTheBetrayal.Tooling;
 
 namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
 {
@@ -31,7 +31,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
             // White Pawn at a3 (Victim)
             // White Rook at a1 (Executioner)
             // ---------------------------------------------------------
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("b1", Team.White, ChessPieceType.Knight)
@@ -46,7 +46,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
             // ---------------------------------------------------------
             // 2. PHASE 1: THE ACT
             // ---------------------------------------------------------
-            ChessEngine.GetBetrayalTargets(board, TestBoardSetupUtility.AlgebraicToVector("b1"), _moveBuffer);
+            ChessEngine.GetBetrayalTargets(board, BoardSetup.AlgebraicToVector("b1"), _moveBuffer);
             Assert.That(_moveBuffer.Count, Is.EqualTo(1), "Knight should be able to target the pawn at a3.");
             MoveCommand actMove = _moveBuffer[0];
 
@@ -55,7 +55,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
             ChessEngine.ApplyMoveToBoard(board, actMove);
 
             Assert.That(board.BetrayalRightAvailable, Is.False, "Engine should natively consume the betrayal right.");
-            Assert.That(board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("a3")).Type, Is.EqualTo(ChessPieceType.Knight), "Knight successfully betrayed the Pawn.");
+            Assert.That(board.GetPiece(BoardSetup.AlgebraicToVector("a3")).Type, Is.EqualTo(ChessPieceType.Knight), "Knight successfully betrayed the Pawn.");
             Assert.DoesNotThrow(() => board.AssertZobristConsistency(), "Hash must remain consistent after Phase 1 Act.");
 
             // ---------------------------------------------------------
@@ -87,7 +87,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
             // White Knight at e3 betrays the White Pawn at d3.
             // When the Knight lands on d3 and defects to Black, it will check the King on e1!
             // ---------------------------------------------------------
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e4", Team.White, ChessPieceType.Rook)   // Executioner (Pinned)
                 .WithPiece("e8", Team.Black, ChessPieceType.Rook)   // Pinning piece
@@ -102,8 +102,8 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
             // 2. PHASE 1: THE ACT
             // ---------------------------------------------------------
             MoveCommand actMove = MoveCommand.CreateStandardMove(
-                TestBoardSetupUtility.AlgebraicToVector("e3"), TestBoardSetupUtility.AlgebraicToVector("d3"),
-                board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("e3")), board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("d3")), board)
+                BoardSetup.AlgebraicToVector("e3"), BoardSetup.AlgebraicToVector("d3"),
+                board.GetPiece(BoardSetup.AlgebraicToVector("e3")), board.GetPiece(BoardSetup.AlgebraicToVector("d3")), board)
                 .WithStage(BetrayalStage.Act);
 
             // FIX: Natively applied by the engine. Removed manual toggles.

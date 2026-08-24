@@ -115,7 +115,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         [Test]
         public void PushSnapshotTo_NoClockActive_LeavesSharedStateUntouched()
         {
-            var sharedState = ScriptableObject.CreateInstance<ChessTheBetrayal.Events.SharedClockStateSO>();
+            var sharedState = ScriptableObject.CreateInstance<ChessTheBetrayal.Events.State.SharedClockStateSO>();
             try
             {
                 _coordinator.PushSnapshotTo(sharedState);
@@ -135,7 +135,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             var mode = new GameModeConfig("Blitz 5|0", baseTimeMs: 5 * 60_000L, incrementMs: 0);
             _coordinator.Initialize(mode, isAiMode: false, Team.White, _host, _matchDriver);
 
-            var sharedState = ScriptableObject.CreateInstance<ChessTheBetrayal.Events.SharedClockStateSO>();
+            var sharedState = ScriptableObject.CreateInstance<ChessTheBetrayal.Events.State.SharedClockStateSO>();
             try
             {
                 _coordinator.PushSnapshotTo(sharedState);

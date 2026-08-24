@@ -14,7 +14,7 @@ namespace ChessTheBetrayal.Infrastructure
     ///
     /// Deliberately not a general-purpose DI container: no lifetime scopes, no auto-wiring, no
     /// constructor injection. Register/Resolve is the entire surface — that's the 90%-of-the-benefit,
-    /// 10%-of-the-complexity tradeoff for a project this size (see di-migration-plan.md).
+    /// 10%-of-the-complexity tradeoff for a project this size.
     /// </summary>
     public sealed class ServiceLocator
     {

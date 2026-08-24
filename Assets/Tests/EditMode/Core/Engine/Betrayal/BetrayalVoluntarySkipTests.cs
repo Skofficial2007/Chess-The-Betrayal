@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using NUnit.Framework;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
-using ChessTheBetrayal.Tests.Utilities;
+using ChessTheBetrayal.Tooling;
 
 namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
 {
@@ -29,7 +29,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
         {
             // Arrange: White has a legal Executioner (the Rook on e4 could capture h8's Knight-turned-
             // Betrayer if it moved there) — but the player is choosing to Skip instead.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithPiece("e1", Team.White, ChessPieceType.Rook) // legal Executioner, unused
                 .WithPiece("h8", Team.White, ChessPieceType.Knight) // Betrayer
@@ -37,7 +37,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
 
             TurnAdvanceResult result = _resolver.ResolveVoluntaryDefection(board);
 
-            PieceData defected = board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("h8"));
+            PieceData defected = board.GetPiece(BoardSetup.AlgebraicToVector("h8"));
             Assert.That(defected.Team, Is.EqualTo(Team.Black), "Skip must defect the Betrayer exactly like a forced Defection.");
             Assert.That(result.DidDefect, Is.True);
         }
@@ -45,7 +45,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
         [Test]
         public void ResolveVoluntaryDefection_NoSelfCheck_PassesTurnToOpponent()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithPiece("h8", Team.White, ChessPieceType.Knight) // Betrayer, defecting far from King
                 .WithPendingBetrayer("h8", Team.White);
@@ -62,7 +62,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
         {
             // Same fixture shape as BetrayalDefectionTests.ResolveFailedRetribution_..._RequiresForcedSaveIsTrue,
             // but triggered via a voluntary skip instead of "no legal Retribution" — must behave identically.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e4", Team.White, ChessPieceType.Rook) // Betrayer. Once it defects to Black, it checks e1.
                 .WithPendingBetrayer("e4", Team.White);
@@ -87,7 +87,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
             //
             // Driven through the REAL incremental path (Advance, not WithPendingBetrayer) so the
             // sub-state hash is genuinely toggled on by the Act, exactly like live play or the AI search.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("h8", Team.White, ChessPieceType.Knight) // Betrayer, defects far from its King
@@ -96,7 +96,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
                 .WithBetrayalRight(true)
                 .WithComputedHash();
 
-            ChessEngine.GetBetrayalTargets(board, TestBoardSetupUtility.AlgebraicToVector("h8"), _moveBuffer);
+            ChessEngine.GetBetrayalTargets(board, BoardSetup.AlgebraicToVector("h8"), _moveBuffer);
             Assert.That(_moveBuffer.Count, Is.GreaterThan(0), "Knight must have at least one Betrayal Act target.");
             MoveCommand actMove = _moveBuffer[0];
 

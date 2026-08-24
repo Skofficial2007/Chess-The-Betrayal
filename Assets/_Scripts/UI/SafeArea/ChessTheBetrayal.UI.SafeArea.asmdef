@@ -1,5 +1,6 @@
 {
   "name": "ChessTheBetrayal.UI.SafeArea",
+  "rootNamespace": "ChessTheBetrayal.UI.SafeArea",
   "references": [],
   "includePlatforms": [],
   "excludePlatforms": [],

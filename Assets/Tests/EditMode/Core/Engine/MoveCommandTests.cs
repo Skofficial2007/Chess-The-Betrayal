@@ -2,7 +2,7 @@ using NUnit.Framework;
 using System.Collections.Generic;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
-using ChessTheBetrayal.Tests.Utilities;
+using ChessTheBetrayal.Tooling;
 
 namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
 {
@@ -46,9 +46,9 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void ApplyMoveToBoard_StandardMove_PieceArrivesAtDestination()
         {
             // Arrange
-            BoardState board = TestBoardSetupUtility.CreateStandard();
-            Vector2Int e2 = TestBoardSetupUtility.AlgebraicToVector("e2");
-            Vector2Int e4 = TestBoardSetupUtility.AlgebraicToVector("e4");
+            BoardState board = BoardSetup.CreateStandard();
+            Vector2Int e2 = BoardSetup.AlgebraicToVector("e2");
+            Vector2Int e4 = BoardSetup.AlgebraicToVector("e4");
             MoveCommand move = MoveCommand.CreateStandardMove(e2, e4, board.GetPiece(e2), default, board);
 
             // Act
@@ -63,17 +63,17 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
         public void ApplyMoveToBoard_CaptureMove_PieceAddedToGraveyard()
         {
             // Arrange
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.Rook)
                 .WithPiece("e5", Team.Black, ChessPieceType.Pawn)
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithPiece("h8", Team.Black, ChessPieceType.King);
 
             MoveCommand capture = MoveCommand.CreateStandardMove(
-                TestBoardSetupUtility.AlgebraicToVector("e1"),
-                TestBoardSetupUtility.AlgebraicToVector("e5"),
-                board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("e1")),
-                board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("e5")),
+                BoardSetup.AlgebraicToVector("e1"),
+                BoardSetup.AlgebraicToVector("e5"),
+                board.GetPiece(BoardSetup.AlgebraicToVector("e1")),
+                board.GetPiece(BoardSetup.AlgebraicToVector("e5")),
                 board);
 
             // Act
@@ -82,21 +82,21 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
             // Assert
             Assert.That(board.BlackCaptured.Count, Is.EqualTo(1));
             Assert.That(board.BlackCaptured[0].Type, Is.EqualTo(ChessPieceType.Pawn));
-            Assert.That(board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("e5")).Team, Is.EqualTo(Team.White));
+            Assert.That(board.GetPiece(BoardSetup.AlgebraicToVector("e5")).Team, Is.EqualTo(Team.White));
         }
 
         [Test]
         public void ApplyMoveToBoard_PromotionMove_PawnReplacedByQueen()
         {
             // Arrange
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e7", Team.White, ChessPieceType.Pawn, hasMoved: true)
                 .WithPiece("a1", Team.White, ChessPieceType.King);
 
             MoveCommand promotion = MoveCommand.CreatePromotionMove(
-                TestBoardSetupUtility.AlgebraicToVector("e7"),
-                TestBoardSetupUtility.AlgebraicToVector("e8"),
-                board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("e7")),
+                BoardSetup.AlgebraicToVector("e7"),
+                BoardSetup.AlgebraicToVector("e8"),
+                board.GetPiece(BoardSetup.AlgebraicToVector("e7")),
                 ChessPieceType.Queen,
                 default,
                 board);
@@ -105,34 +105,34 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine
             ChessEngine.ApplyMoveToBoard(board, promotion);
 
             // Assert
-            Assert.That(board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("e8")).Type, Is.EqualTo(ChessPieceType.Queen));
-            Assert.That(board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("e7")).IsEmpty, Is.True);
+            Assert.That(board.GetPiece(BoardSetup.AlgebraicToVector("e8")).Type, Is.EqualTo(ChessPieceType.Queen));
+            Assert.That(board.GetPiece(BoardSetup.AlgebraicToVector("e7")).IsEmpty, Is.True);
         }
 
         [Test]
         public void ApplyMoveToBoard_EnPassant_CapturedPawnRemovedFromCorrectSquare()
         {
             // Arrange
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e5", Team.White, ChessPieceType.Pawn, hasMoved: true)
                 .WithPiece("f5", Team.Black, ChessPieceType.Pawn, hasMoved: true)
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithEnPassantFile(5); // f-file
 
             MoveCommand epMove = MoveCommand.CreateEnPassantMove(
-                TestBoardSetupUtility.AlgebraicToVector("e5"),
-                TestBoardSetupUtility.AlgebraicToVector("f6"),
-                board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("e5")),
-                board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("f5")),
-                TestBoardSetupUtility.AlgebraicToVector("f5"),
+                BoardSetup.AlgebraicToVector("e5"),
+                BoardSetup.AlgebraicToVector("f6"),
+                board.GetPiece(BoardSetup.AlgebraicToVector("e5")),
+                board.GetPiece(BoardSetup.AlgebraicToVector("f5")),
+                BoardSetup.AlgebraicToVector("f5"),
                 board);
 
             // Act
             ChessEngine.ApplyMoveToBoard(board, epMove);
 
             // Assert
-            Assert.That(board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("f5")).IsEmpty, Is.True, "Captured pawn must be removed from f5.");
-            Assert.That(board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("f6")).Type, Is.EqualTo(ChessPieceType.Pawn), "White pawn must arrive at f6.");
+            Assert.That(board.GetPiece(BoardSetup.AlgebraicToVector("f5")).IsEmpty, Is.True, "Captured pawn must be removed from f5.");
+            Assert.That(board.GetPiece(BoardSetup.AlgebraicToVector("f6")).Type, Is.EqualTo(ChessPieceType.Pawn), "White pawn must arrive at f6.");
         }
     }
 }

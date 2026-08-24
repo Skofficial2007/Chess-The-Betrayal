@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using UnityEngine;
+using ChessTheBetrayal.AI.Profiles;
 using Debug = UnityEngine.Debug;
 
 namespace ChessTheBetrayal.AI.DeviceBenchmark

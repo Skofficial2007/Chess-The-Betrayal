@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using ChessTheBetrayal.Core.Data;
 
-namespace ChessTheBetrayal.View
+namespace ChessTheBetrayal.View.Board
 {
     /// <summary>Where a captured piece stands once it reaches the death pile, and which way it faces.</summary>
     public readonly struct GraveyardSlot

@@ -4,9 +4,9 @@ using UnityEngine;
 using UnityEngine.UI;
 using PrimeTween;
 using ChessTheBetrayal.Core.Data;
-using ChessTheBetrayal.Core.Diagnostics;
+using ChessTheBetrayal.Infrastructure;
 
-namespace ChessTheBetrayal.UI
+namespace ChessTheBetrayal.UI.Panels
 {
     /// <summary>
     /// The View component for team assignment.

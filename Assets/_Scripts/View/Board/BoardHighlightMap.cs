@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
-namespace ChessTheBetrayal.View
+namespace ChessTheBetrayal.View.Board
 {
     /// <summary>
     /// The shape drawn on top of a square. Each one is a different silhouette, not just a different

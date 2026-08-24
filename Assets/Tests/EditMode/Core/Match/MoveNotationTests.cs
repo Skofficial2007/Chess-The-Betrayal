@@ -2,7 +2,7 @@ using NUnit.Framework;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Core.Match;
-using ChessTheBetrayal.Tests.Utilities;
+using ChessTheBetrayal.Tooling;
 
 namespace ChessTheBetrayal.Tests.EditMode.Core.Match
 {
@@ -19,10 +19,10 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Match
         [Test]
         public void Format_WhiteStandardMove_UsesDotSeparatorAndDash()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty().WithPiece("e2", Team.White, ChessPieceType.Pawn);
-            PieceData pawn = board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("e2"));
+            BoardState board = BoardSetup.CreateEmpty().WithPiece("e2", Team.White, ChessPieceType.Pawn);
+            PieceData pawn = board.GetPiece(BoardSetup.AlgebraicToVector("e2"));
             MoveCommand move = MoveCommand.CreateStandardMove(
-                TestBoardSetupUtility.AlgebraicToVector("e2"), TestBoardSetupUtility.AlgebraicToVector("e4"), pawn, default, board);
+                BoardSetup.AlgebraicToVector("e2"), BoardSetup.AlgebraicToVector("e4"), pawn, default, board);
 
             string result = MoveNotation.Format(move, 1);
 
@@ -32,10 +32,10 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Match
         [Test]
         public void Format_BlackStandardMove_UsesEllipsisSeparator()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty().WithPiece("e7", Team.Black, ChessPieceType.Pawn);
-            PieceData pawn = board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("e7"));
+            BoardState board = BoardSetup.CreateEmpty().WithPiece("e7", Team.Black, ChessPieceType.Pawn);
+            PieceData pawn = board.GetPiece(BoardSetup.AlgebraicToVector("e7"));
             MoveCommand move = MoveCommand.CreateStandardMove(
-                TestBoardSetupUtility.AlgebraicToVector("e7"), TestBoardSetupUtility.AlgebraicToVector("e5"), pawn, default, board);
+                BoardSetup.AlgebraicToVector("e7"), BoardSetup.AlgebraicToVector("e5"), pawn, default, board);
 
             string result = MoveNotation.Format(move, 1);
 
@@ -45,10 +45,10 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Match
         [Test]
         public void Format_PieceMove_PrefixesWithPieceLetter()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty().WithPiece("g1", Team.White, ChessPieceType.Knight);
-            PieceData knight = board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("g1"));
+            BoardState board = BoardSetup.CreateEmpty().WithPiece("g1", Team.White, ChessPieceType.Knight);
+            PieceData knight = board.GetPiece(BoardSetup.AlgebraicToVector("g1"));
             MoveCommand move = MoveCommand.CreateStandardMove(
-                TestBoardSetupUtility.AlgebraicToVector("g1"), TestBoardSetupUtility.AlgebraicToVector("f3"), knight, default, board);
+                BoardSetup.AlgebraicToVector("g1"), BoardSetup.AlgebraicToVector("f3"), knight, default, board);
 
             string result = MoveNotation.Format(move, 1);
 
@@ -58,10 +58,10 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Match
         [Test]
         public void Format_PawnMove_OmitsPieceLetter()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty().WithPiece("e2", Team.White, ChessPieceType.Pawn);
-            PieceData pawn = board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("e2"));
+            BoardState board = BoardSetup.CreateEmpty().WithPiece("e2", Team.White, ChessPieceType.Pawn);
+            PieceData pawn = board.GetPiece(BoardSetup.AlgebraicToVector("e2"));
             MoveCommand move = MoveCommand.CreateStandardMove(
-                TestBoardSetupUtility.AlgebraicToVector("e2"), TestBoardSetupUtility.AlgebraicToVector("e4"), pawn, default, board);
+                BoardSetup.AlgebraicToVector("e2"), BoardSetup.AlgebraicToVector("e4"), pawn, default, board);
 
             string result = MoveNotation.Format(move, 1);
 
@@ -71,13 +71,13 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Match
         [Test]
         public void Format_Capture_UsesXSeparator()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e4", Team.White, ChessPieceType.Pawn)
                 .WithPiece("d5", Team.Black, ChessPieceType.Pawn);
-            PieceData attacker = board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("e4"));
-            PieceData victim = board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("d5"));
+            PieceData attacker = board.GetPiece(BoardSetup.AlgebraicToVector("e4"));
+            PieceData victim = board.GetPiece(BoardSetup.AlgebraicToVector("d5"));
             MoveCommand move = MoveCommand.CreateStandardMove(
-                TestBoardSetupUtility.AlgebraicToVector("e4"), TestBoardSetupUtility.AlgebraicToVector("d5"), attacker, victim, board);
+                BoardSetup.AlgebraicToVector("e4"), BoardSetup.AlgebraicToVector("d5"), attacker, victim, board);
 
             string result = MoveNotation.Format(move, 3);
 
@@ -87,11 +87,11 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Match
         [Test]
         public void Format_KingsideCastling_RendersOO()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty().WithPiece("e1", Team.White, ChessPieceType.King);
-            PieceData king = board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("e1"));
+            BoardState board = BoardSetup.CreateEmpty().WithPiece("e1", Team.White, ChessPieceType.King);
+            PieceData king = board.GetPiece(BoardSetup.AlgebraicToVector("e1"));
             MoveCommand move = MoveCommand.CreateCastlingMove(
-                TestBoardSetupUtility.AlgebraicToVector("e1"), TestBoardSetupUtility.AlgebraicToVector("g1"), king,
-                TestBoardSetupUtility.AlgebraicToVector("h1"), TestBoardSetupUtility.AlgebraicToVector("f1"), board);
+                BoardSetup.AlgebraicToVector("e1"), BoardSetup.AlgebraicToVector("g1"), king,
+                BoardSetup.AlgebraicToVector("h1"), BoardSetup.AlgebraicToVector("f1"), board);
 
             string result = MoveNotation.Format(move, 5);
 
@@ -101,11 +101,11 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Match
         [Test]
         public void Format_QueensideCastling_RendersOOO()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty().WithPiece("e1", Team.White, ChessPieceType.King);
-            PieceData king = board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("e1"));
+            BoardState board = BoardSetup.CreateEmpty().WithPiece("e1", Team.White, ChessPieceType.King);
+            PieceData king = board.GetPiece(BoardSetup.AlgebraicToVector("e1"));
             MoveCommand move = MoveCommand.CreateCastlingMove(
-                TestBoardSetupUtility.AlgebraicToVector("e1"), TestBoardSetupUtility.AlgebraicToVector("c1"), king,
-                TestBoardSetupUtility.AlgebraicToVector("a1"), TestBoardSetupUtility.AlgebraicToVector("d1"), board);
+                BoardSetup.AlgebraicToVector("e1"), BoardSetup.AlgebraicToVector("c1"), king,
+                BoardSetup.AlgebraicToVector("a1"), BoardSetup.AlgebraicToVector("d1"), board);
 
             string result = MoveNotation.Format(move, 5);
 
@@ -115,14 +115,14 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Match
         [Test]
         public void Format_EnPassant_AppendsEpMarker()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e5", Team.White, ChessPieceType.Pawn)
                 .WithPiece("d5", Team.Black, ChessPieceType.Pawn);
-            PieceData pawn = board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("e5"));
-            PieceData captured = board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("d5"));
+            PieceData pawn = board.GetPiece(BoardSetup.AlgebraicToVector("e5"));
+            PieceData captured = board.GetPiece(BoardSetup.AlgebraicToVector("d5"));
             MoveCommand move = MoveCommand.CreateEnPassantMove(
-                TestBoardSetupUtility.AlgebraicToVector("e5"), TestBoardSetupUtility.AlgebraicToVector("d6"),
-                pawn, captured, TestBoardSetupUtility.AlgebraicToVector("d5"), board);
+                BoardSetup.AlgebraicToVector("e5"), BoardSetup.AlgebraicToVector("d6"),
+                pawn, captured, BoardSetup.AlgebraicToVector("d5"), board);
 
             string result = MoveNotation.Format(move, 4);
 
@@ -132,10 +132,10 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Match
         [Test]
         public void Format_Promotion_AppendsPromotedPieceLetter()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty().WithPiece("e7", Team.White, ChessPieceType.Pawn);
-            PieceData pawn = board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("e7"));
+            BoardState board = BoardSetup.CreateEmpty().WithPiece("e7", Team.White, ChessPieceType.Pawn);
+            PieceData pawn = board.GetPiece(BoardSetup.AlgebraicToVector("e7"));
             MoveCommand move = MoveCommand.CreatePromotionMove(
-                TestBoardSetupUtility.AlgebraicToVector("e7"), TestBoardSetupUtility.AlgebraicToVector("e8"),
+                BoardSetup.AlgebraicToVector("e7"), BoardSetup.AlgebraicToVector("e8"),
                 pawn, ChessPieceType.Queen, default, board);
 
             string result = MoveNotation.Format(move, 20);
@@ -146,13 +146,13 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Match
         [Test]
         public void Format_ActMove_AppendsActTag()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("c3", Team.White, ChessPieceType.Knight)
                 .WithPiece("d5", Team.White, ChessPieceType.Pawn);
-            PieceData knight = board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("c3"));
-            PieceData victim = board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("d5"));
+            PieceData knight = board.GetPiece(BoardSetup.AlgebraicToVector("c3"));
+            PieceData victim = board.GetPiece(BoardSetup.AlgebraicToVector("d5"));
             MoveCommand move = MoveCommand.CreateStandardMove(
-                TestBoardSetupUtility.AlgebraicToVector("c3"), TestBoardSetupUtility.AlgebraicToVector("d5"), knight, victim, board)
+                BoardSetup.AlgebraicToVector("c3"), BoardSetup.AlgebraicToVector("d5"), knight, victim, board)
                 .WithStage(BetrayalStage.Act);
 
             string result = MoveNotation.Format(move, 12);
@@ -166,9 +166,9 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Match
             // A Defection's StartPosition == EndPosition (see MoveCommand.CreateDefectionMove) —
             // this is the exact bug caught in production: naively formatting it produced the
             // misleading "e5-e5" instead of describing what actually happened.
-            BoardState board = TestBoardSetupUtility.CreateEmpty().WithPiece("e5", Team.White, ChessPieceType.Pawn);
-            PieceData betrayer = board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("e5"));
-            MoveCommand move = MoveCommand.CreateDefectionMove(TestBoardSetupUtility.AlgebraicToVector("e5"), betrayer, board);
+            BoardState board = BoardSetup.CreateEmpty().WithPiece("e5", Team.White, ChessPieceType.Pawn);
+            PieceData betrayer = board.GetPiece(BoardSetup.AlgebraicToVector("e5"));
+            MoveCommand move = MoveCommand.CreateDefectionMove(BoardSetup.AlgebraicToVector("e5"), betrayer, board);
 
             string result = MoveNotation.Format(move, 7);
 
@@ -179,9 +179,9 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Match
         [Test]
         public void Format_DefectionOfNonPawn_IncludesPieceLetter()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty().WithPiece("d5", Team.White, ChessPieceType.Knight);
-            PieceData betrayer = board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("d5"));
-            MoveCommand move = MoveCommand.CreateDefectionMove(TestBoardSetupUtility.AlgebraicToVector("d5"), betrayer, board);
+            BoardState board = BoardSetup.CreateEmpty().WithPiece("d5", Team.White, ChessPieceType.Knight);
+            PieceData betrayer = board.GetPiece(BoardSetup.AlgebraicToVector("d5"));
+            MoveCommand move = MoveCommand.CreateDefectionMove(BoardSetup.AlgebraicToVector("d5"), betrayer, board);
 
             string result = MoveNotation.Format(move, 7);
 
@@ -191,13 +191,13 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Match
         [Test]
         public void Format_RetributionMove_AppendsRetributionTag()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("d5", Team.Black, ChessPieceType.Knight)
                 .WithPiece("d1", Team.White, ChessPieceType.Rook);
-            PieceData rook = board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("d1"));
-            PieceData betrayer = board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("d5"));
+            PieceData rook = board.GetPiece(BoardSetup.AlgebraicToVector("d1"));
+            PieceData betrayer = board.GetPiece(BoardSetup.AlgebraicToVector("d5"));
             MoveCommand move = MoveCommand.CreateStandardMove(
-                TestBoardSetupUtility.AlgebraicToVector("d1"), TestBoardSetupUtility.AlgebraicToVector("d5"), rook, betrayer, board)
+                BoardSetup.AlgebraicToVector("d1"), BoardSetup.AlgebraicToVector("d5"), rook, betrayer, board)
                 .WithStage(BetrayalStage.Retribution);
 
             string result = MoveNotation.Format(move, 8);

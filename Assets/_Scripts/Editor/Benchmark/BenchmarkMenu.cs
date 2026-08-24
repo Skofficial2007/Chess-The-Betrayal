@@ -1,5 +1,6 @@
 using System.Collections.Generic;
-using ChessTheBetrayal.AI;
+using ChessTheBetrayal.AI.Profiles;
+using ChessTheBetrayal.Tooling.Benchmark;
 using UnityEditor;
 using UnityEngine;
 

@@ -1,13 +1,12 @@
 {
   "name": "ChessTheBetrayal.EditorTools",
+  "rootNamespace": "ChessTheBetrayal.EditorTools",
   "references": [
     "ChessTheBetrayal.AI",
     "ChessTheBetrayal.Core",
     "ChessTheBetrayal.Events",
-    "ChessTheBetrayal.Infrastructure",
     "ChessTheBetrayal.UI",
-    "ChessTheBetrayal.View",
-    "ChessTheBetrayal.Tests.Utilities"
+    "ChessTheBetrayal.Tooling"
   ],
   "includePlatforms": [
     "Editor"

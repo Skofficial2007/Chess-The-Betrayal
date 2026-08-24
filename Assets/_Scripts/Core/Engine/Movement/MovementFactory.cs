@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using ChessTheBetrayal.Core.Data;
 
-namespace ChessTheBetrayal.Core.Movement
+namespace ChessTheBetrayal.Core.Engine.Movement
 {
     /// <summary>
     /// Hands out the right movement rules for any piece type. Because each AI thread needs its own copy to work safely in parallel, we use [ThreadStatic] to give every thread its own private set.
@@ -42,26 +42,6 @@ namespace ChessTheBetrayal.Core.Movement
             }
 
             return null;
-        }
-
-        /// <summary>
-        /// Registers a custom piece movement strategy (for modding/custom pieces).
-        /// Heads up: because of how [ThreadStatic] works, this only registers the strategy for whichever thread calls it.
-        /// If you're registering custom pieces, make sure you do it on every thread that needs them.
-        /// </summary>
-        public static void RegisterStrategy(ChessPieceType type, IPieceMovement strategy)
-        {
-            _threadStrategies ??= CreateStrategies();
-            _threadStrategies[type] = strategy;
-        }
-
-        /// <summary>
-        /// Clears all registered strategies for the CURRENT thread.
-        /// </summary>
-        public static void ClearStrategies()
-        {
-            _threadStrategies?.Clear();
-            _threadStrategies = null;
         }
     }
 }

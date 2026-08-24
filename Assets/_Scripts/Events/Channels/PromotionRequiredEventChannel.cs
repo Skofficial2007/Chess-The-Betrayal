@@ -3,7 +3,7 @@ using ChessTheBetrayal.Core.Data;
 using UnityEngine;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
-namespace ChessTheBetrayal.Events
+namespace ChessTheBetrayal.Events.Channels
 {
     [CreateAssetMenu(menuName = "Chess/Events/Promotion Required", fileName = "PromotionRequiredEvent")]
     public sealed class PromotionRequiredEventChannel : GameEventChannel<PromotionRequiredPayload>

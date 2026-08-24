@@ -2,7 +2,7 @@ using NUnit.Framework;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Gameplay.Manager;
-using ChessTheBetrayal.Tests.Utilities;
+using ChessTheBetrayal.Tooling;
 
 namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
 {
@@ -25,7 +25,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         public void Setup()
         {
             _engine = new ChessEngineAdapter();
-            _board = TestBoardSetupUtility.CreateEmpty()
+            _board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e8", Team.Black, ChessPieceType.King)
                 .WithPiece("a2", Team.White, ChessPieceType.Pawn)
@@ -44,8 +44,8 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
 
         private static MoveCommand StandardMove(BoardState board, string from, string to)
         {
-            Vector2Int start = TestBoardSetupUtility.AlgebraicToVector(from);
-            Vector2Int end = TestBoardSetupUtility.AlgebraicToVector(to);
+            Vector2Int start = BoardSetup.AlgebraicToVector(from);
+            Vector2Int end = BoardSetup.AlgebraicToVector(to);
             return MoveCommand.CreateStandardMove(start, end, board.GetPiece(start), board.GetPiece(end), board);
         }
 
@@ -63,10 +63,10 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
 
             _undoService.RequestUndo(isAIMode: true, currentPhase: _matchDriver.CurrentPhase, humanTeam: Team.White, aiMovesFirst: false);
 
-            Assert.That(_board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("a2")).Type, Is.EqualTo(ChessPieceType.Pawn));
-            Assert.That(_board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("a7")).Type, Is.EqualTo(ChessPieceType.Pawn));
-            Assert.That(_board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("a3")).IsEmpty, Is.True);
-            Assert.That(_board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("a6")).IsEmpty, Is.True);
+            Assert.That(_board.GetPiece(BoardSetup.AlgebraicToVector("a2")).Type, Is.EqualTo(ChessPieceType.Pawn));
+            Assert.That(_board.GetPiece(BoardSetup.AlgebraicToVector("a7")).Type, Is.EqualTo(ChessPieceType.Pawn));
+            Assert.That(_board.GetPiece(BoardSetup.AlgebraicToVector("a3")).IsEmpty, Is.True);
+            Assert.That(_board.GetPiece(BoardSetup.AlgebraicToVector("a6")).IsEmpty, Is.True);
             Assert.That(_board.CurrentTurn, Is.EqualTo(Team.White));
             Assert.That(_matchDriver.CurrentPhase, Is.EqualTo(TurnPhase.Normal));
             Assert.DoesNotThrow(() => _board.AssertZobristConsistency());
@@ -132,7 +132,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
 
             Assert.That(_board.CurrentTurn, Is.EqualTo(Team.Black), "Undo must land on the human's turn, not the AI's.");
             Assert.That(_board.ZobristHash, Is.EqualTo(hashAfterAiOpening), "Board is back to just after the AI's opening.");
-            Assert.That(_board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("a3")).Type, Is.EqualTo(ChessPieceType.Pawn),
+            Assert.That(_board.GetPiece(BoardSetup.AlgebraicToVector("a3")).Type, Is.EqualTo(ChessPieceType.Pawn),
                 "The AI's opening pawn must still be on a3 — its opening move is protected from Undo.");
 
             // The protected opening is all that's left — Undo must now be unavailable, and a further
@@ -156,8 +156,8 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
 
             _undoService.RequestUndo(isAIMode: true, currentPhase: _matchDriver.CurrentPhase, humanTeam: Team.White, aiMovesFirst: false);
 
-            Assert.That(_board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("a2")).Type, Is.EqualTo(ChessPieceType.Pawn));
-            Assert.That(_board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("a3")).IsEmpty, Is.True);
+            Assert.That(_board.GetPiece(BoardSetup.AlgebraicToVector("a2")).Type, Is.EqualTo(ChessPieceType.Pawn));
+            Assert.That(_board.GetPiece(BoardSetup.AlgebraicToVector("a3")).IsEmpty, Is.True);
             Assert.That(_board.CurrentTurn, Is.EqualTo(Team.White));
             Assert.That(_matchDriver.CurrentPhase, Is.EqualTo(TurnPhase.Normal));
             Assert.That(_matchDriver.MoveLog.Entries.Count, Is.EqualTo(0));
@@ -190,7 +190,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             Assert.That(_undoService.TurnCount, Is.EqualTo(2), "Only the player's own unanswered turn comes off.");
             Assert.That(_board.ZobristHash, Is.EqualTo(hashAfterAiReply),
                 "The board must land exactly where the AI's last reply left it, not a turn earlier.");
-            Assert.That(_board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("a6")).Type, Is.EqualTo(ChessPieceType.Pawn),
+            Assert.That(_board.GetPiece(BoardSetup.AlgebraicToVector("a6")).Type, Is.EqualTo(ChessPieceType.Pawn),
                 "The AI's own earlier reply must survive — it was never part of this takeback.");
         }
 
@@ -201,7 +201,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             // MatchDriver.PlayMove call each, but ONE turn. Undo (search in flight, pop 1 turn)
             // must unmake both plies in one call and land back on White to move.
             // Clears Setup()'s a2 pawn first — it would block the Rook's a1->a3 Retribution path.
-            Vector2Int a2 = TestBoardSetupUtility.AlgebraicToVector("a2");
+            Vector2Int a2 = BoardSetup.AlgebraicToVector("a2");
             _board.SetPiece(PieceData.Empty, a2.x, a2.y);
             _board.WithPiece("b1", Team.White, ChessPieceType.Knight);
             _board.WithPiece("a1", Team.White, ChessPieceType.Rook);
@@ -211,7 +211,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             ulong hashBefore = _board.ZobristHash;
 
             var actMoves = new System.Collections.Generic.List<MoveCommand>();
-            ChessEngine.GetBetrayalTargets(_board, TestBoardSetupUtility.AlgebraicToVector("b1"), actMoves);
+            ChessEngine.GetBetrayalTargets(_board, BoardSetup.AlgebraicToVector("b1"), actMoves);
             MoveCommand actMove = actMoves[0];
             _matchDriver.PlayMove(actMove);
 
@@ -228,9 +228,9 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             _undoService.RequestUndo(isAIMode: true, currentPhase: _matchDriver.CurrentPhase, humanTeam: Team.White, aiMovesFirst: false);
 
             Assert.That(_board.CurrentTurn, Is.EqualTo(Team.White));
-            Assert.That(_board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("b1")).Type, Is.EqualTo(ChessPieceType.Knight));
-            Assert.That(_board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("a1")).Type, Is.EqualTo(ChessPieceType.Rook));
-            Assert.That(_board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("a3")).Type, Is.EqualTo(ChessPieceType.Pawn));
+            Assert.That(_board.GetPiece(BoardSetup.AlgebraicToVector("b1")).Type, Is.EqualTo(ChessPieceType.Knight));
+            Assert.That(_board.GetPiece(BoardSetup.AlgebraicToVector("a1")).Type, Is.EqualTo(ChessPieceType.Rook));
+            Assert.That(_board.GetPiece(BoardSetup.AlgebraicToVector("a3")).Type, Is.EqualTo(ChessPieceType.Pawn));
             Assert.That(_board.BetrayalRightAvailable, Is.True);
             Assert.DoesNotThrow(() => _board.AssertZobristConsistency());
             Assert.That(_board.ZobristHash, Is.EqualTo(hashBefore));
@@ -256,7 +256,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             ulong hashBefore = _board.ZobristHash;
 
             var actMoves = new System.Collections.Generic.List<MoveCommand>();
-            ChessEngine.GetBetrayalTargets(_board, TestBoardSetupUtility.AlgebraicToVector("h8"), actMoves);
+            ChessEngine.GetBetrayalTargets(_board, BoardSetup.AlgebraicToVector("h8"), actMoves);
             MoveCommand actMove = actMoves[0];
             _matchDriver.PlayMove(actMove);
 
@@ -270,7 +270,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             Assert.That(_board.CurrentTurn, Is.EqualTo(Team.White),
                 "Undo must restore White to move — the pre-fix bug left CurrentTurn on Black because " +
                 "the Stage-only rule never recognized this Defection as turn-flipping.");
-            Assert.That(_board.GetPiece(TestBoardSetupUtility.AlgebraicToVector("h8")).Team, Is.EqualTo(Team.White),
+            Assert.That(_board.GetPiece(BoardSetup.AlgebraicToVector("h8")).Team, Is.EqualTo(Team.White),
                 "Knight must be restored to White before it defected.");
             Assert.DoesNotThrow(() => _board.AssertZobristConsistency());
             Assert.That(_board.ZobristHash, Is.EqualTo(hashBefore));
@@ -309,7 +309,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             Assert.That(_board.Winner, Is.Null);
             Assert.That(_matchDriver.CurrentPhase, Is.EqualTo(TurnPhase.Normal));
             Assert.That(_board.CurrentTurn, Is.EqualTo(Team.White));
-            Assert.That(_matchDriver.CanSelectPiece(TestBoardSetupUtility.AlgebraicToVector("a1")), Is.True,
+            Assert.That(_matchDriver.CanSelectPiece(BoardSetup.AlgebraicToVector("a1")), Is.True,
                 "The rook is back on a1 and it is White's turn — the player must be able to pick it up again.");
         }
 
@@ -329,9 +329,9 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
                 humanTeam: Team.White, aiMovesFirst: false, unmadeMoves: unmade);
 
             Assert.That(unmade, Has.Count.EqualTo(2));
-            Assert.That(unmade[0].StartPosition, Is.EqualTo(TestBoardSetupUtility.AlgebraicToVector("a7")),
+            Assert.That(unmade[0].StartPosition, Is.EqualTo(BoardSetup.AlgebraicToVector("a7")),
                 "The AI's reply came off first, so it must be reported first.");
-            Assert.That(unmade[1].StartPosition, Is.EqualTo(TestBoardSetupUtility.AlgebraicToVector("a2")),
+            Assert.That(unmade[1].StartPosition, Is.EqualTo(BoardSetup.AlgebraicToVector("a2")),
                 "The player's own move came off underneath it.");
         }
 
@@ -351,7 +351,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             _board.ComputeFullZobristHash();
 
             var actMoves = new System.Collections.Generic.List<MoveCommand>();
-            ChessEngine.GetBetrayalTargets(_board, TestBoardSetupUtility.AlgebraicToVector("b1"), actMoves);
+            ChessEngine.GetBetrayalTargets(_board, BoardSetup.AlgebraicToVector("b1"), actMoves);
             _matchDriver.PlayMove(actMoves[0]);
 
             var retMoves = new System.Collections.Generic.List<MoveCommand>();
@@ -382,7 +382,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         {
             for (int i = 0; i < squares.Length; i++)
             {
-                Vector2Int square = TestBoardSetupUtility.AlgebraicToVector(squares[i]);
+                Vector2Int square = BoardSetup.AlgebraicToVector(squares[i]);
                 _board.SetPiece(PieceData.Empty, square.x, square.y);
             }
         }
@@ -393,7 +393,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             // Clears Setup()'s a2 pawn first — it would block the Rook's a1->a3 Retribution path,
             // which would resolve the sequence immediately (Defection) instead of landing in
             // RetributionPending as this test needs.
-            Vector2Int a2 = TestBoardSetupUtility.AlgebraicToVector("a2");
+            Vector2Int a2 = BoardSetup.AlgebraicToVector("a2");
             _board.SetPiece(PieceData.Empty, a2.x, a2.y);
             _board.WithPiece("b1", Team.White, ChessPieceType.Knight);
             _board.WithPiece("a1", Team.White, ChessPieceType.Rook);
@@ -402,7 +402,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             _board.ComputeFullZobristHash();
 
             var actMoves = new System.Collections.Generic.List<MoveCommand>();
-            ChessEngine.GetBetrayalTargets(_board, TestBoardSetupUtility.AlgebraicToVector("b1"), actMoves);
+            ChessEngine.GetBetrayalTargets(_board, BoardSetup.AlgebraicToVector("b1"), actMoves);
             _matchDriver.PlayMove(actMoves[0]);
 
             Assert.That(_matchDriver.CurrentPhase, Is.EqualTo(TurnPhase.RetributionPending));

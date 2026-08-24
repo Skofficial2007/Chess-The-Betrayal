@@ -2,7 +2,7 @@ using NUnit.Framework;
 using System.Collections.Generic;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
-using ChessTheBetrayal.Tests.Utilities;
+using ChessTheBetrayal.Tooling;
 
 namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
 {
@@ -36,8 +36,8 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
 
         private MoveCommand FindMove(BoardState board, string from, string to)
         {
-            Vector2Int fromPos = TestBoardSetupUtility.AlgebraicToVector(from);
-            Vector2Int toPos = TestBoardSetupUtility.AlgebraicToVector(to);
+            Vector2Int fromPos = BoardSetup.AlgebraicToVector(from);
+            Vector2Int toPos = BoardSetup.AlgebraicToVector(to);
 
             _moveBuffer.Clear();
             _engine.GetLegalMoves(board, fromPos, _moveBuffer);
@@ -51,7 +51,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
             }
 
             Assert.Fail($"No legal move found from {from} to {to}. Legal destinations: " +
-                string.Join(", ", TestBoardSetupUtility.GetDestinations(_moveBuffer)));
+                string.Join(", ", BoardSetup.GetDestinations(_moveBuffer)));
             return default;
         }
 
@@ -75,7 +75,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
             // Baseline: the ladder mate alone, no Betrayal mechanic touched at all. If this ever
             // fails, the regression is elsewhere in EvaluateGameState/HasAnyLegalMoves, not in the
             // Betrayal guard these other tests target.
-            BoardState board = WithLadderMateSetup(TestBoardSetupUtility.CreateEmpty())
+            BoardState board = WithLadderMateSetup(BoardSetup.CreateEmpty())
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithTurn(Team.Black);
 
@@ -90,7 +90,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
         {
             // A Betrayal Act + successful Retribution completes far from the mating attack — proves
             // a clean Resolution A sequence never poisons subsequent game-state evaluation.
-            BoardState board = WithLadderMateSetup(TestBoardSetupUtility.CreateEmpty())
+            BoardState board = WithLadderMateSetup(BoardSetup.CreateEmpty())
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithPiece("c1", Team.White, ChessPieceType.Bishop) // Betrayer
                 .WithPiece("d2", Team.White, ChessPieceType.Pawn)   // Victim
@@ -127,7 +127,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
             // forcing GameState.Normal on every future call to EvaluateGameState for the rest of the
             // game. This reproduces exactly that shape: Knight betrays a pawn no other White piece
             // can reach, so Retribution has zero candidates and the engine auto-resolves Defection.
-            BoardState board = WithLadderMateSetup(TestBoardSetupUtility.CreateEmpty())
+            BoardState board = WithLadderMateSetup(BoardSetup.CreateEmpty())
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithPiece("g1", Team.White, ChessPieceType.Knight) // Betrayer
                 .WithPiece("f3", Team.White, ChessPieceType.Pawn)   // Victim; unreachable by any other White piece
@@ -162,7 +162,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
             // Same bug, reached via the Skip button's entry point instead of a forced "no legal
             // Retribution" — RequestRetributionSkip routes through ResolveVoluntaryDefection, which
             // shares ResultFromDefectionOutcome with the forced path and must clear the same state.
-            BoardState board = WithLadderMateSetup(TestBoardSetupUtility.CreateEmpty())
+            BoardState board = WithLadderMateSetup(BoardSetup.CreateEmpty())
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithPiece("g1", Team.White, ChessPieceType.Knight) // Betrayer
                 .WithPiece("f3", Team.White, ChessPieceType.Pawn)   // Victim
@@ -197,7 +197,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
             // PendingBetrayerSquare/BetrayalInitiator via AdvanceBetrayalState's Retribution/
             // DefensiveOverride branch. This test exists so a future change can't silently break
             // *that* path while fixing the other one — both must end in the same clean state.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("e1", Team.White, ChessPieceType.King)
                 .WithPiece("e4", Team.White, ChessPieceType.Rook)   // Executioner candidate, pinned
                 .WithPiece("e8", Team.Black, ChessPieceType.Rook)   // Pins the Rook to the King
@@ -236,7 +236,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
             Assert.That(_engine.EvaluateGameState(board, board.CurrentTurn), Is.EqualTo(GameState.Normal),
                 "Black must have a full, ordinary move set immediately after White's Forced Save.");
 
-            BoardState freshMate = WithLadderMateSetup(TestBoardSetupUtility.CreateEmpty())
+            BoardState freshMate = WithLadderMateSetup(BoardSetup.CreateEmpty())
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithTurn(Team.Black);
 
@@ -256,7 +256,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Betrayal
             // lands on the victim's square (the Betrayer, not the victim) to the opposing team, so a
             // defected Knight would hand Black a genuinely mobile piece and turn this into Normal
             // instead of Stalemate. A pawn boxed in (blocked push, no diagonal targets) has none.
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.Black, ChessPieceType.King)  // Cornered — a2/b1/b2 all covered by the Queen, not a1 itself
                 .WithPiece("b3", Team.White, ChessPieceType.Queen)
                 .WithPiece("c2", Team.White, ChessPieceType.King) // Protects the Queen; doubles as White's own King

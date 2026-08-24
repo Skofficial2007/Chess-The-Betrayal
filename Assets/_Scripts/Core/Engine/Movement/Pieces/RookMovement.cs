@@ -2,14 +2,14 @@ using System.Collections.Generic;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 
-namespace ChessTheBetrayal.Core.Movement
+namespace ChessTheBetrayal.Core.Engine.Movement
 {
     /// <summary>
     /// Movement strategy for the Rook piece.
     /// Rooks move in straight lines: horizontally or vertically, any distance.
     /// Cannot jump over pieces - stops when encountering any piece.
     /// </summary>
-    public class RookMovement : IPieceMovement
+    internal sealed class RookMovement : IPieceMovement
     {
         // Straight directions: Up, Down, Right, Left
         private static readonly int[,] Directions = new int[,]

@@ -2,10 +2,10 @@ using System.Collections.Generic;
 using NUnit.Framework;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
-using ChessTheBetrayal.Events;
+using ChessTheBetrayal.Events.Channels;
 using ChessTheBetrayal.Events.Payloads;
 using ChessTheBetrayal.Gameplay.Manager;
-using ChessTheBetrayal.Tests.Utilities;
+using ChessTheBetrayal.Tooling;
 
 namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
 {
@@ -40,7 +40,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
 
         /// <summary>Two kings and two rooks, all with room to shuffle and nothing to capture.</summary>
         private static BoardState ShufflingEndgame() =>
-            TestBoardSetupUtility.CreateEmpty()
+            BoardSetup.CreateEmpty()
                 .WithPiece("a1", Team.White, ChessPieceType.King)
                 .WithPiece("h1", Team.White, ChessPieceType.Rook)
                 .WithPiece("a8", Team.Black, ChessPieceType.King)
@@ -51,8 +51,8 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
 
         private void Play(BoardState board, string from, string to)
         {
-            Vector2Int fromSquare = TestBoardSetupUtility.AlgebraicToVector(from);
-            Vector2Int toSquare = TestBoardSetupUtility.AlgebraicToVector(to);
+            Vector2Int fromSquare = BoardSetup.AlgebraicToVector(from);
+            Vector2Int toSquare = BoardSetup.AlgebraicToVector(to);
 
             var legal = new List<MoveCommand>();
             _engine.GetLegalMoves(board, fromSquare, legal);
@@ -121,7 +121,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         [Test]
         public void CheckForGameEnd_OnAStalemate_StillReportsAStalemate()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("a8", Team.Black, ChessPieceType.King)
                 .WithPiece("c7", Team.White, ChessPieceType.King)
                 .WithPiece("b6", Team.White, ChessPieceType.Queen)
@@ -143,7 +143,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         [Test]
         public void CheckForGameEnd_OnAMateInAPositionAlreadyRepeated_ReportsACheckmate()
         {
-            BoardState board = TestBoardSetupUtility.CreateEmpty()
+            BoardState board = BoardSetup.CreateEmpty()
                 .WithPiece("a8", Team.Black, ChessPieceType.King)
                 .WithPiece("b6", Team.White, ChessPieceType.King)
                 .WithPiece("h8", Team.White, ChessPieceType.Rook)

@@ -1,10 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using ChessTheBetrayal.AI;
-using ChessTheBetrayal.Tests.Utilities;
+using ChessTheBetrayal.AI.Profiles;
+using ChessTheBetrayal.Tooling.Benchmark;
 using UnityEditor;
 using UnityEngine;
+using ChessTheBetrayal.Tooling.Texel;
 
 namespace ChessTheBetrayal.EditorTools.Benchmark
 {

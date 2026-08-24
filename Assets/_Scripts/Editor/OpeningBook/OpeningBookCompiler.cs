@@ -1,11 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using ChessTheBetrayal.AI;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
-
-[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("ChessTheBetrayal.Tests.EditMode")]
 
 namespace ChessTheBetrayal.EditorTools.OpeningBook
 {
@@ -125,7 +122,7 @@ namespace ChessTheBetrayal.EditorTools.OpeningBook
                 }
 
                 ulong hashBeforeMove = board.ZobristHash;
-                uint packedMove = AlphaBetaSearch.PackMove(match.Value);
+                uint packedMove = PackedMove.Pack(match.Value);
 
                 engine.ApplyMove(board, match.Value);
                 if (BetrayalStageRules.FlipsTurn(match.Value.Stage))
