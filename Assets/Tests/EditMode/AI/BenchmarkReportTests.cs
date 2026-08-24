@@ -13,10 +13,26 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
     [TestFixture]
     public class BenchmarkReportTests
     {
+        private const string TestPlanName = "Test Run";
+
+        [Test]
+        public void Render_NamesThePlanThatRan_NotJustItsCellCount()
+        {
+            var report = new BenchmarkReport("run", "Long Run (sustained load)", totalCells: 200);
+            for (int i = 0; i < 200; i++) report.RecordCellCompleted();
+            report.MarkComplete();
+
+            string text = report.Render(TimeSpan.FromMinutes(10));
+
+            // "200/200 cells" on its own reads like a matrix of 200 positions. It was one position
+            // searched 200 times, which answers an entirely different question.
+            Assert.That(text, Does.Contain("Long Run (sustained load)"));
+        }
+
         [Test]
         public void Render_IncludesTheRunId()
         {
-            var report = new BenchmarkReport("20260730-120000", totalCells: 10);
+            var report = new BenchmarkReport("20260730-120000", TestPlanName, totalCells: 10);
 
             string text = report.Render(TimeSpan.Zero);
 
@@ -26,7 +42,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         [Test]
         public void Render_WhileNotComplete_ReportsRunningWithProgressAndElapsed_AndCaveatsThatItMightBePartial()
         {
-            var report = new BenchmarkReport("run", totalCells: 10);
+            var report = new BenchmarkReport("run", TestPlanName, totalCells: 10);
             report.RecordCellCompleted();
             report.RecordCellCompleted();
             report.RecordCellCompleted();
@@ -43,7 +59,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         [Test]
         public void Render_OnceMarkedComplete_ReportsAnUnmistakableCompleteState_WithNoPartialCaveat()
         {
-            var report = new BenchmarkReport("run", totalCells: 2);
+            var report = new BenchmarkReport("run", TestPlanName, totalCells: 2);
             report.RecordCellCompleted();
             report.RecordCellCompleted();
             report.MarkComplete();
@@ -58,7 +74,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         [Test]
         public void Render_HeaderLinesComeBeforeTheStatusLine_WhichComesBeforeDetail()
         {
-            var report = new BenchmarkReport("run", totalCells: 1);
+            var report = new BenchmarkReport("run", TestPlanName, totalCells: 1);
             report.AppendHeaderLine("Device model: TestPhone");
             report.AppendDetailLine("[easy] some result");
 
@@ -78,7 +94,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         [Test]
         public void Render_SummaryComesBeforeDetail_SoItNeverScrollsBehindHundredsOfDetailLines()
         {
-            var report = new BenchmarkReport("run", totalCells: 1);
+            var report = new BenchmarkReport("run", TestPlanName, totalCells: 1);
             report.SetSummaryLines(new[] { "[easy main-thread] 3 samples: ..." });
             report.AppendDetailLine("[easy] some result");
 
@@ -93,7 +109,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         [Test]
         public void Render_WithNoThermalLinesSet_OmitsTheThermalSectionEntirely()
         {
-            var report = new BenchmarkReport("run", totalCells: 1);
+            var report = new BenchmarkReport("run", TestPlanName, totalCells: 1);
             report.SetSummaryLines(new[] { "[easy main-thread] 3 samples: ..." });
 
             string text = report.Render(TimeSpan.Zero);
@@ -106,9 +122,9 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         [Test]
         public void Render_WithThermalLinesSet_ShowsThemBetweenSummaryAndDetail()
         {
-            var report = new BenchmarkReport("run", totalCells: 1);
+            var report = new BenchmarkReport("run", TestPlanName, totalCells: 1);
             report.SetSummaryLines(new[] { "[impossible worker-thread] 200 samples: ..." });
-            report.SetThermalLines(new[] { "[impossible worker-thread] minute 0: 20 samples, depth worst 7 mean 7.0" });
+            report.SetThermalLines(new[] { "[impossible worker-thread] minute 0: 20 samples, depth worst 7 mean 7.0" }, tracksSustainedLoad: true);
             report.AppendDetailLine("[impossible] some result");
 
             string text = report.Render(TimeSpan.Zero);
@@ -123,9 +139,64 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
+        public void Render_WhenTheRunVariedItsWork_DoesNotCallThePerMinuteBreakdownAThermalCurve()
+        {
+            var report = new BenchmarkReport("run", TestPlanName, totalCells: 54);
+            report.SetThermalLines(new[]
+            {
+                "[hard worker-thread] minute 0: 4 samples, elapsed mean 3.00s; depth worst 5 mean 5.5",
+                "[hard worker-thread] minute 1: 4 samples, elapsed mean 3.00s; depth worst 7 mean 7.0",
+            }, tracksSustainedLoad: false);
+
+            string text = report.Render(TimeSpan.Zero);
+
+            // Those two lines are real and worth printing, but the rise between them is the running
+            // order: the deeper-searching positions come second. Headed "Thermal curve" it reads as
+            // a device getting a ply and a half faster as it warms up, which is nonsense.
+            Assert.That(text, Does.Not.Contain("Thermal curve"));
+            Assert.That(text, Does.Contain("Per-minute breakdown"));
+            Assert.That(text, Does.Contain("not a thermal reading"));
+            Assert.That(text, Does.Contain("minute 1: 4 samples"),
+                "The numbers still belong on the page — only the claim made about them changes.");
+        }
+
+        [Test]
+        public void Render_ProducesNothingOutsidePlainAscii()
+        {
+            var report = new BenchmarkReport("run", TestPlanName, totalCells: 3);
+            report.AppendHeaderLine("Device model: TestPhone");
+            report.SetEstimatedWorstCase(TimeSpan.FromMinutes(2));
+            report.SetSummaryLines(new[] { "[easy worker-thread] 3 samples: ..." });
+            report.SetThermalLines(new[] { "[easy worker-thread] minute 0: 3 samples" }, tracksSustainedLoad: false);
+            report.AppendDetailLine("a result");
+            report.AppendDetailLine("another result");
+            report.AppendDetailLine("a third result");
+
+            // A report is written on a phone and opened by whoever it is forwarded to. Anything
+            // outside ASCII depends on that reader guessing the encoding correctly, and the first
+            // real device report came back with every em-dash rendered as mojibake. A byte-order
+            // mark helps a reader that looks for one; staying inside ASCII needs no reader to do
+            // anything at all.
+            AssertPlainAscii(report.Render(TimeSpan.FromSeconds(30), ReportStyle.Plain, maxDetailLines: 2));
+        }
+
+        /// <summary>Compares code points rather than chars: NUnit's LessThan on a char argument does
+        /// not fail the way it reads, which let an em-dash through a green run of this very
+        /// check.</summary>
+        internal static void AssertPlainAscii(string text)
+        {
+            foreach (char c in text)
+            {
+                if (c < 128) continue;
+
+                Assert.Fail($"Non-ASCII character '{c}' (U+{(int)c:X4}) in:\n{text}");
+            }
+        }
+
+        [Test]
         public void Render_BeforeAnySummaryIsSet_SaysSoRatherThanShowingAnEmptySection()
         {
-            var report = new BenchmarkReport("run", totalCells: 1);
+            var report = new BenchmarkReport("run", TestPlanName, totalCells: 1);
 
             string text = report.Render(TimeSpan.Zero);
 
@@ -135,7 +206,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         [Test]
         public void Render_DetailLinesAppearInTheOrderTheyWereAppended()
         {
-            var report = new BenchmarkReport("run", totalCells: 1);
+            var report = new BenchmarkReport("run", TestPlanName, totalCells: 1);
             report.AppendDetailLine("first");
             report.AppendDetailLine("second");
             report.AppendDetailLine("third");
@@ -183,7 +254,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         [Test]
         public void Render_ByDefault_ShowsEveryDetailLineWithNoTrimNote()
         {
-            var report = new BenchmarkReport("run", totalCells: 1);
+            var report = new BenchmarkReport("run", TestPlanName, totalCells: 1);
             report.AppendDetailLine("oldest");
             report.AppendDetailLine("newest");
 
@@ -203,7 +274,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         [Test]
         public void Render_WithADetailCap_KeepsTheNewestLines_AndSaysHowManyItHid()
         {
-            var report = new BenchmarkReport("run", totalCells: 1);
+            var report = new BenchmarkReport("run", TestPlanName, totalCells: 1);
             report.AppendDetailLine("oldest");
             report.AppendDetailLine("middle");
             report.AppendDetailLine("newest");
@@ -219,7 +290,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         [Test]
         public void Render_WithADetailCap_StillShowsTheHeaderStatusAndSummaryInFull()
         {
-            var report = new BenchmarkReport("run", totalCells: 3);
+            var report = new BenchmarkReport("run", TestPlanName, totalCells: 3);
             report.AppendHeaderLine("Device model: TestPhone");
             report.SetSummaryLines(new[] { "[easy main-thread] 3 samples: ...", "[easy worker-thread] 3 samples: ..." });
             report.AppendDetailLine("dropped");
@@ -238,7 +309,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         [Test]
         public void Revision_ChangesOnEveryKindOfUpdate_SoADisplayCanTellWhenThereIsSomethingNewToDraw()
         {
-            var report = new BenchmarkReport("run", totalCells: 1);
+            var report = new BenchmarkReport("run", TestPlanName, totalCells: 1);
             int start = report.Revision;
 
             report.AppendHeaderLine("Device model: TestPhone");
@@ -257,7 +328,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             Assert.That(report.Revision, Is.GreaterThan(afterProgress), "A summary arriving is a change.");
 
             int afterSummary = report.Revision;
-            report.SetThermalLines(new[] { "[easy main-thread] minute 0: 1 samples, depth worst 5 mean 5.0" });
+            report.SetThermalLines(new[] { "[easy main-thread] minute 0: 1 samples, depth worst 5 mean 5.0" }, tracksSustainedLoad: true);
             Assert.That(report.Revision, Is.GreaterThan(afterSummary), "A thermal curve arriving is a change.");
 
             int afterThermal = report.Revision;
@@ -267,7 +338,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
 
         private static BenchmarkReport BuildPopulatedReport()
         {
-            var report = new BenchmarkReport("20260730-120000", totalCells: 2);
+            var report = new BenchmarkReport("20260730-120000", TestPlanName, totalCells: 2);
             report.AppendHeaderLine("Device model: TestPhone");
             report.SetEstimatedWorstCase(TimeSpan.FromSeconds(140));
             report.SetSummaryLines(new[] { "[easy main-thread] 2 samples: elapsed worst 0.20s" });

@@ -39,6 +39,14 @@ namespace ChessTheBetrayal.AI
         private const int Infinity = 1_000_000;
         private const int MateScore = 900_000;
 
+        /// <summary>
+        /// What a position worth nothing to either side scores. Dead level on purpose: a side that is
+        /// winning should find a repetition worse than the position it repeats, and a side that is
+        /// losing should find it better, and both of those fall out of scoring it at zero against
+        /// their own evaluation rather than out of any preference written in here.
+        /// </summary>
+        private const int DrawScore = 0;
+
         // How far below the exact MateScore constant a score still counts as "this is a mate,
         // just found some plies away from here" rather than an ordinary evaluation. A mate's score
         // is MateScore minus however many plies of remaining depth were searched at the moment it
@@ -429,6 +437,15 @@ namespace ChessTheBetrayal.AI
         public ref SearchStats Stats => ref _tt.Stats;
 #endif
 
+        /// <summary>
+        /// Passed as FindBestMove's rescoreDeadlineMs to let the candidate rescore pass run as long
+        /// as it needs, which is what every caller does today. A finite value instead stops the pass
+        /// once that many milliseconds of the search have elapsed, trading how much of the root list
+        /// it settles for how long the caller waits — see RescoreBudgetTests for what that trade
+        /// costs, which depends entirely on how many moves are genuinely in contention.
+        /// </summary>
+        public const long NoRescoreDeadline = long.MaxValue;
+
         /// <summary>Ranked root moves from the most recent FindBestMove call, parallel to
         /// <see cref="RootScores"/> by index. Read only after FindBestMove returns and before the
         /// next call reuses the buffer — see MoveSelectionPolicy, the sole external consumer.</summary>
@@ -446,18 +463,31 @@ namespace ChessTheBetrayal.AI
         public int BestRootIndex { get; private set; }
 
         /// <summary>
-        /// True only when the candidate-rescore pass ran to completion, i.e. every RootScores entry
-        /// within the requested margin of the best is a genuine full-window value rather than the
-        /// tightened alpha-beta bound the main loop recorded. A search that spends its whole time
-        /// budget on the depth loop gets its rescore pass cancelled before it starts — its
-        /// non-best RootScores are then only upper bounds, and a bound can sit arbitrarily close
-        /// to the best score while the move it belongs to is actually much worse. Any caller that
-        /// picks among near-best candidates (tie-break windows, deliberate blunders) MUST check
-        /// this first and fall back to the best move alone when it is false — selecting from
-        /// bound scores is how a time-capped tier ends up playing near-random moves with full
-        /// confidence.
+        /// How many of the leading RootMoves/RootScores entries are safe to choose among. Index 0
+        /// always counts — it is the search's own best move, found under the full window the depth
+        /// loop opens with. The rest are added as the candidate-rescore pass settles them, either
+        /// by re-searching a candidate with a full window or by finding its tightened score already
+        /// too far below the best for the true score to come back into contention.
+        ///
+        /// Past this count the scores are alpha-beta upper bounds, and a bound can sit arbitrarily
+        /// close to the best while the move it belongs to is much worse. Any caller picking among
+        /// near-best candidates (tie-break windows, deliberate blunders) has to stop here;
+        /// selecting from bound scores is how a time-capped tier ends up playing near-random moves
+        /// with complete confidence.
+        ///
+        /// Reported as a count rather than as "the pass finished" so a search that could not afford
+        /// the whole pass keeps the part of its personality the pass did pay for, instead of losing
+        /// all of it. That is not a corner case: the deeper tiers reach their ceiling in well under
+        /// a second and then cannot finish the pass inside their budget at all, so an all-or-nothing
+        /// answer left them playing every heavy position with their dials silently switched off.
+        /// The pass works down from the best move, so what it settles first is what a selection is
+        /// most likely to want.
         /// </summary>
-        public bool RootScoresExactForSelection { get; private set; }
+        public int RootScoresExactCount { get; private set; }
+
+        /// <summary>True when every root move was settled, not just the leading ones — see
+        /// <see cref="RootScoresExactCount"/>, which is what a selection should actually read.</summary>
+        public bool RootScoresExactForSelection => _rootMoves.Count > 0 && RootScoresExactCount >= _rootMoves.Count;
 
         /// <summary>
         /// Iterative deepening entry point. Returns the best move for board.CurrentTurn.
@@ -498,10 +528,14 @@ namespace ChessTheBetrayal.AI
         /// </summary>
         public MoveCommand FindBestMove(BoardState board, AISearchSettings settings, CancellationToken ct,
             int candidateRescoreMarginCp = 0, bool enableInstabilityTimeManagement = false,
-            bool enableAspirationWindows = false)
+            bool enableAspirationWindows = false, long rescoreDeadlineMs = NoRescoreDeadline)
         {
             Team rootTeam = board.CurrentTurn;
-            Stopwatch stopwatch = enableInstabilityTimeManagement ? Stopwatch.StartNew() : null;
+
+            // A clock is needed for either feature, and starting one the caller didn't ask for costs
+            // nothing it can observe — the instability logic below reads it only behind its own flag.
+            bool needsClock = enableInstabilityTimeManagement || rescoreDeadlineMs != NoRescoreDeadline;
+            Stopwatch stopwatch = needsClock ? Stopwatch.StartNew() : null;
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             // A telemetry-only clock start, always taken while telemetry is compiled in, so the
@@ -528,7 +562,7 @@ namespace ChessTheBetrayal.AI
             // Build the root move list ONCE. This is where the agent-level Betrayal policy applies.
             BuildRootMoves(board, rootTeam, settings.BetrayalUsage);
             EnsureRootScoreCapacity(_rootMoves.Count);
-            RootScoresExactForSelection = false;
+            RootScoresExactCount = 0;
 
             // TT informs root ORDERING ONLY — never a short-circuit. The root list carries the
             // BetrayalUsage.DefendOnly filter and MoveToFront's PV bookkeeping; a TT cutoff here
@@ -800,7 +834,17 @@ namespace ChessTheBetrayal.AI
             _tt.Stats.StopReason = _stopReason;
 #endif
 
-            RescoreCandidatesWithFullWindow(board, rootTeam, _lastCompletedDepth, candidateRescoreMarginCp, ct);
+            // Unbounded beyond the caller's own cancellation, and that costs a player real time: on
+            // a quiet midgame the deeper tiers reach their ceiling inside a second and then spend
+            // the rest of a three-second budget here. Stopping the pass at the soft budget was tried
+            // and does buy that time back, but it stops part-way down the root list while the moves
+            // a tie-break chooses between are spread along that list, so what it costs depends
+            // entirely on how many moves are really in contention. Measured on one midgame that was
+            // nothing at all for most tiers — a window of one move stays a window of one move — and
+            // a five-move window down to one for the tier that had one. Which of those a real game
+            // looks like is not settled by a single position, so the pass stays whole until it is.
+            RescoreCandidatesWithFullWindow(board, rootTeam, _lastCompletedDepth, candidateRescoreMarginCp, ct,
+                stopwatch, rescoreDeadlineMs);
 
             return bestMove;
         }
@@ -812,20 +856,37 @@ namespace ChessTheBetrayal.AI
         /// common case for zero-personality callers) or there's nothing to compare against.
         /// </summary>
         private void RescoreCandidatesWithFullWindow(BoardState board, Team rootTeam, int lastCompletedDepth,
-            int candidateRescoreMarginCp, CancellationToken ct)
+            int candidateRescoreMarginCp, CancellationToken ct, Stopwatch clock, long deadlineMs)
         {
+            // The best move is exact by construction, so it counts as settled before the pass looks
+            // at anything else — a caller that gets no further than this still has one valid move
+            // to choose from, which is the same answer the pass not running at all should give.
+            RootScoresExactCount = _rootMoves.Count > 0 ? 1 : 0;
+
             if (candidateRescoreMarginCp <= 0 || _rootMoves.Count == 0 || lastCompletedDepth <= 0) return;
+
 
             int threshold = _rootScores[0] - candidateRescoreMarginCp; // BestRootIndex == 0
             for (int i = 1; i < _rootMoves.Count; i++) // index 0 is already exact-enough by construction
             {
                 // Cancelled mid-pass: leave the remaining entries at their tightened-window values
-                // and — critically — leave RootScoresExactForSelection false, so no caller
-                // mistakes those bounds for real scores. A search that spends its whole time
-                // budget on the depth loop lands here with the token already fired, which is the
-                // normal case for a deep tier, not an anomaly.
+                // and leave the settled count where it stands, so no caller mistakes those bounds
+                // for real scores. Everything already counted stays usable — a deep tier reaches
+                // here with the token about to fire as a matter of course, not as an anomaly, and
+                // throwing away the candidates it did settle is what used to cost it its dials.
                 if (ct.IsCancellationRequested) return;
-                if (_rootScores[i] < threshold) continue;
+
+                // Checked between candidates rather than inside one: a re-search reports nothing
+                // until it finishes, so stopping one part-way costs its work and settles nothing.
+                // The candidate already in flight when the deadline passes therefore runs to the end.
+                if (deadlineMs != NoRescoreDeadline && clock != null && clock.ElapsedMilliseconds >= deadlineMs) return;
+
+                // Below the margin the recorded score is an upper bound that is already too low, so
+                // the true score cannot climb back into range and nothing needs re-searching. The
+                // margin is the widest of the profile's own dials, so a move outside it is outside
+                // every window a selection might open — counting it settled is safe, and it keeps
+                // one skippable move from stopping the count short of the ones behind it.
+                if (_rootScores[i] < threshold) { RootScoresExactCount = i + 1; continue; }
 
                 MoveCommand move = _rootMoves[i];
                 ApplyMoveAndTurn(board, move);
@@ -851,9 +912,8 @@ namespace ChessTheBetrayal.AI
                 if (ct.IsCancellationRequested) return;
 
                 _rootScores[i] = exactScore;
+                RootScoresExactCount = i + 1;
             }
-
-            RootScoresExactForSelection = true;
         }
 
         /// <summary>Grows the root-score buffers to fit a pathological branching root, mirroring
@@ -945,6 +1005,23 @@ namespace ChessTheBetrayal.AI
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             _tt.Stats.NodesVisited++;
 #endif
+
+            // This position has already been on the board in this line, or earlier in the game, so
+            // playing on from here leads nowhere either side can improve on. Scored as a draw before
+            // any of the work below, which is what stops a winning side shuffling a piece back and
+            // forth: without it every repetition looks exactly as good as the position it repeats,
+            // and a side that is already winning has no reason to prefer making progress. One prior
+            // occurrence is enough to say so — a line that can reach the same position twice can
+            // reach it a third time, and neither side has to co-operate for that.
+            //
+            // Never after a null move. A null move hands the turn over without a move being played,
+            // so the position it produces was never really on the board; it shares its pieces with
+            // an earlier position and differs only in whose turn it is, which is exactly the shape
+            // that would match something it has no business matching.
+            if (!parentWasNull && board.CountPositionOccurrences(board.ZobristHash) > 1)
+            {
+                return DrawScore;
+            }
 
             // Terminal / horizon: drop into quiescence so we never evaluate mid-capture or,
             // critically, mid-Retribution (see Quiescence). Quiescence does not probe/store the TT

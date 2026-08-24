@@ -192,6 +192,76 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
+        public void EveryPlan_HasItsOwnName_SoTwoReportsCanNeverBeConfusedForEachOther()
+        {
+            var names = new[]
+            {
+                BenchmarkPlan.Tester().Name,
+                BenchmarkPlan.Thermal().Name,
+                BenchmarkPlan.Exhaustive().Name,
+            };
+
+            foreach (string name in names)
+                Assert.That(name, Is.Not.Null.And.Not.Empty);
+
+            Assert.That(names, Is.Unique,
+                "Two plans sharing a name would put the same words on reports answering different " +
+                "questions, which is the confusion naming them exists to end.");
+        }
+
+        [Test]
+        public void ThermalPlan_DescribesItselfAsRepetitionRatherThanBreadth()
+        {
+            string described = BenchmarkPlan.Thermal().Describe();
+
+            // The cell count cannot tell these apart: 200 cells is 200 cells whether they are 200
+            // positions or one position 200 times, and only one of those is a sustained-load probe.
+            Assert.That(described, Does.Contain("1 position"));
+            Assert.That(described, Does.Contain("the impossible tier alone"));
+            Assert.That(described, Does.Contain($"{BenchmarkPlan.ThermalSearchCount} times each"));
+            Assert.That(described, Does.Contain("worker thread only"));
+        }
+
+        [Test]
+        public void TesterPlan_DescribesItsBreadthAndItsControl()
+        {
+            string described = BenchmarkPlan.Tester().Describe();
+
+            Assert.That(described, Does.Contain("4 positions"));
+            Assert.That(described, Does.Contain("6 tiers"));
+            Assert.That(described, Does.Contain("main-thread control"));
+        }
+
+        [Test]
+        public void CurveTracksSustainedLoad_OnlyForTheRunWhereEverySampleDidTheSameWork()
+        {
+            Assert.That(BenchmarkPlan.Thermal().CurveTracksSustainedLoad, Is.True,
+                "One position at one tier, repeated — a change across minutes is a change in the device.");
+            Assert.That(BenchmarkPlan.Tester().CurveTracksSustainedLoad, Is.False,
+                "Four positions and six tiers: a minute holds whatever cells fell in it, so its depth " +
+                "tracks the running order and not the hardware.");
+            Assert.That(BenchmarkPlan.Exhaustive().CurveTracksSustainedLoad, Is.False);
+        }
+
+        [Test]
+        public void Describe_ProducesNothingOutsidePlainAscii()
+        {
+            BenchmarkReportTests.AssertPlainAscii(BenchmarkPlan.Tester().Describe());
+            BenchmarkReportTests.AssertPlainAscii(BenchmarkPlan.Thermal().Describe());
+            BenchmarkReportTests.AssertPlainAscii(BenchmarkPlan.Exhaustive().Describe());
+        }
+
+        [Test]
+        public void HasMainThreadControl_IsTrueOnlyForAPlanThatActuallyRunsOne()
+        {
+            Assert.That(BenchmarkPlan.Tester().HasMainThreadControl, Is.True);
+            Assert.That(BenchmarkPlan.Exhaustive().HasMainThreadControl, Is.True);
+            Assert.That(BenchmarkPlan.Thermal().HasMainThreadControl, Is.False,
+                "Reporting a main-thread absence against a plan that never asked for one says " +
+                "nothing, and reads as a run that fell short.");
+        }
+
+        [Test]
         public void ThermalPlan_SkipsPlayForwardAndTheMainThreadControl()
         {
             var plan = BenchmarkPlan.Thermal();

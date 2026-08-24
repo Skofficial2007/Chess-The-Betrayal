@@ -575,6 +575,16 @@ namespace ChessTheBetrayal.Core.Engine
             return false;
         }
 
+        /// <summary>Three occurrences of one position ends it — the position on the board now counts
+        /// as the third, not as a third still to come.</summary>
+        private const int RepetitionsThatDraw = 3;
+
+        /// <summary>Fifty moves by each side, counted in plies because that is what the board counts.
+        /// A Defection resets it alongside captures and pawn moves: it hands a piece to the other
+        /// army, and letting the count run through a change of material would be calling a game dead
+        /// that had just been turned upside down.</summary>
+        private const int PliesWithoutProgressThatDraw = 100;
+
         public static GameState EvaluateGameState(BoardState board, Team team, ClockState? clock = null)
         {
             if (clock.HasValue && clock.Value.IsExpired && clock.Value.ActiveSide == team)
@@ -593,12 +603,24 @@ namespace ChessTheBetrayal.Core.Engine
 
             bool hasLegalMoves = HasAnyLegalMoves(board, team);
 
-            if (hasLegalMoves)
+            if (!hasLegalMoves)
             {
-                return IsKingInCheck(board, team) ? GameState.Check : GameState.Normal;
+                return IsKingInCheck(board, team) ? GameState.Checkmate : GameState.Stalemate;
             }
 
-            return IsKingInCheck(board, team) ? GameState.Checkmate : GameState.Stalemate;
+            // Checked after mate and stalemate, never before: a position that ends the game outright
+            // ends it, however long the two sides had been going nowhere beforehand.
+            if (board.CountPositionOccurrences(board.ZobristHash) >= RepetitionsThatDraw)
+            {
+                return GameState.DrawByRepetition;
+            }
+
+            if (board.PliesSinceIrreversibleMove >= PliesWithoutProgressThatDraw)
+            {
+                return GameState.DrawByFiftyMoveRule;
+            }
+
+            return IsKingInCheck(board, team) ? GameState.Check : GameState.Normal;
         }
 
         #endregion
@@ -907,7 +929,25 @@ namespace ChessTheBetrayal.Core.Engine
             board.EnPassantFile = ComputeNewEnPassantFile(move);
             AdvanceBetrayalState(board, move);
             ApplyZobristMove(board, move, previousCastlingMask, previousEnPassantFile);
+
+            if (recordHistory) board.PushPosition(board.ZobristHash, IsIrreversible(move));
         }
+
+        /// <summary>
+        /// True for a move no amount of further play can undo, which is where a search for a repeated
+        /// position stops and where the fifty-move count starts again. A capture removes a piece and
+        /// a pawn only ever moves forward, so neither position can occur again.
+        ///
+        /// Castling and spending the Betrayal right are just as final, but both live in the position
+        /// hash, so a position from before one can never match a position from after it and no
+        /// separate guard is needed. A Defection counts anyway: it hands a piece to the other army,
+        /// which is the least reversible thing on the board, and leaving it out would let the
+        /// fifty-move count run through a genuine change of material.
+        /// </summary>
+        private static bool IsIrreversible(MoveCommand move) =>
+            move.IsCapture
+            || move.PieceType == ChessPieceType.Pawn
+            || move.Stage == BetrayalStage.Defection;
 
         /// <summary>
         /// Rolls back a move completely, restoring the board to exactly how it was before.
@@ -928,6 +968,8 @@ namespace ChessTheBetrayal.Core.Engine
 
             if (recordHistory)
             {
+                board.PopPosition();
+
                 if (board.MoveHistory.Count >= 2)
                 {
                     board.MoveHistory.RemoveAt(board.MoveHistory.Count - 1);
@@ -1104,6 +1146,14 @@ namespace ChessTheBetrayal.Core.Engine
         Check,
         Checkmate,
         Stalemate,
-        Timeout
+        Timeout,
+
+        /// <summary>The same position has now been reached three times. Neither side is obliged to
+        /// keep going somewhere they have already been twice.</summary>
+        DrawByRepetition,
+
+        /// <summary>Fifty moves by each side with no capture and no pawn moved. Nothing has happened
+        /// that cannot be undone by playing on, so nothing is going to.</summary>
+        DrawByFiftyMoveRule
     }
 }

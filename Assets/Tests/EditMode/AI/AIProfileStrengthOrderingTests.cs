@@ -141,6 +141,11 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             int gameCount = System.Math.Min(positionCount, CuratedPositionSuite.Count) * 2;
             float margin = TournamentStatistics.WinRateMargin95(gameCount);
 
+            // Reported whatever the verdict, the way the gate fixture reports its own: a pairing that
+            // clears the threshold used to print nothing at all, so a run that passed everywhere left
+            // no record of how well it passed and nothing to compare a later run against.
+            TestContext.WriteLine($"{strongerId} vs {weakerId}: {winRate:P1} +/-{margin:P1} over {gameCount} games");
+
             if (winRate < FloorWinRate)
             {
                 bool floorIsInsideConfidenceInterval = winRate + margin >= FloorWinRate;
@@ -169,27 +174,37 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
     }
 
     /// <summary>
-    /// Per-commit ladder gate: a few short, clock-compressed games per pairing, asserting only that
-    /// no stronger tier is actually LOSING to a weaker one. This is the regression net for the class
-    /// of bug that inverts the difficulty ladder — it is deliberately NOT a precise win-rate check
-    /// (too few games and too short a clock for that), which is what the [Explicit] fixture below is
-    /// for. Kept fast enough to run every commit.
+    /// Per-commit ladder gate: short games per pairing, asserting only that no stronger tier is
+    /// actually LOSING to a weaker one. This is the regression net for the class of bug that inverts
+    /// the difficulty ladder — deliberately NOT a precise win-rate check, which is what the
+    /// [Explicit] fixtures are for. Kept fast enough to run every commit.
+    ///
+    /// Only pairings whose tiers genuinely differ in strength are gated here. `extreme` against
+    /// `hard`, and `impossible` against `extreme`, score near an even split however long they are
+    /// given — measured flat from a heavily compressed clock all the way up to the real one — so a
+    /// gate asserting either of them would be settling a coin toss on every commit rather than
+    /// testing anything. Both remain measured by the [Explicit] suites, where a wide interval is
+    /// reported honestly instead of being turned into a pass or a fail.
     /// </summary>
     [TestFixture]
     public class AIProfileStrengthGateTests
     {
-        // A stronger tier that has genuinely inverted shows up as clearly BELOW half (it loses more
-        // than it wins). A tier that's merely playing to a rough draw on a short/compressed clock
-        // sits around half. So the gate floor is "not losing" — comfortably below the real strength
-        // target, on purpose, so ordinary short-game noise never trips it but a true inversion (the
-        // hard-loses-95%-to-normal bug) always does.
+        // A genuinely inverted tier shows up far below half — the bug this exists to catch had the
+        // stronger tier scoring five percent. A tier merely playing to a rough draw sits near half.
         private const float NotLosingFloor = 0.40f;
 
-        // A few positions, short games, a tight per-move clock: enough to expose an inversion, cheap
-        // enough for every commit. The [Explicit] fixture carries the statistically solid numbers.
-        private const int PositionCount = 4;
+        // Eight positions (sixteen games) rather than a handful: on any machine with a dozen or more
+        // cores they still run as a single parallel batch, so the extra games cost almost nothing in
+        // wall time and halve the width of the interval below.
+        private const int PositionCount = 8;
         private const int PlyCap = 60;
-        private const int MoveBudgetCapMs = 150;
+
+        // What separates a deeper tier from a shallower one IS the depth its clock buys, so squeezing
+        // the per-move budget too hard removes the very difference this gate looks for. Measured on
+        // hard-versus-normal: about even at 150ms, around 70% at 800ms, around 77% at 1500ms, and
+        // around 93% at the real budget. Below roughly a second, both tiers are truncated to the same
+        // shallow search and the gate is reading a coin toss — which is what it did for a long time.
+        private const int MoveBudgetCapMs = 1500;
 
         private static void AssertNotLosing(string strongerId, string weakerId, int pairIndex)
         {
@@ -197,17 +212,24 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             float winRate = StrengthLadder.PlayWinRate(strongerId, weakerId, pairIndex,
                 PositionCount, PlyCap, MoveBudgetCapMs, progress.ReportGameCompleted);
 
-            TestContext.WriteLine($"{strongerId} vs {weakerId}: {winRate:P1} over {PositionCount * 2} short games");
+            int gameCount = PositionCount * 2;
+            float margin = TournamentStatistics.WinRateMargin95(gameCount);
 
+            TestContext.WriteLine($"{strongerId} vs {weakerId}: {winRate:P1} +/-{margin:P1} over {gameCount} short games");
+
+            // A plain floor, deliberately: widening it into a confidence-interval test was tried and
+            // reverted, because at any sample size this gate can afford the interval is wide enough to
+            // swallow a real inversion. A pairing measured deliberately backwards scored 28% and still
+            // passed such a test. The floor only works because the budget above leaves these pairings
+            // scoring around 70-77%, several standard deviations clear of it.
             Assert.That(winRate, Is.GreaterThanOrEqualTo(NotLosingFloor),
-                $"{strongerId} scored only {winRate:P1} against {weakerId} — a stronger tier losing to a weaker " +
-                "one is a ladder inversion, not tuning noise. Run the [Explicit] full suite to confirm and diagnose.");
+                $"{strongerId} scored only {winRate:P1} +/-{margin:P1} against {weakerId} — a stronger tier losing " +
+                "to a weaker one is a ladder inversion, not tuning noise. Run the [Explicit] full suite to confirm " +
+                "and diagnose.");
         }
 
         [Test] public void Normal_DoesNotLose_ToEasy() => AssertNotLosing("normal", "easy", pairIndex: 0);
         [Test] public void Hard_DoesNotLose_ToNormal() => AssertNotLosing("hard", "normal", pairIndex: 1);
-        [Test] public void Extreme_DoesNotLose_ToHard() => AssertNotLosing("extreme", "hard", pairIndex: 2);
-        [Test] public void Impossible_DoesNotLose_ToExtreme() => AssertNotLosing("impossible", "extreme", pairIndex: 3);
         [Test] public void Aggressive_DoesNotLose_ToNormal() => AssertNotLosing("aggressive", "normal", pairIndex: 4);
     }
 

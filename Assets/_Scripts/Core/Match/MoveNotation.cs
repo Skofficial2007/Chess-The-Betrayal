@@ -14,16 +14,36 @@ namespace ChessTheBetrayal.Core.Match
     /// Deliberately NOT full SAN (no disambiguation, no +/# suffixes) — this is a debugging and
     /// replay aid, not a PGN exporter. If you need PGN export later, build it as a separate pass
     /// over MatchMoveLog rather than complicating this formatter.
+    ///
+    /// The leading number counts plies, so both sides get their own — "12." and "13..." rather
+    /// than the chess convention of "12." and "12...". That suits a log meant for recreating an
+    /// exact position, where every ply including a Betrayal sub-sequence's needs its own address;
+    /// a PGN exporter would want the other convention and should number its own lines.
     /// </summary>
     public static class MoveNotation
     {
-        public static string Format(MoveCommand move, int fullMoveNumber)
+        public static string Format(MoveCommand move, int plyNumber)
         {
             var sb = new StringBuilder(32);
 
-            sb.Append(fullMoveNumber);
+            sb.Append(plyNumber);
             sb.Append(move.PieceTeam == Team.White ? ". " : "... ");
+            AppendMove(sb, move);
 
+            return sb.ToString();
+        }
+
+        /// <summary>The move on its own, with no leading number — for a caller that numbers its
+        /// own lines and would otherwise print the number twice.</summary>
+        public static string Describe(MoveCommand move)
+        {
+            var sb = new StringBuilder(32);
+            AppendMove(sb, move);
+            return sb.ToString();
+        }
+
+        private static void AppendMove(StringBuilder sb, MoveCommand move)
+        {
             if (move.IsCastling)
             {
                 sb.Append(move.EndPosition.x > move.StartPosition.x ? "O-O" : "O-O-O");
@@ -69,8 +89,6 @@ namespace ChessTheBetrayal.Core.Match
                 sb.Append(move.Stage);
                 sb.Append(']');
             }
-
-            return sb.ToString();
         }
 
         /// <summary>Appends a result suffix (+, #, or nothing) — call after the engine evaluates the

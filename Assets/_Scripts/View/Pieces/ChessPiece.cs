@@ -23,11 +23,25 @@ namespace ChessTheBetrayal.View
         public ChessPieceType type;
 
         private Collider _col;
+        private Renderer _renderer;
         private IPieceAnimator _animator;
+
+        /// <summary>
+        /// How tall this piece stands right now, in world units, or zero if it has no renderer.
+        ///
+        /// Measured off the mesh rather than looked up per type, because the only thing that can
+        /// answer "how big does this look" is the thing being drawn. Swapping the piece set for
+        /// taller models would silently invalidate a table; it cannot invalidate this.
+        ///
+        /// Read live, so it reflects whatever the piece is doing — a piece mid-crush measures short.
+        /// Callers that want its standing height must ask before they start squashing it.
+        /// </summary>
+        public float WorldHeight => _renderer != null ? _renderer.bounds.size.y : 0f;
 
         private void Awake()
         {
             _col = GetComponent<Collider>();
+            _renderer = GetComponentInChildren<Renderer>();
 
             // Real, tweened animation is the default for every piece spawned in a live scene.
             // Headless/AI/test contexts opt out via SetAnimator instead of this ever branching on
@@ -36,7 +50,7 @@ namespace ChessTheBetrayal.View
             // getType is a lazy lookup rather than passing `type` by value: BoardVisuals.
             // SpawnSinglePiece sets ChessPiece.type *after* AddComponent(), which runs Awake, so
             // `type` would still be ChessPieceType.None if we captured it right now.
-            _animator = new PrimeTweenPieceAnimator(transform, GetComponentInChildren<Renderer>(), () => type);
+            _animator = new PrimeTweenPieceAnimator(transform, _renderer, () => type);
         }
 
         /// <summary>
@@ -80,12 +94,12 @@ namespace ChessTheBetrayal.View
         /// Same as SetPosition, but with an explicit MoveStyle (quiet slide, capture punch, knight
         /// arc, promotion glide) so a board move can carry its intended feel through to the
         /// animator without BoardVisuals needing to know how each style is actually tweened.
-        /// squaresTravelled lets a glide be paced against the distance it covers — see
+        /// tilesTravelled lets a glide be paced against the ground it covers — see
         /// IPieceAnimator.MoveTo.
         /// </summary>
-        public void SetPosition(Vector3 worldPos, MoveStyle style, int squaresTravelled = 1, bool force = false)
+        public void SetPosition(Vector3 worldPos, MoveStyle style, float tilesTravelled = 1f, bool force = false)
         {
-            _animator.MoveTo(worldPos, style, squaresTravelled, force);
+            _animator.MoveTo(worldPos, style, tilesTravelled, force);
         }
 
         /// <summary>
@@ -104,9 +118,9 @@ namespace ChessTheBetrayal.View
         /// its new piece can wait for it. Reports immediately if the pawn is already standing there
         /// — see PrimeTweenPieceAnimator.PlayPromotionApproach.
         /// </summary>
-        public void PlayPromotionApproach(Vector3 worldPos, int squaresTravelled, Action onArrived)
+        public void PlayPromotionApproach(Vector3 worldPos, float tilesTravelled, Action onArrived)
         {
-            _animator.PlayPromotionApproach(worldPos, squaresTravelled, onArrived);
+            _animator.PlayPromotionApproach(worldPos, tilesTravelled, onArrived);
         }
 
         /// <summary>
@@ -120,17 +134,20 @@ namespace ChessTheBetrayal.View
 
         /// <summary>
         /// The attacker's half of a capture: an anticipation-leap-stamp onto worldPos, swelling
-        /// mid-air and clearing the victim's head at the peak. onDescentStart fires the frame the
-        /// downward leg begins, so BoardVisuals can start the victim's cower-shrink
-        /// (PlayStompedDeath) under the falling piece — the crush then lands in sync via shared
-        /// timing constants rather than a second callback. onSettled fires once the whole stamp
-        /// (impact, recover, settle bob) has finished — used to defer any animation that must
-        /// happen strictly AFTER this capture reads as complete (e.g. a queued Betrayal Defection
-        /// spin on this same piece).
+        /// mid-air on the way over. onDescentStart fires the frame the downward leg begins, so
+        /// BoardVisuals can start the victim's cower-shrink (PlayStompedDeath) under the falling
+        /// piece — the crush then lands in sync via shared timing constants rather than a second
+        /// callback. onImpact fires on the frame of contact, for anything that answers the collision.
+        /// onSettled fires once the whole stamp (impact, recover, settle bob) has finished — used to
+        /// defer any animation that must happen strictly AFTER this capture reads as complete (e.g.
+        /// a queued Betrayal Defection spin on this same piece).
+        ///
+        /// victimHeft (0 for the smallest piece on the board, 1 for the tallest) makes felling
+        /// something big cost more effort and land harder — see IPieceAnimator.PlayCaptureStamp.
         /// </summary>
-        public void PlayCaptureStamp(Vector3 worldPos, CaptureRunUp runUp = default, Action onDescentStart = null, Action onSettled = null)
+        public void PlayCaptureStamp(Vector3 worldPos, CaptureRunUp runUp = default, float victimHeft = 0f, Action onDescentStart = null, Action onImpact = null, Action onSettled = null)
         {
-            _animator.PlayCaptureStamp(worldPos, runUp, onDescentStart, onSettled);
+            _animator.PlayCaptureStamp(worldPos, runUp, victimHeft, onDescentStart, onImpact, onSettled);
         }
 
         /// <summary>
@@ -145,23 +162,32 @@ namespace ChessTheBetrayal.View
         }
 
         /// <summary>
+        /// Leans this piece away from something crossing the board to take it, for as long as that
+        /// approach lasts. See IPieceAnimator.PlayBrace — only captures with a walk-in play it.
+        /// </summary>
+        public void PlayBrace(Vector3 shoveDirection, float seconds)
+        {
+            _animator.PlayBrace(shoveDirection, seconds);
+        }
+
+        /// <summary>
         /// The en passant victim's death: a hop-and-shrink glide straight to graveyardWorldPos
         /// (no crush, since the attacker never visually lands on this piece). onArrived fires once
         /// it's arrived at vanished scale — the moment BoardVisuals should snap it to death-pile
         /// scale/facing.
         /// </summary>
-        public void PlayEnPassantDeath(Vector3 graveyardWorldPos, Action onArrived)
+        public void PlayEnPassantDeath(Vector3 graveyardWorldPos, float tilesTravelled, Action onArrived)
         {
-            _animator.PlayEnPassantDeath(graveyardWorldPos, onArrived);
+            _animator.PlayEnPassantDeath(graveyardWorldPos, tilesTravelled, onArrived);
         }
 
         /// <summary>
         /// Brings this piece back from the death pile onto boardWorldPos at restScale, because the
         /// capture that put it there was taken back.
         /// </summary>
-        public void PlayGraveyardReturn(Vector3 boardWorldPos, Vector3 restScale, Action onArrived)
+        public void PlayGraveyardReturn(Vector3 boardWorldPos, Vector3 restScale, float tilesTravelled, Action onArrived)
         {
-            _animator.PlayGraveyardReturn(boardWorldPos, restScale, onArrived);
+            _animator.PlayGraveyardReturn(boardWorldPos, restScale, tilesTravelled, onArrived);
         }
 
         /// <summary>

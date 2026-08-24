@@ -5,6 +5,7 @@ using TMPro;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.Infrastructure;
+using ChessTheBetrayal.UI.Controls;
 
 namespace ChessTheBetrayal.UI
 {
@@ -46,18 +47,17 @@ namespace ChessTheBetrayal.UI
             if (active) RefreshShareAiReportButton();
         }
 
-        public void SetWinnerText(Team? winnerTeam, bool byTimeout = false)
+        /// <param name="reason">Why the game ended. A drawn game used to be announced as a stalemate
+        /// whatever had happened, which was true while stalemate was the only draw there was — a
+        /// player who has just repeated a position three times is told something that did not happen
+        /// otherwise, and has no way to tell why the game stopped.</param>
+        public void SetWinnerText(Team? winnerTeam, bool byTimeout = false,
+            ChessTheBetrayal.Events.Payloads.GameEndReason reason =
+                ChessTheBetrayal.Events.Payloads.GameEndReason.Checkmate)
         {
             if (winnerText == null) return;
 
-            string prefix = byTimeout ? "Time Out!\n" : string.Empty;
-
-            winnerText.text = winnerTeam switch
-            {
-                Team.White => $"{prefix}White Team Won!",
-                Team.Black => $"{prefix}Black Team Won!",
-                _          => byTimeout ? "Time Out!\nDraw (Insufficient Material)" : "Stalemate! Draw."
-            };
+            winnerText.text = GameOverMessage.Build(winnerTeam, reason, byTimeout);
         }
 
         /// <summary>

@@ -394,13 +394,13 @@ namespace ChessTheBetrayal.Tests.Utilities
                 // doesn't clear this guard never gets a chance to roll for a blunder at all, so it
                 // must not count as an offered roll either — see BlunderRollOffered's doc comment.
                 bool blunderRollOffered = (profile.BlunderRate > 0f || profile.TieBreakWindowCp > 0)
-                    && search.RootScoresExactForSelection;
+                    && search.RootScoresExactCount > 1;
                 bool blunderRollFired = false;
                 if (blunderRollOffered)
                 {
                     move = policy.SelectFinalMove(
-                        search.RootMoves, search.RootScores, search.RootMoveCount, search.BestRootIndex,
-                        profile, rng, out blunderRollFired);
+                        search.RootMoves, search.RootScores, search.RootScoresExactCount,
+                        search.BestRootIndex, profile, rng, out blunderRollFired);
                 }
                 moveStopwatch.Stop();
 

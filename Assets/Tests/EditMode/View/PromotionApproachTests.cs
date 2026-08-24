@@ -46,7 +46,7 @@ namespace ChessTheBetrayal.Tests.EditMode.View
             PrimeTweenPieceAnimator animator = AnimatorAt(square);
 
             bool arrived = false;
-            animator.PlayPromotionApproach(square, squaresTravelled: 1, onArrived: () => arrived = true);
+            animator.PlayPromotionApproach(square, tilesTravelled: 1f, onArrived: () => arrived = true);
 
             Assert.That(arrived, Is.True);
         }
@@ -59,7 +59,7 @@ namespace ChessTheBetrayal.Tests.EditMode.View
             PrimeTweenPieceAnimator animator = AnimatorAt(new Vector3(3f, 0.5f, 5.5f));
 
             bool arrived = false;
-            animator.PlayPromotionApproach(new Vector3(3f, 0.5f, 7f), squaresTravelled: 1, onArrived: () => arrived = true);
+            animator.PlayPromotionApproach(new Vector3(3f, 0.5f, 7f), tilesTravelled: 1f, onArrived: () => arrived = true);
 
             Assert.That(arrived, Is.False);
         }
@@ -72,7 +72,7 @@ namespace ChessTheBetrayal.Tests.EditMode.View
             PrimeTweenPieceAnimator animator = AnimatorAt(Vector3.zero);
 
             bool arrived = false;
-            animator.PlayPromotionApproach(new Vector3(float.NaN, 0f, 0f), squaresTravelled: 1, onArrived: () => arrived = true);
+            animator.PlayPromotionApproach(new Vector3(float.NaN, 0f, 0f), tilesTravelled: 1f, onArrived: () => arrived = true);
 
             Assert.That(arrived, Is.True);
         }

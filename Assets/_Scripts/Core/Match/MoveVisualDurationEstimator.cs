@@ -25,10 +25,19 @@ namespace ChessTheBetrayal.Core.Match
 
         /// <summary>
         /// The capture strike, measured from the wind-up to the last of the settle bob: the
-        /// anticipation crouch, the leap, the impact squash, the recovery overshoot and the bob.
-        /// Not the run-up, which varies with distance and is added separately.
+        /// anticipation crouch, the leap, the impact squash, the hold at contact, the recovery
+        /// overshoot and the bob. Not the run-up, which varies with distance and is added
+        /// separately.
+        ///
+        /// An attacker that walks in folds its crouch into the end of that walk rather than playing
+        /// it afterwards, so for those this is around a tenth of a second long. That is the right
+        /// direction for a figure whose whole job is to be an upper bound.
+        ///
+        /// Taken at the heaviest a strike gets. The hold at contact stretches with the size of what
+        /// was taken, so this is the figure for felling a king; every lighter capture comes in under
+        /// it, which is the direction an upper bound is allowed to be wrong in.
         /// </summary>
-        private const float CaptureStrikeSeconds = 0.79f;
+        private const float CaptureStrikeSeconds = 0.89f;
 
         /// <summary>
         /// A victim that dies on its own — hop, shrink and glide to the death pile — rather than
@@ -51,15 +60,15 @@ namespace ChessTheBetrayal.Core.Match
         /// </summary>
         public static float EstimateSeconds(MoveCommand move)
         {
-            int squares = MoveTravelTiming.SquaresApart(
+            float tiles = MoveTravelTiming.TilesApart(
                 move.StartPosition.x, move.StartPosition.y,
                 move.EndPosition.x, move.EndPosition.y);
 
-            float seconds = MoveTravelTiming.SecondsForSquares(squares);
+            float seconds = MoveTravelTiming.SecondsForTiles(tiles);
 
             if (move.IsCapture) seconds = Max(seconds, CaptureSeconds(move));
             if (move.IsCastling) seconds = Max(seconds, CastlingSeconds);
-            if (move.IsPromotion) seconds = Max(seconds, PromotionSeconds(squares));
+            if (move.IsPromotion) seconds = Max(seconds, PromotionSeconds(tiles));
 
             return seconds + PaddingSeconds;
         }
@@ -74,10 +83,10 @@ namespace ChessTheBetrayal.Core.Match
         {
             if (CaptureFate.Of(move) != CapturedPieceFate.CrushedByTheStamp) return GlideDeathSeconds;
 
-            int runUp = CaptureApproach.RunUpSquares(move.StartPosition, move.EndPosition, move.PieceType);
-            if (runUp == 0) return CaptureStrikeSeconds;
+            float runUpTiles = CaptureApproach.RunUpTiles(move.StartPosition, move.EndPosition, move.PieceType);
+            if (runUpTiles <= 0f) return CaptureStrikeSeconds;
 
-            return CaptureStrikeSeconds + MoveTravelTiming.ChargeSecondsForSquares(runUp);
+            return CaptureStrikeSeconds + MoveTravelTiming.SecondsForTiles(runUpTiles);
         }
 
         /// <summary>
@@ -85,9 +94,9 @@ namespace ChessTheBetrayal.Core.Match
         /// exactly one square, but the travel is taken from the same curve as any other glide
         /// rather than hard-coded, so retuning that curve carries the budget with it.
         /// </summary>
-        private static float PromotionSeconds(int squares)
+        private static float PromotionSeconds(float tiles)
         {
-            return MoveTravelTiming.SecondsForSquares(squares) + PromotionMorphSeconds;
+            return MoveTravelTiming.SecondsForTiles(tiles) + PromotionMorphSeconds;
         }
 
         private static float Max(float a, float b) => a > b ? a : b;

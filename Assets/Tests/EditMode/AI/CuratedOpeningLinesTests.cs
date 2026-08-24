@@ -67,7 +67,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
                 Assert.That(board.ZobristHash, Is.EqualTo(Golden[i].hash),
                     $"Position {i} ({CuratedOpeningLines.Line(i)}) is no longer the board it was when the " +
                     "baselines were measured.");
-                Assert.That(board.FullMoveNumber, Is.EqualTo(Golden[i].plies),
+                Assert.That(board.PliesPlayed, Is.EqualTo(Golden[i].plies),
                     $"Position {i} is now reached in a different number of plies.");
             }
         }
@@ -97,8 +97,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             // two moved.
             BoardState start = StandardChessPosition.Create(betrayalRightAvailable: true);
 
-            Assert.That(start.FullMoveNumber, Is.EqualTo(0));
-            Assert.That(CuratedOpeningLines.BuildPosition(12).FullMoveNumber, Is.EqualTo(2),
+            Assert.That(start.PliesPlayed, Is.EqualTo(0));
+            Assert.That(CuratedOpeningLines.BuildPosition(12).PliesPlayed, Is.EqualTo(2),
                 "The shortest line is two plies, so a position reporting anything else is not being " +
                 "replayed from a fresh standard board.");
         }

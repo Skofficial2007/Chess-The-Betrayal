@@ -20,15 +20,21 @@ namespace ChessTheBetrayal.View
     }
 
     /// <summary>
-    /// The visual feel of a board-move glide. Quiet is a plain slide, and the only one whose
-    /// duration follows the distance covered; Knight arcs over the board (it "hops" rather than
-    /// slides through occupied squares, matching how the piece actually moves); Promotion is a
-    /// slower, punch-free glide since the morph itself (PlayTransitionOut/In) is the payoff beat.
+    /// The visual feel of a board-move glide. Quiet is a plain slide; Knight arcs over the board (it
+    /// "hops" rather than slides through occupied squares, matching how the piece actually moves);
+    /// Promotion is a slower, punch-free glide since the morph itself (PlayTransitionOut/In) is the
+    /// payoff beat.
     ///
     /// Capture adds a landing impact punch to sell contact, but it is no longer how most captures
     /// look: a piece landing on its victim plays the far heavier stamp instead (PlayCaptureStamp).
     /// What is left for this style is en passant, where the attacker lands beside its victim rather
     /// than on it, and a takeback, where the victim has already gone and there is nothing to land on.
+    ///
+    /// Quiet and Capture both follow the distance covered. Capture used to hold a fixed duration
+    /// whatever the distance, which was harmless while it only ever meant en passant — but a
+    /// takeback also comes through here, and taking back a rook's capture from across the board sent
+    /// it home seven tiles in a fifth of a second. Knight and Promotion keep fixed durations because
+    /// each covers a known distance by definition.
     /// </summary>
     public enum MoveStyle
     {
@@ -48,15 +54,19 @@ namespace ChessTheBetrayal.View
         /// <summary>Where the attacker strikes from — the square beside its victim.</summary>
         public readonly Vector3 LaunchFrom;
 
-        /// <summary>Squares between the attacker and that square, so the glide can be paced.</summary>
-        public readonly int SquaresToCover;
+        /// <summary>
+        /// Ground between the attacker and that square in tile widths, so the walk can be paced
+        /// against what it actually covers. Tiles rather than squares because a diagonal approach
+        /// is half again as long as a straight one of the same square count.
+        /// </summary>
+        public readonly float TilesToCover;
 
         public readonly bool HasGroundToCover;
 
-        public CaptureRunUp(Vector3 launchFrom, int squaresToCover)
+        public CaptureRunUp(Vector3 launchFrom, float tilesToCover)
         {
             LaunchFrom = launchFrom;
-            SquaresToCover = squaresToCover;
+            TilesToCover = tilesToCover;
             HasGroundToCover = true;
         }
     }
@@ -82,12 +92,14 @@ namespace ChessTheBetrayal.View
         /// board-move entry point (AnimateMove); the plain MoveTo above stays for callers that
         /// don't carry move context (death-pile placement, selection snap-back).
         ///
-        /// squaresTravelled is how far the move covers, counting a diagonal step as one, so a glide
-        /// can be paced against the ground it has to make up instead of every move taking the same
-        /// time whatever its length. Callers that aren't moving a piece across the board (a
-        /// promotion swap in place, a snap-back) can leave it alone.
+        /// tilesTravelled is the ground the move covers, measured in tile widths, so a glide can be
+        /// paced against what it has to make up instead of every move taking the same time whatever
+        /// its length. Tiles rather than squares because a diagonal step is 1.414 tiles of real
+        /// floor: pacing it as one square makes every diagonal the faster move. Callers that aren't
+        /// moving a piece across the board (a promotion swap in place, a snap-back) can leave it
+        /// alone.
         /// </summary>
-        void MoveTo(Vector3 worldPos, MoveStyle style, int squaresTravelled = 1, bool force = false);
+        void MoveTo(Vector3 worldPos, MoveStyle style, float tilesTravelled = 1f, bool force = false);
 
         /// <summary>
         /// The rook's half of a castling move: an InOutCubic glide identical in feel to
@@ -106,7 +118,7 @@ namespace ChessTheBetrayal.View
         /// standing on the square reports immediately rather than tweening nowhere — that is the
         /// human's pawn, which walks across while the promotion prompt is still open.
         /// </summary>
-        void PlayPromotionApproach(Vector3 worldPos, int squaresTravelled, Action onArrived);
+        void PlayPromotionApproach(Vector3 worldPos, float tilesTravelled, Action onArrived);
 
         /// <summary>
         /// Plays a small (millimeter-scale) settle bob in place — the tail end of the castling
@@ -132,8 +144,13 @@ namespace ChessTheBetrayal.View
         /// moment BoardVisuals can safely start any animation that must play AFTER this piece's own
         /// capture reads as complete (e.g. a Betrayal Defection spin queued on the same piece — see
         /// BoardVisuals.SwapPieceTeam). See PrimeTweenPieceAnimator for the full timing breakdown.
+        ///
+        /// victimHeft says how big the thing being taken is, 0 for the smallest piece on the board
+        /// and 1 for the tallest, so that felling a queen costs more effort and lands harder than
+        /// swatting a pawn. Zero plays exactly what a capture has always played, which is why the
+        /// pawn case cannot be changed by this.
         /// </summary>
-        void PlayCaptureStamp(Vector3 worldPos, CaptureRunUp runUp = default, Action onDescentStart = null, Action onSettled = null);
+        void PlayCaptureStamp(Vector3 worldPos, CaptureRunUp runUp = default, float victimHeft = 0f, Action onDescentStart = null, Action onImpact = null, Action onSettled = null);
 
         /// <summary>
         /// The victim's half of a capture "stamp", started at the attacker's DESCENT (not impact):
@@ -146,6 +163,20 @@ namespace ChessTheBetrayal.View
         void PlayStompedDeath(Action onVanished);
 
         /// <summary>
+        /// The flinch of a piece watching something cross the board to take it: it leans away along
+        /// shoveDirection for seconds, then straightens.
+        ///
+        /// Only for a capture the attacker has to walk into. While that walk happens the piece being
+        /// taken is the one thing on screen that nothing is happening to, which reads as it not
+        /// having noticed. A capture struck from next door has no such gap and plays nothing here.
+        ///
+        /// Ends before the attacker lands, so it neither overlaps nor has to be unwound by the
+        /// stomp that follows (PlayStompedDeath) — the piece is upright again by the time it is
+        /// crushed, which is the pose that beat was built against.
+        /// </summary>
+        void PlayBrace(Vector3 shoveDirection, float seconds);
+
+        /// <summary>
         /// The en passant victim's death: since the attacker never visually lands on this piece's
         /// square (en passant captures on a different tile than the one the attacker ends up on),
         /// there's no impact to crush against — instead the piece plays its own small hop-and-shrink
@@ -153,7 +184,7 @@ namespace ChessTheBetrayal.View
         /// once the glide completes — the moment BoardVisuals should restore its death-pile
         /// scale/facing there (mirroring PlayStompedDeath's onVanished pattern).
         /// </summary>
-        void PlayEnPassantDeath(Vector3 graveyardWorldPos, Action onArrived);
+        void PlayEnPassantDeath(Vector3 graveyardWorldPos, float tilesTravelled, Action onArrived);
 
         /// <summary>
         /// A captured piece coming back to the board because its capture was taken back: the same
@@ -165,7 +196,7 @@ namespace ChessTheBetrayal.View
         /// Deliberately not the capture stamp reversed: nothing is lifting this piece back up, and
         /// a crush played backwards reads as the victim inflating rather than returning.
         /// </summary>
-        void PlayGraveyardReturn(Vector3 boardWorldPos, Vector3 restScale, Action onArrived);
+        void PlayGraveyardReturn(Vector3 boardWorldPos, Vector3 restScale, float tilesTravelled, Action onArrived);
 
         /// <summary>
         /// Scales the piece toward scale. force = true snaps instantly with no interpolation

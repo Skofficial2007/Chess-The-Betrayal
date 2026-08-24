@@ -85,6 +85,13 @@ namespace ChessTheBetrayal.Gameplay.Manager
             }
 
             board.ComputeFullZobristHash();
+
+            // The opening position counts towards a repetition like any other, and a board reused
+            // for a second match must not carry the first one's positions into it. Recorded here,
+            // once the hash it is recorded under is the real one — every position after this is
+            // recorded by the move that reaches it.
+            board.ClearPositionHistory();
+            board.PushPosition(board.ZobristHash, irreversible: true);
         }
 
         /// <summary>

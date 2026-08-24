@@ -285,11 +285,96 @@ namespace ChessTheBetrayal.Core.Data
         public List<Vector2Int> MoveHistory { get; private set; }
 
         /// <summary>
-        /// The full move number (e.g. Turn 1 covers both White's and Black's 1st moves).
-        /// Single source of truth for turn-number derivation — used by move-executed events,
-        /// PGN-style logging, and network replay.
+        /// How many plies (single moves by one side) have been recorded — not full moves. A ply by
+        /// either side counts one, and so does each ply of a Betrayal sub-sequence, since
+        /// <see cref="RecordMove"/> runs for every one of them. Where the count comes from: history
+        /// stores a from/to pair per ply, so halving it gives the number of plies, not turns.
+        ///
+        /// Every caller wants plies. Anything wanting the chess convention where one number covers
+        /// both sides' moves has to halve this again, and should say so where it does.
         /// </summary>
-        public int FullMoveNumber => MoveHistory.Count / 2;
+        public int PliesPlayed => MoveHistory.Count / 2;
+
+        // Every position reached so far, by hash, alongside how far back one has to look to find a
+        // position that could still recur. A capture or a pawn move can never be taken back by
+        // playing on, so no position before one can ever appear again, and a repetition search that
+        // walked past it would be scanning history it has already ruled out.
+        //
+        // Fixed arrays rather than lists: the search walks this on every node it visits, and it
+        // shares the board with live play through the same apply/undo pair, so growth here would be
+        // growth in the middle of a search. Sized past any real game plus the deepest line a search
+        // adds on top of it; a game that somehow ran past the end simply stops recording, which
+        // costs repetition detection rather than correctness.
+        private readonly ulong[] _positionHistory = new ulong[MaxTrackedPositions];
+        private readonly int[] _lastIrreversibleAt = new int[MaxTrackedPositions];
+        private int _positionCount;
+
+        private const int MaxTrackedPositions = 2048;
+
+        /// <summary>How many positions are on record — the game so far, plus whatever line a search
+        /// is currently down. Read by the repetition rules and by anything asserting on them.</summary>
+        public int PositionCount => _positionCount;
+
+        /// <summary>
+        /// Plies since the last capture or pawn move. This is what the fifty-move rule counts, and
+        /// it is also how far back a repetition can possibly reach.
+        /// </summary>
+        public int PliesSinceIrreversibleMove =>
+            _positionCount == 0 ? 0 : _positionCount - _lastIrreversibleAt[_positionCount - 1] - 1;
+
+        /// <summary>
+        /// Records the position now on the board. <paramref name="irreversible"/> marks a move no
+        /// amount of further play can undo — a capture or a pawn move — which is where any search
+        /// for a repeated position stops.
+        /// </summary>
+        public void PushPosition(ulong hash, bool irreversible)
+        {
+            if (_positionCount >= MaxTrackedPositions) return;
+
+            _positionHistory[_positionCount] = hash;
+            _lastIrreversibleAt[_positionCount] = irreversible || _positionCount == 0
+                ? _positionCount
+                : _lastIrreversibleAt[_positionCount - 1];
+            _positionCount++;
+        }
+
+        /// <summary>Drops the most recent recorded position. Pairs with <see cref="PushPosition"/>
+        /// on every path that unmakes a move, including the search's own.</summary>
+        public void PopPosition()
+        {
+            if (_positionCount > 0) _positionCount--;
+        }
+
+        /// <summary>
+        /// How many times the given position already appears on record, looking back only as far as
+        /// the last capture or pawn move.
+        ///
+        /// Every entry is checked, not every second one. Ordinary chess can skip alternate plies,
+        /// because a position only ever recurs with the same side to move and the turn changes hands
+        /// on every ply — but not here. An Act and a Defection each spend a ply while leaving the
+        /// same player to move, so once a Betrayal has been through, two identical positions can sit
+        /// an odd number of plies apart and a search stepping over alternate entries walks straight
+        /// past them. The hash already carries the side to move, so checking every entry cannot
+        /// produce a false match; it only costs the skip.
+        /// </summary>
+        public int CountPositionOccurrences(ulong hash)
+        {
+            if (_positionCount == 0) return 0;
+
+            int stopAt = _lastIrreversibleAt[_positionCount - 1];
+            int occurrences = 0;
+
+            for (int i = _positionCount - 1; i >= stopAt; i--)
+            {
+                if (_positionHistory[i] == hash) occurrences++;
+            }
+
+            return occurrences;
+        }
+
+        /// <summary>Forgets every recorded position. Call when a board is reused for a new match, so
+        /// one game's repetitions can never be counted against the next.</summary>
+        public void ClearPositionHistory() => _positionCount = 0;
 
         /// <summary>
         /// Tracks captured pieces for each team.
@@ -706,6 +791,13 @@ namespace ChessTheBetrayal.Core.Data
             {
                 clone.MoveHistory.Add(move);
             }
+
+            // The search runs on a clone and has to be able to see the positions the game has
+            // already been through, or it cannot tell that a line it is considering would repeat one
+            // of them.
+            Array.Copy(_positionHistory, clone._positionHistory, _positionCount);
+            Array.Copy(_lastIrreversibleAt, clone._lastIrreversibleAt, _positionCount);
+            clone._positionCount = _positionCount;
 
             return clone;
         }

@@ -20,9 +20,16 @@ namespace ChessTheBetrayal.AI
         /// <summary>A forced mate was found; no deeper search can change that decision.</summary>
         MateFound,
 
-        /// <summary>Iterative deepening completed every depth up to and including MaxDepth without
-        /// being stopped by any of the above — the tier's configured ceiling, not the clock, is what
-        /// ended the search.</summary>
+        /// <summary>
+        /// Iterative deepening completed every depth up to and including MaxDepth without being
+        /// stopped by any of the above: the tier's configured ceiling is what ended the DEPTH LOOP.
+        ///
+        /// It does not follow that the move arrived quickly. A profile carrying a rescore margin
+        /// re-searches its close root candidates after the loop and returns only when the token
+        /// fires, so a search can complete its ceiling and still spend the rest of the budget — one
+        /// real match had depth-7 Ceiling moves at 36ms and at 3001ms alike. Read this as how the
+        /// depth loop ended, never as how long the caller waited.
+        /// </summary>
         Ceiling
     }
 

@@ -22,8 +22,9 @@ searching cannot go past it.
 this because both plans have now been seen to finish late. A run yields a frame between cells so
 results appear as they arrive, and a frame costs whatever that device's Update loop costs at the
 time — so real wall clock is the ceiling plus a per-cell overhead that says nothing about the search
-and everything about what else is on screen. A phone drawing the live report measured about 75 ms a
-cell: a few seconds onto the 54-cell tester run, about fifteen onto the 200-cell thermal one. In the
+and everything about what else is on screen. A phone drawing the live report measured 75–100 ms a
+cell across two devices: a few seconds onto the 54-cell tester run, fifteen to twenty onto the
+200-cell thermal one. In the
 Editor it is far larger and depends on window focus — a hand-driven Play-mode tester run took closer
 to three minutes — which is worth knowing before reading one as a slow device. Quote the ceiling for
 what it bounds, which is the searching, because that is the part that measures the phone.
@@ -71,6 +72,25 @@ and untrimmed, as a `.txt` under `Application.persistentDataPath`, named for the
 moment it ran (`chess-ai-benchmark_<device>_<yyyyMMdd-HHmmss>.txt`) so a folder full of reports from
 several testers stays attributable and nothing overwrites anything. The full path is appended to the
 on-screen log and to the player log — that pair is the safety net nothing else here depends on.
+
+The report stays inside plain ASCII, and every written copy also carries a UTF-8 byte-order mark.
+Both come from the same bug arriving twice. The first report back from a device had every em-dash
+rendered as mojibake, because a plain UTF-8 file with nothing identifying it is read as the local
+ANSI codepage by enough Windows text viewers to matter. The mark was added for that and did not
+fix it — a later report, shared from a build that carried the mark, came back corrupted the same
+way, so something between the phone and a reader was decoding without looking for one.
+
+A mark only helps a reader that checks for it; ASCII needs no reader to do anything. So the report
+gave up its em-dashes, and that is the rule to keep if you add report text or another export
+route. Three tests assert it, one for each thing that produces report text, and they compare code
+points rather than chars — the first version of that check was built on NUnit's `LessThan` over
+chars and passed with an em-dash still in the string. The mark stays because it costs nothing and
+helps where it is honoured, so keep encoding through `ReportExporter.ReportEncoding` rather than
+`Encoding.UTF8`; it is simply not what makes the file safe to forward.
+
+The report names the plan that produced it, on the status line, and describes its shape as a header
+line — how many positions, which tiers, how many repeats. A cell count cannot separate breadth from
+repetition, and "200/200 cells" reads like a matrix when it was one position searched 200 times.
 
 On Android, what happens next depends on the API level. Android 10 (API 29) and newer write a second
 copy straight into the phone's public Downloads folder through MediaStore and raise a share sheet
@@ -144,6 +164,17 @@ never the raw mean time — it's **overshoot past that tier's own budget**, and 
 A tier that stays inside its budget while reaching a shallower depth than the desktop is a real,
 player-visible weakness even though it never technically misses a deadline; a tier that goes even a
 little past its own budget on some device is the exact failure this instrument exists to catch.
+
+**Where the overshoot verdict lives, and where it does not.** A per-cell line states its overshoot as
+a quantity — "+2ms past budget (3000ms)" — and passes no judgement; the judging happens in the
+per-tier summary, where the worst overshoot for a whole tier is what the gate below is read against.
+That split is deliberate. The timer that cancels a search has a resolution of its own, a few
+milliseconds on a phone and around fifteen on Windows, so a line-by-line pass/fail word puts a
+property of the clock in front of a reader as a failure of the search. It also has to be true: an
+earlier version compared the overshoot exactly and then printed it rounded, so a search 0.3 ms late
+announced itself as "OVER BUDGET by 0ms" — 194 of 200 lines in a real device run said exactly that,
+which is enough for a reader to stop believing the six that meant something. Whatever decides is now
+the same number that gets printed.
 
 ## What it does not measure
 
@@ -272,11 +303,71 @@ device or in the Editor alike, exactly as the on-screen text already asks.
 ## Per-device results
 
 The user builds; testers/devices run the app with `DeviceBenchmark.unity` as the boot scene, press
-Quick Run, and send back the shared report. One row per device once a full run completes on it.
+Quick Run, and send back the shared report. One row per device and binary once a full run completes
+on it — the same phone can hold two rows, because the 32-bit binary searches fewer positions in the
+same milliseconds and its row would otherwise read as slower hardware. Take that column from the
+report's build line, never from what was built: the package carries both and the phone is what chose.
 
-| Device | Chipset (GPU proxy) | Worst-case overshoot | Tier that overshot | Deepest tier's depth reached (worst-case) | Verdict | Notes |
-|---|---|---:|---|---:|---|---|
-| TrebleDroid GSI, Android 14 / API 34 (model not reported) | Mali-G68 MC4 [ARM], 8 cores @ 2400 MHz, 7.6 GB | +1 ms | impossible | 7 (impossible) | Pass | Thermal run only — the tester run was lost, see below |
+| Device | Chipset (GPU proxy) | Binary | Worst-case overshoot | Tier that overshot | Deepest tier's depth reached (worst-case) | Verdict | Notes |
+|---|---|---|---:|---|---:|---|---|
+| TrebleDroid GSI, Android 14 / API 34 (model not reported) | Mali-G68 MC4 [ARM], 8 cores @ 2400 MHz, 7.6 GB | 64-bit | +1 ms | impossible | 7 (impossible) | Pass | Thermal run only — the tester run was lost, see below |
+| realme RMX3998, Android 16 / API 36 | Mali-G57 MC2, 8 cores @ 2200 MHz, 5.5 GB | 64-bit | +10 ms | impossible | 7 (impossible, sustained run) | Pass | First device to complete both plans — all six tiers, see below |
+
+### The first complete six-tier device run — realme RMX3998
+
+Release IL2CPP, ARM64. This is the first phone to run the tester plan and the sustained-load plan and
+share both, so it is the first row where all six tiers have numbers rather than one. It was captured
+before both of the later changes to the build config below — the package was ARM64-only and listed
+Vulkan ahead of OpenGL ES 3. Neither disturbs the worker-thread figures, which is nearly all of what
+follows: this phone runs the same 64-bit code out of either package, and search never touches the
+GPU. The one figure worth re-checking on a re-run is the main-thread control, which shares a frame
+with rendering.
+
+**The tester plan finished 54 cells in 2m 11s** against its promised 2m 20s ceiling. The bound holds
+on real hardware, which is the claim the whole "how long it takes" section above rests on.
+
+Worker-thread pass, 8 samples per tier:
+
+| Tier | Budget | Worst elapsed | Worst overshoot | Depth worst / mean |
+|---|---:|---:|---:|---:|
+| easy | 1300 ms | 0.62 s | none | 3 / 3.0 |
+| normal | 2250 ms | 2.25 s | +1 ms | 5 / 5.0 |
+| hard | 3000 ms | 3.00 s | +5 ms | 5 / 6.3 |
+| aggressive | 3000 ms | 3.00 s | none | 6 / 6.5 |
+| extreme | 3000 ms | 3.00 s | +5 ms | 6 / 7.0 |
+| impossible | 3000 ms | 3.00 s | +1 ms | 5 / 6.3 |
+
+**Reading it against the desktop.** The two shallow tiers reach their configured ceiling exactly, as
+they do everywhere — the only thing their timings measure is how little they were asked to do. The
+four deep tiers are budget-bound by construction, so depth is the whole of the signal, and the phone
+means 6.3–7.0 against the desktop's 7.0–7.8. Roughly one ply shallower on a chip with a fraction of
+the desktop's power is a good result, not a finding.
+
+The main-thread control, one sample per tier, matched the worker pass on time throughout and reached
+depth 3/5/6/6/7/6. Nothing here suggests this device's scheduler treats background work differently.
+
+**The worst-depth column is where this run says something the means hide.** On one position — the
+Italian, `e2e4 e7e5 g1f3 b8c6 f1c4` — `hard` and `impossible` reach only depth 5 while `extreme`
+reaches 7, on both repeats. `extreme` and `impossible` share a `MaxDepth` of 9 and the same 3000 ms
+budget and differ only in evaluator weighting, which makes that a controlled comparison: the weighted
+evaluator orders this position roughly two plies better than the identity one, and the two
+identity-weighted tiers settle on a weakening pawn push as a result. Repeats are not independent
+samples here — the search is deterministic given identical inputs — so both agreeing means this is a
+property of the position and the profile rather than wall-clock noise.
+
+Recorded as a measurement, not a call to action. The four deep tiers sitting close together, with
+`impossible` no deeper than `hard`, is a deliberate and separately recorded property of the profile
+table, not something this run discovered.
+
+**Sustained load: no throttling, at all.** 200 cold searches at the impossible tier over 10m 20s.
+Depth read **7 in every one of the eleven minute buckets** — not a mean of 7 with variation under
+it, but the same figure from minute 0 to minute 10. Worst overshoot across all 200 was **+10 ms on a
+3000 ms budget**, and all but a handful came in at +2 ms or less. Battery went 87% to 85%.
+
+That is the second phone in a row to hold depth flat across a full ten minutes at the heaviest tier
+the game ships, and it settles the open question about asking Android for a sustained-performance
+clock: it would trade peak speed for stability this device does not need. The depth a player sees on
+move 5 is the depth they see on move 80.
 
 ### What the first real device showed
 
@@ -309,10 +400,18 @@ which is search work; budget for a few seconds past it on a device with a screen
 
 ## Build config this was measured under
 
-Pinned in `ProjectSettings/ProjectSettings.asset`, not left on template defaults: IL2CPP, ARM64 only,
-IL2CPP configuration Release, code generation "faster runtime," managed stripping Low, target API 36,
-min API 26. Never compare device numbers captured under different settings than these — a timing
-difference would measure the configuration change, not the phone.
+Pinned in `ProjectSettings/ProjectSettings.asset`, not left on template defaults: IL2CPP, ARM64 and
+ARMv7, IL2CPP configuration Release, code generation "faster runtime," managed stripping Low, target
+API 36, min API 26, graphics APIs OpenGL ES 3 ahead of Vulkan. Never compare device numbers captured
+under different settings than these — a timing difference would measure the configuration change, not
+the phone.
+
+ARMv7 is in that list because a phone refused to install an ARM64-only package outright; carrying
+both lets the phone choose, which is the same reason a row has to record which one it chose. Rows
+captured before it was added still stand, since a 64-bit phone runs the identical code either way.
+The graphics API order is listed because it is not free of these numbers: search runs on a worker
+thread and never touches the GPU, but the main-thread control cell shares a frame with rendering, so
+that one figure can move when the order does.
 
 ## Using this on your own project
 
@@ -362,12 +461,46 @@ is this project's baseline, not a template.
 Everything above measures synthetic, nothing-on-screen searches run by this diagnostic tool — never
 a real game. `ChessTheBetrayal.AI.MatchTelemetry.AiMatchTelemetry` measures the other half: what the
 AI actually did across one real match a player just finished, so a tester can send back a report from
-ordinary play instead of a dedicated benchmark session. It records one `AiMoveRecord` per AI move
-(ply, team, the move made, elapsed ms and depth reached for a searched move, or just a `FromBook`
-flag for a book move, since a book move never runs a search and elapsed/depth would only mislead) and
-renders a header, a summary, then every move in order — the same shape and the same reasoning as
+ordinary play instead of a dedicated benchmark session. It records one `AiMoveRecord` per ply — the
+ply number, the team, the move, and for a searched move its elapsed ms, depth and stop reason — then
+renders a header, a summary, and every ply in order, the same shape and the same reasoning as
 `BenchmarkReport`: nothing is formatted into text until a report is actually requested, so a match
 costs no per-move string building.
+
+**Three things a reader has to know about that log, all learned from the first one that came back.**
+
+*Only the AI's own plies are recorded*, so the ply numbers skip. The report says so on the page,
+because a gap otherwise reads as something having been dropped — which is exactly the conclusion the
+next point was first mistaken for.
+
+*A Defection is recorded even though nobody plays it.* The rules produce that ply once Retribution is
+refused or impossible, so it reaches no move-decided path, and the first real match log had a Black
+queen move off a1 with nothing anywhere putting a queen there. It is the one ply in a match that
+moves a piece between the two armies, so a log without it cannot account for the board it describes.
+
+*A move that stopped on a forced mate is kept out of the depth spread.* A search that finds a mate
+stops there whatever depth it is at, because no deeper look can change that answer. Pooling it with a
+search the clock cut short let a mate found at depth 2 be reported as the worst depth of the whole
+match, which reads as an AI that struggled all game when it had just done the best thing available.
+The count of those is reported separately. Elapsed time still covers every searched move — a move
+that arrived in 40 ms genuinely arrived in 40 ms.
+
+The report carries the same device and build header the benchmark's does, from the same reader, and
+is stamped per match so a Replay's own report is attributable too.
+
+**Its elapsed is not the benchmark's elapsed, and the two must not be read against each other.**
+This clock starts when a move is asked for and stops when that move reaches the board, so it carries
+the wait for the next frame as well as the search. The benchmark's wraps the search call and nothing
+else. The first real match report showed a worst of 3044 ms against a 3000 ms budget while the same
+phone's 200-search sustained run never went past +10 ms — that gap is the frame, not a missed
+deadline. The report says as much on the page, because the two figures otherwise sit on this one and
+invite the comparison. What this clock measures that no benchmark can is the delay a player actually
+sat through, which is worth having precisely because it is the larger number.
+
+**The realme's first shared match** (aggressive tier, seven recorded plies) also exercised the parts
+of the log added for exactly this: two book plies, a mate found at depth 2 in 36 ms correctly kept
+out of the depth spread and counted separately, and no Defection — so the Defection line is still the
+one part of this feature never yet seen on a device.
 
 Shipping off by default, behind `GameManager`'s `enableAiTelemetrySharing` — the same
 composition-root-owned-flag shape as its existing `logMoves` field. When it's on and the match that

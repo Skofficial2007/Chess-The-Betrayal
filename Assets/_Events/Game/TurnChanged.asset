@@ -15,4 +15,4 @@ MonoBehaviour:
   DebugTrace: 0
   _debugLog: []
   _debugTeam: 0
-  _debugTurnNumber: 1
+  _debugPlyNumber: 1

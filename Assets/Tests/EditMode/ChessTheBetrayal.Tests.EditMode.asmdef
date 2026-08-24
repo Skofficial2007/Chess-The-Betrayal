@@ -3,6 +3,7 @@
   "references": [
     "ChessTheBetrayal.Core",
     "ChessTheBetrayal.Gameplay.Flow",
+    "ChessTheBetrayal.Gameplay.Interaction",
     "ChessTheBetrayal.Gameplay.Manager",
     "ChessTheBetrayal.AI",
     "ChessTheBetrayal.Events",
@@ -11,7 +12,8 @@
     "ChessTheBetrayal.UI.SafeArea",
     "ChessTheBetrayal.UI",
     "ChessTheBetrayal.View",
-    "ChessTheBetrayal.Infrastructure"
+    "ChessTheBetrayal.Infrastructure",
+    "PrimeTween.Runtime"
   ],
   "includePlatforms": ["Editor"],
   "excludePlatforms": [],

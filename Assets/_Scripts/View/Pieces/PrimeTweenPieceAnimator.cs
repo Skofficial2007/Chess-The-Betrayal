@@ -25,22 +25,27 @@ namespace ChessTheBetrayal.View
         private static readonly Ease MoveEase = Ease.OutQuad;
         private static readonly Ease ScaleEase = Ease.OutQuad;
 
-        // Per-style board-move feel. A quiet glide is the one style that can cross any distance, so
-        // its duration comes from MoveTravelTiming rather than a constant — a king stepping one
-        // square and a rook crossing the board used to take the same time, which made the rook read
-        // as a jump cut. The others each only ever cover a square or two: en passant is a single
-        // diagonal, a promotion is a step onto the back rank, and every knight move is two squares
-        // by definition, so an arc that needs a little extra room to read stays a fixed value.
-        private const float CaptureMoveDuration = 0.2f;
+        // Per-style board-move feel. Quiet and Capture can each cross any distance, so their
+        // durations come from MoveTravelTiming rather than a constant — a king stepping one square
+        // and a rook crossing the board used to take the same time, which made the rook read as a
+        // jump cut. Knight and Promotion cover a known distance by definition (every knight move is
+        // the same L, a promotion is a step onto the back rank), so a duration tuned by eye for the
+        // little extra room an arc needs stays a fixed value.
         private const float KnightMoveDuration = 0.26f;
         private const float PromotionMoveDuration = 0.28f;
-        private static readonly Ease BoardMoveEase = Ease.InOutCubic;
+
+        // Public so MoveTravelTiming's GlideEasePeakFactor can be checked against the easing it
+        // claims to describe — the two together are what bound how fast a glide is allowed to get,
+        // and a duration alone says nothing about that. Sine rather than cubic: both ease in and
+        // out identically to the eye, but a cubic one runs its middle at three times its average
+        // speed against a sine's 1.57, and the middle is where a long move breaks up into stills.
+        public static readonly Ease BoardGlideEase = Ease.InOutSine;
 
         // Castling's rook glide: its own (slightly shorter) duration rather than reusing
         // QuietMoveDuration, so a rook that starts CastleStartDelay seconds after the king still
         // arrives at essentially the same moment — the king leads, the rook tucks in right behind
-        // it, rather than visibly trailing. Same BoardMoveEase (InOutCubic) as every other board
-        // glide, per the "travel = weight" easing vocabulary.
+        // it, rather than visibly trailing. Same BoardGlideEase as every other board glide, per the
+        // "travel = weight" easing vocabulary.
         private const float CastleRookMoveDuration = 0.24f;
 
         // Public: BoardVisuals needs this same value to know how long to wait before calling
@@ -68,6 +73,7 @@ namespace ChessTheBetrayal.View
         // 4h*t*(1-t)) from the exact same t every frame, so "how far across" and "how high up" are
         // physically coupled and can never drift apart. Beats:
         //   1. Anticipation (pull back + crouch): a held breath before the pounce. No travel yet.
+        //      An attacker that walked in doesn't play this as its own beat — see below.
         //   2. Leap: one continuous parabolic arc from start tile to landing tile, peaking well
         //      above the victim's head. Growing to 1.15x mid-air on the way up (jumping things get
         //      bigger, per every good cartoon), landing still oversized.
@@ -75,8 +81,9 @@ namespace ChessTheBetrayal.View
         //      still reads as "the attacker is now falling toward you" — so the victim's
         //      cower-shrink has the entire second half of the arc (not just a short fall leg) to
         //      get out of the way before contact.
-        //   4. Impact: flatten hard against the tile, then a big springy overshoot back to rest
-        //      scale — the "settling back to normal size" that closes the arc — and a settle bob.
+        //   4. Impact: flatten hard against the tile, hold there for a beat, then a big springy
+        //      overshoot back to rest scale — the "settling back to normal size" that closes the
+        //      arc — and a settle bob.
         private const float StampAnticipationDuration = 0.09f;
         private const float StampAnticipationScaleFactor = 0.78f;
         private const float StampAnticipationPullBack = 0.12f;
@@ -88,8 +95,16 @@ namespace ChessTheBetrayal.View
         // the attacker's actual remaining airtime rather than duplicating the numbers by hand.
         public const float StampLeapDuration = 0.3f;
         public const float StampDescentStartFraction = 0.5f;
-        // Peak height above the higher of start/land Y. Pieces are ~1 unit tall at this board
-        // scale, so 1.3 clears even the King/Queen's head with visible air underneath.
+        // Peak height above the higher of start/land Y.
+        //
+        // This does NOT clear a tall piece's head, whatever it may once have been chosen to do. The
+        // pieces stand between 1.2 and 2.6 units on this board — a King is 2.6 — so a peak 1.3 above
+        // the tile passes through the band a King, Queen or Bishop occupies, and only actually
+        // clears a Pawn. What keeps the two from reading as interpenetrating is that the arc peaks
+        // over the boundary between the two squares rather than over the victim, that the victim is
+        // already shrinking by the time the attacker is above it, and that every piece tapers to
+        // almost nothing at the top. It works, but it works by staging rather than by clearance, and
+        // anything that changes the descent timing has to keep that in mind.
         private const float StampLeapHeight = 1.3f;
         // Mid-air growth: the attacker swells on the way up and stays swollen through the landing,
         // only releasing back to rest scale in the post-impact recover — "big things fall hard."
@@ -98,7 +113,50 @@ namespace ChessTheBetrayal.View
         // Growth spans the whole rise half (0 -> 0.5) of the single leap driver.
         private const float StampAirborneGrowOvershoot = 1.3f;
 
+        // The share of a walk-in that is already crouching. A piece that has just charged across the
+        // board should not stop dead and then step backwards to wind up — it has committed, and the
+        // pause reads as hesitation. Instead the last part of the walk decelerates straight into the
+        // loaded pose, so the charge and the crouch are one motion with no stop and no reversal in
+        // between. An attacker already standing beside its victim keeps the separate wind-up, which
+        // is what a close-quarters pounce wants and is the case that already read well.
+        private const float StampRunUpCrouchShare = 0.35f;
+
+        // A charging piece leans into the run, and the piece it is charging leans away from it.
+        //
+        // Beyond the plain fact that something moving under its own power tips forward, the lean is
+        // what lets the eye read speed on a shape that cannot smear. A drawn character stretches
+        // along its path when it moves quickly; a chess piece is a rigid silhouette that would have
+        // to be scaled along an arbitrary world direction to do the same, which a single localScale
+        // cannot express. Tipping does that job instead, and costs nothing but a rotation.
+        //
+        // The victim's half is smaller and answers a different problem: while the attacker crosses
+        // the board, the piece being taken is the only thing on screen with nothing happening to it.
+        //
+        // These are large for a tilt because the window is small. Most real captures are struck from
+        // two or three squares out, which is a third of a second of walking — an angle that would be
+        // plenty on a piece standing still is gone before the eye finds it on a piece crossing the
+        // board. Read them against the board's own tilt rather than against upright.
+        private const float ChargeLeanDegrees = 24f;
+        private const float BraceLeanDegrees = 15f;
+
+        // How much of the strike answers to the size of what is being taken. Heft is 0 for the
+        // smallest piece on the board and 1 for the tallest, and everything below is written so that
+        // heft 0 plays exactly what a capture has always played — taking a pawn is the case that
+        // already read well, so it is the floor, and weight only ever adds.
+        //
+        // Felling something big should cost more effort and land harder than swatting a pawn, and
+        // the leap in particular has a second job: the arc is too low to clear a tall piece (see
+        // StampLeapHeight), so giving the tall victims a higher one buys back some of the room the
+        // constant never had.
+        private const float StampLeapHeightPerHeft = 0.9f;
+        private const float StampImpactHoldPerHeft = 0.05f;
+        private const float StampRecoverOvershootPerHeft = 0.5f;
+
         private const float StampImpactSquashDuration = 0.06f;
+        // A beat with nothing moving at all, at maximum squash. The victim already froze here (see
+        // StampVictimHoldDuration) while the attacker sprang straight back up, so the two disagreed
+        // about the moment they collided; holding both makes the contact land as one event.
+        private const float StampImpactHoldDuration = 0.05f;
         private const float StampImpactRecoverDuration = 0.24f;
         private const float StampImpactWidthFactor = 1.45f;
         private const float StampImpactHeightFactor = 0.45f;
@@ -126,15 +184,28 @@ namespace ChessTheBetrayal.View
         // piece, so it plays its own "swept away" beat instead — a quick hop-and-shrink glide
         // straight to its team's graveyard slot, matching the weight of every other board glide
         // (InOutCubic) rather than the old instant teleport.
-        private const float EnPassantDeathDuration = 0.34f;
+        // The journey between the board and a side's pile, both ways. Paced off the same curve as
+        // any other travel rather than a fixed duration, because the pile sits off the edge of the
+        // board and the distance to it is not small: the far corner of the board to the far end of
+        // a full pile is fifteen tiles, and a fixed third of a second across that is two tiles
+        // between one drawn frame and the next — the piece does not glide, it streaks. It reached
+        // this far because a corpse leaving the board is easy not to look at, but the same journey
+        // run backwards is a piece arriving on it, which is very much looked at.
         private const float EnPassantDeathHopHeight = 0.22f;
-        private static readonly Ease EnPassantDeathMoveEase = Ease.InOutCubic;
+
+        // How long the piece takes to shrink away, kept separate from how long it takes to get
+        // there. Those used to be one number, which is what made the journey a fixed duration in the
+        // first place. They answer different questions: the shrink is how long a captured piece is
+        // still worth looking at, and the move pacing waits on exactly that; the travel is just a
+        // corpse being carried off, and stretching it to a readable speed costs nothing because by
+        // then there is almost nothing left to see.
+        private const float DeathVanishSeconds = 0.34f;
         private static readonly Ease EnPassantDeathHopEase = Ease.OutQuad;
         private static readonly Ease EnPassantDeathScaleEase = Ease.InQuad;
 
-        // The arc's own ease now comes from whatever style called MoveToInternal (BoardMoveEase,
-        // same InOutCubic as every other board move) via ApplyKnightArc's single Tween.Custom
-        // driver — a separate arc-specific ease would fight the "travel = weight" vocabulary.
+        // The arc's own ease now comes from whatever style called MoveToInternal (BoardGlideEase,
+        // the same as every other board move) via ApplyKnightArc's single Tween.Custom driver — a
+        // separate arc-specific ease would fight the "travel = weight" vocabulary.
         private const float KnightArcHeight = 0.35f;
 
         // Promotion/defection transition timings: "out" is a quick anticipation beat, "in" is the
@@ -243,6 +314,15 @@ namespace ChessTheBetrayal.View
         private Tween _settleBobTween;
         private float? _settleBobBaseY;
         private Sequence _stampSequence;
+
+        // The lean runs alongside the stamp rather than inside it, because the victim plays one too
+        // and it has no stamp of its own to hang it on. _leaning says whether the resting rotation
+        // below is a real one worth putting back — a strike cut off halfway would otherwise leave
+        // the piece tipped over for the rest of the game.
+        private Tween _leanTween;
+        private Quaternion _leanRestRotation;
+        private bool _leaning;
+
         private MaterialPropertyBlock _mpb;
 
         // Selection-lift state. _liftRestPosition/_liftRestScale are captured the moment
@@ -275,22 +355,22 @@ namespace ChessTheBetrayal.View
             MoveToInternal(worldPos, MoveDuration, MoveEase, punch: false, arc: false, force);
         }
 
-        public void MoveTo(Vector3 worldPos, MoveStyle style, int squaresTravelled = 1, bool force = false)
+        public void MoveTo(Vector3 worldPos, MoveStyle style, float tilesTravelled = 1f, bool force = false)
         {
             switch (style)
             {
                 case MoveStyle.Capture:
-                    MoveToInternal(worldPos, CaptureMoveDuration, BoardMoveEase, punch: true, arc: false, force);
+                    MoveToInternal(worldPos, MoveTravelTiming.SecondsForTiles(tilesTravelled), BoardGlideEase, punch: true, arc: false, force);
                     break;
                 case MoveStyle.Knight:
-                    MoveToInternal(worldPos, KnightMoveDuration, BoardMoveEase, punch: false, arc: true, force);
+                    MoveToInternal(worldPos, KnightMoveDuration, BoardGlideEase, punch: false, arc: true, force);
                     break;
                 case MoveStyle.Promotion:
-                    MoveToInternal(worldPos, PromotionMoveDuration, BoardMoveEase, punch: false, arc: false, force);
+                    MoveToInternal(worldPos, PromotionMoveDuration, BoardGlideEase, punch: false, arc: false, force);
                     break;
                 case MoveStyle.Quiet:
                 default:
-                    MoveToInternal(worldPos, MoveTravelTiming.SecondsForSquares(squaresTravelled), BoardMoveEase, punch: false, arc: false, force);
+                    MoveToInternal(worldPos, MoveTravelTiming.SecondsForTiles(tilesTravelled), BoardGlideEase, punch: false, arc: false, force);
                     break;
             }
         }
@@ -308,7 +388,7 @@ namespace ChessTheBetrayal.View
             _castleSequence.Stop();
             _settleBobTween.Stop();
             _settleBobBaseY = null;
-            _stampSequence.Stop();
+            StopStampBeat();
 
             // A caller driving MoveTo directly (a board move, castling, snap-back) means the piece
             // is no longer conceptually "lifted" — stop any in-flight lift/bob so they can't fight
@@ -380,7 +460,7 @@ namespace ChessTheBetrayal.View
             _castleSequence.Stop();
             _settleBobTween.Stop();
             _settleBobBaseY = null;
-            _stampSequence.Stop();
+            StopStampBeat();
             StopLiftTweens();
             _liftRestPosition = null;
             HideSelectionOutline(instant: true);
@@ -400,7 +480,7 @@ namespace ChessTheBetrayal.View
                 _castleSequence.Chain(Tween.Delay(startDelay, useUnscaledTime: true));
             }
             _castleSequence
-                .Chain(Tween.Position(_transform, worldPos, CastleRookMoveDuration, BoardMoveEase, useUnscaledTime: true))
+                .Chain(Tween.Position(_transform, worldPos, CastleRookMoveDuration, BoardGlideEase, useUnscaledTime: true))
                 .ChainCallback(() =>
                 {
                     PlaySettleBob();
@@ -408,7 +488,7 @@ namespace ChessTheBetrayal.View
                 });
         }
 
-        public void PlayPromotionApproach(Vector3 worldPos, int squaresTravelled, Action onArrived)
+        public void PlayPromotionApproach(Vector3 worldPos, float tilesTravelled, Action onArrived)
         {
             if (!IsFinite(worldPos))
             {
@@ -422,7 +502,7 @@ namespace ChessTheBetrayal.View
             _castleSequence.Stop();
             _settleBobTween.Stop();
             _settleBobBaseY = null;
-            _stampSequence.Stop();
+            StopStampBeat();
             _promotionApproachSequence.Stop();
             StopLiftTweens();
             _liftRestPosition = null;
@@ -440,7 +520,7 @@ namespace ChessTheBetrayal.View
             }
 
             _promotionApproachSequence = Sequence.Create(useUnscaledTime: true)
-                .Chain(Tween.Position(_transform, worldPos, MoveTravelTiming.SecondsForSquares(squaresTravelled), BoardMoveEase, useUnscaledTime: true))
+                .Chain(Tween.Position(_transform, worldPos, MoveTravelTiming.SecondsForTiles(tilesTravelled), BoardGlideEase, useUnscaledTime: true))
                 .ChainCallback(() => onArrived?.Invoke());
         }
 
@@ -468,8 +548,11 @@ namespace ChessTheBetrayal.View
                 .OnComplete(this, self => self._settleBobBaseY = null);
         }
 
-        public void PlayCaptureStamp(Vector3 worldPos, CaptureRunUp runUp = default, Action onDescentStart = null, Action onSettled = null)
+        public void PlayCaptureStamp(Vector3 worldPos, CaptureRunUp runUp = default, float victimHeft = 0f, Action onDescentStart = null, Action onImpact = null, Action onSettled = null)
         {
+            // Anything outside 0..1 would scale a beat past what the estimator budgeted for it.
+            victimHeft = Mathf.Clamp01(victimHeft);
+
             if (!IsFinite(worldPos) || (runUp.HasGroundToCover && !IsFinite(runUp.LaunchFrom)))
             {
                 Debug.LogWarning($"[{nameof(PrimeTweenPieceAnimator)}] PlayCaptureStamp given non-finite vector for {_transform.name}. Ignoring.");
@@ -483,19 +566,18 @@ namespace ChessTheBetrayal.View
             _castleSequence.Stop();
             _settleBobTween.Stop();
             _settleBobBaseY = null;
-            _stampSequence.Stop();
+            StopStampBeat();
             StopLiftTweens();
             _liftRestPosition = null;
             HideSelectionOutline(instant: true);
 
             Vector3 restScale = _transform.localScale;
-            // Where the strike begins. With ground to cover that is the square next to the victim,
-            // not the square the piece is standing on — so the wind-up, the arc and its peak are
-            // all measured from there, and the leap stays the short pounce it was built as however
-            // far away the attacker started.
+            // Where the strike is staged from. With ground to cover that is the square next to the
+            // victim, not the square the piece is standing on — so the wind-up, the arc and its peak
+            // are all measured from there, and the leap stays the short pounce it was built as
+            // however far away the attacker started.
             Vector3 startPos = runUp.HasGroundToCover ? runUp.LaunchFrom : _transform.position;
             Vector3 landPos = worldPos;
-            float peakY = Mathf.Max(startPos.y, landPos.y) + StampLeapHeight;
 
             Vector3 crouchScale = restScale * StampAnticipationScaleFactor;
             // Pulled back along the direction of travel, away from the victim — a boxer loading a
@@ -505,6 +587,13 @@ namespace ChessTheBetrayal.View
             towardVictim.y = 0f;
             Vector3 pullBackPos = startPos - towardVictim.normalized * StampAnticipationPullBack * Mathf.Min(1f, towardVictim.magnitude);
             pullBackPos.y = startPos.y - StampAnticipationCrouchDrop;
+
+            // The leap begins where the wind-up left the piece, which is the loaded pose and not the
+            // staging square. Arcing from the staging square instead put the whole pull-back back on
+            // the piece in a single frame the instant the leap started — a small teleport forwards
+            // that every capture in the game was paying, hidden inside the snap of the release.
+            Vector3 launchPos = pullBackPos;
+            float peakY = Mathf.Max(launchPos.y, landPos.y) + StampLeapHeight + StampLeapHeightPerHeft * victimHeft;
 
             // Swollen mid-air size — held through the landing and only released back to restScale
             // by the post-impact recover, so the piece that lands is visibly bigger than the piece
@@ -525,25 +614,60 @@ namespace ChessTheBetrayal.View
             // Stretched across half a board the leap stops being a pounce — a bishop leaving c1 for
             // g5 covers eight units in the same third of a second and simply appears on top of its
             // victim. Closing the distance first is also the honest read: the piece really did
-            // travel that far. Same glide vocabulary as any other board move, at charge pace,
-            // ending in a dead stop that the wind-up below then loads against.
+            // travel that far. Same glide vocabulary and pace as any other board move, and it ends
+            // on the loaded pose rather than on the staging square: the deceleration IS the crouch,
+            // so there is no stop and no step backwards between arriving and striking. The scale
+            // crouch is delayed to overlap only the tail of that walk, which is where a running
+            // thing actually gathers itself.
             if (runUp.HasGroundToCover)
             {
-                _stampSequence.Chain(Tween.Position(_transform, startPos,
-                    MoveTravelTiming.ChargeSecondsForSquares(runUp.SquaresToCover), BoardMoveEase, useUnscaledTime: true));
+                float runUpSeconds = MoveTravelTiming.SecondsForTiles(runUp.TilesToCover);
+                float crouchSeconds = runUpSeconds * StampRunUpCrouchShare;
+
+                _stampSequence
+                    .Chain(Tween.Position(_transform, pullBackPos, runUpSeconds, BoardGlideEase, useUnscaledTime: true))
+                    .Group(Sequence.Create(useUnscaledTime: true)
+                        .Chain(Tween.Delay(runUpSeconds - crouchSeconds, useUnscaledTime: true))
+                        .Chain(Tween.Scale(_transform, crouchScale, crouchSeconds, StampAnticipationEase, useUnscaledTime: true)));
+
+                // Started beside the sequence rather than inside it because the piece being charged
+                // plays the mirror of this and has no sequence of its own to hang it on — one
+                // implementation, two callers. Both begin on the same frame, which is all the
+                // synchronising they need. It writes rotation only, so it cannot fight the walk
+                // above for an axis the way two position tweens would.
+                //
+                // Carried through the leap rather than unwound at the end of the walk. The lean is
+                // strongest at the middle of whatever it spans, and spanning the walk alone put that
+                // peak out in open ground and had the piece already upright by the time it gathered
+                // itself — the least interesting moment to be leaning and the most interesting one
+                // not to be. Across the walk and the leap together, the peak lands on the crouch and
+                // the launch, and the piece rotates square again on its way down. It reaches exactly
+                // upright before the impact, which is the pose the landing was built against.
+                PlayLean(towardVictim, ChargeLeanDegrees, runUpSeconds + StampLeapDuration);
+            }
+            else
+            {
+                // 1. Anticipation: pull back and crouch down — a held breath before the pounce.
+                // Only for an attacker that is already beside its victim and has nothing to close.
+                _stampSequence
+                    .Chain(Tween.Position(_transform, pullBackPos, StampAnticipationDuration, StampAnticipationEase, useUnscaledTime: true))
+                    .Group(Tween.Scale(_transform, crouchScale, StampAnticipationDuration, StampAnticipationEase, useUnscaledTime: true));
             }
 
             _stampSequence
-                // 1. Anticipation: pull back and crouch down — a held breath before the pounce.
-                .Chain(Tween.Position(_transform, pullBackPos, StampAnticipationDuration, StampAnticipationEase, useUnscaledTime: true))
-                .Group(Tween.Scale(_transform, crouchScale, StampAnticipationDuration, StampAnticipationEase, useUnscaledTime: true))
                 // 2. Leap, first half (0 -> 0.5): one driver tween computes XZ (lerp) and Y (the
                 // rising half of a parabola) from the same progress value every frame, so
                 // "how far across" and "how high up" can never drift apart — the piece is
                 // physically guaranteed to already be near peak height by the time it's over the
                 // victim's tile, instead of two independently-eased tweens letting horizontal
                 // catch up before vertical does (exactly the bug that caused visible overlap).
-                .Chain(Tween.Custom(this, 0f, 0.5f, halfDuration, (self, t) => self.ApplyStampArc(t, startPos, landPos, peakY), Ease.OutQuad, useUnscaledTime: true))
+                //
+                // Linear, not eased. Easing this driver eased the horizontal travel too, which sent
+                // the piece sideways at double speed off the ground, stalled it to a dead stop in
+                // mid-air at the peak, then flung it down again — a thing in flight does not stop
+                // moving forwards halfway. Held level instead, the parabola alone gives the hang at
+                // the top, because that is where a real arc slows down.
+                .Chain(Tween.Custom(this, 0f, 0.5f, halfDuration, (self, t) => self.ApplyStampArc(t, launchPos, landPos, peakY), Ease.Linear, useUnscaledTime: true))
                 // Swell from the crouch to the airborne size across the rise, with a small
                 // overshoot so the growth pops — jumping things get bigger, per every good cartoon.
                 .Group(Tween.Scale(_transform, airborneScale, halfDuration, Easing.Overshoot(StampAirborneGrowOvershoot), useUnscaledTime: true))
@@ -553,12 +677,19 @@ namespace ChessTheBetrayal.View
                 .ChainCallback(() => onDescentStart?.Invoke())
                 // Leap, second half (0.5 -> 1): same driver, same coupled XZ/Y formula, continuing
                 // seamlessly from the peak down to the landing tile.
-                .Chain(Tween.Custom(this, 0.5f, 1f, halfDuration, (self, t) => self.ApplyStampArc(t, startPos, landPos, peakY), Ease.InQuad, useUnscaledTime: true))
-                // 4. Impact: flatten hard against the tile (still oversized — a big flat slap)...
+                .Chain(Tween.Custom(this, 0.5f, 1f, halfDuration, (self, t) => self.ApplyStampArc(t, launchPos, landPos, peakY), Ease.Linear, useUnscaledTime: true))
+                // 4. Contact. Its own beat rather than something a caller has to time for itself:
+                // anything that answers the collision — the camera's knock, a sound, dust — has to
+                // land on this exact frame, and the only thing that knows when it arrives is the
+                // sequence playing it.
+                .ChainCallback(() => onImpact?.Invoke())
+                // Flatten hard against the tile (still oversized — a big flat slap)...
                 .Chain(Tween.Scale(_transform, impactScale, StampImpactSquashDuration, Ease.OutQuad, useUnscaledTime: true))
+                // ...hold there, dead still, for the same beat the victim holds under it...
+                .Chain(Tween.Delay(StampImpactHoldDuration + StampImpactHoldPerHeft * victimHeft, useUnscaledTime: true))
                 // ...then recover with a big springy overshoot back down to rest scale — this is
                 // the "settling back to its normal size" beat that closes the whole arc.
-                .Chain(Tween.Scale(_transform, restScale, StampImpactRecoverDuration, Easing.Overshoot(StampRecoverOvershoot), useUnscaledTime: true))
+                .Chain(Tween.Scale(_transform, restScale, StampImpactRecoverDuration, Easing.Overshoot(StampRecoverOvershoot + StampRecoverOvershootPerHeft * victimHeft), useUnscaledTime: true))
                 // The bob is the last thing anyone sees of the capture, so onSettled waits it out
                 // rather than firing as it starts. Callers use that moment to begin an animation
                 // that must not overlap this one — a Defection spin queued on the piece that just
@@ -569,23 +700,92 @@ namespace ChessTheBetrayal.View
                 .ChainCallback(() => onSettled?.Invoke());
         }
 
+        public void PlayBrace(Vector3 shoveDirection, float seconds)
+        {
+            PlayLean(shoveDirection, BraceLeanDegrees, seconds);
+        }
+
+        /// <summary>
+        /// Tips the piece about the axis across the given direction — hardest halfway through and
+        /// back to exactly upright by the end, which is where a glide is quickest and where a
+        /// leaning thing is leaning most.
+        ///
+        /// Works in world space throughout, and never reads a rotation back as a set of angles: the
+        /// resting rotation is cached as a quaternion and multiplied, so the piece lands on the
+        /// exact pose it started from rather than on some other triple that describes the same
+        /// facing. Getting that wrong is what once left defected pieces facing their old side.
+        /// </summary>
+        private void PlayLean(Vector3 towardDirection, float degrees, float seconds)
+        {
+            towardDirection.y = 0f;
+            if (seconds <= 0f || towardDirection.sqrMagnitude < 0.000001f) return;
+
+            StopLean();
+
+            _leanRestRotation = _transform.rotation;
+            _leaning = true;
+
+            Vector3 axis = Vector3.Cross(Vector3.up, towardDirection.normalized);
+
+            _leanTween = Tween.Custom(this, 0f, 1f, seconds,
+                    (self, u) => self.ApplyLean(u, axis, degrees), Ease.Linear, useUnscaledTime: true)
+                .OnComplete(this, self => self._leaning = false);
+        }
+
+        private void ApplyLean(float u, Vector3 axis, float degrees)
+        {
+            // Sin is zero at both ends whatever the numbers, so the piece cannot finish out of true
+            // even if the tween is retimed — the same envelope trick the check shake relies on.
+            float lean = Mathf.Sin(u * Mathf.PI) * degrees;
+            _transform.rotation = Quaternion.AngleAxis(lean, axis) * _leanRestRotation;
+        }
+
+        /// <summary>
+        /// Ends a lean and puts the piece back upright. Only restores when a lean was actually
+        /// live: the cached rotation is meaningless otherwise, and writing it back would snap the
+        /// piece to wherever it last happened to be leaning from.
+        /// </summary>
+        private void StopLean()
+        {
+            _leanTween.Stop();
+            if (!_leaning) return;
+
+            _transform.rotation = _leanRestRotation;
+            _leaning = false;
+        }
+
+        /// <summary>
+        /// Ends the whole capture beat — the sequence and the lean running beside it. Every caller
+        /// that interrupts a strike needs both, since stopping the sequence alone leaves the piece
+        /// tipped at whatever angle it had reached.
+        /// </summary>
+        private void StopStampBeat()
+        {
+            _stampSequence.Stop();
+            StopLean();
+        }
+
         /// <summary>
         /// Places the transform along the stamp's leap arc at normalized progress t (0 = takeoff,
-        /// 1 = landing): XZ is a straight lerp between startPos/landPos, Y is a true parabola
+        /// 1 = landing): XZ is a straight lerp between launchPos/landPos, Y is a true parabola
         /// (4 * peakOffset * t * (1-t), zero at both ends, peakOffset at t=0.5) added on top of the
         /// lerped baseline height. Driving both axes from the same t is what guarantees horizontal
         /// and vertical progress can never drift apart — see PlayCaptureStamp's call site.
+        ///
+        /// t is fed in level, with no easing on it. The parabola is what makes the piece hang at the
+        /// top and drop away quickly at the ends; easing t as well would apply that same shaping to
+        /// the horizontal travel, which is the one part of a leap that should hold its pace.
         /// </summary>
-        private void ApplyStampArc(float t, Vector3 startPos, Vector3 landPos, float peakY)
+        private void ApplyStampArc(float t, Vector3 launchPos, Vector3 landPos, float peakY)
         {
-            float x = Mathf.Lerp(startPos.x, landPos.x, t);
-            float z = Mathf.Lerp(startPos.z, landPos.z, t);
-            float baseline = Mathf.Lerp(startPos.y, landPos.y, t);
+            float x = Mathf.Lerp(launchPos.x, landPos.x, t);
+            float z = Mathf.Lerp(launchPos.z, landPos.z, t);
+            float baseline = Mathf.Lerp(launchPos.y, landPos.y, t);
 
-            // Parabola: 0 at t=0 and t=1, (peakY - higherStartLandY) at t=0.5. Added on top of the
+            // Parabola: 0 at t=0 and t=1, (peakY - higherLaunchLandY) at t=0.5. Added on top of the
             // straight-line baseline so the arc still smoothly reaches exactly landPos.y at t=1
-            // even when startPos.y != landPos.y (a board with tilesYOffset/uneven tiles).
-            float higherY = Mathf.Max(startPos.y, landPos.y);
+            // even when launchPos.y != landPos.y (a board with tilesYOffset/uneven tiles).
+            float higherY = Mathf.Max(launchPos.y, landPos.y);
             float peakBump = 4f * (peakY - higherY) * t * (1f - t);
 
             _transform.position = new Vector3(x, baseline + peakBump, z);
@@ -615,7 +815,7 @@ namespace ChessTheBetrayal.View
             _castleSequence.Stop();
             _settleBobTween.Stop();
             _settleBobBaseY = null;
-            _stampSequence.Stop();
+            StopStampBeat();
             StopLiftTweens();
             _liftRestPosition = null;
             HideSelectionOutline(instant: true);
@@ -646,7 +846,7 @@ namespace ChessTheBetrayal.View
                 .ChainCallback(() => onVanished?.Invoke());
         }
 
-        public void PlayEnPassantDeath(Vector3 graveyardWorldPos, Action onArrived)
+        public void PlayEnPassantDeath(Vector3 graveyardWorldPos, float tilesTravelled, Action onArrived)
         {
             if (!IsFinite(graveyardWorldPos))
             {
@@ -660,30 +860,31 @@ namespace ChessTheBetrayal.View
             _castleSequence.Stop();
             _settleBobTween.Stop();
             _settleBobBaseY = null;
-            _stampSequence.Stop();
+            StopStampBeat();
             StopLiftTweens();
             _liftRestPosition = null;
             HideSelectionOutline(instant: true);
 
             Vector3 startPos = _transform.position;
+            float journeySeconds = MoveTravelTiming.SecondsForTiles(tilesTravelled);
 
             // The attacker never visually touches this piece (it's captured on a different square
             // than the one it lands on), so instead of a crush it plays its own "swept off the
-            // board" beat: a small hop — same InOutCubic/OutQuad vocabulary as a normal board move,
-            // just with the piece shrinking to nothing across the same glide rather than teleporting
-            // to the graveyard at full size and only then scaling down. XZ and Y are driven by
-            // separate tweens (same pattern as PlayCaptureStamp's leap) so the horizontal glide and
-            // the vertical hop-arc don't fight over the Y axis.
+            // board" beat: a small hop, the same glide vocabulary as a normal board move, with the
+            // piece shrinking away as it goes rather than teleporting to the pile at full size and
+            // only then scaling down. XZ and Y are driven by separate tweens (same pattern as
+            // PlayCaptureStamp's leap) so the horizontal glide and the vertical hop don't fight over
+            // the Y axis. The shrink runs on its own clock — see DeathVanishSeconds.
             _stampSequence = Sequence.Create(useUnscaledTime: true)
-                .Group(Tween.Position(_transform, new Vector3(graveyardWorldPos.x, startPos.y, graveyardWorldPos.z), EnPassantDeathDuration, EnPassantDeathMoveEase, useUnscaledTime: true))
-                .Group(Tween.Scale(_transform, VanishedScale, EnPassantDeathDuration, EnPassantDeathScaleEase, useUnscaledTime: true))
+                .Group(Tween.Position(_transform, new Vector3(graveyardWorldPos.x, startPos.y, graveyardWorldPos.z), journeySeconds, BoardGlideEase, useUnscaledTime: true))
+                .Group(Tween.Scale(_transform, VanishedScale, DeathVanishSeconds, EnPassantDeathScaleEase, useUnscaledTime: true))
                 .Group(Sequence.Create(useUnscaledTime: true)
-                    .Chain(Tween.PositionY(_transform, startPos.y + EnPassantDeathHopHeight, EnPassantDeathDuration * 0.5f, EnPassantDeathHopEase, useUnscaledTime: true))
-                    .Chain(Tween.PositionY(_transform, graveyardWorldPos.y, EnPassantDeathDuration * 0.5f, Ease.InQuad, useUnscaledTime: true)))
+                    .Chain(Tween.PositionY(_transform, startPos.y + EnPassantDeathHopHeight, journeySeconds * 0.5f, EnPassantDeathHopEase, useUnscaledTime: true))
+                    .Chain(Tween.PositionY(_transform, graveyardWorldPos.y, journeySeconds * 0.5f, Ease.InQuad, useUnscaledTime: true)))
                 .ChainCallback(() => onArrived?.Invoke());
         }
 
-        public void PlayGraveyardReturn(Vector3 boardWorldPos, Vector3 restScale, Action onArrived)
+        public void PlayGraveyardReturn(Vector3 boardWorldPos, Vector3 restScale, float tilesTravelled, Action onArrived)
         {
             if (!IsFinite(boardWorldPos) || !IsFinite(restScale))
             {
@@ -697,23 +898,24 @@ namespace ChessTheBetrayal.View
             _castleSequence.Stop();
             _settleBobTween.Stop();
             _settleBobBaseY = null;
-            _stampSequence.Stop();
+            StopStampBeat();
             StopLiftTweens();
             _liftRestPosition = null;
             HideSelectionOutline(instant: true);
 
             Vector3 startPos = _transform.position;
+            float journeySeconds = MoveTravelTiming.SecondsForTiles(tilesTravelled);
 
             // The death glide read backwards: the same InOutCubic travel and the same hop, with the
             // piece swelling back to full size across it instead of shrinking away. The arrival
             // overshoots where the death eased flat, because this one lands somewhere — a piece
             // returning to the board should look like it means to be there.
             _stampSequence = Sequence.Create(useUnscaledTime: true)
-                .Group(Tween.Position(_transform, new Vector3(boardWorldPos.x, startPos.y, boardWorldPos.z), EnPassantDeathDuration, EnPassantDeathMoveEase, useUnscaledTime: true))
-                .Group(Tween.Scale(_transform, restScale, EnPassantDeathDuration, Easing.Overshoot(1.4f), useUnscaledTime: true))
+                .Group(Tween.Position(_transform, new Vector3(boardWorldPos.x, startPos.y, boardWorldPos.z), journeySeconds, BoardGlideEase, useUnscaledTime: true))
+                .Group(Tween.Scale(_transform, restScale, DeathVanishSeconds, Easing.Overshoot(1.4f), useUnscaledTime: true))
                 .Group(Sequence.Create(useUnscaledTime: true)
-                    .Chain(Tween.PositionY(_transform, startPos.y + EnPassantDeathHopHeight, EnPassantDeathDuration * 0.5f, EnPassantDeathHopEase, useUnscaledTime: true))
-                    .Chain(Tween.PositionY(_transform, boardWorldPos.y, EnPassantDeathDuration * 0.5f, Ease.OutBack, useUnscaledTime: true)))
+                    .Chain(Tween.PositionY(_transform, startPos.y + EnPassantDeathHopHeight, journeySeconds * 0.5f, EnPassantDeathHopEase, useUnscaledTime: true))
+                    .Chain(Tween.PositionY(_transform, boardWorldPos.y, journeySeconds * 0.5f, Ease.OutBack, useUnscaledTime: true)))
                 .ChainCallback(() =>
                 {
                     onArrived?.Invoke();
@@ -1074,18 +1276,37 @@ namespace ChessTheBetrayal.View
         }
 
         /// <summary>
-        /// Stops every tween/sequence this animator can have live, regardless of which field holds
-        /// it. Tween.StopAll(onTarget) covers every tween created against a given target object —
-        /// this class's tweens are split between targeting `this` (the Tween.Custom ones driving
-        /// shake/dissolve/outline) and `_transform` (the Tween.Position/Scale ones) — so both
-        /// targets need a StopAll pass. Individual .Stop() calls on each field would be equivalent
-        /// but require updating this method every time a new tween field is added; StopAll(target)
-        /// is self-maintaining against that drift.
+        /// Stops every tween and sequence this animator can have live.
+        ///
+        /// One field at a time, deliberately. Stopping everything aimed at a target instead reads
+        /// as the tidier version of this and does not work: almost everything here is built as a
+        /// sequence, and a tween that belongs to one can only be stopped through the sequence that
+        /// owns it. Reaching for the children directly is refused, so the sweep left running
+        /// exactly the animations most likely to be interrupted — a strike, a swap, a lift — while
+        /// reporting that it had stopped them. The piece was then destroyed with those still
+        /// writing to its Transform, which is the very thing this method exists to prevent.
+        ///
+        /// The cost is that a new tween field has to be added to the list below. A test asserts
+        /// nothing is left running afterwards, so forgetting fails rather than going quiet.
         /// </summary>
         public void StopAllAnimations()
         {
-            Tween.StopAll(onTarget: this);
-            Tween.StopAll(onTarget: _transform);
+            _moveTween.Stop();
+            _scaleTween.Stop();
+            _settleBobTween.Stop();
+            _bobTween.Stop();
+            _shakeTween.Stop();
+            _outlineTween.Stop();
+            _dissolveTween.Stop();
+            _leanTween.Stop();
+
+            _punchSequence.Stop();
+            _transitionSequence.Stop();
+            _castleSequence.Stop();
+            _promotionApproachSequence.Stop();
+            _stampSequence.Stop();
+            _liftSequence.Stop();
+            _glowFlashSequence.Stop();
         }
 
         private void StartBobLoop()

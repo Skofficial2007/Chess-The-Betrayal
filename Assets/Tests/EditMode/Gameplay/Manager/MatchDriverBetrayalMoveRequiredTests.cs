@@ -109,5 +109,88 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             Assert.That(_board.CurrentTurn, Is.EqualTo(Team.Black),
                 "After the Retribution completes, the turn flips to the opponent as normal.");
         }
+
+        [Test]
+        public void ActWithNoLegalExecutioner_AnnouncesTheDefectionMoveItResolved()
+        {
+            // White Acts against its own pawn with nothing able to execute the Betrayer, so the
+            // Betrayer defects. Nobody plays that ply, which is exactly why it needs announcing:
+            // it never reaches a move-decided path, so anything recording the match would show a
+            // piece changing armies with nothing to account for it.
+            _board.WithPiece("b1", Team.White, ChessPieceType.Knight);
+            _board.WithPiece("a3", Team.White, ChessPieceType.Pawn); // Betrayal victim
+            _board.WithBetrayalRight(true);
+            _board.ComputeFullZobristHash();
+
+            MoveCommand? defection = null;
+            int defectionPlyNumber = 0;
+            _matchDriver.OnDefectionResolved += (move, plyNumber) =>
+            {
+                defection = move;
+                defectionPlyNumber = plyNumber;
+            };
+
+            var actMoves = new List<MoveCommand>();
+            ChessEngine.GetBetrayalTargets(_board, TestBoardSetupUtility.AlgebraicToVector("b1"), actMoves);
+            _matchDriver.PlayMove(actMoves[0]);
+
+            Assert.That(defection.HasValue, Is.True, "A resolved Defection must be announced.");
+            Assert.That(defection.Value.Stage, Is.EqualTo(BetrayalStage.Defection));
+            Assert.That(defection.Value.PieceTeam, Is.EqualTo(Team.White),
+                "The move carries the Betrayer as it was before it turned, which is what tells a " +
+                "reader which army just lost the piece.");
+            Assert.That(_board.GetPiece(defection.Value.StartPosition).Team, Is.EqualTo(Team.Black),
+                "By the time this is announced the piece has already changed sides.");
+            Assert.That(defectionPlyNumber, Is.EqualTo(_board.PliesPlayed),
+                "A Defection spends a ply like any other, and the number has to come from the " +
+                "driver announcing it rather than from a subscriber reading the board for itself.");
+        }
+
+        [Test]
+        public void EveryAppliedPly_IsAnnouncedWithTheNumberItLandedOn()
+        {
+            // Act then Retribution: two plies of one turn, each with its own number, even though
+            // the turn does not pass between them.
+            _board.WithPiece("b1", Team.White, ChessPieceType.Knight);
+            _board.WithPiece("a1", Team.White, ChessPieceType.Rook);
+            _board.WithPiece("a3", Team.White, ChessPieceType.Pawn);
+            _board.WithBetrayalRight(true);
+            _board.ComputeFullZobristHash();
+
+            var announced = new List<int>();
+            _matchDriver.OnPlyApplied += (_, plyNumber) => announced.Add(plyNumber);
+
+            var actMoves = new List<MoveCommand>();
+            ChessEngine.GetBetrayalTargets(_board, TestBoardSetupUtility.AlgebraicToVector("b1"), actMoves);
+            _matchDriver.PlayMove(actMoves[0]);
+
+            var retMoves = new List<MoveCommand>();
+            _engine.GetRetributionMoves(_board, Team.White, _board.PendingBetrayerSquare.Value, retMoves);
+            _matchDriver.PlayMove(retMoves[0]);
+
+            Assert.That(announced, Is.EqualTo(new[] { 1, 2 }),
+                "The number has to come from the board at the moment each ply reached it — that is " +
+                "the only place it is knowable, since a move source may hold its move back.");
+        }
+
+        [Test]
+        public void ActWithALegalExecutioner_NeverAnnouncesADefection()
+        {
+            _board.WithPiece("b1", Team.White, ChessPieceType.Knight);
+            _board.WithPiece("a1", Team.White, ChessPieceType.Rook); // can execute the Betrayer
+            _board.WithPiece("a3", Team.White, ChessPieceType.Pawn);
+            _board.WithBetrayalRight(true);
+            _board.ComputeFullZobristHash();
+
+            bool fired = false;
+            _matchDriver.OnDefectionResolved += (_, _) => fired = true;
+
+            var actMoves = new List<MoveCommand>();
+            ChessEngine.GetBetrayalTargets(_board, TestBoardSetupUtility.AlgebraicToVector("b1"), actMoves);
+            _matchDriver.PlayMove(actMoves[0]);
+
+            Assert.That(fired, Is.False,
+                "Retribution is still owed here, so nothing has defected yet.");
+        }
     }
 }

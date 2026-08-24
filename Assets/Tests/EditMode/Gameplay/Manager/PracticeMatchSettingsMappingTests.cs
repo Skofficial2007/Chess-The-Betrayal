@@ -52,6 +52,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
                 showAIMatchSettings: () => { },
                 onExecutorMoveRejected: (_, __) => { },
                 onExecutorPromotionRequired: (_, __, ___) => { },
+                onExecutorBetrayalActConfirmationRequired: (_, __) => { },
                 raiseGameModeConfigured: _ => { },
                 raiseGameStarted: () => { },
                 raiseBoardResyncRequired: () => { },

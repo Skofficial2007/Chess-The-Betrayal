@@ -33,6 +33,17 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         [Test]
+        public void Read_InTheEditor_DoesNotClaimToBeABuild()
+        {
+            // These tests run in the Editor, which is neither a Release nor a Development build.
+            // Falling through to "Release Build" put that on the header of every report a Play-mode
+            // session produced, where in a table it reads as a measurement taken under the same
+            // conditions as a real device row.
+            Assert.That(DeviceDescriptionReader.Read().BuildType, Does.Not.Contain("Release Build"));
+            Assert.That(DeviceDescriptionReader.Read().BuildType, Does.Contain("Editor"));
+        }
+
+        [Test]
         public void ToReportLines_SayNothingAboutTheValuesThatUsedToIdentifyTheOwner()
         {
             var description = SampleDescription();
@@ -63,9 +74,10 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         }
 
         /// <summary>
-        /// A number captured under a different scripting backend or a development build is not
-        /// comparable with one that wasn't, so the report has to say which it was — this is the line
-        /// that makes a device row honest about what it is being compared against.
+        /// A number captured under a different scripting backend, a development build or the
+        /// narrower of the two binaries is not comparable with one that wasn't, so the report has to
+        /// say which it was — this is the line that makes a device row honest about what it is being
+        /// compared against.
         /// </summary>
         [Test]
         public void ToReportLines_StateTheBuildConfigurationTheRunHappenedUnder()
@@ -73,7 +85,36 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             IReadOnlyList<string> lines = SampleDescription().ToReportLines();
 
             Assert.That(lines.Single(l => l.StartsWith("Build:")),
-                Is.EqualTo("Build: Release Build, IL2CPP, platform Android"));
+                Is.EqualTo("Build: Release Build, IL2CPP, 64-bit, platform Android"));
+        }
+
+        /// <summary>
+        /// The case the bit width is carried for. An Android build ships both binaries and the phone
+        /// picks one; the 32-bit binary searches fewer positions in the same milliseconds, so its row
+        /// reads as a slower phone unless the report says which ran. Both widths are asserted here
+        /// rather than only the one this machine is, because no machine that runs these tests will
+        /// ever produce the 32-bit case on its own.
+        /// </summary>
+        [Test]
+        public void ToReportLines_SayWhichOfTheTwoBinariesRan()
+        {
+            DeviceDescription narrow = SampleDescription();
+            narrow.ProcessBits = 32;
+
+            Assert.That(narrow.ToReportLines().Single(l => l.StartsWith("Build:")), Does.Contain("32-bit"));
+            Assert.That(SampleDescription().ToReportLines().Single(l => l.StartsWith("Build:")),
+                Does.Contain("64-bit"));
+        }
+
+        /// <summary>
+        /// The one way this fails quietly: a width nobody filled in reports every run as "0-bit",
+        /// which is wrong rather than merely absent, and a reader has no way to tell that from a
+        /// real answer.
+        /// </summary>
+        [Test]
+        public void Read_ReportsARealBitWidth_NeverAnUnsetZero()
+        {
+            Assert.That(DeviceDescriptionReader.Read().ProcessBits, Is.EqualTo(64).Or.EqualTo(32));
         }
 
         [Test]
@@ -101,6 +142,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
             ScreenDpi = 384f,
             BuildType = "Release Build",
             ScriptingBackend = "IL2CPP",
+            ProcessBits = 64,
             Platform = "Android",
         };
     }

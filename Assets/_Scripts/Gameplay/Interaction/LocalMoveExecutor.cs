@@ -20,6 +20,7 @@ namespace ChessTheBetrayal.Gameplay.Interaction
         public event Action<Vector2Int, Vector2Int> OnMoveRejected;
         public event Action<Vector2Int, Vector2Int, bool> OnPromotionRequired;
         public event Action OnRetributionSkipConfirmed;
+        public event Action<Vector2Int, Vector2Int> OnBetrayalActConfirmationRequired;
 
         private readonly BoardState _board;
         private readonly IChessEngine _engine;
@@ -32,6 +33,15 @@ namespace ChessTheBetrayal.Gameplay.Interaction
         private MoveCommand _pendingPromotionMove;
         private bool _isAwaitingPromotion;
         private bool _logMoves;
+
+        // The squares a Betrayal Act would run between, held while the player decides. Only the
+        // squares, never the resolved MoveCommand: that command carries a snapshot of the board's
+        // castling rights, en-passant file and Betrayal sub-state taken at the moment it was
+        // requested, which is what an undo would put back. Playing it after the question has been
+        // on screen for a while would restore a board that has moved on.
+        private Vector2Int _pendingBetrayalFrom = Vector2Int.Invalid;
+        private Vector2Int _pendingBetrayalTo = Vector2Int.Invalid;
+        private bool _isAwaitingBetrayalConfirmation;
 
         /// <summary>
         /// Note: We take a direct reference to the live board here. A network executor must NOT do this — it should validate against a server snapshot, not the client's version.
@@ -51,10 +61,13 @@ namespace ChessTheBetrayal.Gameplay.Interaction
         /// </summary>
         public void RequestMove(Vector2Int from, Vector2Int to)
         {
-            // Block new moves if waiting for a UI decision
-            if (_isAwaitingPromotion)
+            // Block new moves while a decision on the last one is still outstanding — a promotion
+            // choice, or a Betrayal Act nobody has answered for yet. Each of those has a move parked
+            // against it, so a second request would either replace it without a word or end up
+            // playing both.
+            if (_isAwaitingPromotion || _isAwaitingBetrayalConfirmation)
             {
-                if (_logMoves) Debug.Log($"[LocalMoveExecutor] Move rejected: awaiting promotion choice");
+                if (_logMoves) Debug.Log($"[LocalMoveExecutor] Move rejected: awaiting {(_isAwaitingPromotion ? "promotion choice" : "Betrayal confirmation")}");
                 OnMoveRejected?.Invoke(from, to);
                 return;
             }
@@ -212,6 +225,28 @@ namespace ChessTheBetrayal.Gameplay.Interaction
                 return;
             }
 
+            // A Betrayal Act is one tap on a piece of your own, on a square that looks no different
+            // from an enemy's, and it spends a right neither side gets back. Park it and ask.
+            //
+            // Checked after legality rather than off the classifier above, so an Act that would
+            // leave the king in check is turned down as illegal instead of being offered. There is
+            // never more than one candidate here either: a square holding a friendly piece is not
+            // reachable by any ordinary move, and an Act never promotes.
+            if (_movesToTarget[0].Stage == BetrayalStage.Act)
+            {
+                _pendingBetrayalFrom = from;
+                _pendingBetrayalTo = to;
+                _isAwaitingBetrayalConfirmation = true;
+
+                if (_logMoves) Debug.Log($"[LocalMoveExecutor] Betrayal Act {from} -> {to} awaiting confirmation.");
+
+                // Nothing may follow this raise. A handler with confirmation switched off answers
+                // straight back into ConfirmBetrayalAct, so by the time it returns the move has
+                // already been played and anything written here would land on a finished sequence.
+                OnBetrayalActConfirmationRequired?.Invoke(from, to);
+                return;
+            }
+
             // If the engine generated promotion variants for this square, we need the player to pick one.
             bool isPromotionChoice = false;
             for (int i = 0; i < _movesToTarget.Count; i++)
@@ -249,6 +284,84 @@ namespace ChessTheBetrayal.Gameplay.Interaction
             if (_logMoves) Debug.Log($"[LocalMoveExecutor] Move confirmed: {validMove.StartPosition} -> {validMove.EndPosition}");
             
             OnMoveConfirmed?.Invoke(validMove);
+        }
+
+        /// <summary>
+        /// The player meant it. The Act is worked out again from the board as it stands now rather
+        /// than replayed from the one that was parked, because the question was on screen for as
+        /// long as the player wanted it there: the clock kept running, and in a timed game it can
+        /// have run out. Anything that leaves the position where it was — the phase moving on, the
+        /// victim no longer there — turns this into a rejection rather than a move played against a
+        /// board that no longer matches it.
+        /// </summary>
+        public void ConfirmBetrayalAct()
+        {
+            if (!_isAwaitingBetrayalConfirmation)
+            {
+                if (_logMoves) Debug.Log("[LocalMoveExecutor] Betrayal confirmation ignored: no Act was waiting on one");
+                return;
+            }
+
+            Vector2Int from = _pendingBetrayalFrom;
+            Vector2Int to = _pendingBetrayalTo;
+            ClearPendingBetrayal();
+
+            if (_phaseProvider != null && _phaseProvider() != TurnPhase.Normal)
+            {
+                if (_logMoves) Debug.Log($"[LocalMoveExecutor] Betrayal Act rejected: the turn moved on while the question was up");
+                OnMoveRejected?.Invoke(from, to);
+                return;
+            }
+
+            _legalMoves.Clear();
+            try
+            {
+                _engine.GetLegalMoves(_board, from, _legalMoves);
+            }
+            catch (DomainException ex)
+            {
+                if (_logMoves) Debug.LogException(ex);
+                OnMoveRejected?.Invoke(from, to);
+                return;
+            }
+
+            for (int i = 0; i < _legalMoves.Count; i++)
+            {
+                MoveCommand candidate = _legalMoves[i];
+                if (candidate.Stage != BetrayalStage.Act || candidate.EndPosition != to) continue;
+
+                // Stamped now, not when the question went up — the time spent deciding is the
+                // player's own, and the move has to say so.
+                ClockState? clockSnapshot = _clockSource?.Current;
+                if (clockSnapshot.HasValue) candidate = candidate.WithClockSnapshot(clockSnapshot.Value);
+
+                if (_logMoves) Debug.Log($"[LocalMoveExecutor] Betrayal Act confirmed: {candidate}");
+                OnMoveConfirmed?.Invoke(candidate);
+                return;
+            }
+
+            if (_logMoves) Debug.Log($"[LocalMoveExecutor] Betrayal Act rejected: {from} -> {to} is no longer legal");
+            OnMoveRejected?.Invoke(from, to);
+        }
+
+        /// <summary>
+        /// Player backed out. The parked Act is dropped and nothing reaches the board — and
+        /// deliberately nothing is reported as rejected either, since a rejection means "that was
+        /// illegal" and the visual layer answers one by snapping a piece back into place.
+        /// </summary>
+        public void CancelBetrayalAct()
+        {
+            if (!_isAwaitingBetrayalConfirmation) return;
+
+            if (_logMoves) Debug.Log($"[LocalMoveExecutor] Betrayal Act {_pendingBetrayalFrom} -> {_pendingBetrayalTo} cancelled");
+            ClearPendingBetrayal();
+        }
+
+        private void ClearPendingBetrayal()
+        {
+            _isAwaitingBetrayalConfirmation = false;
+            _pendingBetrayalFrom = Vector2Int.Invalid;
+            _pendingBetrayalTo = Vector2Int.Invalid;
         }
 
         /// <summary>

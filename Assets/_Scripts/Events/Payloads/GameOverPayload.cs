@@ -19,5 +19,5 @@ namespace ChessTheBetrayal.Events.Payloads
         }
     }
 
-    public enum GameEndReason { Checkmate, Stalemate, Resignation, Timeout }
+    public enum GameEndReason { Checkmate, Stalemate, Resignation, Timeout, Repetition, FiftyMoveRule }
 }

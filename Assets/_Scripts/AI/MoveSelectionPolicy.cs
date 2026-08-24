@@ -25,9 +25,9 @@ namespace ChessTheBetrayal.AI
         private float[] _weights = new float[MaxRootMoves];
 
         public MoveCommand SelectFinalMove(
-            IReadOnlyList<MoveCommand> rootMoves, int[] rootScores, int rootMoveCount, int bestIndex,
+            IReadOnlyList<MoveCommand> rootMoves, int[] rootScores, int selectableCount, int bestIndex,
             AIProfile profile, IRandomSource rng) =>
-            SelectFinalMove(rootMoves, rootScores, rootMoveCount, bestIndex, profile, rng, out _);
+            SelectFinalMove(rootMoves, rootScores, selectableCount, bestIndex, profile, rng, out _);
 
         /// <summary>
         /// Same selection as the four-argument overload, but also reports whether the blunder roll
@@ -35,17 +35,23 @@ namespace ChessTheBetrayal.AI
         /// measuring how often a profile's configured BlunderRate translates into a real blunder
         /// needs this distinguished from the tie-break window returning a non-best move for an
         /// unrelated reason (a Betrayal-aggression reweight can do that too, at BlunderRate == 0).
+        ///
+        /// selectableCount is how many of the leading entries carry scores that can honestly be
+        /// compared — AlphaBetaSearch.RootScoresExactCount, not its total root move count. Anything
+        /// past it is an alpha-beta upper bound, and a bound can sit right next to the best score
+        /// while the move it belongs to is far worse, so reading one is how a dial that should
+        /// "sometimes miss the best idea" turns into one that plays noise.
         /// </summary>
         public MoveCommand SelectFinalMove(
-            IReadOnlyList<MoveCommand> rootMoves, int[] rootScores, int rootMoveCount, int bestIndex,
+            IReadOnlyList<MoveCommand> rootMoves, int[] rootScores, int selectableCount, int bestIndex,
             AIProfile profile, IRandomSource rng, out bool blunderRollFired)
         {
             blunderRollFired = false;
 
-            if (rootMoveCount == 0) return default;
+            if (selectableCount == 0) return default;
             if (rng == null) return rootMoves[bestIndex];
 
-            EnsureCapacity(rootMoveCount);
+            EnsureCapacity(selectableCount);
 
             MoveCommand best = rootMoves[bestIndex];
             int bestScore = rootScores[bestIndex];
@@ -58,7 +64,7 @@ namespace ChessTheBetrayal.AI
             {
                 int threshold = bestScore - profile.BlunderMarginCp;
                 int count = 0;
-                for (int i = 0; i < rootMoveCount; i++)
+                for (int i = 0; i < selectableCount; i++)
                 {
                     if (i == bestIndex) continue;
                     if (rootScores[i] >= threshold) _candidateIndices[count++] = i;
@@ -80,7 +86,7 @@ namespace ChessTheBetrayal.AI
             // Betrayal.
             int windowThreshold = bestScore - profile.TieBreakWindowCp;
             int windowCount = 0;
-            for (int i = 0; i < rootMoveCount; i++)
+            for (int i = 0; i < selectableCount; i++)
             {
                 if (rootScores[i] >= windowThreshold) _candidateIndices[windowCount++] = i;
             }

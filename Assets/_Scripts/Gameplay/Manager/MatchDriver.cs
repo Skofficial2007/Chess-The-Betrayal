@@ -43,16 +43,16 @@ namespace ChessTheBetrayal.Gameplay.Manager
         private BetrayalBountyConfig _bountyConfig;
 
         // Captured once when an Act move starts a Betrayal sub-sequence, and reused for every
-        // ply in that sequence (Retribution/DefensiveOverride/Defection). FullMoveNumber keeps
-        // incrementing under the hood even though the turn hasn't flipped (RecordMove runs for
-        // every ply, Betrayal or not) — without this, the log would show the move number jumping
+        // ply in that sequence (Retribution/DefensiveOverride/Defection). The board's ply count
+        // keeps climbing under the hood even though the turn hasn't flipped, since RecordMove runs
+        // for every ply, Betrayal or not — without this, the log would show the number jumping
         // mid-sequence instead of staying on the ply where the Betrayal actually started.
-        private int _betrayalSequenceMoveNumber = -1;
+        private int _betrayalSequencePlyNumber = -1;
 
         // Monotonic count of plies applied this match — see MoveExecutedPayload.PlyIndex doc
         // comment. Incremented once per applied ply (every branch that raises
-        // _moveExecutedChannel), independent of TurnNumber which repeats across a Betrayal
-        // sub-sequence. Reset alongside the turn accumulator at match start.
+        // _moveExecutedChannel) and never walked back, which is what separates it from the board's
+        // own ply count that an Undo rewinds. Reset alongside the turn accumulator at match start.
         private int _plyIndex;
 
         // Every MoveCommand applied since the last turn boundary — 1 entry for a plain move, 2+
@@ -79,6 +79,28 @@ namespace ChessTheBetrayal.Gameplay.Manager
         /// the sequence (result.DidDefect with no ForcedSave), which ends the turn normally.
         /// </summary>
         public event System.Action<Team> OnBetrayalMoveRequired;
+
+        /// <summary>
+        /// Fires the moment a Betrayer changes sides, carrying the Defection move itself. Nobody
+        /// chooses this ply — the rules produce it once Retribution is refused or impossible — so
+        /// it reaches no move-decided path and would otherwise be invisible to anything recording
+        /// the match. It still spends a ply and hands a piece to the other army, which is enough to
+        /// leave a log unable to explain the board it describes.
+        ///
+        /// Carries the ply number it landed on for the same reason OnPlyApplied does: this driver
+        /// is the only thing that knows what a ply was numbered, and a subscriber reading the
+        /// board's count for itself is reading a second clock that only happens to agree.
+        /// </summary>
+        public event System.Action<MoveCommand, int> OnDefectionResolved;
+
+        /// <summary>
+        /// Fires as each ply reaches the board, carrying the move and the ply number it landed on.
+        /// This is the only moment that number is knowable: a move source may hand its move to a
+        /// pacing queue that holds it back while the previous animation plays, so anything reading
+        /// the board's own count at the moment it decided gets the count from before its move
+        /// landed. Whoever records a match wants the number the ply actually got.
+        /// </summary>
+        public event System.Action<MoveCommand, int> OnPlyApplied;
 
         /// <summary>Clears the in-progress turn buffer. Call alongside MoveLog.Clear() whenever a
         /// new match starts, so a stale partial turn from a previous game can never leak in.</summary>
@@ -154,7 +176,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
         {
             if (_logMoves) Debug.Log($"[MatchDriver] Executing: {move}");
 
-            int moveNumberBeforeApply = _board.FullMoveNumber;
+            int plyNumberBeforeApply = _board.PliesPlayed;
 
             TurnAdvanceResult result;
             try
@@ -183,13 +205,13 @@ namespace ChessTheBetrayal.Gameplay.Manager
             // The Act: the Betrayer has just captured a Victim.
             if (move.Stage == BetrayalStage.Act)
             {
-                // Pin the move number for the whole sub-sequence — see field doc comment.
-                _betrayalSequenceMoveNumber = moveNumberBeforeApply;
+                // Pin the ply number for the whole sub-sequence — see field doc comment.
+                _betrayalSequencePlyNumber = plyNumberBeforeApply;
 
                 // Recorded as Normal, not evaluated for Check/Checkmate: the turn hasn't resolved
                 // yet (see EvaluateGameState's PendingBetrayerSquare guard) — a real result gets
                 // logged once Retribution/Defection completes the turn, below.
-                MoveLog.Record(move, _betrayalSequenceMoveNumber, GameState.Normal);
+                MoveLog.Record(move, _betrayalSequencePlyNumber, GameState.Normal);
 
                 // result.DidDefect is already known here (Advance resolved the whole sub-sequence
                 // as far as it could before returning) — threading it through as WillDefect lets
@@ -201,8 +223,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
 
                 // Fire the standard move event so visuals update, but pass isCheck=false
                 // because Edge Case C dictates Discovered Checks on Opponent wait until the sequence resolves.
-                _plyIndex++;
-                _moveExecutedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveExecutedPayload(move, _board.FullMoveNumber, false, _plyIndex));
+                AnnounceAppliedPly(move, isCheck: false);
 
                 if (result.DidDefect)
                 {
@@ -232,8 +253,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
 
                 // Fire the move event so BoardVisuals plays the capture animation.
                 bool isCheckAfterRetribution = _engine.IsKingInCheck(_board, _board.CurrentTurn);
-                _plyIndex++;
-                _moveExecutedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveExecutedPayload(move, _board.FullMoveNumber, isCheckAfterRetribution, _plyIndex));
+                AnnounceAppliedPly(move, isCheckAfterRetribution);
 
                 _clock?.OnMoveMade(move.PieceTeam); // Standard Fischer increment now applies
                 CheckForGameEnd(move); // Discovered checks against the opponent evaluate here for the first time
@@ -246,8 +266,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
             {
                 // Fire the move event so BoardVisuals plays the save animation.
                 bool isCheckAfterSave = _engine.IsKingInCheck(_board, _board.CurrentTurn);
-                _plyIndex++;
-                _moveExecutedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveExecutedPayload(move, _board.FullMoveNumber, isCheckAfterSave, _plyIndex));
+                AnnounceAppliedPly(move, isCheckAfterSave);
 
                 _clock?.OnMoveMade(move.PieceTeam); // The Defensive Override move IS the final action of this turn — standard increment applies
                 CheckForGameEnd(move); // Discovered checks against the opponent evaluate here
@@ -260,16 +279,23 @@ namespace ChessTheBetrayal.Gameplay.Manager
             // We need to calculate if this move resulted in a check so the UI can flash the HUD.
             bool isCheck = _engine.IsKingInCheck(_board, _board.CurrentTurn);
 
-            _plyIndex++;
-            _moveExecutedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveExecutedPayload(
-                move,
-                _board.FullMoveNumber,
-                isCheck,
-                _plyIndex
-            ));
+            AnnounceAppliedPly(move, isCheck);
 
             CheckForGameEnd(move);
             FlushCompletedTurn();
+        }
+
+        /// <summary>
+        /// The one place a ply is announced as having reached the board. Every branch of PlayMove
+        /// that applies one goes through here, so the ply counter, the event channel and the
+        /// applied-ply signal can never be advanced by one branch and forgotten by another.
+        /// </summary>
+        private void AnnounceAppliedPly(MoveCommand move, bool isCheck)
+        {
+            _plyIndex++;
+            _moveExecutedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.MoveExecutedPayload(
+                move, _board.PliesPlayed, isCheck, _plyIndex));
+            OnPlyApplied?.Invoke(move, _board.PliesPlayed);
         }
 
         /// <summary>Raises OnTurnCompleted with this turn's accumulated moves, then clears the
@@ -325,6 +351,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
             if (result.DefectionMove.HasValue)
             {
                 _currentTurnMoves.Add(result.DefectionMove.Value);
+                OnDefectionResolved?.Invoke(result.DefectionMove.Value, _board.PliesPlayed);
             }
 
             if (result.RequiresForcedSave)
@@ -363,11 +390,11 @@ namespace ChessTheBetrayal.Gameplay.Manager
             if (justPlayed.HasValue)
             {
                 // Use the pinned sequence number if a Betrayal sub-sequence produced this move
-                // (Retribution/DefensiveOverride/Defection), so the log doesn't show the move
-                // number jumping mid-sequence — see _betrayalSequenceMoveNumber's doc comment.
-                int loggedMoveNumber = _betrayalSequenceMoveNumber >= 0 ? _betrayalSequenceMoveNumber : _board.FullMoveNumber;
-                MoveLog.Record(justPlayed.Value, loggedMoveNumber, state);
-                _betrayalSequenceMoveNumber = -1;
+                // (Retribution/DefensiveOverride/Defection), so the log doesn't show the number
+                // jumping mid-sequence — see _betrayalSequencePlyNumber's doc comment.
+                int loggedPlyNumber = _betrayalSequencePlyNumber >= 0 ? _betrayalSequencePlyNumber : _board.PliesPlayed;
+                MoveLog.Record(justPlayed.Value, loggedPlyNumber, state);
+                _betrayalSequencePlyNumber = -1;
             }
 
             switch (state)
@@ -382,11 +409,19 @@ namespace ChessTheBetrayal.Gameplay.Manager
                     EndGame(null); // Draw.
                     break;
 
+                case GameState.DrawByRepetition:
+                    EndGame(null, drawReason: ChessTheBetrayal.Events.Payloads.GameEndReason.Repetition);
+                    break;
+
+                case GameState.DrawByFiftyMoveRule:
+                    EndGame(null, drawReason: ChessTheBetrayal.Events.Payloads.GameEndReason.FiftyMoveRule);
+                    break;
+
                 case GameState.Check:
                     _checkDetectedChannel?.Raise();
                     _turnChangedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.TurnChangedPayload(
                         _board.CurrentTurn,
-                        _board.FullMoveNumber,
+                        _board.PliesPlayed,
                         ChessTheBetrayal.Events.Payloads.TurnSource.HumanLocal
                     ));
                     break;
@@ -394,7 +429,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
                 case GameState.Normal:
                     _turnChangedChannel?.Raise(new ChessTheBetrayal.Events.Payloads.TurnChangedPayload(
                         _board.CurrentTurn,
-                        _board.FullMoveNumber,
+                        _board.PliesPlayed,
                         ChessTheBetrayal.Events.Payloads.TurnSource.HumanLocal
                     ));
                     break;
@@ -405,14 +440,20 @@ namespace ChessTheBetrayal.Gameplay.Manager
             }
         }
 
-        public void EndGame(Team? winner, bool byTimeout = false)
+        /// <param name="drawReason">Which kind of draw this is, when the game ended in one and the
+        /// board alone cannot say which. A drawn game used to be reported as a stalemate whatever
+        /// had actually happened, which was true while stalemate was the only draw there was.</param>
+        public void EndGame(Team? winner, bool byTimeout = false,
+            ChessTheBetrayal.Events.Payloads.GameEndReason? drawReason = null)
         {
             _board.IsGameOver = true;
             _board.Winner = winner;
 
             TransitionToPhase(TurnPhase.GameOver);
 
-            var reason = winner.HasValue ? ChessTheBetrayal.Events.Payloads.GameEndReason.Checkmate : ChessTheBetrayal.Events.Payloads.GameEndReason.Stalemate;
+            var reason = winner.HasValue
+                ? ChessTheBetrayal.Events.Payloads.GameEndReason.Checkmate
+                : drawReason ?? ChessTheBetrayal.Events.Payloads.GameEndReason.Stalemate;
             if (byTimeout) reason = ChessTheBetrayal.Events.Payloads.GameEndReason.Timeout;
 
             _gameOverChannel?.Raise(new ChessTheBetrayal.Events.Payloads.GameOverPayload(winner, reason, byTimeout));

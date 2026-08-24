@@ -10,17 +10,21 @@ namespace ChessTheBetrayal.Events.Payloads
     public readonly struct TurnChangedPayload
     {
         public readonly Team CurrentTeam;
-        public readonly int TurnNumber;
+
+        /// <summary>Plies played, not turns — a turn covers a move from each side, and a Betrayal
+        /// sub-sequence spends several plies without the turn passing at all.</summary>
+        public readonly int PlyNumber;
+
         public readonly TurnSource Source;
 
-        public TurnChangedPayload(Team team, int turnNumber, TurnSource source)
+        public TurnChangedPayload(Team team, int plyNumber, TurnSource source)
         {
             CurrentTeam = team;
-            TurnNumber  = turnNumber;
+            PlyNumber   = plyNumber;
             Source      = source;
         }
 
-        public override string ToString() => $"Team={CurrentTeam} Turn={TurnNumber} Src={Source}";
+        public override string ToString() => $"Team={CurrentTeam} Ply={PlyNumber} Src={Source}";
     }
 
     public enum TurnSource { HumanLocal, HumanNetwork, AI }

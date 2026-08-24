@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using ChessTheBetrayal.AI;
 using ChessTheBetrayal.AI.MatchTelemetry;
@@ -85,8 +86,14 @@ namespace ChessTheBetrayal.Gameplay.Manager
         /// mid-match, only before the first SetAIMode call.</summary>
         public AiMatchTelemetry Telemetry { get; private set; }
 
-        public AIMatchCoordinator(IChessEngine engine, BoardState board, Action<MoveCommand> playMove, IDomainLogger logger = null)
-            : this(engine, board, playMove, AISearchSettings.FromProfile, new AIProfileTableProvider(), logger)
+        // Optional. Supplies the device/build facts a shared report needs to be attributable to the
+        // hardware it came off — null in every test and in any host with no platform to read.
+        private readonly Func<IReadOnlyList<string>> _deviceFacts;
+
+        public AIMatchCoordinator(IChessEngine engine, BoardState board, Action<MoveCommand> playMove,
+            IDomainLogger logger = null, Func<IReadOnlyList<string>> deviceFacts = null)
+            : this(engine, board, playMove, AISearchSettings.FromProfile, new AIProfileTableProvider(), logger,
+                deviceFacts)
         {
         }
 
@@ -101,7 +108,8 @@ namespace ChessTheBetrayal.Gameplay.Manager
         public AIMatchCoordinator(
             IChessEngine engine, BoardState board, Action<MoveCommand> playMove,
             Func<BetrayalUsage, AIProfile, AISearchSettings> searchSettingsFactory,
-            IAIProfileProvider profileProvider, IDomainLogger logger = null)
+            IAIProfileProvider profileProvider, IDomainLogger logger = null,
+            Func<IReadOnlyList<string>> deviceFacts = null)
         {
             _engine = engine;
             _board = board;
@@ -109,6 +117,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
             _searchSettingsFactory = searchSettingsFactory;
             _profileProvider = profileProvider ?? new AIProfileTableProvider();
             _logger = logger;
+            _deviceFacts = deviceFacts;
         }
 
         /// <summary>
@@ -143,7 +152,26 @@ namespace ChessTheBetrayal.Gameplay.Manager
             agent.OnLeftOpeningBook += HandleLeftOpeningBook;
             _aiAgent = agent;
 
+            _plyAwaitingItsNumber = null;
             Telemetry = new AiMatchTelemetry(DateTime.Now.ToString("yyyyMMdd-HHmmss"));
+
+            // Stamped per match rather than once at startup, so a report that arrives on its own
+            // still says which phone produced it. Without this a shared match report is a page of
+            // timings attributable to no hardware at all, which is most of what makes it worth
+            // sending — the same facts the device benchmark's own report carries, from the same
+            // reader, so two reports off one phone can never describe it differently.
+            if (_deviceFacts != null)
+            {
+                foreach (string line in _deviceFacts()) Telemetry.AppendHeaderLine(line);
+            }
+
+            // Which tier played, and what it was allowed. Every timing and depth in the report below
+            // is only judgeable against these: an elapsed worst of 3005ms is a tier sitting on its
+            // budget or one comfortably inside it depending entirely on which budget it had, and
+            // nothing else in the file says. Taken from the settings the agent was actually built
+            // with rather than the profile row, since a caller may substitute them.
+            Telemetry.AppendHeaderLine(
+                $"AI tier: {profile.Id} (max depth {settings.MaxDepth}, budget {settings.TimeBudget.HardMs}ms)");
         }
 
         /// <summary>Call once it's aiTeam's turn in a live match to kick off a background search.</summary>
@@ -166,12 +194,23 @@ namespace ChessTheBetrayal.Gameplay.Manager
         /// but not yet delivered — without tearing down the agent, so it stays usable for the
         /// player's very next move. Used by Undo's cancel-before-pop ordering.
         ///
-        /// Both states have to be checked. An opening-book reply never starts a search, so it is
-        /// undelivered while IsSearching is false; gating this on IsSearching alone let a book move
-        /// survive an Undo and then land on the rewound board a frame later.
+        /// Three states have to be covered, and each was found the hard way. An opening-book reply
+        /// never starts a search, so it is undelivered while IsSearching is false; gating this on
+        /// IsSearching alone let a book move survive an Undo and then land on the rewound board a
+        /// frame later. And a move already handed to the pacing queue is past both of those checks
+        /// while still not on the board, which is what the telemetry record held for it is waiting
+        /// on.
         /// </summary>
         public void CancelInFlightSearch()
         {
+            // Cleared before either guard below, because a move that has already been handed on is
+            // past both of them: the agent has stopped searching and has nothing undelivered, yet
+            // the move can still be sitting in the pacing queue waiting for an animation to finish.
+            // Undo empties that queue too, so a record held for it is waiting on a ply that will
+            // now never happen, and completing it later would put a move in the log that was never
+            // played.
+            _plyAwaitingItsNumber = null;
+
             if (_aiAgent is not AsyncAIAgent asyncAgent) return;
             if (!asyncAgent.IsSearching && !asyncAgent.HasUndeliveredResult) return;
 
@@ -227,13 +266,13 @@ namespace ChessTheBetrayal.Gameplay.Manager
                 _logger.LogInfo(new DomainLogEvent(DomainEventCode.AI_MoveDecided, message: message, auxInt: auxMs));
             }
 
-            _playMove(move);
-
             if (RecordTelemetry && _aiAgent is AsyncAIAgent recordingAgent)
             {
-                Telemetry.RecordMove(new AiMoveRecord(_board.FullMoveNumber, _aiTeam, move, fromBook: false,
-                    auxMs, recordingAgent.LastCompletedDepth, recordingAgent.StopReason));
+                HoldForPlyNumber(new AiMoveRecord(PlyNumberPendingUntilItLands, _aiTeam, move,
+                    AiMoveSource.Searched, auxMs, recordingAgent.LastCompletedDepth, recordingAgent.StopReason));
             }
+
+            _playMove(move);
 
             Activity = AgentActivity.Idle;
         }
@@ -253,15 +292,84 @@ namespace ChessTheBetrayal.Gameplay.Manager
                 _logger.LogInfo(new DomainLogEvent(DomainEventCode.AI_BookMovePlayed, message: $"{_aiTeam} plays {move}"));
             }
 
-            _playMove(move);
-
             if (RecordTelemetry)
             {
-                Telemetry.RecordMove(new AiMoveRecord(_board.FullMoveNumber, _aiTeam, move, fromBook: true,
-                    elapsedMs: 0, completedDepth: 0, stopReason: SearchStopReason.Unset));
+                HoldForPlyNumber(new AiMoveRecord(PlyNumberPendingUntilItLands, _aiTeam, move,
+                    AiMoveSource.Book, elapsedMs: 0, completedDepth: 0, stopReason: SearchStopReason.Unset));
             }
 
+            _playMove(move);
+
             Activity = AgentActivity.Idle;
+        }
+
+        // What a search cost is known here; which ply it becomes is not. The move goes to a queue
+        // that paces it against whatever animation is still playing, so it reaches the board either
+        // immediately or a fraction of a second later, and the board's own count says nothing about
+        // which until it lands. Reading the count here got the number right only when the queue
+        // happened to be idle: in one real match the two fastest replies -- an instant book move and
+        // a mate found in 36ms, both delivered while the opponent's move was still animating -- were
+        // each recorded a ply short, while the four that followed three-second searches were right.
+        private AiMoveRecord? _plyAwaitingItsNumber;
+
+        private const int PlyNumberPendingUntilItLands = 0;
+
+        private void HoldForPlyNumber(AiMoveRecord record) => _plyAwaitingItsNumber = record;
+
+        /// <summary>
+        /// Completes the held record once its move reaches the board. Fired for every ply, including
+        /// the opponent's, so it matches on the move itself rather than assuming the next one to
+        /// land is the AI's -- an opponent move already queued ahead of the AI's reply lands first
+        /// and would otherwise hand its ply number to the wrong record.
+        /// </summary>
+        public void NotePlyApplied(MoveCommand move, int plyNumber)
+        {
+            if (_plyAwaitingItsNumber == null || Telemetry == null) return;
+
+            AiMoveRecord held = _plyAwaitingItsNumber.Value;
+            if (held.Move.StartPosition != move.StartPosition
+                || held.Move.EndPosition != move.EndPosition
+                || held.Move.Stage != move.Stage) return;
+
+            Telemetry.RecordMove(held.WithPlyNumber(plyNumber));
+            _plyAwaitingItsNumber = null;
+        }
+
+        /// <summary>
+        /// Drops any already-recorded ply that a takeback has just taken off the board. Pass the
+        /// board's ply count as it stands AFTER the rewind.
+        ///
+        /// CancelInFlightSearch above covers the move that hasn't landed yet; this covers the ones
+        /// that had. Without it the report goes on describing moves nobody ended up playing: one
+        /// match took two turns back and its report still listed them, so its ply numbers ran 47,
+        /// 49, 50 and then 47 again, and it summarised two Defections in a game whose Betrayal
+        /// right can only be spent once.
+        /// </summary>
+        public void NotePliesUnmade(int lastSurvivingPlyNumber) =>
+            Telemetry?.RemoveAfterPly(lastSurvivingPlyNumber);
+
+        /// <summary>
+        /// Records a Betrayer changing sides. Nothing here decides that move — the rules produce it
+        /// when Retribution is refused or impossible — so it reaches neither of the hand-offs above
+        /// and would go unrecorded. It matters because it is the one ply in a match that moves a
+        /// piece between the two armies: a log without it shows the AI holding a piece nothing
+        /// accounts for, and one real match had a Black queen appear on a1 out of nowhere for
+        /// exactly this reason. Recorded whichever side's Betrayer it was, since either changes
+        /// what the AI is playing with. No elapsed time or depth, because no search produced it.
+        ///
+        /// The ply number comes from the driver raising this, the same source every other recorded
+        /// ply uses. Reading the board's own count here instead would be a second way of answering
+        /// a question the driver has already answered, and the two only agree by coincidence of
+        /// when this happens to be called.
+        /// </summary>
+        public void RecordDefection(MoveCommand move, int plyNumber)
+        {
+            if (!RecordTelemetry || Telemetry == null) return;
+
+            // The move carries the Betrayer as it was before it turned, so the army it landed in is
+            // the other one.
+            Team gainedBy = move.PieceTeam == Team.White ? Team.Black : Team.White;
+            Telemetry.RecordMove(AiMoveRecord.ForDefection(plyNumber, gainedBy, move));
         }
 
         /// <summary>
@@ -290,6 +398,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
         public void ClearAIMode()
         {
             TearDownAgent();
+            _plyAwaitingItsNumber = null;
             Telemetry = null;
         }
 

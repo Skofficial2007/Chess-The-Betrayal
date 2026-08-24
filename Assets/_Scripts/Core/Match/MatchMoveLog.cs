@@ -36,9 +36,9 @@ namespace ChessTheBetrayal.Core.Match
 
         public IReadOnlyList<MoveLogEntry> Entries => _entries;
 
-        public void Record(MoveCommand move, int fullMoveNumber, GameState resultingState)
+        public void Record(MoveCommand move, int plyNumber, GameState resultingState)
         {
-            string notation = MoveNotation.WithResultSuffix(MoveNotation.Format(move, fullMoveNumber), resultingState);
+            string notation = MoveNotation.WithResultSuffix(MoveNotation.Format(move, plyNumber), resultingState);
             _entries.Add(new MoveLogEntry(move, resultingState, notation));
         }
 

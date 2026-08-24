@@ -25,7 +25,7 @@ namespace ChessTheBetrayal.View
 
         public void MoveTo(Vector3 worldPos, bool force = false) => _transform.position = worldPos;
 
-        public void MoveTo(Vector3 worldPos, MoveStyle style, int squaresTravelled = 1, bool force = false) => _transform.position = worldPos;
+        public void MoveTo(Vector3 worldPos, MoveStyle style, float tilesTravelled = 1f, bool force = false) => _transform.position = worldPos;
 
         // Headless/AI play has no notion of a staggered choreography — the rook just arrives, and
         // onSettled must still fire synchronously so BoardVisuals' castling logic (if it ever
@@ -36,7 +36,7 @@ namespace ChessTheBetrayal.View
             onSettled?.Invoke();
         }
 
-        public void PlayPromotionApproach(Vector3 worldPos, int squaresTravelled, Action onArrived)
+        public void PlayPromotionApproach(Vector3 worldPos, float tilesTravelled, Action onArrived)
         {
             _transform.position = worldPos;
             onArrived?.Invoke();
@@ -47,25 +47,30 @@ namespace ChessTheBetrayal.View
         // No stomp to play headlessly — just arrive and fire both callbacks synchronously so
         // BoardVisuals' capture logic (which drives the victim's PlayStompedDeath and any queued
         // Defection spin off these) doesn't stall waiting on a tween that will never exist here.
-        public void PlayCaptureStamp(Vector3 worldPos, CaptureRunUp runUp = default, Action onDescentStart = null, Action onSettled = null)
+        public void PlayCaptureStamp(Vector3 worldPos, CaptureRunUp runUp = default, float victimHeft = 0f, Action onDescentStart = null, Action onImpact = null, Action onSettled = null)
         {
             _transform.position = worldPos;
             onDescentStart?.Invoke();
+            onImpact?.Invoke();
             onSettled?.Invoke();
         }
 
         public void PlayStompedDeath(Action onVanished) => onVanished?.Invoke();
 
+        // A flinch is nothing but a rotation that ends where it started, so headless play has
+        // nothing to do and nothing to report back.
+        public void PlayBrace(Vector3 shoveDirection, float seconds) { }
+
         // Same deal in reverse: the piece is simply back on its square at full size, with onArrived
         // fired synchronously so nothing waits on a tween that will never exist here.
-        public void PlayGraveyardReturn(Vector3 boardWorldPos, Vector3 restScale, Action onArrived)
+        public void PlayGraveyardReturn(Vector3 boardWorldPos, Vector3 restScale, float tilesTravelled, Action onArrived)
         {
             _transform.position = boardWorldPos;
             _transform.localScale = restScale;
             onArrived?.Invoke();
         }
 
-        public void PlayEnPassantDeath(Vector3 graveyardWorldPos, Action onArrived)
+        public void PlayEnPassantDeath(Vector3 graveyardWorldPos, float tilesTravelled, Action onArrived)
         {
             _transform.position = graveyardWorldPos;
             onArrived?.Invoke();

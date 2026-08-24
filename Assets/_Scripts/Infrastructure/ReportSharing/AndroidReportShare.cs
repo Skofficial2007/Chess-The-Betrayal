@@ -1,6 +1,5 @@
 #if UNITY_ANDROID && !UNITY_EDITOR
 using System;
-using System.Text;
 using UnityEngine;
 
 namespace ChessTheBetrayal.Infrastructure
@@ -108,11 +107,17 @@ namespace ChessTheBetrayal.Infrastructure
             AndroidJavaObject uri = resolver.Call<AndroidJavaObject>("insert", collection, values);
             if (uri == null) return null;
 
+            // The same encoding the desktop write uses, byte-order mark and all. GetBytes alone
+            // leaves the mark off, and this file lands in the same inboxes as that one, where a
+            // report without it gets read as the local ANSI codepage and arrives as mojibake.
+            //
             // Unity's JNI bridge marshals a Java byte[] as a C# sbyte[]; BlockCopy reinterprets the
             // same bytes rather than converting values, since byte and sbyte share a bit layout.
-            byte[] utf8 = Encoding.UTF8.GetBytes(contents);
-            var javaBytes = new sbyte[utf8.Length];
-            Buffer.BlockCopy(utf8, 0, javaBytes, 0, utf8.Length);
+            byte[] preamble = ReportExporter.ReportEncoding.GetPreamble();
+            byte[] body = ReportExporter.ReportEncoding.GetBytes(contents);
+            var javaBytes = new sbyte[preamble.Length + body.Length];
+            Buffer.BlockCopy(preamble, 0, javaBytes, 0, preamble.Length);
+            Buffer.BlockCopy(body, 0, javaBytes, preamble.Length, body.Length);
 
             using (AndroidJavaObject stream = resolver.Call<AndroidJavaObject>("openOutputStream", uri))
             {
