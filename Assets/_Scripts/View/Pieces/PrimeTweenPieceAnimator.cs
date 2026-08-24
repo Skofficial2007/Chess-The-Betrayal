@@ -1124,12 +1124,6 @@ namespace ChessTheBetrayal.View.Pieces
         }
 
         /// <summary>
-        /// Ends a shake — waiting or rattling — and puts the piece back on the pose it was rattling
-        /// around, so nothing that follows inherits a half-finished offset as the piece's real
-        /// place. Nothing to put back while it is still only waiting: the pose is not read until the
-        /// rattle itself begins.
-        /// </summary>
-        /// <summary>
         /// Hands this piece's position to <paramref name="next"/>, taking it off whatever held it
         /// before.
         ///
@@ -1163,6 +1157,12 @@ namespace ChessTheBetrayal.View.Pieces
             _positionOwner = next;
         }
 
+        /// <summary>
+        /// Ends a shake — waiting or rattling — and puts the piece back on the pose it was rattling
+        /// around, so nothing that follows inherits a half-finished offset as the piece's real
+        /// place. Nothing to put back while it is still only waiting: the pose is not read until the
+        /// rattle itself begins.
+        /// </summary>
         private void StopShake()
         {
             bool wasShaking = _shaking && _shakeTween.isAlive;
