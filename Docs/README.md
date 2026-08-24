@@ -17,6 +17,14 @@ verified and what has not. That second part is the useful one. A technique with 
 correct is not the same as a technique with tests proving the engine still uses it, and the documents
 say which is which.
 
+## Benchmarks
+
+What the engine measures about itself, and the committed runs behind every strength and speed number
+this project quotes. `Benchmarks/README.md` says what each file in there is and how a run is
+produced. The distinction worth knowing before comparing two figures: the desktop tournament answers
+which tier wins, while the on-device benchmark answers how fast and how deep a phone gets. Different
+instruments, different questions, and their numbers do not transfer.
+
 ## Playtests
 
 Logs from manual play sessions against a difficulty tier, one file per session. The automated
