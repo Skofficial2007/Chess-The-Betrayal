@@ -25,8 +25,10 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.OpeningBook
     /// that the book does not hand the search a position the engine itself considers lost. That is
     /// a narrower claim than "good opening theory", but it is the one that maps onto what a player
     /// would actually see, and it costs milliseconds to check. Measuring whether the book adds
-    /// playing strength would need a harness that plays whole games through the real agent, which
-    /// does not exist — the tournament harness drives the search directly and never opens a book.
+    /// playing strength is a separate job, needing whole games played with and without a book. The
+    /// tournament harness cannot do it — it drives the search directly and never opens one. See
+    /// MatchSimulator.PlayGameWithBooks for the path that can, and Docs/AI/opening-book.md for what
+    /// it found.
     /// </summary>
     [TestFixture]
     public class OpeningBookExitBalanceTests
