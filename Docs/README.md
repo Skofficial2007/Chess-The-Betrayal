@@ -25,6 +25,15 @@ produced. The distinction worth knowing before comparing two figures: the deskto
 which tier wins, while the on-device benchmark answers how fast and how deep a phone gets. Different
 instruments, different questions, and their numbers do not transfer.
 
+## Multiplayer
+
+Decisions taken in advance for networked play, which is not implemented. This is the one directory
+here that documents something you cannot go and read the code for, and each page says so at the top.
+It is written down because the alternative is making the same calls twice, badly, under time
+pressure. `Multiplayer/move-and-clock-authority.md` covers who decides whether a move is legal, who
+owns the clock, and which parts of the Betrayal a client must never be trusted to report about
+itself.
+
 ## Playtests
 
 Logs from manual play sessions against a difficulty tier, one file per session. The automated
