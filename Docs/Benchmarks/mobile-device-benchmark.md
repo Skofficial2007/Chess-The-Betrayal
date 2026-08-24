@@ -73,12 +73,20 @@ moment it ran (`chess-ai-benchmark_<device>_<yyyyMMdd-HHmmss>.txt`) so a folder 
 several testers stays attributable and nothing overwrites anything. The full path is appended to the
 on-screen log and to the player log — that pair is the safety net nothing else here depends on.
 
-Every written copy carries a UTF-8 byte-order mark. That is not decoration: the first report to come
-back from a device arrived with every em-dash rendered as mojibake, because a plain UTF-8 file with
-nothing identifying it is read as the local ANSI codepage by enough Windows text viewers to matter.
-The report is full of em-dashes — every section title, every per-cell line — so the whole page was
-affected. If you add another export route, encode it through `ReportExporter.ReportEncoding` rather
-than reaching for `Encoding.UTF8` directly, which emits no mark.
+The report stays inside plain ASCII, and every written copy also carries a UTF-8 byte-order mark.
+Both come from the same bug arriving twice. The first report back from a device had every em-dash
+rendered as mojibake, because a plain UTF-8 file with nothing identifying it is read as the local
+ANSI codepage by enough Windows text viewers to matter. The mark was added for that and did not
+fix it — a later report, shared from a build that carried the mark, came back corrupted the same
+way, so something between the phone and a reader was decoding without looking for one.
+
+A mark only helps a reader that checks for it; ASCII needs no reader to do anything. So the report
+gave up its em-dashes, and that is the rule to keep if you add report text or another export
+route. Three tests assert it, one for each thing that produces report text, and they compare code
+points rather than chars — the first version of that check was built on NUnit's `LessThan` over
+chars and passed with an em-dash still in the string. The mark stays because it costs nothing and
+helps where it is honoured, so keep encoding through `ReportExporter.ReportEncoding` rather than
+`Encoding.UTF8`; it is simply not what makes the file safe to forward.
 
 The report names the plan that produced it, on the status line, and describes its shape as a header
 line — how many positions, which tiers, how many repeats. A cell count cannot separate breadth from

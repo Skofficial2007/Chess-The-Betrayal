@@ -37,11 +37,14 @@ difficulty.
 | Tier | Plies of theory | Openings it shortens (of 40 sampled) |
 |---|---:|---:|
 | easy | 4 | 40 |
-| normal | 8 | 40 |
-| aggressive | 10 | 39 |
+| normal | 8 | 39 |
+| aggressive | 10 | 36 |
 | hard | 14 | 26 |
 | extreme | whole book | — |
 | impossible | whole book | — |
+
+The right-hand column shifts whenever lines are added to the book, so `OpeningBookTheoryWalkTests`
+reports it on every run rather than leaving it recorded only here.
 
 The allowance counts plies played in the game, read off the board rather than tallied by the agent.
 That makes it mean the same thing whichever colour the AI has, and it means taking a move back moves
