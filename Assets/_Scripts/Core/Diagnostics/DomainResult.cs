@@ -6,10 +6,12 @@ namespace ChessTheBetrayal.Core.Diagnostics
     /// of the program forbid. A rejected move is the first kind; a board of the wrong size is the
     /// second.
     ///
-    /// Nothing calls this yet. It is here for the side of the game that has not been built: once a
-    /// server is deciding whether a move a client sent is legal, it has to answer with a reason the
-    /// client can act on, and an exception is the wrong carrier for that. It cannot cross an RPC
-    /// intact, and a player trying something illegal is ordinary traffic, not an error.
+    /// Confirming a Betrayal Act is the first thing that needed it. That question stays on screen
+    /// while the clock runs, so by the time the player answers, the move they named may have stopped
+    /// being legal — which is nobody's mistake, just a position that moved on. A server needs the
+    /// same answer for the same reason: a client sends what it would like to happen, the board that
+    /// counts decides, and the refusal has to cross an RPC with a reason attached. An exception
+    /// cannot do that, and a player trying something illegal is ordinary traffic, not an error.
     ///
     /// A struct, so returning one from a rejection check costs nothing. That constrains T to a value
     /// type, which suits what the domain hands back — a MoveCommand, a MatchResult, a turn outcome.
