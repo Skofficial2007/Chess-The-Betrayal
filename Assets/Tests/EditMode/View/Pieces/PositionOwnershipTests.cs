@@ -131,6 +131,57 @@ namespace ChessTheBetrayal.Tests.EditMode.View.Pieces
         }
 
         [Test]
+        public void TakingAPieceOverStopsWhateverWasMovingItBefore()
+        {
+            // Recording the new owner and stopping the old animation are two separate things done
+            // by the same method, and reading the owner only ever proved the first. Deleting one of
+            // the stops failed nothing: the piece came away held by the right animation with the
+            // wrong one still writing its position underneath, which is both bugs above.
+            //
+            // Counting what is still running says the other half. There is nothing to advance and
+            // nothing to wait for - stopping a tween takes it off the list there and then.
+            foreach (var second in Travellers())
+            {
+                // A pick-up and a check warning claim the piece without going through the shared
+                // take-over, and deliberately so for the warning. Neither is asserted here, and
+                // that gap is real rather than overlooked.
+                if (second.who == PositionWriter.Lift || second.who == PositionWriter.Shake) continue;
+
+                int alone = LiveTweensAfter(a => second.start(a));
+
+                foreach (var first in Travellers())
+                {
+                    int onTopOfFirst = LiveTweensAfter(a => { first.start(a); second.start(a); });
+
+                    Assert.That(onTopOfFirst, Is.EqualTo(alone),
+                        $"Starting {second.what} on top of {first.what} left {onTopOfFirst - alone} more " +
+                        $"animation(s) running than {second.what} starts on its own, so something from " +
+                        $"{first.what} is still writing the piece's position underneath it.");
+                }
+            }
+        }
+
+        /// <summary>
+        /// How much is still moving this piece once the given animations have been started. Counted
+        /// against both targets the animator tweens against, since a sequence built around one is
+        /// invisible to a count of the other.
+        /// </summary>
+        private int LiveTweensAfter(Action<PrimeTweenPieceAnimator> arrange)
+        {
+            Assert.That(Tween.GetTweensCount(_pieceObject.transform), Is.Zero,
+                "Something was left running by the previous case, so this count would not mean what it says.");
+
+            _pieceObject.transform.position = Square;
+            PrimeTweenPieceAnimator animator = Animator();
+
+            arrange(animator);
+            int live = Tween.GetTweensCount(_pieceObject.transform) + Tween.GetTweensCount(animator);
+
+            animator.StopAllAnimations();
+            return live;
+        }
+
+        [Test]
         public void PuttingAPieceDownLeavesNothingMovingIt()
         {
             PrimeTweenPieceAnimator animator = Animator();
