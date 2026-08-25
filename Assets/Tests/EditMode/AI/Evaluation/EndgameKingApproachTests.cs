@@ -6,9 +6,11 @@ using ChessTheBetrayal.Tooling;
 namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
 {
     /// <summary>
-    /// Every assertion calls EndgameKingApproach.Score directly, the same isolation
-    /// KingSafetyEvaluationTests/PawnStructureEvaluationTests use — BetrayalAwareEvaluator still
-    /// scales the result by AttackScale before adding it to the total.
+    /// Most of these call EndgameKingApproach.Score directly, the same isolation
+    /// KingSafetyEvaluationTests/PawnStructureEvaluationTests use. The last one does not: scoring
+    /// the term correctly is worth nothing if the evaluator stops adding it, and that wiring used
+    /// to be provable only by the endgame fixtures that play a whole King and Queen against a bare
+    /// king over dozens of real plies — far too slow to run on a commit.
     /// </summary>
     [TestFixture]
     public class EndgameKingApproachTests
@@ -110,5 +112,44 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
 
             Assert.That(EndgameKingApproach.Score(board, Team.White), Is.EqualTo(0));
         }
+
+        [Test]
+        public void TheEvaluatorAddsTheApproachBonusItScores()
+        {
+            // Two boards identical but for where White's king stands, both placements on the same
+            // file so the open-file half of king safety reads the same, and both far enough from
+            // the black king that neither sits inside the other's safety zone. No pawns, so pawn
+            // structure is zero on both. Subtracting the cheap score removes material and the
+            // piece-square tables, which do move when the king moves — what is left is the block of
+            // terms the full evaluation adds on top, and the only one of those that differs here is
+            // the king approach.
+            BoardState near = ApproachBoard("e5");
+            BoardState far = ApproachBoard("e1");
+
+            var evaluator = new BetrayalAwareEvaluator(EvaluationWeights.Identity);
+
+            int expected = EndgameKingApproach.Score(near, Team.White)
+                - EndgameKingApproach.Score(far, Team.White);
+            Assert.That(expected, Is.GreaterThan(0),
+                "The two boards score the same approach bonus, so this compares nothing.");
+
+            int nearExtra = evaluator.Evaluate(near, Team.White) - evaluator.EvaluateCheap(near, Team.White);
+            int farExtra = evaluator.Evaluate(far, Team.White) - evaluator.EvaluateCheap(far, Team.White);
+
+            Assert.That(nearExtra - farExtra, Is.EqualTo(expected),
+                "Walking the king four squares closer to a bare enemy king changed nothing in the " +
+                "evaluator's score, so the approach term is being computed and then dropped. That " +
+                "term is what stops a King and Queen search confining the enemy king and then " +
+                "shuffling forever instead of finishing.");
+        }
+
+        private static BoardState ApproachBoard(string whiteKingSquare) =>
+            BoardSetup.CreateEmpty()
+                .WithPiece(whiteKingSquare, Team.White, ChessPieceType.King)
+                .WithPiece("a4", Team.White, ChessPieceType.Queen)
+                .WithPiece("h8", Team.Black, ChessPieceType.King)
+                .WithBetrayalRight(false)
+                .WithComputedHash();
+
     }
 }
