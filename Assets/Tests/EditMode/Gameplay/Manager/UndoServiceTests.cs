@@ -277,6 +277,58 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             Assert.That(_matchDriver.MoveLog.Entries.Count, Is.EqualTo(0));
         }
 
+        [Test]
+        public void RequestUndo_BetrayalTurnWhereTheDefectionForcedASave_RestoresTheTurnOnce()
+        {
+            // The companion to the case above, and the one no test reached. A Defection passes the
+            // turn only when nothing else in the turn follows it. Here something does: the defected
+            // Knight checks the King it just abandoned, so White owes a Defensive Override, and it
+            // is that move which ends the turn. Undo has to recognise the Override as the ply that
+            // passed the turn and the Defection as one that did not, or it flips the turn twice on
+            // the way back and hands White a board where it is not White to move.
+            //
+            // Every existing Betrayal case here ends its turn on the Defection itself, so the
+            // branch that separates the two was never taken.
+            ClearSquares("e8");
+            _board.WithPiece("h8", Team.Black, ChessPieceType.King);
+            _board.WithPiece("e4", Team.White, ChessPieceType.Rook);
+            _board.WithPiece("e8", Team.Black, ChessPieceType.Rook); // pins the Rook to its own King
+            _board.WithPiece("f4", Team.White, ChessPieceType.Knight); // Betrayer; f4-d3 is a knight move
+            _board.WithPiece("d3", Team.White, ChessPieceType.Pawn);   // Victim; a Black Knight on d3 checks e1
+            _board.WithBetrayalRight(true);
+            _board.ComputeFullZobristHash();
+            ulong hashBefore = _board.ZobristHash;
+
+            var actMoves = new System.Collections.Generic.List<MoveCommand>();
+            ChessEngine.GetBetrayalTargets(_board, BoardSetup.AlgebraicToVector("f4"), actMoves);
+            _matchDriver.PlayMove(actMoves[0]);
+
+            Assert.That(_matchDriver.CurrentPhase, Is.EqualTo(TurnPhase.ForcedSave),
+                "The defected Knight checks e1, so the turn cannot end until White answers it.");
+            Assert.That(_board.CurrentTurn, Is.EqualTo(Team.White),
+                "The turn must still be White's while the Save is owed.");
+
+            var saveMoves = new System.Collections.Generic.List<MoveCommand>();
+            _engine.GetForcedSaveMoves(_board, _board.CurrentTurn, saveMoves);
+            Assert.That(saveMoves.Count, Is.GreaterThan(0), "The King must have somewhere to go.");
+            _matchDriver.PlayMove(saveMoves[0]);
+
+            Assert.That(_board.CurrentTurn, Is.EqualTo(Team.Black),
+                "The Defensive Override is what ends this turn.");
+
+            _undoService.RequestUndo(isAIMode: true, currentPhase: _matchDriver.CurrentPhase, humanTeam: Team.White, aiMovesFirst: false);
+
+            Assert.That(_board.CurrentTurn, Is.EqualTo(Team.White),
+                "Undo restored the turn to Black, which means it counted both the Defection and the " +
+                "Override as having passed it and flipped twice.");
+            Assert.That(_board.GetPiece(BoardSetup.AlgebraicToVector("f4")).Team, Is.EqualTo(Team.White),
+                "The Knight must be back on f4 and White again.");
+            Assert.That(_board.GetPiece(BoardSetup.AlgebraicToVector("d3")).Type, Is.EqualTo(ChessPieceType.Pawn));
+            Assert.DoesNotThrow(() => _board.AssertZobristConsistency());
+            Assert.That(_board.ZobristHash, Is.EqualTo(hashBefore));
+            Assert.That(_matchDriver.MoveLog.Entries.Count, Is.EqualTo(0));
+        }
+
         /// <summary>
         /// CanUndo deliberately allows TurnPhase.GameOver, so taking back a checkmate is a supported
         /// press. Unmaking the moves is not enough on its own: BoardState.IsGameOver is set by
