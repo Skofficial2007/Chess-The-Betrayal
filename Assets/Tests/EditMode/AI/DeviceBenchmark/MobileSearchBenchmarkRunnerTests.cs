@@ -6,7 +6,10 @@ using ChessTheBetrayal.AI.Search;
 using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.AI.Positions;
 using ChessTheBetrayal.AI.DeviceBenchmark;
+using ChessTheBetrayal.AI.Agent;
 using ChessTheBetrayal.Core.Engine;
+using ChessTheBetrayal.Core.Data;
+using ChessTheBetrayal.Tooling;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI.DeviceBenchmark
 {
@@ -21,12 +24,70 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.DeviceBenchmark
     public class MobileSearchBenchmarkRunnerTests
     {
         [Test]
-        public void ProductionTranspositionTableSize_MatchesAsyncAIAgentsSizing()
+        public void TheProductionTableSizeIsTheOneARealMatchAllocates()
         {
-            Assert.That(MobileSearchBenchmarkRunner.ProductionTranspositionTableLog2Size, Is.EqualTo(20),
-                "AsyncAIAgent sizes its production table with log2Size 20 (~16 MB); a smaller table " +
-                "here would measure worse move ordering than a real match ever has.");
+            // This used to read its own literal and compare it to another literal, under a name
+            // claiming it checked the agent. It checked nothing: either number could move alone.
+            // The runner now reads the agent's constant, so the compiler holds them together and
+            // the only thing left worth asserting is the value itself.
+            Assert.That(MobileSearchBenchmarkRunner.ProductionTranspositionTableLog2Size,
+                Is.EqualTo(AsyncAIAgent.ProductionTranspositionTableLog2Size));
+            Assert.That(AsyncAIAgent.ProductionTranspositionTableLog2Size, Is.EqualTo(20),
+                "A real match runs on 2^20 entries, about 16 MB. Measuring a device against anything " +
+                "smaller reports worse move ordering than a player ever meets.");
         }
+
+        [Test]
+        public void TheRescoreMarginIsTheOneTheAgentWouldHaveUsed()
+        {
+            // Whichever dial reaches further sets the margin. A tier with neither asks for no
+            // rescore pass at all, which is the case that has to stay at zero: a nonzero margin
+            // there buys a second pass over the root for a profile that cannot use the result.
+            var blunderer = ProfileWith(blunderMarginCp: 90, tieBreakWindowCp: 20);
+            var tieBreaker = ProfileWith(blunderMarginCp: 15, tieBreakWindowCp: 75);
+            var neither = ProfileWith(blunderMarginCp: 0, tieBreakWindowCp: 0);
+
+            Assert.That(blunderer.RescoreMarginCp, Is.EqualTo(90));
+            Assert.That(tieBreaker.RescoreMarginCp, Is.EqualTo(75));
+            Assert.That(neither.RescoreMarginCp, Is.Zero);
+        }
+
+        [Test]
+        public void EachProfileIsMeasuredAgainstItsOwnWeightedEvaluator()
+        {
+            // The defect this replaced: every tier was benchmarked with the identity evaluator, so
+            // an aggressive tier's numbers described a player nobody faces. A profile whose attack
+            // dial is turned up must score a position differently from one left at identity, or the
+            // weighting is not reaching the evaluator the runner hands to the search.
+            //
+            // An ordinary midgame will not do, and that is worth saying: the attack-weighted terms
+            // there run close enough to level between the two sides that scaling both cancels, and
+            // the two evaluators agree to the point. This board is one-sided on purpose — White
+            // holds mating material against a bare king, which is the one thing only the attacking
+            // side ever scores.
+            BoardState board = BoardSetup.CreateEmpty()
+                .WithPiece("e5", Team.White, ChessPieceType.King)
+                .WithPiece("a4", Team.White, ChessPieceType.Queen)
+                .WithPiece("h8", Team.Black, ChessPieceType.King)
+                .WithBetrayalRight(false)
+                .WithComputedHash();
+
+            int aggressive = MobileSearchBenchmarkRunner
+                .EvaluatorFor(ProfileWith(attackDefenseBias: 1.5f)).Evaluate(board, Team.White);
+            int identity = MobileSearchBenchmarkRunner
+                .EvaluatorFor(ProfileWith(attackDefenseBias: 1.0f)).Evaluate(board, Team.White);
+
+            Assert.That(aggressive, Is.Not.EqualTo(identity),
+                "An attack-weighted profile scored this position exactly as the identity evaluator " +
+                "did, so the profile's dials are not reaching the evaluator being measured.");
+        }
+
+        private static AIProfile ProfileWith(int blunderMarginCp = 0, int tieBreakWindowCp = 0,
+            float attackDefenseBias = 1f) =>
+            new AIProfile("probe", maxDepth: 4, timeBudget: new AITimeBudget(500, 700),
+                blunderRate: 0f, blunderMarginCp: blunderMarginCp, betrayalAggression: 0f,
+                attackDefenseBias: attackDefenseBias, tieBreakWindowCp: tieBreakWindowCp,
+                useOpeningBook: false);
 
         [Test]
         public void SingleMoveSettings_UseBetrayalUsageFull_AndCarryTheProfilesDepthAndBudget()

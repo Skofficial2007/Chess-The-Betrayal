@@ -170,10 +170,11 @@ namespace ChessTheBetrayal.Tooling.Match
         public const int DefaultPlyCap = 120;
         public const int AdjudicationMarginCp = 300;
 
-        /// <summary>Same table size the live agent allocates — an undersized table degrades move
+        /// <summary>Read from the live agent rather than copied — an undersized table degrades move
         /// ordering more and more as a long game fills it, inflating node counts in a way that has
         /// nothing to do with the search being measured.</summary>
-        public const int ProductionTranspositionTableLog2Size = 20;
+        public const int ProductionTranspositionTableLog2Size =
+            AsyncAIAgent.ProductionTranspositionTableLog2Size;
 
         private readonly IChessEngine _engine = new ChessEngineAdapter();
         private readonly IPositionEvaluator _adjudicationEvaluator = new BetrayalAwareEvaluator();

@@ -39,6 +39,16 @@ namespace ChessTheBetrayal.AI.Profiles
         /// </summary>
         public readonly int OpeningBookDepthPlies;
 
+        /// <summary>
+        /// How far below the best score the root rescore pass has to look before the personality
+        /// dials choose between candidates. Alpha-beta only proves the best move's score exactly;
+        /// everything else comes back tightened against a window, so a dial picking a
+        /// nearly-as-good move needs those scores re-established over a margin wide enough to hold
+        /// every candidate it might pick. Whichever dial reaches further sets it, and zero here
+        /// means no dial is asking, so the pass is skipped and costs nothing.
+        /// </summary>
+        public int RescoreMarginCp => BlunderMarginCp > TieBreakWindowCp ? BlunderMarginCp : TieBreakWindowCp;
+
         public AIProfile(
             string id,
             int maxDepth,
