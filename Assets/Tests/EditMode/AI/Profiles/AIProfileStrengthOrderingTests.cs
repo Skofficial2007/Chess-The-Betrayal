@@ -77,25 +77,25 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Profiles
     /// being the fast thing to run on demand, with the large suite as the deliberate slow opt-in
     /// below. Its win rate carries a wide confidence interval at this sample size; a shortfall below
     /// the floor is only reported as a genuine failure when the floor sits outside that interval —
-    /// see StrengthLadder.AssertStrongerScoresAtLeast.
+    /// see StrengthLadder.AssertStrongerStaysAboveTheFloor.
     /// </summary>
     [TestFixture]
     [Explicit("Quick AI-vs-AI ladder check at each tier's real per-move budget, small sample — run on demand.")]
     [Timeout(10 * 60 * 1000)]
     public class AIProfileStrengthQuickTests
     {
-        [Test] public void Normal_ScoresAtLeastSixtyPercent_AgainstEasy() =>
-            StrengthLadder.AssertStrongerScoresAtLeast("normal", "easy", pairIndex: 0, StrengthLadder.QuickPositionCount);
-        [Test] public void Hard_ScoresAtLeastSixtyPercent_AgainstNormal() =>
-            StrengthLadder.AssertStrongerScoresAtLeast("hard", "normal", pairIndex: 1, StrengthLadder.QuickPositionCount);
-        [Test] public void Extreme_ScoresAtLeastSixtyPercent_AgainstHard() =>
-            StrengthLadder.AssertStrongerScoresAtLeast("extreme", "hard", pairIndex: 2, StrengthLadder.QuickPositionCount);
-        [Test] public void Impossible_ScoresAtLeastSixtyPercent_AgainstExtreme() =>
-            StrengthLadder.AssertStrongerScoresAtLeast("impossible", "extreme", pairIndex: 3, StrengthLadder.QuickPositionCount);
-        [Test] public void Aggressive_ScoresAtLeastSixtyPercent_AgainstNormal() =>
-            StrengthLadder.AssertStrongerScoresAtLeast("aggressive", "normal", pairIndex: 4, StrengthLadder.QuickPositionCount);
-        [Test] public void Aggressive_ScoresAtLeastSixtyPercent_AgainstEasy() =>
-            StrengthLadder.AssertStrongerScoresAtLeast("aggressive", "easy", pairIndex: 5, StrengthLadder.QuickPositionCount);
+        [Test] public void Normal_StaysAboveTheStrengthFloor_AgainstEasy() =>
+            StrengthLadder.AssertStrongerStaysAboveTheFloor("normal", "easy", pairIndex: 0, StrengthLadder.QuickPositionCount);
+        [Test] public void Hard_StaysAboveTheStrengthFloor_AgainstNormal() =>
+            StrengthLadder.AssertStrongerStaysAboveTheFloor("hard", "normal", pairIndex: 1, StrengthLadder.QuickPositionCount);
+        [Test] public void Extreme_StaysAboveTheStrengthFloor_AgainstHard() =>
+            StrengthLadder.AssertStrongerStaysAboveTheFloor("extreme", "hard", pairIndex: 2, StrengthLadder.QuickPositionCount);
+        [Test] public void Impossible_StaysAboveTheStrengthFloor_AgainstExtreme() =>
+            StrengthLadder.AssertStrongerStaysAboveTheFloor("impossible", "extreme", pairIndex: 3, StrengthLadder.QuickPositionCount);
+        [Test] public void Aggressive_StaysAboveTheStrengthFloor_AgainstNormal() =>
+            StrengthLadder.AssertStrongerStaysAboveTheFloor("aggressive", "normal", pairIndex: 4, StrengthLadder.QuickPositionCount);
+        [Test] public void Aggressive_StaysAboveTheStrengthFloor_AgainstEasy() =>
+            StrengthLadder.AssertStrongerStaysAboveTheFloor("aggressive", "easy", pairIndex: 5, StrengthLadder.QuickPositionCount);
     }
 
     /// <summary>
@@ -114,17 +114,17 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Profiles
     [Timeout(20 * 60 * 1000)]
     public class AIProfileStrengthOrderingTests
     {
-        [Test] public void Normal_ScoresAtLeastSixtyPercent_AgainstEasy() =>
-            StrengthLadder.AssertStrongerScoresAtLeast("normal", "easy", pairIndex: 0, CuratedPositionSuite.Count);
-        [Test] public void Hard_ScoresAtLeastSixtyPercent_AgainstNormal() =>
-            StrengthLadder.AssertStrongerScoresAtLeast("hard", "normal", pairIndex: 1, CuratedPositionSuite.Count);
-        [Test] public void Extreme_ScoresAtLeastSixtyPercent_AgainstHard() =>
-            StrengthLadder.AssertStrongerScoresAtLeast("extreme", "hard", pairIndex: 2, CuratedPositionSuite.Count);
-        [Test] public void Impossible_ScoresAtLeastSixtyPercent_AgainstExtreme() =>
-            StrengthLadder.AssertStrongerScoresAtLeast("impossible", "extreme", pairIndex: 3, CuratedPositionSuite.Count);
-        [Test] public void Aggressive_ScoresAtLeastSixtyPercent_AgainstNormal() =>
-            StrengthLadder.AssertStrongerScoresAtLeast("aggressive", "normal", pairIndex: 4, CuratedPositionSuite.Count);
-        [Test] public void Aggressive_ScoresAtLeastSixtyPercent_AgainstEasy() =>
-            StrengthLadder.AssertStrongerScoresAtLeast("aggressive", "easy", pairIndex: 5, CuratedPositionSuite.Count);
+        [Test] public void Normal_StaysAboveTheStrengthFloor_AgainstEasy() =>
+            StrengthLadder.AssertStrongerStaysAboveTheFloor("normal", "easy", pairIndex: 0, CuratedPositionSuite.Count);
+        [Test] public void Hard_StaysAboveTheStrengthFloor_AgainstNormal() =>
+            StrengthLadder.AssertStrongerStaysAboveTheFloor("hard", "normal", pairIndex: 1, CuratedPositionSuite.Count);
+        [Test] public void Extreme_StaysAboveTheStrengthFloor_AgainstHard() =>
+            StrengthLadder.AssertStrongerStaysAboveTheFloor("extreme", "hard", pairIndex: 2, CuratedPositionSuite.Count);
+        [Test] public void Impossible_StaysAboveTheStrengthFloor_AgainstExtreme() =>
+            StrengthLadder.AssertStrongerStaysAboveTheFloor("impossible", "extreme", pairIndex: 3, CuratedPositionSuite.Count);
+        [Test] public void Aggressive_StaysAboveTheStrengthFloor_AgainstNormal() =>
+            StrengthLadder.AssertStrongerStaysAboveTheFloor("aggressive", "normal", pairIndex: 4, CuratedPositionSuite.Count);
+        [Test] public void Aggressive_StaysAboveTheStrengthFloor_AgainstEasy() =>
+            StrengthLadder.AssertStrongerStaysAboveTheFloor("aggressive", "easy", pairIndex: 5, CuratedPositionSuite.Count);
     }
 }

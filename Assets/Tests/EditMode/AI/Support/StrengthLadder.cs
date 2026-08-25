@@ -47,7 +47,14 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
     /// </summary>
     internal static class StrengthLadder
     {
+        /// <summary>What a healthy gap between adjacent tiers looks like. Nothing fails for missing
+        /// it — falling short only prints a line asking somebody to look at the dials, because at
+        /// every sample size this harness can afford the interval is far too wide to call a miss a
+        /// regression. The tests are named for the floor below, which is the number they enforce.</summary>
         public const float PassWinRate = 0.60f;
+
+        /// <summary>The number that actually fails a run, and only when the whole confidence
+        /// interval sits below it.</summary>
         public const float FloorWinRate = 0.55f;
         public const int RunSeed = 20260713;
 
@@ -131,7 +138,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI
         /// confidence interval before failing — the same honesty rule BenchmarkDriftAnalyzer
         /// applies, so a small-N shortfall never asserts a confident failure it can't back up.
         /// </summary>
-        public static void AssertStrongerScoresAtLeast(string strongerId, string weakerId, int pairIndex, int positionCount)
+        public static void AssertStrongerStaysAboveTheFloor(string strongerId, string weakerId, int pairIndex, int positionCount)
         {
             var progress = new TestContextProgressSink($"{strongerId} vs {weakerId}");
             // moveBudgetCapMs 0: each tier plays at its own real per-move budget, the exact clock a
