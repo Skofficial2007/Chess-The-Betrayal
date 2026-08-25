@@ -148,41 +148,50 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Profiles
         }
 
         [Test]
-        public void FixtureProvider_WrappingACorruptedRoster_ResolveReturnsAClampedProfile()
+        public void ResolvingAShallowProfileWithStrongDialsClampsThemOnTheWayOut()
         {
-            // AIProfileTableProvider only ever resolves the fixed, already-valid BuiltIn roster —
-            // there's no way to feed it a corrupted row through its real API. To prove the clamp
-            // fires on the RESOLVE path itself (not just on Apply() in isolation), this wraps a
-            // hand-corrupted roster in a minimal provider that applies the same guardrail
-            // AIProfileTableProvider.Resolve does, the way a future authored-asset provider must.
-            var corruptedRoster = new[]
+            // The clamp lives on the path a running match takes from a difficulty id to a profile,
+            // and every shipped row already sits inside its range - so clamped and unclamped are
+            // the same thing for all six, and removing the clamp from that path changed nothing
+            // anywhere. This used to be checked by a stand-in provider written in this file that
+            // called the guardrail itself, which could only ever prove the guardrail works.
+            //
+            // The real provider takes the roster now, so a row that does need clamping goes through
+            // the same code a match does.
+            var beyondTheGuardrail = new[]
             {
-                new AIProfile("shallow-corrupt", maxDepth: AIProfileGuardrails.ShallowSearchDepthThreshold - 1,
+                new AIProfile("shallow-and-strident", maxDepth: AIProfileGuardrails.ShallowSearchDepthThreshold - 1,
                     timeBudget: new AITimeBudget(1000, 1500), blunderRate: 0f, blunderMarginCp: 0,
                     betrayalAggression: 1f, attackDefenseBias: 2f, tieBreakWindowCp: 0, useOpeningBook: false)
             };
-            IAIProfileProvider provider = new GuardrailedFixtureProvider(corruptedRoster);
+            IAIProfileProvider provider = new AIProfileTableProvider(beyondTheGuardrail);
 
-            AIProfile resolved = provider.Resolve("shallow-corrupt");
+            AIProfile resolved = provider.Resolve("shallow-and-strident");
 
-            Assert.That(resolved.AttackDefenseBias, Is.EqualTo(AIProfileGuardrails.MaxClampedAttackDefenseBias));
+            Assert.That(resolved.AttackDefenseBias, Is.EqualTo(AIProfileGuardrails.MaxClampedAttackDefenseBias),
+                "A depth-3 tier resolved with its attack dial at 2.0 still reweights the evaluator " +
+                "harder than three plies of search can vet, which reads as erratic rather than hard.");
             Assert.That(resolved.BetrayalAggression, Is.EqualTo(AIProfileGuardrails.MaxClampedBetrayalAggression));
         }
 
-        private sealed class GuardrailedFixtureProvider : IAIProfileProvider
+        [Test]
+        public void ResolvingAnUnknownIdFallsBackToADefaultThatIsAlsoClamped()
         {
-            private readonly AIProfile[] _roster;
-
-            public GuardrailedFixtureProvider(AIProfile[] roster) => _roster = roster;
-
-            public AIProfile Resolve(string id)
+            // The fallback is a second return inside the same method, so it can lose the clamp on
+            // its own while the hit above keeps it.
+            var beyondTheGuardrail = new[]
             {
-                foreach (AIProfile profile in _roster)
-                {
-                    if (profile.Id == id) return AIProfileGuardrails.Apply(profile);
-                }
-                return AIProfileGuardrails.Apply(_roster[0]);
-            }
+                new AIProfile(AIProfileTable.DefaultId, maxDepth: AIProfileGuardrails.ShallowSearchDepthThreshold - 1,
+                    timeBudget: new AITimeBudget(1000, 1500), blunderRate: 0f, blunderMarginCp: 0,
+                    betrayalAggression: 1f, attackDefenseBias: 2f, tieBreakWindowCp: 0, useOpeningBook: false)
+            };
+            IAIProfileProvider provider = new AIProfileTableProvider(beyondTheGuardrail);
+
+            AIProfile resolved = provider.Resolve("no-such-tier");
+
+            Assert.That(resolved.Id, Is.EqualTo(AIProfileTable.DefaultId));
+            Assert.That(resolved.AttackDefenseBias, Is.EqualTo(AIProfileGuardrails.MaxClampedAttackDefenseBias));
+            Assert.That(resolved.BetrayalAggression, Is.EqualTo(AIProfileGuardrails.MaxClampedBetrayalAggression));
         }
 
         [Test]
