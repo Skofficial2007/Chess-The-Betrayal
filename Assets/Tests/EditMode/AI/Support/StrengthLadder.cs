@@ -7,6 +7,7 @@ using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Tooling.Match;
 using ChessTheBetrayal.Tooling.Strength;
 using ChessTheBetrayal.Tooling.Tournament;
+using ChessTheBetrayal.Tests.EditMode.Support;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI
 {

@@ -1,7 +1,7 @@
 using NUnit.Framework;
 using ChessTheBetrayal.Tooling.Benchmark;
 
-namespace ChessTheBetrayal.Tests.EditMode
+namespace ChessTheBetrayal.Tests.EditMode.Support
 {
     /// <summary>
     /// Reports tournament progress through TestContext.Progress — NUnit's write-through progress

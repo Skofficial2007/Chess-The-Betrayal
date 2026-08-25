@@ -11,6 +11,7 @@ using ChessTheBetrayal.EditorTools.OpeningBook;
 using ChessTheBetrayal.Tooling.Benchmark;
 using ChessTheBetrayal.Tooling.Agreement;
 using ChessTheBetrayal.Tooling.Match;
+using ChessTheBetrayal.Tests.EditMode.Support;
 
 namespace ChessTheBetrayal.Tests.EditMode.Tooling.BookImport
 {

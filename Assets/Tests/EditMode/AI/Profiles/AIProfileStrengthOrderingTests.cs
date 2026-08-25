@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using NUnit.Framework;
 using ChessTheBetrayal.Tooling.Tournament;
 using ChessTheBetrayal.Tooling.Strength;
+using ChessTheBetrayal.Tests.EditMode.Support;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI.Profiles
 {

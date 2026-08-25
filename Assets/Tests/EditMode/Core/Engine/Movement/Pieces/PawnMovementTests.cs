@@ -4,7 +4,7 @@ using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Tooling;
 
-namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Movement
+namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Movement.Pieces
 {
     /// <summary>
     /// Unit tests for PawnMovement strategy and its integration with ChessEngine.
