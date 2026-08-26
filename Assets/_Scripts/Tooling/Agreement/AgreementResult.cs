@@ -57,10 +57,18 @@ namespace ChessTheBetrayal.Tooling.Agreement
 
         public readonly double SubjectElapsedMs;
 
+        /// <summary>
+        /// Whether the reference names the same move two plies shallower as it does at its own
+        /// depth. Where it does not, its answer here is a fact about the depth somebody chose
+        /// rather than about the position, and agreeing or disagreeing with it means nothing.
+        /// </summary>
+        public readonly bool ReferenceIsStable;
+
         public AgreementResult(int positionIndex, bool rawAgreed, bool selectedAgreed,
             MoveCommand rawMove, MoveCommand selectedMove, MoveCommand referenceMove,
             int subjectScoreCp, int referenceScoreCp, int depthReached, int depthCeiling,
-            int referenceDepth, bool blunderRollFired, double subjectElapsedMs)
+            int referenceDepth, bool blunderRollFired, double subjectElapsedMs,
+            bool referenceIsStable)
         {
             PositionIndex = positionIndex;
             RawAgreed = rawAgreed;
@@ -75,6 +83,7 @@ namespace ChessTheBetrayal.Tooling.Agreement
             ReferenceDepth = referenceDepth;
             BlunderRollFired = blunderRollFired;
             SubjectElapsedMs = subjectElapsedMs;
+            ReferenceIsStable = referenceIsStable;
         }
 
         /// <summary>

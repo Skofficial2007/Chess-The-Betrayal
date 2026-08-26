@@ -54,8 +54,48 @@ namespace ChessTheBetrayal.Tooling.Agreement
         }
 
         /// <summary>Fraction of positions where the search's own best move matched the reference.
-        /// An empty run reports 0 rather than dividing by zero.</summary>
+        /// An empty run reports 0 rather than dividing by zero. Counts every position, including any
+        /// the reference could not hold still on — see <see cref="RawAgreementWhereTheReferenceHeld"/>
+        /// for the same figure with those left out.</summary>
         public double RawAgreement => PositionCount == 0 ? 0.0 : (double)RawAgreedCount / PositionCount;
+
+        /// <summary>Positions where the reference names the same move two plies shallower as it does
+        /// at its own depth, so its answer is about the position rather than the depth.</summary>
+        public int StablePositionCount
+        {
+            get
+            {
+                int count = 0;
+                for (int i = 0; i < Results.Count; i++)
+                    if (Results[i].ReferenceIsStable) count++;
+                return count;
+            }
+        }
+
+        /// <summary>
+        /// Raw agreement counted only over the positions the reference held still on.
+        ///
+        /// The headline figure above divides by every position, which means a position where the
+        /// reference changes its mind between plies contributes a match or a miss decided by which
+        /// depth somebody picked. This is the same measurement with that noise left out, and where
+        /// the two figures disagree it is this one worth reading.
+        /// </summary>
+        public double RawAgreementWhereTheReferenceHeld
+        {
+            get
+            {
+                int stable = 0;
+                int agreed = 0;
+                for (int i = 0; i < Results.Count; i++)
+                {
+                    if (!Results[i].ReferenceIsStable) continue;
+                    stable++;
+                    if (Results[i].RawAgreed) agreed++;
+                }
+
+                return stable == 0 ? 0.0 : (double)agreed / stable;
+            }
+        }
 
         /// <summary>Fraction where the move the profile would actually play matched.</summary>
         public double SelectedAgreement => PositionCount == 0 ? 0.0 : (double)SelectedAgreedCount / PositionCount;
@@ -85,6 +125,10 @@ namespace ChessTheBetrayal.Tooling.Agreement
                 $"raw agreement {RawAgreedCount}/{PositionCount} ({RawAgreement:P1}), " +
                 $"as-played {SelectedAgreedCount}/{PositionCount} ({SelectedAgreement:P1}), " +
                 $"{CutShortCount} cut short of their depth ceiling.");
+            builder.AppendLine($"  Reference held still on {StablePositionCount}/{PositionCount}; " +
+                $"raw agreement over those alone {RawAgreementWhereTheReferenceHeld:P1}. Where this " +
+                "differs from the figure above, the difference is positions the reference answers " +
+                "differently from one ply to the next.");
 
             for (int i = 0; i < Results.Count; i++)
             {

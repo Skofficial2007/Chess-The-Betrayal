@@ -30,6 +30,66 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.Strength
         private static AIProfile TopTier => AIProfileTable.BuiltIn.Single(p => p.Id == "impossible");
 
         /// <summary>
+        /// The harness has to ask whether the reference held still, not leave it to whoever reads
+        /// the report. Some positions genuinely alternate their best move from one ply to the next,
+        /// and on those the reference reports the depth it was given rather than anything about the
+        /// position — so counting them into the headline figure buries parity noise inside it.
+        ///
+        /// The screen existed and nothing in the run consulted it: every result came back with the
+        /// question unanswered, and the number was an average over positions some of which could not
+        /// be agreed or disagreed with meaningfully.
+        /// </summary>
+        [Test]
+        public void EveryResultRecordsWhetherTheReferenceHeldStillOnThatPosition()
+        {
+            AIProfile subject = ProfileAtDepth(TopTier, TestReferenceDepth);
+            var oracle = new ReferenceMoveOracle(TopTier, TestReferenceDepth);
+
+            AgreementReport report = ReferenceAgreementRunner.Run(subject, oracle, TwoPositions);
+
+            var askedDirectly = new List<bool>();
+            foreach (int index in TwoPositions)
+            {
+                askedDirectly.Add(new ReferenceMoveOracle(TopTier, TestReferenceDepth)
+                    .IsStableAcrossDepths(CuratedPositionSuite.Build(index)));
+            }
+
+            Assert.That(report.Results.Select(r => r.ReferenceIsStable), Is.EqualTo(askedDirectly).AsCollection,
+                "The run's own answer about each position differs from asking the oracle directly, so " +
+                "the report is carrying something other than what the screen says.");
+            Assert.That(report.StablePositionCount, Is.EqualTo(askedDirectly.Count(stable => stable)));
+        }
+
+        /// <summary>
+        /// The two figures have to be able to differ, or reporting both says nothing. Built by hand
+        /// rather than measured: one position the reference held still on and agreed, one it did not
+        /// hold still on and disagreed. Counting everything gives half; counting what the reference
+        /// could actually speak to gives all of it.
+        /// </summary>
+        [Test]
+        public void AgreementOverStablePositionsIgnoresTheOnesTheReferenceCouldNotHold()
+        {
+            var results = new List<AgreementResult>
+            {
+                Result(positionIndex: 0, agreed: true, referenceIsStable: true),
+                Result(positionIndex: 1, agreed: false, referenceIsStable: false),
+            };
+            var report = new AgreementReport(results, "made-up", TestReferenceDepth);
+
+            Assert.That(report.RawAgreement, Is.EqualTo(0.5),
+                "The headline figure counts every position, which is what makes it the wrong one to read here.");
+            Assert.That(report.RawAgreementWhereTheReferenceHeld, Is.EqualTo(1.0));
+            Assert.That(report.StablePositionCount, Is.EqualTo(1));
+        }
+
+        private static AgreementResult Result(int positionIndex, bool agreed, bool referenceIsStable) =>
+            new AgreementResult(positionIndex, agreed, agreed,
+                default, default, default,
+                subjectScoreCp: 0, referenceScoreCp: 0, depthReached: TestReferenceDepth,
+                depthCeiling: TestReferenceDepth, referenceDepth: TestReferenceDepth,
+                blunderRollFired: false, subjectElapsedMs: 1.0, referenceIsStable: referenceIsStable);
+
+        /// <summary>
         /// A profile measured against a reference that thinks exactly as it does, searching just as
         /// deep, must agree everywhere. Any shortfall means the harness introduces a difference the
         /// two searches never had — which would make every later number it reports untrustworthy.
