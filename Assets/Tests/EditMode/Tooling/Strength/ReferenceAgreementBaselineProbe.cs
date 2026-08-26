@@ -22,8 +22,9 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.Strength
     /// the headline. On those the reference's answer is a fact about the depth that was searched,
     /// so counting them would mix ply parity into a strength figure.
     ///
-    /// Explicit: the reference costs roughly forty seconds per position at its default depth, so a
-    /// full sweep runs in minutes and has no place in a per-commit suite.
+    /// Explicit: the reference costs about eleven seconds per position at its default depth, and the
+    /// stability screen adds the two shallower searches on top, so a full sweep runs in minutes and
+    /// has no place in a per-commit suite.
     /// </summary>
     [TestFixture]
     [Explicit("Measurement only — run by hand to record an agreement baseline.")]
@@ -31,8 +32,8 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.Strength
     {
         /// <summary>
         /// Well past the default per-test limit, which a run like this exceeds several times over:
-        /// the reference alone costs tens of seconds per position and every case here sweeps the
-        /// whole set. Without this the measurement still completes and still logs its numbers, but
+        /// the reference alone costs about eleven seconds per position and every case here sweeps
+        /// the whole set. Without this the measurement still completes and still logs its numbers, but
         /// the case is reported as failed on time, which reads as a broken measurement rather than
         /// a long one.
         /// </summary>
