@@ -2,6 +2,7 @@ using System.Threading;
 using NUnit.Framework;
 using ChessTheBetrayal.AI.Search;
 using ChessTheBetrayal.AI.Evaluation;
+using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Tooling;
@@ -33,6 +34,54 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         // to noise, giving an effective no-TT baseline without touching AlphaBetaSearch's API.
         private AlphaBetaSearch NewSearchWithNegligibleTT() =>
             new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator(), transpositionTable: new TranspositionTable(log2Size: 1));
+
+        [Test]
+        public void TheMainSearchOrdersFromTheTableAndTrustsWhatItStored()
+        {
+            // TTProbes and TTHits are counted inside the table, so they cannot say WHO probed.
+            // Quiescence probes and stores several times more often than the main search does, which
+            // is why both of them stay comfortably above zero with the main search ignoring the
+            // table completely — an assertion on either one proves only that something, somewhere,
+            // looked. These two are incremented at the main search's own probe and nowhere else.
+            //
+            // What it costs when the main search stops reading the table is not subtle: on a fixed
+            // midgame position at depth 7 the same search goes from roughly 33k nodes to 219k, most
+            // of it move ordering collapsing and the reduction that only fires without a stored move
+            // firing everywhere and buying nothing.
+            var search = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator(),
+                transpositionTable: new TranspositionTable(log2Size: 16));
+            var settings = new AISearchSettings(maxDepth: 5, new AITimeBudget(60_000, 60_000), BetrayalUsage.Full);
+
+            search.FindBestMove(BoardSetup.CreateStandard(), settings, CancellationToken.None);
+
+            Assert.That(search.Stats.TTOrderingMoves, Is.GreaterThan(0),
+                "The main search never started a node from a move the table had already found there.");
+            Assert.That(search.Stats.TTDepthSufficientHits, Is.GreaterThan(0),
+                "The main search never believed a score the table had already searched deeply enough.");
+        }
+
+        [Test]
+        public void ASearchWithNothingStoredYetTakesNothingFromTheTableWhileStillProbingIt()
+        {
+            // The other side of the pair, and the demonstration of why the counters above had to
+            // exist. One ply deep on a cold table there is nothing for the main search to find, so
+            // both of its counters stay at zero — proving they are not simply always-on — while the
+            // table's own probe count climbs anyway, because quiescence is underneath doing its own
+            // probing and storing. A test asserting only that the table was probed would pass here,
+            // on a search that took nothing from it at all.
+            var search = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator(),
+                transpositionTable: new TranspositionTable(log2Size: 16));
+            var settings = new AISearchSettings(maxDepth: 1, new AITimeBudget(60_000, 60_000), BetrayalUsage.Full);
+
+            search.FindBestMove(BoardSetup.CreateStandard(), settings, CancellationToken.None);
+
+            Assert.That(search.Stats.TTOrderingMoves, Is.Zero,
+                "Nothing had been stored for the main search to order from yet.");
+            Assert.That(search.Stats.TTDepthSufficientHits, Is.Zero,
+                "Nothing had been stored deeply enough for the main search to believe yet.");
+            Assert.That(search.Stats.TTProbes, Is.GreaterThan(0),
+                "The table was never probed at all, so this says nothing about who was probing it.");
+        }
 
         [Test]
         public void FindBestMove_BackRankMateInOne_SameMoveWithAndWithoutEffectiveTT()

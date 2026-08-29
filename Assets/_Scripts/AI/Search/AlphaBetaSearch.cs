@@ -1042,10 +1042,16 @@ namespace ChessTheBetrayal.AI.Search
             {
                 // Always harvested for ordering, even on a depth-insufficient hit.
                 ttMove = ttPackedMove;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                if (ttMove != 0) _tt.Stats.TTOrderingMoves++;
+#endif
 
                 if (ttDepth >= depth)
                 {
                     int s = UnadjustMateScore(ttScore, plyFromRoot);
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                    _tt.Stats.TTDepthSufficientHits++;
+#endif
                     if (ttFlag == TTFlag.Exact) return s;
                     if (ttFlag == TTFlag.LowerBound && s > alpha) alpha = s;
                     if (ttFlag == TTFlag.UpperBound && s < beta) beta = s;

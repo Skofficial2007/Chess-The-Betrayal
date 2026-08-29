@@ -93,6 +93,16 @@ namespace ChessTheBetrayal.AI.Search
 
         public long IirReductions; // nodes given a shallower probe search to find an ordering move before the real search
 
+        // What the MAIN search got out of the table, as opposed to what quiescence did. TTProbes
+        // and TTHits above are counted inside the table itself and cannot tell the two apart, and
+        // quiescence probes and stores far more often than the main search does — so those two stay
+        // comfortably above zero even with the main search ignoring the table completely. These
+        // two do not: TTOrderingMoves counts nodes handed a move to try first, and
+        // TTDepthSufficientHits counts nodes that found a stored score searched deeply enough to be
+        // believed — whether that ended the node outright or only narrowed the window it searched.
+        public long TTOrderingMoves;
+        public long TTDepthSufficientHits;
+
         // Aspiration windows (experimental) — depths searched with a narrow guessed window, and how
         // many of those had to be thrown away and re-searched with the full window because the
         // guess was wrong (a fail-low or fail-high against the narrow bound).
@@ -342,7 +352,7 @@ namespace ChessTheBetrayal.AI.Search
         public override string ToString() =>
             $"depth={LastCompletedDepth} stopReason={StopReason} nodes={NodesVisited} tt(probe={TTProbes} hit={TTHits} emptyMiss={TTEmptyMisses} verifyMiss={TTVerificationMisses} store={TTStores} replace={TTReplacements}) " +
             $"null(try={NullMoveAttempts} cut={NullMoveCutoffs} skip(depth={NullMoveSkippedByDepth} guard={NullMoveSkippedByGuard} parentNull={NullMoveSkippedByParentNull} material={NullMoveSkippedByMaterial} beta={NullMoveSkippedByBeta})) lmr(reduce={LmrReductions} research={LmrReSearches}) pvs(scout={PvsScouts} research={PvsReSearches}) " +
-            $"fwdPrune(rfp={ReverseFutilityCutoffs} lmp={LateMovePrunes} ffp={FrontierFutilityPrunes}) betrayalExt={BetrayalExtensions} forcedDefection={ForcedDefectionResolutions} iir={IirReductions} " +
+            $"fwdPrune(rfp={ReverseFutilityCutoffs} lmp={LateMovePrunes} ffp={FrontierFutilityPrunes}) betrayalExt={BetrayalExtensions} forcedDefection={ForcedDefectionResolutions} iir={IirReductions} mainTT(order={TTOrderingMoves} deep={TTDepthSufficientHits}) " +
             $"cutoff(total={BetaCutoffs} firstMove={FirstMoveBetaCutoffs} rate={FirstMoveCutoffRate():F3}) " +
             $"aspiration(attempt={AspirationWindowAttempts} research={AspirationWindowReSearches}) " +
             $"q(nodes={QNodesVisited} betrayalRes={QBetrayalResolutionNodes} actExp={QActExpansions} gen={QMovesGenerated} searched={QMovesSearched} seePrune={SeeQuiescencePrunes}) " +
