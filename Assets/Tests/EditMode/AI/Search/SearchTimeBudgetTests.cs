@@ -7,6 +7,7 @@ using ChessTheBetrayal.AI.Evaluation;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Tooling;
+using ChessTheBetrayal.Tests.EditMode.Support;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI.Search
 {
@@ -24,6 +25,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
     /// TT persists per-match precisely to fight successive-turn escalation).
     /// </summary>
     [TestFixture]
+    // Plays consecutive turns against the clock they are budgeted by.
+    [Category(TestCategories.Slow)]
     public class SearchTimeBudgetTests
     {
         private ChessEngineAdapter _engine;

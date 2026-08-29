@@ -10,6 +10,7 @@ using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Gameplay.Manager;
 using ChessTheBetrayal.Tooling;
+using ChessTheBetrayal.Tests.EditMode.Support;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI.Profiles
 {
@@ -20,6 +21,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Profiles
     /// would otherwise push it toward.
     /// </summary>
     [TestFixture]
+    // Plays a full match to show an Act never appears in one.
+    [Category(TestCategories.Slow)]
     public class BetrayalDisabledProfileTests
     {
         private const int PollTimeoutMs = 10_000;

@@ -9,6 +9,7 @@ using ChessTheBetrayal.AI.Evaluation;
 using ChessTheBetrayal.AI.Positions;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
+using ChessTheBetrayal.Tests.EditMode.Support;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
 {
@@ -37,6 +38,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
     /// </summary>
     [TestFixture]
     [Explicit("Measurement only - fixed-depth searches with no time budget.")]
+    [Category(TestCategories.OnDemand)]
     public class WeightedEvaluatorCostProbe
     {
         private const int TimeoutMs = 900_000;

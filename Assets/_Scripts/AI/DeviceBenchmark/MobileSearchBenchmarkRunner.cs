@@ -9,6 +9,7 @@ using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.AI.Search;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
+using ChessTheBetrayal.AI.Agent;
 
 namespace ChessTheBetrayal.AI.DeviceBenchmark
 {
@@ -61,11 +62,12 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         // minute of the run they landed in.
         private readonly Stopwatch _runElapsed = Stopwatch.StartNew();
 
-        // Matches AsyncAIAgent's production sizing (~16 MB). AlphaBetaSearch's own default
-        // (log2Size: 16, ~1 MB) exists for lightweight callers that don't care about move-ordering
-        // quality — a real match never uses it, so measuring against it understates how deep a
-        // device actually searches.
-        internal const int ProductionTranspositionTableLog2Size = 20;
+        // Read from the agent rather than copied, so the two cannot drift apart the way a second
+        // literal would. AlphaBetaSearch's own default (log2Size: 16, ~1 MB) exists for lightweight
+        // callers that do not care about move-ordering quality — a real match never uses it, so
+        // measuring against it understates how deep a device actually searches.
+        internal const int ProductionTranspositionTableLog2Size =
+            AsyncAIAgent.ProductionTranspositionTableLog2Size;
 
         /// <summary>How many distinct positions a cell index can address: every curated opening
         /// line plus the two hand-placed positions in DepthWallPositions.</summary>
@@ -145,8 +147,16 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         /// call sites below need the identical shape, so it exists once here rather than twice.
         /// </summary>
         internal static AlphaBetaSearch BuildSearch(IChessEngine engine, AIProfile profile) =>
-            new AlphaBetaSearch(engine, new BetrayalAwareEvaluator(EvaluationWeights.FromProfile(profile)),
+            new AlphaBetaSearch(engine, EvaluatorFor(profile),
                 transpositionTable: new TranspositionTable(log2Size: ProductionTranspositionTableLog2Size));
+
+        /// <summary>
+        /// The evaluator a profile actually plays with, weighted by its own dials. Split out so it
+        /// can be scored directly: every tier used to be measured against the identity evaluator,
+        /// which made an aggressive tier's numbers describe a player nobody faces.
+        /// </summary>
+        internal static IPositionEvaluator EvaluatorFor(AIProfile profile) =>
+            new BetrayalAwareEvaluator(EvaluationWeights.FromProfile(profile));
 
         /// <summary>
         /// Full for the single cold search: nothing here gets applied to a board afterwards, so
@@ -363,7 +373,7 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             var engine = new ChessEngineAdapter();
             var search = BuildSearch(engine, profile);
             AISearchSettings settings = SingleMoveSettingsFor(profile);
-            int rescoreMargin = Math.Max(profile.BlunderMarginCp, profile.TieBreakWindowCp);
+            int rescoreMargin = profile.RescoreMarginCp;
 
             MoveCommand best = TimedSearch(search, board, settings, rescoreMargin, out SearchTiming timing);
             RecordTiming(profile.Id, threadLabel, timing);
@@ -377,7 +387,7 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             var engine = new ChessEngineAdapter();
             var search = BuildSearch(engine, profile);
             AISearchSettings settings = MultiMoveSettingsFor(profile);
-            int rescoreMargin = Math.Max(profile.BlunderMarginCp, profile.TieBreakWindowCp);
+            int rescoreMargin = profile.RescoreMarginCp;
             var legalMoves = new List<MoveCommand>();
 
             for (int ply = 0; ply < plyCount; ply++)

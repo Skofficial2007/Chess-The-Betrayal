@@ -53,6 +53,14 @@ namespace ChessTheBetrayal.AI.Agent
         private readonly IChessEngine _engine;
         private readonly AlphaBetaSearch _search;
         private readonly AISearchSettings _settings;
+        /// <summary>
+        /// The transposition table a real match runs on: 2^20 entries, about 16 MB. Named here
+        /// because the benchmark and the match simulator both have to allocate the same size or
+        /// they measure worse move ordering than a player ever sees, and a second literal in each
+        /// of them is a coupling nothing can check. Mobile sizing is still an open question.
+        /// </summary>
+        public const int ProductionTranspositionTableLog2Size = 20;
+
         private readonly TranspositionTable _tt;
         private readonly AIProfile _profile;
         private readonly IRandomSource _rng;
@@ -155,7 +163,7 @@ namespace ChessTheBetrayal.AI.Agent
             // match — this is what attacks the successive-turn escalation the TT is built for.
             // A fresh AsyncAIAgent (one per match, via AIMatchCoordinator.SetAIMode) gets a fresh
             // table for free; there is no need to clear it mid-match.
-            _tt = new TranspositionTable(log2Size: 20); // ~16 MB desktop; mobile sizing TBD via settings
+            _tt = new TranspositionTable(ProductionTranspositionTableLog2Size);
             _engine = engine;
             _search = new AlphaBetaSearch(engine, evaluator, transpositionTable: _tt);
             _settings = settings;
@@ -216,7 +224,7 @@ namespace ChessTheBetrayal.AI.Agent
                     // handful of candidates SelectFinalMove might actually pick. Zero for the
                     // convenience-ctor/zero-dial (Impossible tier) path, which skips the rescore
                     // pass entirely and so pays nothing for it.
-                    int rescoreMargin = Math.Max(_profile.BlunderMarginCp, _profile.TieBreakWindowCp);
+                    int rescoreMargin = _profile.RescoreMarginCp;
                     MoveCommand best = _search.FindBestMove(isolated, _settings, token, rescoreMargin,
                         enableInstabilityTimeManagement: true);
 

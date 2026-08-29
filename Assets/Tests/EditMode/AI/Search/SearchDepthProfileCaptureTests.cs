@@ -5,6 +5,7 @@ using ChessTheBetrayal.AI.Evaluation;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Tooling;
+using ChessTheBetrayal.Tests.EditMode.Support;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI.Search
 {
@@ -28,6 +29,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
     /// </summary>
     [TestFixture]
     [Explicit("Recording harness — run manually and read the per-depth profile from the log.")]
+    [Category(TestCategories.OnDemand)]
     public class SearchDepthProfileCaptureTests
     {
         private ChessEngineAdapter _engine;

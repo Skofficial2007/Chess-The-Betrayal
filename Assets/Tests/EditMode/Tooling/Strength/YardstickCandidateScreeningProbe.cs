@@ -7,6 +7,7 @@ using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Tooling.Agreement;
 using ChessTheBetrayal.Tooling.Strength;
+using ChessTheBetrayal.Tests.EditMode.Support;
 
 namespace ChessTheBetrayal.Tests.EditMode.Tooling.Strength
 {
@@ -32,6 +33,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.Strength
     /// </summary>
     [TestFixture]
     [Explicit("Measurement only — run by hand when growing the yardstick suite.")]
+    [Category(TestCategories.OnDemand)]
     public class YardstickCandidateScreeningProbe
     {
         private static AIProfile TopTier => AIProfileTable.BuiltIn.Single(p => p.Id == "impossible");

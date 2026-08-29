@@ -9,6 +9,7 @@ using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.Tooling.Benchmark;
 using ChessTheBetrayal.Tooling.Match;
 using ChessTheBetrayal.Tooling.Tournament;
+using ChessTheBetrayal.Tests.EditMode.Support;
 
 namespace ChessTheBetrayal.Tests.EditMode.Tooling.Tournament
 {
@@ -24,6 +25,8 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.Tournament
     /// real wall-clock timing is never reproducible move-for-move regardless of time control.
     /// </summary>
     [TestFixture]
+    // Runs whole tournaments twice over, sequentially and in parallel, to prove the scheduling cannot change the result.
+    [Category(TestCategories.Slow)]
     public class ParallelTournamentExecutorTests
     {
         private const int TestPlyCap = 12;

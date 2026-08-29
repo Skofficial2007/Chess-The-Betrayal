@@ -11,6 +11,7 @@ using ChessTheBetrayal.EditorTools.OpeningBook;
 using ChessTheBetrayal.Tooling.Benchmark;
 using ChessTheBetrayal.Tooling.Agreement;
 using ChessTheBetrayal.Tooling.Match;
+using ChessTheBetrayal.Tests.EditMode.Support;
 
 namespace ChessTheBetrayal.Tests.EditMode.Tooling.BookImport
 {
@@ -197,6 +198,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.BookImport
         /// </summary>
         [Test]
         [Explicit("Plays 240 real games — run on demand.")]
+        [Category(TestCategories.OnDemand)]
         [Timeout(3 * 60 * 60 * 1000)]
         public void BookImpact_Scan_FortyGamesPerTier()
         {
@@ -212,6 +214,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.BookImport
         /// </summary>
         [Test]
         [Explicit("Plays 1200 real games and takes hours — run on demand.")]
+        [Category(TestCategories.OnDemand)]
         [Timeout(8 * 60 * 60 * 1000)]
         public void BookImpact_Full_TwoHundredGamesPerTier()
         {
@@ -235,6 +238,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.BookImport
         /// </summary>
         [Test]
         [Explicit("Plays 400 real games — run on demand.")]
+        [Category(TestCategories.OnDemand)]
         [Timeout(4 * 60 * 60 * 1000)]
         public void BookImpact_Targeted_NormalAndAggressive()
         {
@@ -279,6 +283,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.BookImport
         /// </summary>
         [Test]
         [Explicit("Runs deep reference searches over sampled book positions — run on demand.")]
+        [Category(TestCategories.OnDemand)]
         [Timeout(4 * 60 * 60 * 1000)]
         public void BookAgreement_AgainstADeeperSearch_PerTier()
         {

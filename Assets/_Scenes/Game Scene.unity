@@ -19523,9 +19523,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GameManager
   logMoves: 1
-  enableQAButton: 1
+  enableQAButton: 0
   _openingBook: {fileID: 11400000, guid: b3ce5f2087b4e8343ac2986ee8b65488, type: 2}
-  enableAiTelemetrySharing: 1
+  enableAiTelemetrySharing: 0
   _betrayalBountyBulletMs: 3000
   _betrayalBountyBullet2Ms: 5000
   _betrayalBountyBlitzMs: 8000

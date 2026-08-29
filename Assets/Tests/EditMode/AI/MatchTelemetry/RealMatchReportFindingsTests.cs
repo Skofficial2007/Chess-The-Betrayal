@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
@@ -9,6 +8,7 @@ using ChessTheBetrayal.AI.Evaluation;
 using ChessTheBetrayal.AI.Positions;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
+using ChessTheBetrayal.Tests.EditMode.Support;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI.MatchTelemetry
 {
@@ -23,6 +23,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.MatchTelemetry
     /// together with the numbers a player actually gets.
     /// </summary>
     [TestFixture]
+    // Reproduces what a real match surfaced, through the production entry points and with the tier's own budget.
+    [Category(TestCategories.Slow)]
     public class RealMatchReportFindingsTests
     {
         private static readonly Vector2Int F3 = new Vector2Int(5, 2);
@@ -114,7 +116,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.MatchTelemetry
             IChessEngine engine = new ChessEngineAdapter();
             AIProfile profile = new AIProfileTableProvider().Resolve("hard");
             AISearchSettings settings = AISearchSettings.FromProfile(BetrayalUsage.Full, profile);
-            int rescoreMargin = Math.Max(profile.BlunderMarginCp, profile.TieBreakWindowCp);
+            int rescoreMargin = profile.RescoreMarginCp;
 
             var search = new AlphaBetaSearch(engine, new BetrayalAwareEvaluator(EvaluationWeights.FromProfile(profile)));
             BoardState board = DepthWallPositions.QuietMidgame();
@@ -161,7 +163,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.MatchTelemetry
             IChessEngine engine = new ChessEngineAdapter();
             AIProfile profile = new AIProfileTableProvider().Resolve("hard");
             AISearchSettings settings = AISearchSettings.FromProfile(BetrayalUsage.Full, profile);
-            int rescoreMargin = Math.Max(profile.BlunderMarginCp, profile.TieBreakWindowCp);
+            int rescoreMargin = profile.RescoreMarginCp;
 
             var search = new AlphaBetaSearch(engine, new BetrayalAwareEvaluator(EvaluationWeights.FromProfile(profile)));
             BoardState board = DepthWallPositions.QuietMidgame();
@@ -193,7 +195,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.MatchTelemetry
             IChessEngine engine = new ChessEngineAdapter();
             AIProfile profile = Aggressive();
             AISearchSettings settings = AISearchSettings.FromProfile(BetrayalUsage.Full, profile);
-            int rescoreMargin = Math.Max(profile.BlunderMarginCp, profile.TieBreakWindowCp);
+            int rescoreMargin = profile.RescoreMarginCp;
 
             long withoutRescoreMs = TimeDepthBoundSearch(engine, profile, settings, candidateRescoreMarginCp: 0);
             long withRescoreMs = TimeDepthBoundSearch(engine, profile, settings, rescoreMargin);
@@ -226,7 +228,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.MatchTelemetry
             foreach (AIProfile profile in AIProfileTable.BuiltIn)
             {
                 AISearchSettings settings = AISearchSettings.FromProfile(BetrayalUsage.Full, profile);
-                int margin = Math.Max(profile.BlunderMarginCp, profile.TieBreakWindowCp);
+                int margin = profile.RescoreMarginCp;
 
                 long plainMs = TimeBudgetedSearch(engine, profile, settings, 0, out _, out _, out int plainDepth);
                 long rescoredMs = TimeBudgetedSearch(engine, profile, settings, margin,

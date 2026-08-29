@@ -9,6 +9,7 @@ using ChessTheBetrayal.AI.Evaluation;
 using ChessTheBetrayal.AI.Positions;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
+using ChessTheBetrayal.Tests.EditMode.Support;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI.Search
 {
@@ -32,6 +33,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
     /// without costing more than it saves.
     /// </summary>
     [TestFixture]
+    // Walks every tier through a real rescore pass against its own deadline.
+    [Category(TestCategories.Slow)]
     public class RescoreBudgetTests
     {
         /// <summary>One turn's worth of measurements, gathered together so the helper below keeps a
@@ -56,9 +59,6 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             public bool PassWasCutShort => Settled < RootMoves;
         }
 
-        private static int RescoreMarginFor(AIProfile profile) =>
-            Math.Max(profile.BlunderMarginCp, profile.TieBreakWindowCp);
-
         [Test]
         public void EveryTierWithDials_ChoosesFromItsWholeTieBreakWindow()
         {
@@ -71,7 +71,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
 
             foreach (AIProfile profile in AIProfileTable.BuiltIn)
             {
-                int margin = RescoreMarginFor(profile);
+                int margin = profile.RescoreMarginCp;
 
                 // A tier with no dials never runs the pass, so it has nothing to be judged on here.
                 if (margin <= 0) continue;

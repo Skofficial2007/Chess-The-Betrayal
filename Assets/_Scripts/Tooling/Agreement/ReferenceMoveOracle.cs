@@ -30,11 +30,17 @@ namespace ChessTheBetrayal.Tooling.Agreement
         /// peer opinion rather than an oracle. The deepest configured profile ceiling is 9, so this
         /// clears every one of them rather than matching them.
         ///
-        /// Measured cost on ordinary midgame positions climbs roughly two and a half times per ply:
-        /// about 14s per position at depth 9, 40s at 10, 93s at 11 and 227s at 12. Depth 10 is the
-        /// chosen balance — clear of every profile ceiling, and cheap enough that a full set can be
-        /// answered in minutes rather than hours. Going deeper is affordable for a one-off
-        /// investigation, which is why this is a default rather than a fixed value.
+        /// Cost per position, re-measured after the search speed work: roughly 3.3s at depth 9,
+        /// 10.7s at 10, 20.3s at 11 and 27.2s at 12. The curve FLATTENS above depth 10 rather than
+        /// climbing steeply — each extra ply costs proportionally less than the one before it, so a
+        /// depth-12 reference is about two and a half times a depth-10 one rather than the ten-fold
+        /// multiple the pre-speed-work numbers implied.
+        ///
+        /// Depth 10 is where this sits today, which is a balance struck against the older, far
+        /// steeper curve. It is worth revisiting: the reference has NOT converged on the curated
+        /// positions — some answer differently at 10, 11 and 12 — and an oracle that still changes
+        /// its mind is reporting which depth it searched as much as what the position holds. See
+        /// Docs/Benchmarks/agreement-baseline.md, which carries both the curve and the evidence.
         /// </summary>
         public const int DefaultReferenceDepth = 10;
 

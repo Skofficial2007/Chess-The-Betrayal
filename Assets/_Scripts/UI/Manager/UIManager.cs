@@ -229,7 +229,10 @@ namespace ChessTheBetrayal.UI.Manager
 
         #region State Checks
 
-        public bool IsUIBlocking()
+        public bool IsUIBlocking() =>
+            BoardInputBlocking.BlocksTheBoard(APanelIsCoveringTheBoard(), _confirmations);
+
+        private bool APanelIsCoveringTheBoard()
         {
             if (gameModeSelectionUI != null && gameModeSelectionUI.gameObject.activeSelf)
             {
@@ -257,15 +260,6 @@ namespace ChessTheBetrayal.UI.Manager
             }
 
             if (mainMenuUI != null && mainMenuUI.gameObject.activeSelf)
-            {
-                return true;
-            }
-
-            // A question on screen has to stop the board reacting too. It already blocks anything
-            // drawn on this canvas, but a tap on the board is a raycast into the world that knows
-            // nothing about canvases — without this, tapping twice through the dimmed panel picks up
-            // a piece and lights its moves behind the very question asking about the last one.
-            if (_confirmations != null && _confirmations.IsOpen)
             {
                 return true;
             }

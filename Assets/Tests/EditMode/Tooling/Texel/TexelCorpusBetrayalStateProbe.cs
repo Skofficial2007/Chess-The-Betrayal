@@ -7,6 +7,7 @@ using ChessTheBetrayal.EditorTools.Benchmark;
 using UnityEngine;
 using ChessTheBetrayal.Tooling.Strength;
 using ChessTheBetrayal.Tooling.Texel;
+using ChessTheBetrayal.Tests.EditMode.Support;
 
 namespace ChessTheBetrayal.Tests.EditMode.Tooling.Texel
 {
@@ -19,6 +20,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.Texel
     /// </summary>
     [TestFixture]
     [Explicit("Plays a real generation pass at production time budgets — minutes, not a per-commit cost.")]
+    [Category(TestCategories.OnDemand)]
     public class TexelCorpusBetrayalStateProbe
     {
         [Test]

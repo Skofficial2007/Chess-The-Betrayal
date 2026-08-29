@@ -9,6 +9,7 @@ using ChessTheBetrayal.AI.Evaluation;
 using ChessTheBetrayal.AI.Positions;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
+using ChessTheBetrayal.Tests.EditMode.Support;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI.Search
 {
@@ -37,6 +38,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
     /// </summary>
     [TestFixture]
     [Explicit("Measurement only - runs unbounded searches to establish the true tie-break window.")]
+    [Category(TestCategories.OnDemand)]
     public class RescoreDeadlineDecisionProbe
     {
         private const int TimeoutMs = 600_000;
@@ -68,7 +70,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
                 {
                     AIProfile profile = provider.Resolve(tierId);
                     AISearchSettings settings = AISearchSettings.FromProfile(BetrayalUsage.Full, profile);
-                    int margin = Math.Max(profile.BlunderMarginCp, profile.TieBreakWindowCp);
+                    int margin = profile.RescoreMarginCp;
 
                     // The reference: no clock, no cancellation, so every candidate is settled and the
                     // window it reports is the real one.

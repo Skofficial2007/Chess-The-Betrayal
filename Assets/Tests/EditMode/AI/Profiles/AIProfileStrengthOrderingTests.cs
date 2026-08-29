@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using NUnit.Framework;
 using ChessTheBetrayal.Tooling.Tournament;
 using ChessTheBetrayal.Tooling.Strength;
+using ChessTheBetrayal.Tests.EditMode.Support;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI.Profiles
 {
@@ -21,6 +22,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Profiles
     /// reported honestly instead of being turned into a pass or a fail.
     /// </summary>
     [TestFixture]
+    // Plays sixteen real games per pairing; the budget cannot be squeezed without deleting the depth difference being measured.
+    [Category(TestCategories.Slow)]
     public class AIProfileStrengthGateTests
     {
         // A genuinely inverted tier shows up far below half — the bug this exists to catch had the
@@ -76,25 +79,26 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Profiles
     /// being the fast thing to run on demand, with the large suite as the deliberate slow opt-in
     /// below. Its win rate carries a wide confidence interval at this sample size; a shortfall below
     /// the floor is only reported as a genuine failure when the floor sits outside that interval —
-    /// see StrengthLadder.AssertStrongerScoresAtLeast.
+    /// see StrengthLadder.AssertStrongerStaysAboveTheFloor.
     /// </summary>
     [TestFixture]
     [Explicit("Quick AI-vs-AI ladder check at each tier's real per-move budget, small sample — run on demand.")]
+    [Category(TestCategories.OnDemand)]
     [Timeout(10 * 60 * 1000)]
     public class AIProfileStrengthQuickTests
     {
-        [Test] public void Normal_ScoresAtLeastSixtyPercent_AgainstEasy() =>
-            StrengthLadder.AssertStrongerScoresAtLeast("normal", "easy", pairIndex: 0, StrengthLadder.QuickPositionCount);
-        [Test] public void Hard_ScoresAtLeastSixtyPercent_AgainstNormal() =>
-            StrengthLadder.AssertStrongerScoresAtLeast("hard", "normal", pairIndex: 1, StrengthLadder.QuickPositionCount);
-        [Test] public void Extreme_ScoresAtLeastSixtyPercent_AgainstHard() =>
-            StrengthLadder.AssertStrongerScoresAtLeast("extreme", "hard", pairIndex: 2, StrengthLadder.QuickPositionCount);
-        [Test] public void Impossible_ScoresAtLeastSixtyPercent_AgainstExtreme() =>
-            StrengthLadder.AssertStrongerScoresAtLeast("impossible", "extreme", pairIndex: 3, StrengthLadder.QuickPositionCount);
-        [Test] public void Aggressive_ScoresAtLeastSixtyPercent_AgainstNormal() =>
-            StrengthLadder.AssertStrongerScoresAtLeast("aggressive", "normal", pairIndex: 4, StrengthLadder.QuickPositionCount);
-        [Test] public void Aggressive_ScoresAtLeastSixtyPercent_AgainstEasy() =>
-            StrengthLadder.AssertStrongerScoresAtLeast("aggressive", "easy", pairIndex: 5, StrengthLadder.QuickPositionCount);
+        [Test] public void Normal_StaysAboveTheStrengthFloor_AgainstEasy() =>
+            StrengthLadder.AssertStrongerStaysAboveTheFloor("normal", "easy", pairIndex: 0, StrengthLadder.QuickPositionCount);
+        [Test] public void Hard_StaysAboveTheStrengthFloor_AgainstNormal() =>
+            StrengthLadder.AssertStrongerStaysAboveTheFloor("hard", "normal", pairIndex: 1, StrengthLadder.QuickPositionCount);
+        [Test] public void Extreme_StaysAboveTheStrengthFloor_AgainstHard() =>
+            StrengthLadder.AssertStrongerStaysAboveTheFloor("extreme", "hard", pairIndex: 2, StrengthLadder.QuickPositionCount);
+        [Test] public void Impossible_StaysAboveTheStrengthFloor_AgainstExtreme() =>
+            StrengthLadder.AssertStrongerStaysAboveTheFloor("impossible", "extreme", pairIndex: 3, StrengthLadder.QuickPositionCount);
+        [Test] public void Aggressive_StaysAboveTheStrengthFloor_AgainstNormal() =>
+            StrengthLadder.AssertStrongerStaysAboveTheFloor("aggressive", "normal", pairIndex: 4, StrengthLadder.QuickPositionCount);
+        [Test] public void Aggressive_StaysAboveTheStrengthFloor_AgainstEasy() =>
+            StrengthLadder.AssertStrongerStaysAboveTheFloor("aggressive", "easy", pairIndex: 5, StrengthLadder.QuickPositionCount);
     }
 
     /// <summary>
@@ -106,6 +110,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Profiles
     /// </summary>
     [TestFixture]
     [Explicit("Full-suite AI-vs-AI tournament at each tier's real per-move budget — run on demand, not per commit.")]
+    [Category(TestCategories.OnDemand)]
     // A hard backstop only — StrengthLadder.PlayWinRate has no watchdog of its own (that lives in
     // BenchmarkRunner's parallel path, not this direct Parallel.For call), so nothing else here
     // catches a genuine deadlock. This should never actually fire: if it does, something is stuck
@@ -113,17 +118,17 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Profiles
     [Timeout(20 * 60 * 1000)]
     public class AIProfileStrengthOrderingTests
     {
-        [Test] public void Normal_ScoresAtLeastSixtyPercent_AgainstEasy() =>
-            StrengthLadder.AssertStrongerScoresAtLeast("normal", "easy", pairIndex: 0, CuratedPositionSuite.Count);
-        [Test] public void Hard_ScoresAtLeastSixtyPercent_AgainstNormal() =>
-            StrengthLadder.AssertStrongerScoresAtLeast("hard", "normal", pairIndex: 1, CuratedPositionSuite.Count);
-        [Test] public void Extreme_ScoresAtLeastSixtyPercent_AgainstHard() =>
-            StrengthLadder.AssertStrongerScoresAtLeast("extreme", "hard", pairIndex: 2, CuratedPositionSuite.Count);
-        [Test] public void Impossible_ScoresAtLeastSixtyPercent_AgainstExtreme() =>
-            StrengthLadder.AssertStrongerScoresAtLeast("impossible", "extreme", pairIndex: 3, CuratedPositionSuite.Count);
-        [Test] public void Aggressive_ScoresAtLeastSixtyPercent_AgainstNormal() =>
-            StrengthLadder.AssertStrongerScoresAtLeast("aggressive", "normal", pairIndex: 4, CuratedPositionSuite.Count);
-        [Test] public void Aggressive_ScoresAtLeastSixtyPercent_AgainstEasy() =>
-            StrengthLadder.AssertStrongerScoresAtLeast("aggressive", "easy", pairIndex: 5, CuratedPositionSuite.Count);
+        [Test] public void Normal_StaysAboveTheStrengthFloor_AgainstEasy() =>
+            StrengthLadder.AssertStrongerStaysAboveTheFloor("normal", "easy", pairIndex: 0, CuratedPositionSuite.Count);
+        [Test] public void Hard_StaysAboveTheStrengthFloor_AgainstNormal() =>
+            StrengthLadder.AssertStrongerStaysAboveTheFloor("hard", "normal", pairIndex: 1, CuratedPositionSuite.Count);
+        [Test] public void Extreme_StaysAboveTheStrengthFloor_AgainstHard() =>
+            StrengthLadder.AssertStrongerStaysAboveTheFloor("extreme", "hard", pairIndex: 2, CuratedPositionSuite.Count);
+        [Test] public void Impossible_StaysAboveTheStrengthFloor_AgainstExtreme() =>
+            StrengthLadder.AssertStrongerStaysAboveTheFloor("impossible", "extreme", pairIndex: 3, CuratedPositionSuite.Count);
+        [Test] public void Aggressive_StaysAboveTheStrengthFloor_AgainstNormal() =>
+            StrengthLadder.AssertStrongerStaysAboveTheFloor("aggressive", "normal", pairIndex: 4, CuratedPositionSuite.Count);
+        [Test] public void Aggressive_StaysAboveTheStrengthFloor_AgainstEasy() =>
+            StrengthLadder.AssertStrongerStaysAboveTheFloor("aggressive", "easy", pairIndex: 5, CuratedPositionSuite.Count);
     }
 }

@@ -17,7 +17,7 @@ That tree is far too big to walk completely, and **alpha-beta pruning** is what 
 The moment one reply proves a branch is worse than something already found, the rest of that branch
 goes unexamined, because nothing in it can change the decision. That early stop is a **cutoff**, and
 causing more of them sooner is what almost every technique below is for.
-`Assets/_Scripts/AI/AlphaBetaSearch.cs`.
+`Assets/_Scripts/AI/Search/AlphaBetaSearch.cs`.
 
 ### What a position is worth
 
@@ -26,7 +26,7 @@ or penalty per piece for the square it stands on so a knight in the centre beats
 add a little for holding an unspent Betrayal right. Positive means good for the side being scored.
 
 It is deliberately simple. The strength here comes from searching deeply, not from a clever
-evaluation. `Assets/_Scripts/AI/BetrayalAwareEvaluator.cs`.
+evaluation. `Assets/_Scripts/AI/Evaluation/BetrayalAwareEvaluator.cs`.
 
 ### The Betrayal moves, and why the search treats them specially
 
@@ -87,13 +87,13 @@ depth's move, so being stopped is never a wasted search.
 
 One consequence worth knowing before tuning anything: on a middlegame position at three seconds, the
 four deep tiers can all bottom out at the same depth, in which case what separates them is their
-personality dials rather than their search. `Assets/_Scripts/AI/AIProfileTable.cs`.
+personality dials rather than their search. `Assets/_Scripts/AI/Profiles/AIProfileTable.cs`.
 
 ## What makes it fast
 
 These compose in roughly this order. Iterative deepening drives the whole thing, the table and the
 ordering decide what gets looked at first, and the pruning family decides what gets skipped
-entirely. Unless noted, all of it lives in `Assets/_Scripts/AI/AlphaBetaSearch.cs`.
+entirely. Unless noted, all of it lives in `Assets/_Scripts/AI/Search/AlphaBetaSearch.cs`.
 
 ### Transposition table
 
@@ -107,7 +107,7 @@ Betrayal sub-state, a position mid-sequence never collides with the same board o
 
 Costs memory: sixteen megabytes in a real match. It lives for the whole match on purpose, since that
 persistence is what stops each move re-deriving the previous move's work.
-`Assets/_Scripts/AI/TranspositionTable.cs`.
+`Assets/_Scripts/AI/Search/TranspositionTable.cs`.
 
 ### Move ordering
 
@@ -148,7 +148,7 @@ The classic algorithm assumes the two sides simply alternate on the contested sq
 exactly what a pending Betrayer breaks — a Retribution capture is played by an ally of the piece that
 Acted, not by the opponent, so "whose turn is next" and "who benefits" come apart. Every call site
 checks for a pending Betrayer first and falls back to plain material-difference ordering when one
-exists. `Assets/_Scripts/AI/StaticExchangeEvaluation.cs`.
+exists. `Assets/_Scripts/AI/Search/StaticExchangeEvaluation.cs`.
 
 ### Null move pruning
 
@@ -238,7 +238,7 @@ and it is the promise to the player: three seconds at most, every tier. **Soft**
 aims for, and the gap between them is the room a genuinely tactical position is allowed to spend.
 
 Without two numbers, "stay a little longer to be sure" and "no cap at all" are the same thing.
-`Assets/_Scripts/AI/AITimeBudget.cs`.
+`Assets/_Scripts/AI/Profiles/AITimeBudget.cs`.
 
 ### Instability time management
 
@@ -267,7 +267,7 @@ got faster" is an anecdote, and there is no way to tell a technique that is work
 silently disabled.
 
 Every increment sits behind an editor or development-build guard, so a release build pays nothing for
-the counting — not even a branch. `Assets/_Scripts/AI/SearchStats.cs`.
+the counting — not even a branch. `Assets/_Scripts/AI/Search/SearchStats.cs`.
 
 ## What is verified, and what is not
 

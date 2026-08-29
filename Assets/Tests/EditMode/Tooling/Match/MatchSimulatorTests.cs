@@ -10,6 +10,7 @@ using ChessTheBetrayal.Tooling.Agreement;
 using ChessTheBetrayal.Tooling.Match;
 using ChessTheBetrayal.Tooling.Strength;
 using ChessTheBetrayal.Tooling.Tournament;
+using ChessTheBetrayal.Tests.EditMode.Support;
 
 namespace ChessTheBetrayal.Tests.EditMode.Tooling.Match
 {
@@ -20,6 +21,8 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.Match
     /// tournaments and is too slow for the routine per-commit suite.
     /// </summary>
     [TestFixture]
+    // Plays games; it is the simulator every tournament runs on.
+    [Category(TestCategories.Slow)]
     public class MatchSimulatorTests
     {
         private static AIProfile Fast(string id, int maxDepth) =>

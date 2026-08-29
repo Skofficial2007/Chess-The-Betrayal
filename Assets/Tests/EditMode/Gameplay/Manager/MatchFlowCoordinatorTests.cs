@@ -7,6 +7,7 @@ using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.Core.Randomness;
 using ChessTheBetrayal.Gameplay.Manager;
+using ChessTheBetrayal.Tooling;
 using Vector2Int = ChessTheBetrayal.Core.Data.Vector2Int;
 
 namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
@@ -108,6 +109,43 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         {
             _aiCoordinator.Dispose();
             if (_host != null) Object.DestroyImmediate(_host);
+        }
+
+        private MoveCommand QuietMove(string from, string to)
+        {
+            Vector2Int start = BoardSetup.AlgebraicToVector(from);
+            Vector2Int end = BoardSetup.AlgebraicToVector(to);
+            return MoveCommand.CreateStandardMove(start, end, _board.GetPiece(start), _board.GetPiece(end), _board);
+        }
+
+        [Test]
+        public void AMatchStartedAfterOneLeftMidBetrayalNumbersItsFirstPlyFromScratch()
+        {
+            // Leaving is allowed mid-game — TearDownCurrentMatch has a branch that dumps the
+            // position when it happens — so a player can walk out during a Betrayal and start
+            // again. The number pinned for that sequence is part of the half-finished turn a new
+            // match clears, and left behind it becomes the number the next game's first ply is
+            // written down under, on a board where nothing has happened yet.
+            _matchFlow.ConfigureMatch(null);
+            _board.CurrentTurn = Team.White;
+            _matchFlow.BeginPlay();
+
+            BetrayalScenario.ArrangeOneThatForcesASave(_board);
+            _matchDriver.PlayMove(QuietMove("a2", "a3"));
+            _matchDriver.PlayMove(QuietMove("a7", "a6"));
+            _matchDriver.PlayMove(BetrayalScenario.TheActThatStartsIt(_board));
+
+            Assume.That(_matchDriver.CurrentPhase, Is.EqualTo(TurnPhase.ForcedSave),
+                "The abandoned game has to be part-way through a Betrayal for this to mean anything.");
+
+            _matchFlow.ConfigureMatch(null);
+            _board.CurrentTurn = Team.White;
+            _matchFlow.BeginPlay();
+
+            _matchDriver.PlayMove(QuietMove("e2", "e4"));
+
+            Assert.That(_matchDriver.MoveLog.Entries[0].Notation, Does.StartWith("1."),
+                "The new game's opening ply was written down under the abandoned game's number.");
         }
 
         [Test]

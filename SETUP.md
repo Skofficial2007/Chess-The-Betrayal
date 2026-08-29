@@ -51,3 +51,8 @@ sky.
 To run the test suite: **Window → General → Test Runner → EditMode → Run All**. Everything should
 pass without the Asset Store packages too, since the tests never touch the art — they only need the
 code.
+
+Run All takes about eleven minutes, because a hundred or so of the tests play whole games of chess.
+If you only want to know that nothing is broken, pick **Uncategorized** from the category dropdown in
+that toolbar and the other thirteen hundred finish in under a minute. `CONTRIBUTING.md` explains when
+each one is the right choice.

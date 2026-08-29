@@ -35,7 +35,7 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
             Full
         }
 
-        private const int CustomProfileChoice = -1;
+        private const int CustomProfileChoice = TournamentProfileChoice.Custom;
 
         [SerializeField] private TournamentKind _kind = TournamentKind.HeadToHead;
         [SerializeField] private int _runSeed = 20260713;
@@ -52,44 +52,6 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
         private BenchmarkReport _baseline;
         private List<DriftFinding> _findings = new List<DriftFinding>();
         private Vector2 _scroll;
-
-        /// <summary>Editable dial set for a hand-built profile. What actually gets played is this
-        /// draft run through AIProfileGuardrails.Apply — the window can't construct a profile the
-        /// resolution path would have rejected.</summary>
-        [System.Serializable]
-        private struct CustomProfileDraft
-        {
-            public string Id;
-            public int MaxDepth;
-            public int SoftTimeBudgetMs;
-            public int HardTimeBudgetMs;
-            public float BlunderRate;
-            public int BlunderMarginCp;
-            public float BetrayalAggression;
-            public float AttackDefenseBias;
-            public int TieBreakWindowCp;
-
-            public static CustomProfileDraft Default(string id) => new CustomProfileDraft
-            {
-                Id = id,
-                MaxDepth = 3,
-                SoftTimeBudgetMs = 1000,
-                HardTimeBudgetMs = 1500,
-                BlunderRate = 0f,
-                BlunderMarginCp = 0,
-                BetrayalAggression = 0f,
-                AttackDefenseBias = 1f,
-                TieBreakWindowCp = 0,
-            };
-
-            // The simulator never consults the opening book — deliberately, so a tournament
-            // measures raw search strength rather than book coverage (several curated starting
-            // positions ARE reachable book lines, so a book probe would short-circuit real
-            // searches). The flag is fixed off rather than shown as a dial that would do nothing.
-            public AIProfile Build() => AIProfileGuardrails.Apply(new AIProfile(
-                Id, MaxDepth, new AITimeBudget(SoftTimeBudgetMs, HardTimeBudgetMs), BlunderRate, BlunderMarginCp,
-                BetrayalAggression, AttackDefenseBias, TieBreakWindowCp, useOpeningBook: false));
-        }
 
         [MenuItem("Chess: The Betrayal/AI/Tournament Window...")]
         private static void Open()
@@ -186,15 +148,7 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
             }
         }
 
-        private static readonly string[] _builtInIdsCache = BuildChoiceLabels();
-
-        private static string[] BuildChoiceLabels()
-        {
-            var labels = new List<string>();
-            foreach (AIProfile profile in AIProfileTable.BuiltIn) labels.Add(profile.Id);
-            labels.Add("custom...");
-            return labels.ToArray();
-        }
+        private static readonly string[] _builtInIdsCache = TournamentProfileChoice.Labels();
 
         private void DrawProfilePicker(string label, ref int choice, ref CustomProfileDraft draft)
         {
@@ -228,8 +182,8 @@ namespace ChessTheBetrayal.EditorTools.Benchmark
             EditorGUI.indentLevel--;
         }
 
-        private AIProfile ResolveChoice(int choice, CustomProfileDraft draft) =>
-            choice == CustomProfileChoice ? draft.Build() : AIProfileTable.BuiltIn[choice];
+        private static AIProfile ResolveChoice(int choice, CustomProfileDraft draft) =>
+            TournamentProfileChoice.Resolve(choice, draft);
 
         // --- Run control ---
 

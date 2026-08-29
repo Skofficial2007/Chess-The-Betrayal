@@ -55,6 +55,13 @@ namespace ChessTheBetrayal.Tooling.Agreement
 
                 ReferenceMove reference = oracle.Answer(board);
 
+                // Asked here rather than left to whoever reads the report. Some positions genuinely
+                // alternate their best move from one ply to the next, and on those the reference is
+                // reporting the depth it was given rather than anything about the position — so
+                // folding them into the headline figure quietly buries parity noise inside it. The
+                // oracle answers from cache, so this costs the two shallower searches and no more.
+                bool referenceIsStable = oracle.IsStableAcrossDepths(board);
+
                 var search = new AlphaBetaSearch(engine,
                     new BetrayalAwareEvaluator(EvaluationWeights.FromProfile(subject)));
                 var settings = AISearchSettings.FromProfile(BetrayalUsage.Full, subject);
@@ -62,7 +69,7 @@ namespace ChessTheBetrayal.Tooling.Agreement
                 // The rescore margin mirrors what a real game passes, so the personality dials below
                 // act on the same exact scores they would act on in play rather than on the
                 // alpha-beta bounds a plain search leaves behind.
-                int rescoreMargin = System.Math.Max(subject.BlunderMarginCp, subject.TieBreakWindowCp);
+                int rescoreMargin = subject.RescoreMarginCp;
 
                 var stopwatch = System.Diagnostics.Stopwatch.StartNew();
                 using var cts = new CancellationTokenSource();
@@ -95,7 +102,7 @@ namespace ChessTheBetrayal.Tooling.Agreement
                     rawMove, selectedMove, reference.Move,
                     subjectScoreCp, reference.ScoreCp,
                     search.Stats.LastCompletedDepth, subject.MaxDepth, oracle.ReferenceDepth,
-                    blunderRollFired, stopwatch.Elapsed.TotalMilliseconds));
+                    blunderRollFired, stopwatch.Elapsed.TotalMilliseconds, referenceIsStable));
             }
 
             return new AgreementReport(results, subject.Id, oracle.ReferenceDepth);

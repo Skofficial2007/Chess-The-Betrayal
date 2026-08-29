@@ -5,7 +5,7 @@ using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Tooling;
 using System;
 
-namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Movement
+namespace ChessTheBetrayal.Tests.EditMode.Core.Engine.Movement.Pieces
 {
     [TestFixture]
     public class BishopMovementTests

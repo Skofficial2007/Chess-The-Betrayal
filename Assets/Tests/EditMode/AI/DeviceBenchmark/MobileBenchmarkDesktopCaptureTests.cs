@@ -3,6 +3,7 @@ using NUnit.Framework;
 using UnityEngine;
 using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.AI.DeviceBenchmark;
+using ChessTheBetrayal.Tests.EditMode.Support;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI.DeviceBenchmark
 {
@@ -19,6 +20,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.DeviceBenchmark
     /// </summary>
     [TestFixture]
     [Explicit("Recording harness — run manually and read the reference numbers from the log.")]
+    [Category(TestCategories.OnDemand)]
     public class MobileBenchmarkDesktopCaptureTests
     {
         [Test]
@@ -34,6 +36,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.DeviceBenchmark
         /// </summary>
         [Test]
         [Explicit("Ten-minute sustained-load run — start it deliberately.")]
+        [Category(TestCategories.OnDemand)]
         [Timeout(700_000)]
         public void CaptureThermalPlanReference() => Capture(BenchmarkPlan.Thermal());
 
@@ -43,6 +46,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.DeviceBenchmark
         /// </summary>
         [Test]
         [Explicit("Multi-hour exhaustive run — start it deliberately.")]
+        [Category(TestCategories.OnDemand)]
         public void CaptureExhaustiveReference() => Capture(BenchmarkPlan.Exhaustive());
 
         private static void Capture(BenchmarkPlan plan)

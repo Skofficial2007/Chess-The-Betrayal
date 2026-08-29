@@ -379,6 +379,86 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Agent
             }
         }
 
+        [Test]
+        public void ATierWhoseBookAllowanceHasRunOutWorksTheMoveOutInstead()
+        {
+            // Each difficulty tier is allowed a different amount of book, and the rule was checked
+            // five ways - every one of them by calling the rule. Nothing asked whether the agent
+            // consults it, so cutting the agent's only call left the whole suite green while the
+            // easiest tier played the entire repertoire.
+            //
+            // The control matters as much as the case. A capped agent that searches proves nothing
+            // on its own, because a book with nothing to say produces exactly the same result; the
+            // uncapped agent below plays a book move from the same position on the same book, so
+            // the only difference left between them is the allowance.
+            OpeningBookAsset book = ThreePlyBook();
+            AsyncAIAgent capped = BookAgentWithAllowance(book, allowancePlies: 2);
+            AsyncAIAgent uncapped = BookAgentWithAllowance(book, allowancePlies: 0);
+
+            try
+            {
+                Assert.That(PlaysFromBookAfterTwoPlies(uncapped), Is.True,
+                    "The book has no third move, so the capped agent below would search whatever the allowance said.");
+
+                Assert.That(PlaysFromBookAfterTwoPlies(capped), Is.False,
+                    "An agent two plies into a two-ply allowance answered from the book anyway, so the " +
+                    "allowance is not reaching the agent - only the rule that computes it.");
+            }
+            finally
+            {
+                capped.Dispose();
+                uncapped.Dispose();
+                Object.DestroyImmediate(book);
+            }
+        }
+
+        /// <summary>
+        /// Walks the agent to the position two plies in, asks it to move, and reports whether the
+        /// answer came out of the book rather than out of a search.
+        /// </summary>
+        private static bool PlaysFromBookAfterTwoPlies(AsyncAIAgent agent)
+        {
+            BoardState board = OpeningBookCompiler.CreateStandardStartingPosition();
+            Play(board, "e2", "e4");
+            Play(board, "e7", "e5");
+
+            bool fromBook = false;
+            bool answered = false;
+            agent.OnBookMovePlayed += _ => { fromBook = true; answered = true; };
+            agent.OnMoveDecided += _ => answered = true;
+
+            agent.RequestBestMove(board, Team.White);
+            PumpUntil(agent, () => answered);
+
+            Assert.That(answered, Is.True, "The agent never produced a move at all.");
+            return fromBook;
+        }
+
+        /// <summary>
+        /// Three plies, so the book still has an answer at the point a two-ply allowance runs out.
+        /// A book that simply stopped there would make the allowance untestable.
+        /// </summary>
+        private static OpeningBookAsset ThreePlyBook()
+        {
+            var (keys, packedMoves, weights, schemeVersion) = OpeningBookCompiler.Compile("e2e4 e7e5 g1f3");
+            var asset = ScriptableObject.CreateInstance<OpeningBookAsset>();
+            asset.SetEntries(keys, packedMoves, weights, schemeVersion);
+            return asset;
+        }
+
+        /// <summary>An agent whose tier may read the book for its first <paramref name="allowancePlies"/>
+        /// plies of the game. Zero means no limit, the way the tier table spells unlimited.</summary>
+        private static AsyncAIAgent BookAgentWithAllowance(OpeningBookAsset book, int allowancePlies) =>
+            new AsyncAIAgent(
+                new ChessEngineAdapter(),
+                new BetrayalAwareEvaluator(),
+                new AISearchSettings(maxDepth: 1, new AITimeBudget(5000, 5000), BetrayalUsage.Full),
+                new AIProfile("allowance-test", maxDepth: 1, timeBudget: new AITimeBudget(5000, 5000),
+                    blunderRate: 0f, blunderMarginCp: 0, betrayalAggression: 0f, attackDefenseBias: 1f,
+                    tieBreakWindowCp: 0, useOpeningBook: true, openingBookDepthPlies: allowancePlies),
+                new SystemRandomSource(seed: 31),
+                book);
+
         /// <summary>
         /// Pins the contract that a book move reports depth 0 / StopReason.Unset. On a freshly
         /// constructed agent this is also plain C# default-field behavior, so on its own this test

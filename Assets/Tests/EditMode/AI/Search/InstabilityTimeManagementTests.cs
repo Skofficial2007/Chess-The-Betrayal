@@ -8,6 +8,7 @@ using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Tooling;
 using ChessTheBetrayal.Tooling.Strength;
+using ChessTheBetrayal.Tests.EditMode.Support;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI.Search
 {
@@ -20,6 +21,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
     /// since enableInstabilityTimeManagement defaults to false and every one of those callers omits it.
     /// </summary>
     [TestFixture]
+    // Compares two real searches whose whole difference is when they decide to stop.
+    [Category(TestCategories.Slow)]
     public class InstabilityTimeManagementTests
     {
         private ChessEngineAdapter _engine;
