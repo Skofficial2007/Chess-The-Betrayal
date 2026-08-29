@@ -35,6 +35,9 @@ namespace ChessTheBetrayal.Tests.EditMode.View.Pieces
         private static readonly Vector3 Elsewhere = new Vector3(3f, 0.5f, 1f);
         private static readonly Vector3 Graveyard = new Vector3(9f, 0.5f, 9f);
 
+        /// <summary>Where a lift would have left the piece. Nothing ticks here, so it is put in by hand.</summary>
+        private static readonly Vector3 Raised = new Vector3(0f, 0.3f, 0f);
+
         [SetUp]
         public void Setup()
         {
@@ -184,12 +187,71 @@ namespace ChessTheBetrayal.Tests.EditMode.View.Pieces
         [Test]
         public void PuttingAPieceDownLeavesNothingMovingIt()
         {
+            // Nothing ticks in here, so the piece never actually rose and is already standing where
+            // it would be set down: there is no descent to run and nobody to hold it. The case
+            // where one does run is below, and needs the raise put in by hand to reach.
             PrimeTweenPieceAnimator animator = Animator();
 
             animator.LiftSelect();
             animator.LowerDeselect();
 
             Assert.That(animator.PositionHolder, Is.EqualTo(PositionWriter.None));
+        }
+
+        [Test]
+        public void APieceOnItsWayBackDownSaysSoWhileItIsStillGoing()
+        {
+            // Letting go animates the piece back onto its square, and that writes its position for
+            // a tenth of a second afterwards. Reporting nobody as holding it through that window is
+            // what let it be left out of every list of things to stop.
+            PrimeTweenPieceAnimator animator = Animator();
+
+            animator.LiftSelect();
+            _pieceObject.transform.position = Square + Raised;
+            animator.LowerDeselect();
+
+            Assert.That(animator.PositionHolder, Is.EqualTo(PositionWriter.Lower));
+        }
+
+        [Test]
+        public void PickingAPieceStraightBackUpSetsItDownOnItsSquareFirst()
+        {
+            // Two taps inside a tenth of a second: the piece is still on its way down when it is
+            // picked up again, and a pick-up reads the transform to learn where to put the piece
+            // when the player next lets go. Read mid-descent, that is a point in mid-air, and it is
+            // never recovered — the next lift is measured from there, and the one after that from
+            // wherever that left it, so the piece climbs away from its own square as it is played.
+            PrimeTweenPieceAnimator animator = Animator();
+
+            animator.LiftSelect();
+            _pieceObject.transform.position = Square + Raised;
+            animator.LowerDeselect();
+            _pieceObject.transform.position = Square + Raised * 0.6f;   // part of the way back down
+
+            animator.LiftSelect();
+
+            Assert.That(Vector3.Distance(_pieceObject.transform.position, Square), Is.LessThan(0.001f),
+                "The piece was picked back up in mid-air, so mid-air is where it will be put down.");
+        }
+
+        [Test]
+        public void ATravelTakesThePieceOverFromADescentToo()
+        {
+            // The matrix above starts from the things that travel. Being set back down is not one
+            // of them — it only ever follows a pick-up, so it cannot be arranged alongside the
+            // rest — and it was the one writer nothing in the animator could stop.
+            int moveAlone = LiveTweensAfter(a => a.MoveTo(Elsewhere, MoveStyle.Quiet, 1.414f));
+
+            int moveOverADescent = LiveTweensAfter(a =>
+            {
+                a.LiftSelect();
+                _pieceObject.transform.position = Square + Raised;
+                a.LowerDeselect();
+                a.MoveTo(Elsewhere, MoveStyle.Quiet, 1.414f);
+            });
+
+            Assert.That(moveOverADescent, Is.EqualTo(moveAlone),
+                "Setting the piece down is still writing its position underneath the move that took it over.");
         }
 
         [Test]

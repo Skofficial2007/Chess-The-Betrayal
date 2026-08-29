@@ -140,6 +140,30 @@ namespace ChessTheBetrayal.Tests.EditMode.View.Pieces
         }
 
         [Test]
+        public void ADescentCutShortLeavesNothingStillWriting()
+        {
+            // Letting go of a piece animates it back onto its square, and that outlives the tap by
+            // a tenth of a second. A takeback or a rebuild landing inside that window destroys the
+            // piece, and anything still writing its Transform then is the fault this exists for.
+            //
+            // Nothing ticks a tween in here, so the raise the lift would have applied is set by
+            // hand — without it the piece is already home and there is no descent to leave behind.
+            PrimeTweenPieceAnimator animator = Animator();
+
+            animator.LiftSelect();
+            _pieceObject.transform.position += new Vector3(0f, 0.3f, 0f);
+            animator.LowerDeselect();
+
+            Assume.That(Tween.GetTweensCount(_pieceObject.transform), Is.GreaterThan(0),
+                "The descent did not start, so there is nothing here to stop.");
+
+            animator.StopAllAnimations();
+
+            Assert.That(Tween.GetTweensCount(_pieceObject.transform), Is.Zero,
+                "Something is still setting this piece down after everything was supposed to stop.");
+        }
+
+        [Test]
         public void APieceStoppedWhileDoingNothingIsFine()
         {
             // Teardown runs on pieces that were never animating at all, and it must not complain.

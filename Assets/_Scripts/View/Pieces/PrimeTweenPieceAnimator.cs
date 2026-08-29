@@ -39,6 +39,9 @@ namespace ChessTheBetrayal.View.Pieces
         /// <summary>The piece is in the player's hand: raised, and drifting while it is held.</summary>
         Lift,
 
+        /// <summary>The piece being set back down on its square after the player let go of it.</summary>
+        Lower,
+
         /// <summary>A king rattling where it stands because it is in check.</summary>
         Shake,
     }
@@ -383,6 +386,13 @@ namespace ChessTheBetrayal.View.Pieces
         private Tween _bobTween;
         private Vector3? _liftRestPosition;
         private Vector3 _liftRestScale;
+
+        // The two halves of setting the piece back down, held rather than started and forgotten. A
+        // tween nobody keeps is a tween nobody can stop, and this one runs on for a tenth of a
+        // second after the player lets go — long enough for the piece to be picked straight back
+        // up, moved, or destroyed while it is still writing the transform.
+        private Tween _lowerPositionTween;
+        private Tween _lowerScaleTween;
 
         public PrimeTweenPieceAnimator(Transform transform, Renderer renderer, Func<ChessPieceType> getType)
         {
@@ -1084,6 +1094,11 @@ namespace ChessTheBetrayal.View.Pieces
             // completion callback, so there is nothing to fire early by ending it here.
             if (_moveTween.isAlive) _moveTween.Complete();
 
+            // A piece on its way back down is the same case, and the wait above does not measure
+            // it — only the glide. It has nowhere to get to but the square underneath, so there is
+            // nothing to lose by finishing it here either.
+            FinishAnyDescent();
+
             // Nothing to clear away first: every route in here has just been through StopShake.
             _shakeRestPosition = _transform.position;
             _shakeRestRotation = _transform.localRotation;
@@ -1139,6 +1154,10 @@ namespace ChessTheBetrayal.View.Pieces
         /// </summary>
         private void TakeOverPosition(PositionWriter next)
         {
+            // A descent ends on the square it was returning to rather than being cut short in
+            // mid-air, so whatever takes the piece over starts from where the piece belongs.
+            FinishAnyDescent();
+
             _moveTween.Stop();
             _punchSequence.Stop();
             _castleSequence.Stop();
@@ -1299,8 +1318,36 @@ namespace ChessTheBetrayal.View.Pieces
             }
         }
 
+        /// <summary>
+        /// Raises the piece under the player's finger.
+        ///
+        /// Deliberately does not take the piece over the way a travel does (see TakeOverPosition),
+        /// and that is worth an argument rather than an assumption, since a travel left running
+        /// under a pick-up would write the piece's position from underneath it.
+        ///
+        /// It cannot arrive while one is running. Everything that travels belongs to a move that
+        /// has just been made, and making a move passes the turn, after which the piece that moved
+        /// is not on the side that is choosing and a tap on it is refused long before it reaches
+        /// here. The two phases where the turn does not pass are the two halves of a Betrayal, and
+        /// neither opens the gap: the piece that moved is the Betrayer, the only moves on offer are
+        /// captures of it, and the generator will not offer the Betrayer a move of its own to be
+        /// selected into; by the time a forced Save is asked for instead, the Betrayer has changed
+        /// sides and belongs to the other team. A takeback is held shut from the other end —
+        /// selection is refused for as long as the rewind is being shown, and each ply of it is
+        /// given the same room the move was paced against on the way out.
+        ///
+        /// What can be running is the warning rattle and the piece's own way back down, and both
+        /// are ended here.
+        /// </summary>
         public void LiftSelect()
         {
+            // A piece still on its way back down has one place to be, the square underneath it, so
+            // end the descent there rather than wherever it had got to. The rest position further
+            // down is read straight off the transform, and two taps inside a tenth of a second
+            // would otherwise record mid-air as the place to set the piece down — which is not
+            // recovered, because every lift after it is measured from there in turn.
+            FinishAnyDescent();
+
             // Re-lifting an already-lifted piece (a stale/duplicate select) would otherwise stack
             // a second rest position on top of the lifted one, so restart from a clean slate first.
             StopLiftTweens();
@@ -1363,15 +1410,22 @@ namespace ChessTheBetrayal.View.Pieces
             // start-equals-end tween.
             if (_transform.position != _liftRestPosition.Value)
             {
-                Tween.Position(_transform, _liftRestPosition.Value, LiftLowerDuration, Ease.OutQuad, useUnscaledTime: true);
+                _lowerPositionTween = Tween.Position(_transform, _liftRestPosition.Value, LiftLowerDuration, Ease.OutQuad, useUnscaledTime: true);
             }
             if (_transform.localScale != _liftRestScale)
             {
-                Tween.Scale(_transform, _liftRestScale, LiftLowerDuration, Ease.OutQuad, useUnscaledTime: true);
+                _lowerScaleTween = Tween.Scale(_transform, _liftRestScale, LiftLowerDuration, Ease.OutQuad, useUnscaledTime: true);
             }
 
             _liftRestPosition = null;
-            _positionOwner = PositionWriter.None;
+
+            // Naming the descent matters because it writes the position for a tenth of a second
+            // after the player has let go, and reporting nobody as writing it is what kept it out
+            // of every list of things to stop. Both guards can be false, though — a piece already
+            // standing where it is going has nothing to animate — and there is nobody to name then.
+            _positionOwner = _lowerPositionTween.isAlive || _lowerScaleTween.isAlive
+                ? PositionWriter.Lower
+                : PositionWriter.None;
             HideSelectionOutline(instant: false);
         }
 
@@ -1403,6 +1457,8 @@ namespace ChessTheBetrayal.View.Pieces
             _scaleTween.Stop();
             _settleBobTween.Stop();
             _bobTween.Stop();
+            _lowerPositionTween.Stop();
+            _lowerScaleTween.Stop();
             _shakeTween.Stop();
             _shaking = false;
             _positionOwner = PositionWriter.None;
@@ -1430,14 +1486,28 @@ namespace ChessTheBetrayal.View.Pieces
         }
 
         /// <summary>
-        /// Stops the lift sequence and bob loop without touching the Transform — callers decide
-        /// separately whether to then restore position/scale (LowerDeselect) or leave it as-is
-        /// (CancelSelectionAnimation, called right before the GameObject is destroyed anyway).
+        /// Stops the lift sequence, the bob loop and any descent still running, without touching
+        /// the Transform — callers decide separately whether to then restore position/scale
+        /// (LowerDeselect) or leave it as-is (CancelSelectionAnimation, called right before the
+        /// GameObject is destroyed anyway).
         /// </summary>
         private void StopLiftTweens()
         {
             _liftSequence.Stop();
             _bobTween.Stop();
+            _lowerPositionTween.Stop();
+            _lowerScaleTween.Stop();
+        }
+
+        /// <summary>
+        /// Ends a descent on the square it was heading for. A piece being set down is the one thing
+        /// here with nowhere of its own to get to, so finishing it early costs nothing and cutting
+        /// it short leaves the piece standing above its square.
+        /// </summary>
+        private void FinishAnyDescent()
+        {
+            if (_lowerPositionTween.isAlive) _lowerPositionTween.Complete();
+            if (_lowerScaleTween.isAlive) _lowerScaleTween.Complete();
         }
 
         /// <summary>
