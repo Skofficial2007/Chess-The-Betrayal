@@ -210,12 +210,35 @@ def check_document_links(files):
     return problems
 
 
+# A document that sends you to a file which has moved wastes more of your time than one that sends
+# you nowhere, because you go looking. The folder restructure left eight of these behind in the
+# engine document alone, and every one of them still read as authoritative.
+CITED_PATH = re.compile(r"(?:Assets|ProjectSettings|Packages|Docs)/[A-Za-z0-9_\-./&]+\.[A-Za-z0-9]+")
+
+
+def check_cited_paths(files):
+    tracked = set(files)
+    problems = []
+    for path in files:
+        if not path.endswith(".md"):
+            continue
+        for number, line in enumerate(read(path).decode("utf-8", "replace").splitlines(), 1):
+            for cited in CITED_PATH.findall(line):
+                cited = cited.rstrip(".,;:)")
+                if cited in tracked:
+                    continue
+                problems.append(
+                    "%s:%d sends the reader to %s, which is not here" % (path, number, cited))
+    return problems
+
+
 CHECKS = (
     ("asset identity files", check_meta_files),
     ("assembly definitions", check_assembly_definitions),
     ("text encoding", check_text_encoding),
     ("comment style", check_comment_style),
     ("document links", check_document_links),
+    ("paths documents cite", check_cited_paths),
 )
 
 
