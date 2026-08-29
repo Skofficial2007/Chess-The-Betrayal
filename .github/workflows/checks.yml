@@ -9,12 +9,11 @@
 
 name: Checks
 
-# Every pull request, and `main` itself. A branch pushed while a pull request is already open is
-# covered by the pull request, so listing every branch here would only run the same job twice.
+# Any branch, so you find out before you open the pull request rather than after, and every pull
+# request, which is the only way a fork's commits are ever seen here.
 on:
   pull_request:
   push:
-    branches: [main]
 
 # This job only reads, so there is nothing here worth taking over.
 permissions:
