@@ -59,9 +59,6 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             public bool PassWasCutShort => Settled < RootMoves;
         }
 
-        private static int RescoreMarginFor(AIProfile profile) =>
-            Math.Max(profile.BlunderMarginCp, profile.TieBreakWindowCp);
-
         [Test]
         public void EveryTierWithDials_ChoosesFromItsWholeTieBreakWindow()
         {
@@ -74,7 +71,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
 
             foreach (AIProfile profile in AIProfileTable.BuiltIn)
             {
-                int margin = RescoreMarginFor(profile);
+                int margin = profile.RescoreMarginCp;
 
                 // A tier with no dials never runs the pass, so it has nothing to be judged on here.
                 if (margin <= 0) continue;

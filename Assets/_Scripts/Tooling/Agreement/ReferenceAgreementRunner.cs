@@ -69,7 +69,7 @@ namespace ChessTheBetrayal.Tooling.Agreement
                 // The rescore margin mirrors what a real game passes, so the personality dials below
                 // act on the same exact scores they would act on in play rather than on the
                 // alpha-beta bounds a plain search leaves behind.
-                int rescoreMargin = System.Math.Max(subject.BlunderMarginCp, subject.TieBreakWindowCp);
+                int rescoreMargin = subject.RescoreMarginCp;
 
                 var stopwatch = System.Diagnostics.Stopwatch.StartNew();
                 using var cts = new CancellationTokenSource();

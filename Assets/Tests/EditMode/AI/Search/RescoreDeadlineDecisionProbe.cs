@@ -70,7 +70,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
                 {
                     AIProfile profile = provider.Resolve(tierId);
                     AISearchSettings settings = AISearchSettings.FromProfile(BetrayalUsage.Full, profile);
-                    int margin = Math.Max(profile.BlunderMarginCp, profile.TieBreakWindowCp);
+                    int margin = profile.RescoreMarginCp;
 
                     // The reference: no clock, no cancellation, so every candidate is settled and the
                     // window it reports is the real one.

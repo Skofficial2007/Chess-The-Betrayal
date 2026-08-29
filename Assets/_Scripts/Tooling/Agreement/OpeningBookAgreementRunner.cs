@@ -190,7 +190,7 @@ namespace ChessTheBetrayal.Tooling.Agreement
             var search = new AlphaBetaSearch(engine,
                 new BetrayalAwareEvaluator(EvaluationWeights.FromProfile(tier)));
             AISearchSettings settings = AISearchSettings.FromProfile(BetrayalUsage.Full, tier);
-            int rescoreMargin = System.Math.Max(tier.BlunderMarginCp, tier.TieBreakWindowCp);
+            int rescoreMargin = tier.RescoreMarginCp;
 
             using var cts = new CancellationTokenSource();
             cts.CancelAfter(settings.TimeBudget.HardMs);

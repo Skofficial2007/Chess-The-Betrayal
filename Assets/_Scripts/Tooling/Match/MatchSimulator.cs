@@ -386,7 +386,7 @@ namespace ChessTheBetrayal.Tooling.Match
                 }
 
                 var settings = ApplyMoveBudgetCap(AISearchSettings.FromProfile(BetrayalUsage.Full, profile));
-                int rescoreMargin = Math.Max(profile.BlunderMarginCp, profile.TieBreakWindowCp);
+                int rescoreMargin = profile.RescoreMarginCp;
 
                 var moveStopwatch = System.Diagnostics.Stopwatch.StartNew();
                 MoveCommand move = FindMoveUnderTimeControl(search, board, settings, rescoreMargin);
