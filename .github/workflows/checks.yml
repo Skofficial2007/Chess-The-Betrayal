@@ -1,0 +1,40 @@
+# Checks that run on every pull request, including one from a fork.
+#
+# A job that ran the tests would need a Unity licence, and GitHub does not hand repository secrets
+# to a workflow started by a pull request from a fork. It would sit out every outside contribution,
+# which is most of what a check is for. Nothing here needs a licence, a secret or the engine.
+#
+# The tests are still what proves the game works, and CONTRIBUTING still asks you to run them
+# before you open a pull request.
+
+name: Checks
+
+# Every pull request, and `main` itself. A branch pushed while a pull request is already open is
+# covered by the pull request, so listing every branch here would only run the same job twice.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# This job only reads, so there is nothing here worth taking over.
+permissions:
+  contents: read
+
+# A branch that gets three pushes in a minute only needs the last one checked.
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repository:
+    name: Repository checks
+    runs-on: ubuntu-latest
+    steps:
+      # The large files live in Git LFS, and none of them are the text these checks read, so
+      # there is no reason to spend the bandwidth pulling them.
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - name: Check the repository
+        run: python3 .github/checks/repo_checks.py
