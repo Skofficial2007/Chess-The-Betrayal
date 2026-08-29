@@ -84,10 +84,27 @@ namespace ChessTheBetrayal.EditorTools
             return missing;
         }
 
+        /// <summary>
+        /// Whether there is anybody to show the window to.
+        ///
+        /// This is separate from the callback below because the interesting case cannot be reached
+        /// from inside a running editor: a machine with no screen and none of the art, which is
+        /// what a fresh clone on a build agent looks like. There the packages are missing for the
+        /// ordinary reason that the repository is not allowed to carry them, and a window opened
+        /// with nobody in front of it fails rather than being ignored.
+        /// </summary>
+        internal static bool ShouldPrompt(bool isBatchMode, bool alreadyAskedThisSession, int missingCount)
+        {
+            if (isBatchMode) return false;
+            if (alreadyAskedThisSession) return false;
+
+            return missingCount > 0;
+        }
+
         private static void ShowIfAnythingMissing()
         {
-            if (SessionState.GetBool(AlreadyAskedKey, false)) return;
-            if (Missing().Count == 0) return;
+            bool alreadyAsked = SessionState.GetBool(AlreadyAskedKey, false);
+            if (!ShouldPrompt(Application.isBatchMode, alreadyAsked, Missing().Count)) return;
 
             SessionState.SetBool(AlreadyAskedKey, true);
             RequiredAssetsWindow.Open();
