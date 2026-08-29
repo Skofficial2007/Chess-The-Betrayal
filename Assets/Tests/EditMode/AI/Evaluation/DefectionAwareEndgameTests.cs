@@ -4,6 +4,7 @@ using NUnit.Framework;
 using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Tooling.Strength;
+using ChessTheBetrayal.Tests.EditMode.Support;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
 {
@@ -19,6 +20,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
     /// </summary>
     [TestFixture]
     [Explicit("Plays each position out to completion with real search on both sides — seconds to minutes per position, not a per-commit budget.")]
+    [Category(TestCategories.OnDemand)]
     public class DefectionAwareEndgameTests
     {
         private static AIProfile Attacker => AIProfileTable.BuiltIn.Single(p => p.Id == "impossible");

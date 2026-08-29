@@ -22,6 +22,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Profiles
     /// reported honestly instead of being turned into a pass or a fail.
     /// </summary>
     [TestFixture]
+    // Plays sixteen real games per pairing; the budget cannot be squeezed without deleting the depth difference being measured.
+    [Category(TestCategories.Slow)]
     public class AIProfileStrengthGateTests
     {
         // A genuinely inverted tier shows up far below half — the bug this exists to catch had the
@@ -81,6 +83,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Profiles
     /// </summary>
     [TestFixture]
     [Explicit("Quick AI-vs-AI ladder check at each tier's real per-move budget, small sample — run on demand.")]
+    [Category(TestCategories.OnDemand)]
     [Timeout(10 * 60 * 1000)]
     public class AIProfileStrengthQuickTests
     {
@@ -107,6 +110,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Profiles
     /// </summary>
     [TestFixture]
     [Explicit("Full-suite AI-vs-AI tournament at each tier's real per-move budget — run on demand, not per commit.")]
+    [Category(TestCategories.OnDemand)]
     // A hard backstop only — StrengthLadder.PlayWinRate has no watchdog of its own (that lives in
     // BenchmarkRunner's parallel path, not this direct Parallel.For call), so nothing else here
     // catches a genuine deadlock. This should never actually fire: if it does, something is stuck

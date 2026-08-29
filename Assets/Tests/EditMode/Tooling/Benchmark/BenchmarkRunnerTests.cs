@@ -4,6 +4,7 @@ using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.Tooling.Benchmark;
 using ChessTheBetrayal.Tooling.Tournament;
 using ChessTheBetrayal.Tooling.Match;
+using ChessTheBetrayal.Tests.EditMode.Support;
 
 namespace ChessTheBetrayal.Tests.EditMode.Tooling.Benchmark
 {
@@ -16,6 +17,8 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.Benchmark
     /// this per-commit suite.
     /// </summary>
     [TestFixture]
+    // Drives the benchmark entry point the menu commands use, which plays games.
+    [Category(TestCategories.Slow)]
     public class BenchmarkRunnerTests
     {
         /// <summary>Short enough that a depth 1-2 game against the curated positions finishes in a

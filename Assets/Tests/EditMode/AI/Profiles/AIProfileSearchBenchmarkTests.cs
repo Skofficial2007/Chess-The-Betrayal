@@ -7,6 +7,7 @@ using ChessTheBetrayal.AI.Evaluation;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Tooling;
+using ChessTheBetrayal.Tests.EditMode.Support;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI.Profiles
 {
@@ -31,6 +32,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Profiles
     /// visible in each test's console telemetry for eyeballing, they just no longer gate.
     /// </summary>
     [TestFixture]
+    // Every case is a real search held to a real per-move budget, which is the thing under test.
+    [Category(TestCategories.Slow)]
     public class AIProfileSearchBenchmarkTests
     {
         /// <summary>Grace on top of a profile's hard budget before the wall-clock assertion calls

@@ -9,6 +9,7 @@ using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Tooling.Match;
 using ChessTheBetrayal.Tooling.Strength;
+using ChessTheBetrayal.Tests.EditMode.Support;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
 {
@@ -27,6 +28,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Evaluation
     /// </summary>
     [TestFixture]
     [Explicit("One-off A/B measurement, not a per-commit gate. Run manually via -testFilter.")]
+    [Category(TestCategories.OnDemand)]
     public class KingSafetyABProbe
     {
         private const int MoveBudgetCapMs = 400;

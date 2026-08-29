@@ -6,6 +6,7 @@ using ChessTheBetrayal.Tooling.Benchmark;
 using ChessTheBetrayal.Tooling.Match;
 using ChessTheBetrayal.Tooling.Strength;
 using ChessTheBetrayal.Tooling.Tournament;
+using ChessTheBetrayal.Tests.EditMode.Support;
 
 namespace ChessTheBetrayal.Tests.EditMode.Tooling.Tournament
 {
@@ -17,6 +18,8 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.Tournament
     /// same seed through both paths must produce the same report.
     /// </summary>
     [TestFixture]
+    // Draws real games out of a real session rather than a stubbed one.
+    [Category(TestCategories.Slow)]
     public class TournamentSessionTests
     {
         private const int TestPlyCap = 10;

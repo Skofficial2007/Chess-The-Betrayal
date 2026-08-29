@@ -9,6 +9,7 @@ using ChessTheBetrayal.AI.Evaluation;
 using ChessTheBetrayal.AI.Positions;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
+using ChessTheBetrayal.Tests.EditMode.Support;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI.MatchTelemetry
 {
@@ -23,6 +24,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.MatchTelemetry
     /// together with the numbers a player actually gets.
     /// </summary>
     [TestFixture]
+    // Reproduces what a real match surfaced, through the production entry points and with the tier's own budget.
+    [Category(TestCategories.Slow)]
     public class RealMatchReportFindingsTests
     {
         private static readonly Vector2Int F3 = new Vector2Int(5, 2);

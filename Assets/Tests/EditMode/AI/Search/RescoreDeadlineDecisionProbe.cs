@@ -9,6 +9,7 @@ using ChessTheBetrayal.AI.Evaluation;
 using ChessTheBetrayal.AI.Positions;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
+using ChessTheBetrayal.Tests.EditMode.Support;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI.Search
 {
@@ -37,6 +38,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
     /// </summary>
     [TestFixture]
     [Explicit("Measurement only - runs unbounded searches to establish the true tie-break window.")]
+    [Category(TestCategories.OnDemand)]
     public class RescoreDeadlineDecisionProbe
     {
         private const int TimeoutMs = 600_000;

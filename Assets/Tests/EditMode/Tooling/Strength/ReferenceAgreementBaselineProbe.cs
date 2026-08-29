@@ -6,6 +6,7 @@ using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Tooling.Agreement;
 using ChessTheBetrayal.Tooling.Strength;
+using ChessTheBetrayal.Tests.EditMode.Support;
 
 namespace ChessTheBetrayal.Tests.EditMode.Tooling.Strength
 {
@@ -28,6 +29,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.Strength
     /// </summary>
     [TestFixture]
     [Explicit("Measurement only — run by hand to record an agreement baseline.")]
+    [Category(TestCategories.OnDemand)]
     public class ReferenceAgreementBaselineProbe
     {
         /// <summary>

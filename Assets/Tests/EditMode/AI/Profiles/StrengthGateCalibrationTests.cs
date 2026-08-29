@@ -1,4 +1,5 @@
 using NUnit.Framework;
+using ChessTheBetrayal.Tests.EditMode.Support;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI.Profiles
 {
@@ -23,6 +24,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Profiles
     /// </summary>
     [TestFixture]
     [Explicit("Calibration sweep — run manually when choosing the per-commit gate's budget and floor.")]
+    [Category(TestCategories.OnDemand)]
     [Timeout(45 * 60 * 1000)]
     public class StrengthGateCalibrationTests
     {

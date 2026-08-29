@@ -7,6 +7,7 @@ using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.EditorTools.Benchmark;
 using ChessTheBetrayal.Tooling.Texel;
+using ChessTheBetrayal.Tests.EditMode.Support;
 
 namespace ChessTheBetrayal.Tests.EditMode.Tooling.Texel
 {
@@ -19,6 +20,8 @@ namespace ChessTheBetrayal.Tests.EditMode.Tooling.Texel
     /// Commit 4's dedicated, real-profile generation run).
     /// </summary>
     [TestFixture]
+    // Generates its corpus by playing, which is what makes the positions worth tuning against.
+    [Category(TestCategories.Slow)]
     public class TexelCorpusGeneratorTests
     {
         private static AIProfile FastProfile(string id, int maxDepth) =>

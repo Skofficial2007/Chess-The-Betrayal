@@ -6,6 +6,7 @@ using ChessTheBetrayal.AI.Evaluation;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Tooling.Strength;
+using ChessTheBetrayal.Tests.EditMode.Support;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI.Search
 {
@@ -32,6 +33,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
     /// </summary>
     [TestFixture]
     [Explicit("Recording harness — run manually and read the per-position/per-tier depth-ceiling profile from the log.")]
+    [Category(TestCategories.OnDemand)]
     public class CappedDepthCeilingReverifyTests
     {
         private ChessEngineAdapter _engine;

@@ -6,6 +6,7 @@ using ChessTheBetrayal.AI.Evaluation;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 using ChessTheBetrayal.Tooling;
+using ChessTheBetrayal.Tests.EditMode.Support;
 
 namespace ChessTheBetrayal.Tests.EditMode.AI.Profiles
 {
@@ -24,6 +25,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Profiles
     /// well beyond this one position.
     /// </summary>
     [TestFixture]
+    // A real search at every tier's depth, because the bias only shows at the depths a player faces.
+    [Category(TestCategories.Slow)]
     public class BetrayalActBiasRegressionTests
     {
         /// <summary>
