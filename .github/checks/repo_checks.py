@@ -63,6 +63,17 @@ def check_meta_files(files):
                 "%s has no .meta -- commit it too, or Unity hands out a new identity and every "
                 "reference to this asset breaks" % path)
 
+    # Folders get a .meta of their own, and git will not mention one is missing because it does
+    # not track folders at all -- the files inside arrive and the folder's identity does not.
+    folders = set()
+    for path in assets:
+        parts = path.split("/")[:-1]
+        for depth in range(2, len(parts) + 1):
+            folders.add("/".join(parts[:depth]))
+    for folder in sorted(folders):
+        if folder + ".meta" not in tracked:
+            problems.append("%s is a folder with no .meta -- commit it too" % folder)
+
     for path in assets:
         if not path.endswith(".meta"):
             continue
