@@ -292,9 +292,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             ArrangeBetrayalThatForcesASave();
             ulong hashBefore = _board.ZobristHash;
 
-            var actMoves = new System.Collections.Generic.List<MoveCommand>();
-            ChessEngine.GetBetrayalTargets(_board, BoardSetup.AlgebraicToVector("f4"), actMoves);
-            _matchDriver.PlayMove(actMoves[0]);
+            _matchDriver.PlayMove(BetrayalScenario.TheActThatStartsIt(_board));
 
             Assert.That(_matchDriver.CurrentPhase, Is.EqualTo(TurnPhase.ForcedSave),
                 "The defected Knight checks e1, so the turn cannot end until White answers it.");
@@ -326,24 +324,12 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         /// A Betrayal whose Defection leaves the initiator's own King in check, so a Defensive
         /// Override is owed and the turn cannot end on the Defection itself.
         /// </summary>
-        private void ArrangeBetrayalThatForcesASave()
-        {
-            ClearSquares("e8");
-            _board.WithPiece("h8", Team.Black, ChessPieceType.King);
-            _board.WithPiece("e4", Team.White, ChessPieceType.Rook);
-            _board.WithPiece("e8", Team.Black, ChessPieceType.Rook); // pins the Rook to its own King
-            _board.WithPiece("f4", Team.White, ChessPieceType.Knight); // Betrayer; f4-d3 is a knight move
-            _board.WithPiece("d3", Team.White, ChessPieceType.Pawn);   // Victim; a Black Knight on d3 checks e1
-            _board.WithBetrayalRight(true);
-            _board.ComputeFullZobristHash();
-        }
+        private void ArrangeBetrayalThatForcesASave() => BetrayalScenario.ArrangeOneThatForcesASave(_board);
 
         /// <summary>Plays the Act and the Save it forces, which is the whole of White's turn.</summary>
         private void PlayTheActAndTheSaveItForces()
         {
-            var actMoves = new System.Collections.Generic.List<MoveCommand>();
-            ChessEngine.GetBetrayalTargets(_board, BoardSetup.AlgebraicToVector("f4"), actMoves);
-            _matchDriver.PlayMove(actMoves[0]);
+            _matchDriver.PlayMove(BetrayalScenario.TheActThatStartsIt(_board));
 
             Assume.That(_matchDriver.CurrentPhase, Is.EqualTo(TurnPhase.ForcedSave),
                 "No Save was owed, so this is not the sequence these tests are about.");

@@ -114,6 +114,11 @@ namespace ChessTheBetrayal.Gameplay.Manager
         {
             _currentTurnMoves.Clear();
             _plyIndex = 0;
+
+            // The number pinned for a Betrayal is part of that half-finished turn. A match left
+            // part-way through one would otherwise hand its number to the first ply of the next
+            // game, on a board where nothing has happened yet.
+            _betrayalSequencePlyNumber = -1;
         }
 
         /// <summary>The current phase of the turn (Normal, Betrayal sub-phases, GameOver, etc.).</summary>
