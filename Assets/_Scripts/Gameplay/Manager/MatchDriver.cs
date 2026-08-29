@@ -49,6 +49,12 @@ namespace ChessTheBetrayal.Gameplay.Manager
         // mid-sequence instead of staying on the ply where the Betrayal actually started.
         private int _betrayalSequencePlyNumber = -1;
 
+        /// <summary>
+        /// The number a ply is written down under: the pinned one for every ply of a Betrayal, and
+        /// the board's own count for everything else.
+        /// </summary>
+        private int PlyNumberForLog => _betrayalSequencePlyNumber >= 0 ? _betrayalSequencePlyNumber : _board.PliesPlayed;
+
         // Monotonic count of plies applied this match — see MoveExecutedPayload.PlyIndex doc
         // comment. Incremented once per applied ply (every branch that raises
         // _moveExecutedChannel) and never walked back, which is what separates it from the board's
@@ -206,7 +212,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
                 // Recorded as Normal, not evaluated for Check/Checkmate: the turn hasn't resolved
                 // yet (see EvaluateGameState's PendingBetrayerSquare guard) — a real result gets
                 // logged once Retribution/Defection completes the turn, below.
-                MoveLog.Record(move, _betrayalSequencePlyNumber, GameState.Normal);
+                MoveLog.Record(move, PlyNumberForLog, GameState.Normal);
 
                 // result.DidDefect is already known here (Advance resolved the whole sub-sequence
                 // as far as it could before returning) — threading it through as WillDefect lets
@@ -351,6 +357,21 @@ namespace ChessTheBetrayal.Gameplay.Manager
 
             if (result.RequiresForcedSave)
             {
+                // The Defection is a ply like any other and this is the record of every one of
+                // them. Written here rather than through CheckForGameEnd because the turn has not
+                // resolved: a Save is still owed, so there is no check or mate to attach to it yet
+                // — the same reason the Act is recorded Normal. The branch below has no Save
+                // coming, so the Defection ends the turn there and CheckForGameEnd writes it down
+                // with the state it produced.
+                //
+                // Leaving it out was not only a gap in the record: the takeback drops one line per
+                // move in the turn, and this turn has three, so a log missing one of them loses a
+                // line belonging to the turn before it every time this one is taken back.
+                if (result.DefectionMove.HasValue)
+                {
+                    MoveLog.Record(result.DefectionMove.Value, PlyNumberForLog, GameState.Normal);
+                }
+
                 _domainLogger?.LogWarning(new DomainLogEvent(DomainEventCode.Betrayal_ForcedSaveRequired));
                 _betrayalChannel?.Raise(new ChessTheBetrayal.Events.Payloads.BetrayalPayload(initiatingTeam, result.DefectedSquare.Value, ChessTheBetrayal.Events.Payloads.BetrayalPhase.ForcedSaveActive));
                 // No NextTurn() yet — the pending Defensive Override move and final turn advancement
@@ -387,8 +408,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
                 // Use the pinned sequence number if a Betrayal sub-sequence produced this move
                 // (Retribution/DefensiveOverride/Defection), so the log doesn't show the number
                 // jumping mid-sequence — see _betrayalSequencePlyNumber's doc comment.
-                int loggedPlyNumber = _betrayalSequencePlyNumber >= 0 ? _betrayalSequencePlyNumber : _board.PliesPlayed;
-                MoveLog.Record(justPlayed.Value, loggedPlyNumber, state);
+                MoveLog.Record(justPlayed.Value, PlyNumberForLog, state);
                 _betrayalSequencePlyNumber = -1;
             }
 

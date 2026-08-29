@@ -289,14 +289,7 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             //
             // Every existing Betrayal case here ends its turn on the Defection itself, so the
             // branch that separates the two was never taken.
-            ClearSquares("e8");
-            _board.WithPiece("h8", Team.Black, ChessPieceType.King);
-            _board.WithPiece("e4", Team.White, ChessPieceType.Rook);
-            _board.WithPiece("e8", Team.Black, ChessPieceType.Rook); // pins the Rook to its own King
-            _board.WithPiece("f4", Team.White, ChessPieceType.Knight); // Betrayer; f4-d3 is a knight move
-            _board.WithPiece("d3", Team.White, ChessPieceType.Pawn);   // Victim; a Black Knight on d3 checks e1
-            _board.WithBetrayalRight(true);
-            _board.ComputeFullZobristHash();
+            ArrangeBetrayalThatForcesASave();
             ulong hashBefore = _board.ZobristHash;
 
             var actMoves = new System.Collections.Generic.List<MoveCommand>();
@@ -327,6 +320,115 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
             Assert.DoesNotThrow(() => _board.AssertZobristConsistency());
             Assert.That(_board.ZobristHash, Is.EqualTo(hashBefore));
             Assert.That(_matchDriver.MoveLog.Entries.Count, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// A Betrayal whose Defection leaves the initiator's own King in check, so a Defensive
+        /// Override is owed and the turn cannot end on the Defection itself.
+        /// </summary>
+        private void ArrangeBetrayalThatForcesASave()
+        {
+            ClearSquares("e8");
+            _board.WithPiece("h8", Team.Black, ChessPieceType.King);
+            _board.WithPiece("e4", Team.White, ChessPieceType.Rook);
+            _board.WithPiece("e8", Team.Black, ChessPieceType.Rook); // pins the Rook to its own King
+            _board.WithPiece("f4", Team.White, ChessPieceType.Knight); // Betrayer; f4-d3 is a knight move
+            _board.WithPiece("d3", Team.White, ChessPieceType.Pawn);   // Victim; a Black Knight on d3 checks e1
+            _board.WithBetrayalRight(true);
+            _board.ComputeFullZobristHash();
+        }
+
+        /// <summary>Plays the Act and the Save it forces, which is the whole of White's turn.</summary>
+        private void PlayTheActAndTheSaveItForces()
+        {
+            var actMoves = new System.Collections.Generic.List<MoveCommand>();
+            ChessEngine.GetBetrayalTargets(_board, BoardSetup.AlgebraicToVector("f4"), actMoves);
+            _matchDriver.PlayMove(actMoves[0]);
+
+            Assume.That(_matchDriver.CurrentPhase, Is.EqualTo(TurnPhase.ForcedSave),
+                "No Save was owed, so this is not the sequence these tests are about.");
+
+            var saveMoves = new System.Collections.Generic.List<MoveCommand>();
+            _engine.GetForcedSaveMoves(_board, _board.CurrentTurn, saveMoves);
+            Assume.That(saveMoves.Count, Is.GreaterThan(0), "The King must have somewhere to go.");
+            _matchDriver.PlayMove(saveMoves[0]);
+        }
+
+        [Test]
+        public void ABetrayalThatForcesASaveWritesTheDefectionDown()
+        {
+            // MoveLog describes itself as the record of every ply applied this match, Betrayal
+            // sub-phase moves named one by one, Defection among them. It holds all of them except
+            // that one here. The ply that changes a piece's side is applied to the board and never
+            // written, so a log of this game shows a piece playing for the other army with nothing
+            // in it to say how it got there.
+            ArrangeBetrayalThatForcesASave();
+
+            PlayTheActAndTheSaveItForces();
+
+            var stages = new System.Collections.Generic.List<BetrayalStage>();
+            foreach (var entry in _matchDriver.MoveLog.Entries) stages.Add(entry.Move.Stage);
+
+            Assert.That(stages, Does.Contain(BetrayalStage.Defection),
+                "The Defection reached the board and was never written down.");
+            Assert.That(_matchDriver.MoveLog.Entries.Count, Is.EqualTo(_board.PliesPlayed),
+                "The log holds fewer plies than the board played.");
+        }
+
+        [Test]
+        public void UndoingABetrayalTurnLeavesTheTurnsBeforeItAlone()
+        {
+            // A takeback drops as many lines as the turn it is undoing had moves. This turn has
+            // three - Act, Defection, Override - and only two were ever written, so the count runs
+            // one past the turn's own lines and takes the previous turn's last ply with it.
+            //
+            // It needs a turn in front of it to show at all: with nothing there, RemoveLast clamps
+            // at zero and the log looks exactly right, which is why the case above this one passes
+            // while the same miscount is happening inside it.
+            ArrangeBetrayalThatForcesASave();
+
+            _matchDriver.PlayMove(StandardMove(_board, "a2", "a3"));
+            _matchDriver.PlayMove(StandardMove(_board, "a7", "a6"));
+            int quietPliesLogged = _matchDriver.MoveLog.Entries.Count;
+            Assume.That(quietPliesLogged, Is.EqualTo(2),
+                "Both quiet plies have to be in the log for anything below to mean what it says.");
+
+            PlayTheActAndTheSaveItForces();
+            _undoService.RequestUndo(isAIMode: true, currentPhase: _matchDriver.CurrentPhase, humanTeam: Team.White, aiMovesFirst: false);
+
+            Assert.That(_matchDriver.MoveLog.Entries.Count, Is.EqualTo(quietPliesLogged),
+                "Taking the Betrayal turn back deleted a ply belonging to the turn before it.");
+        }
+
+        [Test]
+        public void EveryPlyOfOneBetrayalIsWrittenDownUnderTheSameNumber()
+        {
+            // A Betrayal is one turn however many plies it takes, so all of them are written down
+            // under the number the turn started at. Reading the board's own count for each instead
+            // would number this turn's three plies 2, 3 and 4, and anyone reading the log would
+            // take them for three separate turns by alternating sides.
+            //
+            // Nothing caught this before: dropping the pin outright and numbering every ply from
+            // the board left the whole suite green.
+            ArrangeBetrayalThatForcesASave();
+
+            _matchDriver.PlayMove(StandardMove(_board, "a2", "a3"));
+            _matchDriver.PlayMove(StandardMove(_board, "a7", "a6"));
+            string theNumberTheTurnStartsOn = _board.PliesPlayed.ToString();
+
+            PlayTheActAndTheSaveItForces();
+
+            var numbers = new System.Collections.Generic.List<string>();
+            foreach (var entry in _matchDriver.MoveLog.Entries)
+            {
+                if (entry.Move.Stage == BetrayalStage.None) continue;
+                numbers.Add(entry.Notation.Split('.')[0]);
+            }
+
+            Assert.That(numbers.Count, Is.EqualTo(3),
+                "The Act, the Defection and the Save are the whole turn, and all three belong in the log.");
+            Assert.That(numbers, Is.All.EqualTo(theNumberTheTurnStartsOn),
+                "The plies of one Betrayal were numbered as though they were separate turns.");
         }
 
         /// <summary>
