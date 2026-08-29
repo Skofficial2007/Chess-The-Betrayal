@@ -309,11 +309,11 @@ namespace ChessTheBetrayal.AI.Search
 
         // Capture ordering's SEE cache, one slot per move-list index — filled once, up front, by
         // OrderMoves' pre-pass, then read (never recomputed) for every comparison the insertion
-        // sort makes below. SEE walks every piece on the board, so calling it fresh on each of the
-        // O(n^2) comparisons an insertion sort can make would be far more expensive than the
-        // ordering win it buys; computing each move's score exactly once avoids that. Sized to the
-        // same ceiling as _moveBuffers' individual lists and grown lazily on the same "never shrink"
-        // policy as _rootScores.
+        // sort makes below. SEE walks every piece on the board, and an insertion sort can compare
+        // almost every pair of moves in the list, so calling it fresh on each comparison would cost
+        // far more than the ordering win it buys; scoring each move exactly once avoids that. Sized
+        // to the same ceiling as _moveBuffers' individual lists and grown lazily on the same "never
+        // shrink" policy as _rootScores.
         private int[] _seeScoreCache = new int[64];
 
         // Move-ordering health for the current search, counted on every build rather than only in
