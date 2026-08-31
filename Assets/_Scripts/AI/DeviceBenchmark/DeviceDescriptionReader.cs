@@ -28,6 +28,12 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         /// Android build carries a 32-bit and a 64-bit binary and the phone decides which of them
         /// runs: the narrower one searches fewer positions in the same milliseconds, which would
         /// otherwise land in a table looking like a slower phone.
+        ///
+        /// The build id comes back empty in the editor, which is honest rather than broken — an
+        /// editor session was never built, so there is no build to identify. The Android version
+        /// code would be a third way to say the same thing and is deliberately not read: it lives on
+        /// PlayerSettings, which no player build can reach, and getting at it would mean a JNI call
+        /// into the package manager for a number the build id already distinguishes.
         /// </summary>
         public static DeviceDescription Read()
         {
@@ -62,8 +68,15 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
                 ScriptingBackend = scriptingBackend,
                 ProcessBits = System.IntPtr.Size * 8,
                 Platform = Application.platform.ToString(),
+                AppVersion = Application.version,
+                BuildId = Application.buildGUID,
             };
         }
+
+        /// <summary>The one line naming the build, for the log at startup. Read through the same
+        /// description the reports are built from, so a log line and a report header cannot end up
+        /// claiming different builds.</summary>
+        public static string AppVersionLine => Read().AppVersionLine;
 
         /// <summary>The same facts already formatted, for a caller that only wants to hand them to
         /// a report rather than read any single one of them.</summary>
