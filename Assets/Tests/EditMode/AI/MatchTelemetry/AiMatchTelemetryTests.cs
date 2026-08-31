@@ -165,6 +165,55 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.MatchTelemetry
         }
 
         /// <summary>
+        /// Nothing used to write an outcome into this report, so a tester sent back forty lines of
+        /// timings that never said who won or how - the first thing anybody opening it looks for.
+        /// </summary>
+        [Test]
+        public void Render_OnceTheMatchHasEnded_LeadsWithHowItEnded()
+        {
+            var telemetry = new AiMatchTelemetry("match");
+            telemetry.RecordMove(Searched(2, Team.Black, elapsedMs: 900, depth: 6));
+            telemetry.SetResult("Black won by checkmate.");
+
+            Assert.That(telemetry.Render(), Does.Contain("Result: Black won by checkmate."));
+        }
+
+        /// <summary>
+        /// A report can honestly be shared from a game still being played, so the absence gets a line
+        /// of its own. Saying nothing there reads as a report that forgot to mention the result
+        /// rather than one that has none to give.
+        /// </summary>
+        [Test]
+        public void Render_WithTheGameStillGoing_SaysThereIsNoResultYetRatherThanOmittingIt()
+        {
+            var telemetry = new AiMatchTelemetry("match");
+            telemetry.RecordMove(Searched(2, Team.Black, elapsedMs: 900, depth: 6));
+
+            Assert.That(telemetry.Render(), Does.Contain("Result: not recorded"));
+        }
+
+        /// <summary>
+        /// A checkmate can be taken back - the undo path clears the board's own game-over state for
+        /// exactly that reason - and the report has to come back with it. Left standing, the result
+        /// would head a report about a game that is still being played, and it would be the most
+        /// confident-looking line on the page.
+        /// </summary>
+        [Test]
+        public void RemoveAfterPly_AfterATakeback_DropsTheResultThePositionNoLongerSupports()
+        {
+            var telemetry = new AiMatchTelemetry("match");
+            telemetry.RecordMove(Searched(48, Team.White, elapsedMs: 900, depth: 6));
+            telemetry.RecordMove(Searched(50, Team.White, elapsedMs: 40, depth: 2, SearchStopReason.MateFound));
+            telemetry.SetResult("White won by checkmate.");
+
+            telemetry.RemoveAfterPly(48);
+
+            string text = telemetry.Render();
+            Assert.That(text, Does.Not.Contain("White won by checkmate."));
+            Assert.That(text, Does.Contain("Result: not recorded"));
+        }
+
+        /// <summary>
         /// Which way the parity goes depends on the colour the AI is playing and on how many plies
         /// the sequence took - an Act and a Retribution spend two, an Act, a Defection and a forced
         /// Save spend three and leave the parity where it started. Naming one direction was wrong for

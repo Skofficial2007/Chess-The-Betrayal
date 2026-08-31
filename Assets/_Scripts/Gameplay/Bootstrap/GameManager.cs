@@ -430,8 +430,11 @@ namespace ChessTheBetrayal.App
             ChessEngine.Initialize(NullDomainLogger.Instance);
         }
 
-        private void OnGameOverRaised(ChessTheBetrayal.Events.Payloads.GameOverPayload payload) =>
+        private void OnGameOverRaised(ChessTheBetrayal.Events.Payloads.GameOverPayload payload)
+        {
             _matchFlow.RecordMatchResult(payload.WinningTeam, payload.IsTimeout);
+            _aiCoordinator.NoteMatchEnded(payload.WinningTeam, payload.Reason);
+        }
 
         /// <summary>
         /// Loud-fails on any unassigned Inspector reference at Play-mode start instead of letting

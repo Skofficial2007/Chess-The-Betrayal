@@ -352,6 +352,22 @@ namespace ChessTheBetrayal.Gameplay.Manager
             Telemetry?.RemoveAfterPly(lastSurvivingPlyNumber);
 
         /// <summary>
+        /// Records how the match ended. Nothing else was writing an outcome into the report, so a
+        /// tester sent back forty lines of timings that never said who won or how - the one thing
+        /// somebody reading it would want first.
+        ///
+        /// Worded here rather than in the report itself: the vocabulary for an ending belongs to the
+        /// event that announced it, and the AI assembly this report lives in does not reference the
+        /// events. Passing the finished sentence keeps that boundary where it is.
+        /// </summary>
+        public void NoteMatchEnded(Team? winner, ChessTheBetrayal.Events.Payloads.GameEndReason reason)
+        {
+            if (!RecordTelemetry || Telemetry == null) return;
+
+            Telemetry.SetResult(MatchResultLine.Describe(winner, reason));
+        }
+
+        /// <summary>
         /// Records a Betrayer changing sides. Nothing here decides that move — the rules produce it
         /// when Retribution is refused or impossible — so it reaches neither of the hand-offs above
         /// and would go unrecorded. It matters because it is the one ply in a match that moves a

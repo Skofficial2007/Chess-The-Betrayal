@@ -21,6 +21,7 @@ namespace ChessTheBetrayal.AI.MatchTelemetry
     {
         private readonly List<string> _headerLines = new List<string>();
         private readonly List<AiMoveRecord> _moves = new List<AiMoveRecord>();
+        private string _result;
 
         public AiMatchTelemetry(string matchId)
         {
@@ -37,6 +38,17 @@ namespace ChessTheBetrayal.AI.MatchTelemetry
         public void AppendHeaderLine(string line) => _headerLines.Add(line);
 
         public void RecordMove(AiMoveRecord record) => _moves.Add(record);
+
+        /// <summary>
+        /// How the match ended, in the words a caller has already chosen. Taken as text rather than
+        /// as a result type because the vocabulary for an ending lives outside this assembly, and
+        /// this one deliberately depends on nothing but the core rules - the same reason the device
+        /// facts in the header arrive as lines instead of as a device.
+        ///
+        /// Worth having at all because a report without it is forty-odd lines of timings about a
+        /// game whose outcome the reader has to be told separately, or guess.
+        /// </summary>
+        public void SetResult(string result) => _result = result;
 
         /// <summary>
         /// Drops every ply recorded above <paramref name="lastSurvivingPlyNumber"/> — the report's
@@ -56,6 +68,12 @@ namespace ChessTheBetrayal.AI.MatchTelemetry
             {
                 if (_moves[i].PlyNumber > lastSurvivingPlyNumber) _moves.RemoveAt(i);
             }
+
+            // Any ending recorded for this match described a position that has just been taken back.
+            // A checkmate can be undone - the undo path clears the board's own game-over state for
+            // exactly that reason - so a result left standing here would outlive the mate it came
+            // from and head a report about a game still being played.
+            _result = null;
         }
 
         /// <summary>
@@ -91,6 +109,14 @@ namespace ChessTheBetrayal.AI.MatchTelemetry
 
         private void AppendSummary(StringBuilder text)
         {
+            // First line of the summary, because it is the one fact somebody opening this wants
+            // before any of the timings mean anything. Absent gets a line of its own rather than
+            // nothing at all: a report can legitimately be shared from a game still in progress, and
+            // silence there reads as a report that forgot to say instead of one with nothing to say.
+            text.AppendLine(_result != null
+                ? $"Result: {_result}"
+                : "Result: not recorded - this report was taken before the game ended.");
+
             int searchedCount = 0;
             int bookCount = 0;
             int defectionCount = 0;
