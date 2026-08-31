@@ -229,8 +229,26 @@ namespace ChessTheBetrayal.AI.MatchTelemetry
             AiMoveSource.Book => $"ply {move.PlyNumber}: {move.Team} plays {MoveNotation.Describe(move.Move)} (book{HeldNote(move)})",
             AiMoveSource.Defection => $"ply {move.PlyNumber}: {MoveNotation.Describe(move.Move)} - now {move.Team}'s",
             _ => $"ply {move.PlyNumber}: {move.Team} plays {MoveNotation.Describe(move.Move)} "
-                + $"(depth {move.CompletedDepth}, {move.StopReason}, {move.ElapsedMs}ms{HeldNote(move)})",
+                + $"(depth {move.CompletedDepth}, {move.StopReason}, {move.ElapsedMs}ms{DepthLoopNote(move)}{HeldNote(move)})",
         };
+
+        /// <summary>
+        /// Splits the elapsed time into the climb and the tie-break pass that follows it. A move
+        /// reporting its ceiling after three seconds may have reached that ceiling in one of them and
+        /// spent the other two settling which of several near-equal moves to play, and those say
+        /// opposite things about how hard the device was working. Nothing else in a report separates
+        /// them, and the stop reason cannot: it describes how the loop ended, not how long it took.
+        ///
+        /// Left off when the loop is all there was - a tier with no personality dials skips the pass
+        /// entirely, and "0ms in the tie-break pass" on every one of its lines is noise.
+        /// </summary>
+        private static string DepthLoopNote(AiMoveRecord move)
+        {
+            if (move.DepthLoopMs <= 0 || move.ElapsedMs <= 0) return "";
+
+            int rest = move.ElapsedMs - move.DepthLoopMs;
+            return rest > 0 ? $" - {move.DepthLoopMs}ms to depth, {rest}ms settling" : "";
+        }
 
         /// <summary>
         /// Said only when there was a wait to report. A run of lines each announcing a hold of zero

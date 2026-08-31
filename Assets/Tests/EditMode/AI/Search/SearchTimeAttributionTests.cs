@@ -29,6 +29,59 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
                 transpositionTable: new TranspositionTable(log2Size: 20));
         }
 
+        /// <summary>
+        /// Zeroes every slot, including ones a shorter search will never write. Checked directly
+        /// because nothing running in the editor can check it any other way: the wholesale Reset is
+        /// compiled in here and clears the curve as a side effect, so a search-level test passes
+        /// whether or not this method is called at all. It was written that way first and stayed
+        /// green with the call removed.
+        ///
+        /// The call itself is held in place by an architecture check reading the source, since that
+        /// is the only thing that can tell the difference from inside the editor.
+        /// </summary>
+        [Test]
+        public void ResetElapsedMsCurve_ClearsEveryTrackedDepth()
+        {
+            var stats = new SearchStats();
+            for (int depth = 1; depth <= SearchStats.MaxTrackedCurveDepth; depth++)
+                stats.AssignElapsedMsAfterDepth(depth, depth * 100);
+
+            stats.ResetElapsedMsCurve();
+
+            for (int depth = 1; depth <= SearchStats.MaxTrackedCurveDepth; depth++)
+                Assert.That(stats.ElapsedMsAfterDepth(depth), Is.Zero, $"Depth {depth} kept its old time.");
+        }
+
+        /// <summary>
+        /// A deep search followed by a shallow one: the shallow one never reaches depth 9, so a time
+        /// still sitting in that slot came from the search before it.
+        ///
+        /// Honest about what this covers. In the editor it is satisfied by either reset - the
+        /// wholesale one is compiled in here - so it cannot show which of them did the work, and it
+        /// would only fail if both were gone. The case it exists for is a release build, where the
+        /// wholesale reset is absent, and no test running here can reach that. Its companions are the
+        /// direct check above and the source-level one in the architecture fixture.
+        /// </summary>
+        [Test]
+        public void FindBestMove_AfterADeeperSearch_ReportsNoTimeForDepthsThisOneNeverReached()
+        {
+            BoardState board = BoardSetup.CreateStandard();
+
+            _search.FindBestMove(board, new AISearchSettings(maxDepth: 9, TestTimeBudgets.Generous, BetrayalUsage.Full),
+                CancellationToken.None);
+            Assume.That(_search.Stats.ElapsedMsAfterDepth(9), Is.GreaterThan(0),
+                "The first search has to reach depth 9, or there is nothing left behind to catch.");
+
+            _search.FindBestMove(board, new AISearchSettings(maxDepth: 3, TestTimeBudgets.Generous, BetrayalUsage.Full),
+                CancellationToken.None);
+
+            Assert.That(_search.Stats.ElapsedMsAfterDepth(9), Is.Zero,
+                "A depth-3 search never reached depth 9, so a time recorded there belongs to the "
+                + "search before it.");
+            Assert.That(_search.Stats.ElapsedMsAfterDepth(3), Is.GreaterThanOrEqualTo(0),
+                "The depth it did reach still has to be recorded.");
+        }
+
         [Test]
         public void FindBestMove_ReachesDepthNine_RecordsPerDepthNodeCurveThroughDepthNine()
         {

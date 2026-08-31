@@ -37,8 +37,14 @@ namespace ChessTheBetrayal.AI.Search
     /// Search telemetry. Plain counters, no allocation, reset once per FindBestMove — exists purely
     /// to measure each pruning mechanism's node-count impact on fixed regression positions.
     /// Conditional-compiled: every counter increment lives behind the editor/development-build
-    /// guard, so a release build pays zero cost (not even a branch) for tracking it. See
-    /// AlphaBetaSearch/TranspositionTable's #if sites.
+    /// guard, so a release build pays nothing for tracking them. See AlphaBetaSearch/
+    /// TranspositionTable's #if sites.
+    ///
+    /// One exception, and it is deliberate: the elapsed-ms curve is filled in on every build. A
+    /// report shared from a phone is a release build, and how long each depth took is the only thing
+    /// that separates a device with headroom from one a fraction away from dropping a ply — depth
+    /// alone is quantised to whole plies and cannot. It costs one timestamp read per completed
+    /// depth, at most twelve in a search, and it has its own reset for the same reason.
     /// </summary>
     public struct SearchStats
     {
@@ -302,6 +308,27 @@ namespace ChessTheBetrayal.AI.Search
             if (samples <= 0 || calls <= 0) return 0.0;
             double scaledTicks = (double)sampledTicks * calls / samples;
             return scaledTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+        }
+
+        /// <summary>How deep the two curves above are tracked. A search may legitimately be
+        /// configured deeper; the curves simply stop recording past here rather than failing it.</summary>
+        public const int MaxTrackedCurveDepth = 12;
+
+        /// <summary>
+        /// Clears the elapsed-ms curve alone, leaving the counters as they are.
+        ///
+        /// It has its own reset because it has its own lifetime: everything else here is compiled
+        /// out of a release build, while the curve is filled in on every build, so the wholesale
+        /// Reset above does not run where the curve still needs clearing. Without this a release
+        /// build would report whatever the previous search climbed to, which is a plausible-looking
+        /// number and therefore the worst kind of wrong.
+        ///
+        /// Walks the same assignment the search itself uses, so a thirteenth depth added later
+        /// cannot be recorded by one and missed by the other.
+        /// </summary>
+        public void ResetElapsedMsCurve()
+        {
+            for (int depth = 1; depth <= MaxTrackedCurveDepth; depth++) AssignElapsedMsAfterDepth(depth, 0);
         }
 
         /// <summary>Records the cumulative wall-clock milliseconds elapsed at the moment a depth in

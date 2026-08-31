@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -61,6 +62,47 @@ namespace ChessTheBetrayal.Tests.EditMode.Architecture
             }
 
             Assert.That(offenders, Is.Empty, Explain(offenders));
+        }
+
+        /// <summary>
+        /// The per-depth clock has to stay out of the editor/development-build guard, and no test
+        /// running in the editor can tell whether it is inside one - the symbol is always defined
+        /// there, so the code compiles either way and every assertion about it passes either way.
+        /// This reads the source instead, which is a proxy and is written down as one.
+        ///
+        /// It matters because the builds that go to testers are release builds. Behind the guard the
+        /// number is compiled out of exactly the builds it exists to describe, which is where it
+        /// started and is easy to put back while tidying the two lines together again. The real
+        /// proof is a release build's report carrying a non-zero time; this is what fails first.
+        /// </summary>
+        [Test]
+        [TestCase("AssignElapsedMsAfterDepth(depth,", TestName = "TheClimbToEachDepthIsTimed_OnEveryBuild")]
+        [TestCase("ResetElapsedMsCurve()", TestName = "AndTheCurveIsClearedPerSearch_OnEveryBuild")]
+        public void ThePerDepthClockIsCompiledIntoEveryBuild(string marker)
+        {
+            string path = Path.Combine(Application.dataPath, "_Scripts/AI/Search/AlphaBetaSearch.cs");
+            Assume.That(File.Exists(path), $"Expected the search at {path}.");
+
+            string[] lines = File.ReadAllLines(path);
+            int site = Array.FindIndex(lines, l => l.Contains(marker) && !l.TrimStart().StartsWith("//"));
+            Assert.That(site, Is.GreaterThan(-1),
+                $"'{marker}' has gone, or been renamed - this guard now checks nothing.");
+
+            // Walk back to whichever directive governs it. An #endif above means the nearest block
+            // closed before reaching this line, so it sits outside one.
+            for (int i = site - 1; i >= 0; i--)
+            {
+                string line = lines[i].TrimStart();
+                if (line.StartsWith("#endif")) return;
+                if (line.StartsWith("#if"))
+                {
+                    Assert.Fail(
+                        $"AlphaBetaSearch.cs:{site + 1} sits inside '{line}'.\n"
+                        + "A release build defines neither symbol, so this compiles out of the builds handed "
+                        + "to testers - the only builds it exists to describe. Depth alone is whole plies and "
+                        + "cannot show a device getting slower until it drops one.");
+                }
+            }
         }
 
         private static string Explain(List<string> offenders)

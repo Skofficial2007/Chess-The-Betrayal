@@ -28,7 +28,8 @@ namespace ChessTheBetrayal.AI.MatchTelemetry
     public readonly struct AiMoveRecord
     {
         public AiMoveRecord(int plyNumber, Team team, MoveCommand move, AiMoveSource source,
-            int elapsedMs, int completedDepth, SearchStopReason stopReason, int gateHoldMs = 0)
+            int elapsedMs, int completedDepth, SearchStopReason stopReason, int gateHoldMs = 0,
+            int depthLoopMs = 0)
         {
             PlyNumber = plyNumber;
             Team = team;
@@ -38,6 +39,7 @@ namespace ChessTheBetrayal.AI.MatchTelemetry
             CompletedDepth = completedDepth;
             StopReason = stopReason;
             GateHoldMs = gateHoldMs;
+            DepthLoopMs = depthLoopMs;
         }
 
         /// <summary>A ply the rules produced rather than either side choosing it.</summary>
@@ -51,13 +53,13 @@ namespace ChessTheBetrayal.AI.MatchTelemetry
         /// animation before it reaches the board — so the two are filled in at different moments.
         /// </summary>
         public AiMoveRecord WithPlyNumber(int plyNumber) =>
-            new AiMoveRecord(plyNumber, Team, Move, Source, ElapsedMs, CompletedDepth, StopReason, GateHoldMs);
+            new AiMoveRecord(plyNumber, Team, Move, Source, ElapsedMs, CompletedDepth, StopReason, GateHoldMs, DepthLoopMs);
 
         /// <summary>The same record with the wait between the move being decided and it reaching the
         /// board. Filled in at the same moment the ply number is, since both are only known once the
         /// move has actually landed.</summary>
         public AiMoveRecord WithGateHold(int gateHoldMs) =>
-            new AiMoveRecord(PlyNumber, Team, Move, Source, ElapsedMs, CompletedDepth, StopReason, gateHoldMs);
+            new AiMoveRecord(PlyNumber, Team, Move, Source, ElapsedMs, CompletedDepth, StopReason, gateHoldMs, DepthLoopMs);
 
         public int PlyNumber { get; }
 
@@ -78,5 +80,14 @@ namespace ChessTheBetrayal.AI.MatchTelemetry
         /// board was free, which is most of the time.
         /// </summary>
         public int GateHoldMs { get; }
+
+        /// <summary>
+        /// How long the deepening loop took to reach <see cref="CompletedDepth"/>, out of the whole
+        /// <see cref="ElapsedMs"/>. Whatever is left went on the tie-break pass, which runs after the
+        /// loop and returns only when the budget's timer fires - so a move that reports its ceiling
+        /// after three seconds may have reached that ceiling in one of them. Nothing else in a report
+        /// can tell those apart, and they mean opposite things about how hard the device was working.
+        /// </summary>
+        public int DepthLoopMs { get; }
     }
 }

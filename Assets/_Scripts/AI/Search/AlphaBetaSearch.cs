@@ -523,14 +523,27 @@ namespace ChessTheBetrayal.AI.Search
             Stopwatch stopwatch = needsClock ? Stopwatch.StartNew() : null;
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-            // A telemetry-only clock start, always taken while telemetry is compiled in, so the
-            // per-depth ms curve is captured even for the ordinary searches that don't ask for
-            // instability time management (their own stopwatch above stays null). A raw timestamp
-            // rather than a Stopwatch instance so starting the clock allocates nothing — the per-depth
-            // read below subtracts against it. One read per completed depth adds nothing per node.
-            long telemetryStartTimestamp = Stopwatch.GetTimestamp();
             _tt.Stats.Reset();
 #endif
+
+            // The per-depth clock, on every build rather than only where the counters are compiled
+            // in. What it answers cannot be answered any other way: a search that reports depth 7
+            // after three seconds might have spent one of them reaching depth 7 and two in the
+            // tie-break pass, or all three climbing to it, and those are a comfortable device and a
+            // struggling one. Depth alone is quantised to whole plies, so it cannot separate a phone
+            // with headroom to spare from one a fraction away from dropping a ply - which is exactly
+            // what a report from a device is being read for.
+            //
+            // Left behind the editor guard it was useless where it is wanted, because the builds
+            // handed to testers are release builds and the guard compiles it out of those. The same
+            // reasoning already moved the completed depth and the stop reason out.
+            //
+            // A raw timestamp rather than a Stopwatch instance, so starting the clock allocates
+            // nothing, and one read per completed depth - at most twelve in a search that visits
+            // hundreds of thousands of nodes. The curve is cleared here too: reading a value this
+            // search never wrote would report the previous search's climb as this one's.
+            long depthClockStart = Stopwatch.GetTimestamp();
+            _tt.Stats.ResetElapsedMsCurve();
             _tt.NewSearch();
             Array.Clear(_historyScores, 0, _historyScores.Length);
 
@@ -702,9 +715,9 @@ namespace ChessTheBetrayal.AI.Search
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                     _tt.Stats.AssignNodesAfterDepth(depth, _tt.Stats.NodesVisited + _tt.Stats.QNodesVisited);
-                    _tt.Stats.AssignElapsedMsAfterDepth(depth,
-                        (Stopwatch.GetTimestamp() - telemetryStartTimestamp) * 1000L / Stopwatch.Frequency);
 #endif
+                    _tt.Stats.AssignElapsedMsAfterDepth(depth,
+                        (Stopwatch.GetTimestamp() - depthClockStart) * 1000L / Stopwatch.Frequency);
 
                     // Early exit on forced mate found — no deeper search changes the decision. A
                     // mate's score is MateScore minus the remaining depth at the moment it was

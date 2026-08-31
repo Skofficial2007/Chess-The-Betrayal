@@ -283,8 +283,10 @@ namespace ChessTheBetrayal.Gameplay.Manager
 
             if (RecordTelemetry && _aiAgent is AsyncAIAgent recordingAgent)
             {
+                long depthLoopMs = recordingAgent.DepthLoopMs;
                 HoldForPlyNumber(new AiMoveRecord(PlyNumberPendingUntilItLands, _aiTeam, move,
-                    AiMoveSource.Searched, auxMs, recordingAgent.LastCompletedDepth, recordingAgent.StopReason));
+                    AiMoveSource.Searched, auxMs, recordingAgent.LastCompletedDepth, recordingAgent.StopReason,
+                    depthLoopMs: depthLoopMs > int.MaxValue ? int.MaxValue : (int)depthLoopMs));
             }
 
             _deliveryStopwatch.Restart();
