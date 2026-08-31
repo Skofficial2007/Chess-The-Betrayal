@@ -509,10 +509,24 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         /// long run. The magnitude is still printed in full, and a device that misses by 2 ms and
         /// one that misses by 2 seconds still read nothing alike.
         /// </summary>
-        internal static string BudgetNote(SearchTiming timing) =>
-            timing.OvershootMsRounded > 0
-                ? $"+{timing.OvershootMsRounded}ms past budget ({timing.HardMs}ms)"
-                : $"within budget ({timing.HardMs}ms)";
+        internal static string BudgetNote(SearchTiming timing)
+        {
+            int overshoot = timing.OvershootMsRounded;
+            if (overshoot > 0) return $"+{overshoot}ms past budget ({timing.HardMs}ms)";
+
+            // How much room was left, not just that there was some. A bare "within budget" said the
+            // same thing about a tier finishing in a fifth of its budget and one finishing a
+            // millisecond inside it, and on a real run said it about 129 cells of 200 - showing only
+            // the tail of the distribution and hiding everything that was comfortable.
+            //
+            // Below a millisecond it says so in words instead. The figure is rounded, so a search a
+            // fraction inside its budget would otherwise print "0ms inside budget" - which is the
+            // shape that already taught one reader to stop believing these lines.
+            int room = -overshoot;
+            return room >= 1
+                ? $"{room}ms inside budget ({timing.HardMs}ms)"
+                : $"on budget to the millisecond ({timing.HardMs}ms)";
+        }
 
         private void Emit(string line) => OnLine?.Invoke(line);
 

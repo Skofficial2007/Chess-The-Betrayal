@@ -67,16 +67,19 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         {
             BoardState board = BoardSetup.CreateStandard();
 
-            _search.FindBestMove(board, new AISearchSettings(maxDepth: 9, TestTimeBudgets.Generous, BetrayalUsage.Full),
+            // Six rather than the nine the fixture's other searches use. All this needs is a depth
+            // the second search will not reach, and going deeper for that costs a second of the fast
+            // half of the suite to prove exactly the same thing.
+            _search.FindBestMove(board, new AISearchSettings(maxDepth: 6, TestTimeBudgets.Generous, BetrayalUsage.Full),
                 CancellationToken.None);
-            Assume.That(_search.Stats.ElapsedMsAfterDepth(9), Is.GreaterThan(0),
-                "The first search has to reach depth 9, or there is nothing left behind to catch.");
+            Assume.That(_search.Stats.ElapsedMsAfterDepth(6), Is.GreaterThan(0),
+                "The first search has to reach depth 6, or there is nothing left behind to catch.");
 
             _search.FindBestMove(board, new AISearchSettings(maxDepth: 3, TestTimeBudgets.Generous, BetrayalUsage.Full),
                 CancellationToken.None);
 
-            Assert.That(_search.Stats.ElapsedMsAfterDepth(9), Is.Zero,
-                "A depth-3 search never reached depth 9, so a time recorded there belongs to the "
+            Assert.That(_search.Stats.ElapsedMsAfterDepth(6), Is.Zero,
+                "A depth-3 search never reached depth 6, so a time recorded there belongs to the "
                 + "search before it.");
             Assert.That(_search.Stats.ElapsedMsAfterDepth(3), Is.GreaterThanOrEqualTo(0),
                 "The depth it did reach still has to be recorded.");

@@ -173,8 +173,19 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
                 yield return null;
             }
 
+            // Both of these hand their lines back AND stream them, and the streamed copy is what a
+            // plain adb listener with no report to read relies on. Leaving the report subscribed
+            // filed each line twice - once in its own section, once at the end of the scrolling
+            // detail log - which came to a fifth of a real Quick Run's file, repeated verbatim. So
+            // the log keeps its copy and the report stops taking one.
+            _runner.OnLine -= HandleLine;
+            _runner.OnLine += LogWithoutFiling;
+
             IReadOnlyList<string> summaryLines = _runner.EmitTierSummaries(plan.Profiles, plan.HasMainThreadControl);
             IReadOnlyList<string> thermalLines = _runner.EmitThermalBuckets();
+
+            _runner.OnLine -= LogWithoutFiling;
+            _runner.OnLine += HandleLine;
             lock (_reportLock)
             {
                 _report.SetSummaryLines(summaryLines);
@@ -219,6 +230,10 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         // cells and every self-emitted line below) -- Debug.Log itself tolerates either, but the
         // report does not, hence the lock.
         private void HandleLine(string line) => EmitOwnLine(line);
+
+        /// <summary>For the lines the report is about to file as a section of its own: they still
+        /// belong in the log, where nobody has the report to read them from.</summary>
+        private void LogWithoutFiling(string line) => Debug.Log($"[DeviceSearchBenchmark] {line}");
 
         private void EmitOwnLine(string line)
         {

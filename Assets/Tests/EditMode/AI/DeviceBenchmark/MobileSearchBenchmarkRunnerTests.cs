@@ -314,8 +314,29 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.DeviceBenchmark
 
             string note = MobileSearchBenchmarkRunner.BudgetNote(timing);
 
-            Assert.That(note, Does.Contain("within budget"));
+            // Says how much room was left, not merely that there was some. "Within budget" read the
+            // same on a tier finishing in a fifth of its budget as on one a millisecond inside it,
+            // and 129 cells of a real 200-cell run said exactly that.
+            Assert.That(note, Does.Contain("500ms inside budget"));
             Assert.That(note, Does.Not.Contain("past budget"));
+        }
+
+        /// <summary>
+        /// Rounded to the millisecond, a search a fraction inside its budget has no room left to
+        /// report. Printing "0ms inside budget" is the shape that already taught a reader to stop
+        /// believing these lines, on a run where 194 rows of 200 announced an overshoot of zero.
+        /// </summary>
+        [Test]
+        public void BudgetNote_AFractionInsideItsBudget_SaysSoInWordsRatherThanPrintingZero()
+        {
+            var timing = new MobileSearchBenchmarkRunner.SearchTiming(
+                seconds: 2.9997, budgetCapped: true, depthReached: 7, hardMs: 3000);
+
+            string note = MobileSearchBenchmarkRunner.BudgetNote(timing);
+
+            Assert.That(note, Does.Contain("on budget to the millisecond"));
+            Assert.That(note, Does.Not.Contain("0ms inside"),
+                "A rounded-away margin must not be printed as a magnitude of zero.");
         }
 
         [Test]
@@ -341,7 +362,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.DeviceBenchmark
         }
 
         [Test]
-        public void BudgetNote_AnOvershootTooSmallToPrint_ReadsAsWithinBudget()
+        public void BudgetNote_AnOvershootTooSmallToPrint_IsNotAnnouncedAsOne()
         {
             // 0.3ms past a 3000ms budget. Exact enough to be a positive number, far too small to
             // survive being rendered at whole-millisecond precision — a run of 200 searches on a
@@ -351,9 +372,9 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.DeviceBenchmark
 
             string note = MobileSearchBenchmarkRunner.BudgetNote(timing);
 
-            Assert.That(note, Does.Contain("within budget"),
+            Assert.That(note, Does.Contain("on budget to the millisecond"),
                 "An overshoot that rounds away to nothing must not be announced as one.");
-            Assert.That(note, Does.Not.Contain("0ms past budget"));
+            Assert.That(note, Does.Not.Contain("past budget"));
         }
 
         [Test]
