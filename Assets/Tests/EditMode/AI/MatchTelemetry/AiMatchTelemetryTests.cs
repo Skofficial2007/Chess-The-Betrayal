@@ -134,6 +134,51 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.MatchTelemetry
             Assert.That(telemetry.Render(), Does.Contain("ply numbers skip"));
         }
 
+        /// <summary>
+        /// The page used to blame a Defection for the parity change, and a real match disproved it:
+        /// no Defection anywhere in the game, its own summary line saying so, and the parity changed
+        /// regardless. What actually does it is a Betrayal spending more than one ply inside a single
+        /// turn, whoever played it - the human's Act and Retribution did it here, and neither of
+        /// those is recorded at all, because only the AI's plies are.
+        ///
+        /// Built to the shape of that match rather than to the wording, so this fails for the reason
+        /// the original was wrong: nothing in it defected, and the numbers still change parity.
+        /// </summary>
+        [Test]
+        public void Render_WhenTheParityChangesWithNoDefectionAnywhere_DoesNotBlameOneForIt()
+        {
+            var telemetry = new AiMatchTelemetry("match");
+            telemetry.RecordMove(Searched(10, Team.Black, elapsedMs: 3000, depth: 7));
+            telemetry.RecordMove(Searched(12, Team.Black, elapsedMs: 3000, depth: 7));
+            // The human Acts and pays the Retribution here, two plies inside their own turn. Neither
+            // is the AI's, so neither is recorded; all that shows is Black's plies turning odd.
+            telemetry.RecordMove(Searched(15, Team.Black, elapsedMs: 3000, depth: 7));
+            telemetry.RecordMove(Searched(17, Team.Black, elapsedMs: 3000, depth: 7));
+
+            string text = telemetry.Render();
+
+            Assert.That(text, Does.Contain("0 by Defection"),
+                "The fixture has to be a match with no Defection in it, or it cannot catch this.");
+            Assert.That(text, Does.Not.Contain("A Defection spends a ply of its own"),
+                "This report contains no Defection and its ply numbers still change parity, so a "
+                + "Defection cannot be what the page offers as the explanation.");
+        }
+
+        /// <summary>
+        /// Which way the parity goes depends on the colour the AI is playing and on how many plies
+        /// the sequence took - an Act and a Retribution spend two, an Act, a Defection and a forced
+        /// Save spend three and leave the parity where it started. Naming one direction was wrong for
+        /// the first real match to arrive, which went the other way.
+        /// </summary>
+        [Test]
+        public void Render_DoesNotClaimTheParityAlwaysTurnsTheSameWay()
+        {
+            var telemetry = new AiMatchTelemetry("match");
+            telemetry.RecordMove(Searched(3, Team.White, elapsedMs: 100, depth: 5));
+
+            Assert.That(telemetry.Render(), Does.Not.Contain("from odd to even"));
+        }
+
         [Test]
         public void Render_AMateFoundEarly_DoesNotSetTheWorstDepthForTheWholeMatch()
         {

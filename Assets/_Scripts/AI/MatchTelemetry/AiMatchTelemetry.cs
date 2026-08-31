@@ -82,7 +82,8 @@ namespace ChessTheBetrayal.AI.MatchTelemetry
 
             text.AppendLine("--- Plies ---");
             text.AppendLine("(the AI's own plies and any Defection; the opponent's moves are not recorded, so ply numbers skip.");
-            text.AppendLine("A Defection spends a ply of its own, so the AI's plies change from odd to even across one.)");
+            text.AppendLine("A Betrayal by either side spends more than one ply in a single turn, so the numbers below");
+            text.AppendLine("change parity across one - a run of even plies becomes odd, or the other way about.)");
             foreach (AiMoveRecord move in _moves) text.AppendLine(FormatMove(move));
 
             return text.ToString();
