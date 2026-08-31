@@ -63,6 +63,12 @@ namespace ChessTheBetrayal.Gameplay.Manager
         // main-thread clock; started in TryRequestMove, read in HandleMoveDecided.
         private readonly Stopwatch _searchStopwatch = new Stopwatch();
 
+        // Times the other half of the wait: from the move being handed to the pacing gate to it
+        // actually reaching the board. A clock of its own rather than reading the one above a second
+        // time, because applying a ply raises the turn change that asks for the next move, which
+        // restarts that one - the two spans overlap by design and cannot share a stopwatch.
+        private readonly Stopwatch _deliveryStopwatch = new Stopwatch();
+
         /// <summary>True once <see cref="SetAIMode"/> has constructed an agent for this session.</summary>
         public bool IsAiMode => _aiAgent != null;
 
@@ -173,8 +179,14 @@ namespace ChessTheBetrayal.Gameplay.Manager
             // budget or one comfortably inside it depending entirely on which budget it had, and
             // nothing else in the file says. Taken from the settings the agent was actually built
             // with rather than the profile row, since a caller may substitute them.
+            //
+            // Both halves of the budget, not just the ceiling. A settled position is allowed to stop
+            // at the soft figure, so a report showing every move sitting on the hard one is saying
+            // that never happened - and a reader with only the hard number has no way to tell that
+            // from a tier which was never given the choice.
             Telemetry.AppendHeaderLine(
-                $"AI tier: {profile.Id} (max depth {settings.MaxDepth}, budget {settings.TimeBudget.HardMs}ms)");
+                $"AI tier: {profile.Id} (max depth {settings.MaxDepth}, "
+                + $"budget {settings.TimeBudget.SoftMs}ms soft / {settings.TimeBudget.HardMs}ms hard)");
         }
 
         /// <summary>Call once it's aiTeam's turn in a live match to kick off a background search.</summary>
@@ -275,6 +287,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
                     AiMoveSource.Searched, auxMs, recordingAgent.LastCompletedDepth, recordingAgent.StopReason));
             }
 
+            _deliveryStopwatch.Restart();
             _playMove(move);
 
             Activity = AgentActivity.Idle;
@@ -301,6 +314,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
                     AiMoveSource.Book, elapsedMs: 0, completedDepth: 0, stopReason: SearchStopReason.Unset));
             }
 
+            _deliveryStopwatch.Restart();
             _playMove(move);
 
             Activity = AgentActivity.Idle;
@@ -334,7 +348,16 @@ namespace ChessTheBetrayal.Gameplay.Manager
                 || held.Move.EndPosition != move.EndPosition
                 || held.Move.Stage != move.Stage) return;
 
-            Telemetry.RecordMove(held.WithPlyNumber(plyNumber));
+            // The gate applies a move immediately when the board is free and queues it behind a
+            // running animation otherwise, so this is where the second half of the player's wait
+            // becomes known. The elapsed time recorded above stops when the search handed the move
+            // over; whatever this adds is time the player sat through and no search figure shows.
+            long heldMs = _deliveryStopwatch.IsRunning ? _deliveryStopwatch.ElapsedMilliseconds : 0;
+            _deliveryStopwatch.Reset();
+
+            Telemetry.RecordMove(held
+                .WithPlyNumber(plyNumber)
+                .WithGateHold(heldMs > int.MaxValue ? int.MaxValue : (int)heldMs));
             _plyAwaitingItsNumber = null;
         }
 

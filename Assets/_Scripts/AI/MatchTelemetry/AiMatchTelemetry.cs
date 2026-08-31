@@ -168,10 +168,12 @@ namespace ChessTheBetrayal.AI.MatchTelemetry
             }
 
             double meanElapsed = elapsedSum / (double)searchedCount;
-            text.AppendLine($"elapsed ms: worst={worstElapsed} mean={meanElapsed:F0} min={minElapsed}");
-            text.AppendLine("(elapsed runs from asking for a move to that move reaching the board, so it includes "
-                + "the wait for the next frame. It is what the player waited, not what the search spent, and does "
-                + "not compare against a device benchmark figure.)");
+            text.AppendLine($"elapsed ms over {searchedCount} searched moves: "
+                + $"worst={worstElapsed} mean={meanElapsed:F0} min={minElapsed}");
+            text.AppendLine("(elapsed runs from asking for a move to the search handing it over, so it includes the "
+                + "wait for the next frame. It is not what the search spent and does not compare against a device "
+                + "benchmark figure.)");
+            AppendGateHoldLine(text);
 
             string mateNote = matesFound > 0
                 ? $" ({matesFound} more stopped early on a forced mate)"
@@ -188,6 +190,34 @@ namespace ChessTheBetrayal.AI.MatchTelemetry
         }
 
         /// <summary>
+        /// The rest of what the player waited: how long the longest move sat between being decided
+        /// and reaching the board, held behind an animation still playing.
+        ///
+        /// Reported even when it never happened, because "never held" is the answer this line exists
+        /// to give. Its absence would leave a reader assuming the elapsed figures above are the whole
+        /// wait, which is exactly the assumption that made a 23ms reply look instant when the capture
+        /// it followed was still a good half-second from finishing.
+        /// </summary>
+        private void AppendGateHoldLine(StringBuilder text)
+        {
+            int worstHold = 0;
+            int heldCount = 0;
+
+            foreach (AiMoveRecord move in _moves)
+            {
+                if (move.GateHoldMs <= 0) continue;
+
+                heldCount++;
+                if (move.GateHoldMs > worstHold) worstHold = move.GateHoldMs;
+            }
+
+            text.AppendLine(heldCount == 0
+                ? "held behind an animation: never - every move reached the board as soon as it was decided"
+                : $"held behind an animation: {heldCount} of {_moves.Count} plies, worst={worstHold}ms "
+                    + "(added to the elapsed figures above, from the player's side)");
+        }
+
+        /// <summary>
         /// Every line goes through MoveNotation, which exists to be the one way this project writes
         /// down what happened in a ply. A MoveCommand's own ToString spells out a coordinate pair
         /// ("Black Pawn from (7, 6) to (6, 5) capturing Pawn"), which asks a reader to know that x
@@ -196,10 +226,19 @@ namespace ChessTheBetrayal.AI.MatchTelemetry
         /// </summary>
         private static string FormatMove(AiMoveRecord move) => move.Source switch
         {
-            AiMoveSource.Book => $"ply {move.PlyNumber}: {move.Team} plays {MoveNotation.Describe(move.Move)} (book)",
+            AiMoveSource.Book => $"ply {move.PlyNumber}: {move.Team} plays {MoveNotation.Describe(move.Move)} (book{HeldNote(move)})",
             AiMoveSource.Defection => $"ply {move.PlyNumber}: {MoveNotation.Describe(move.Move)} - now {move.Team}'s",
             _ => $"ply {move.PlyNumber}: {move.Team} plays {MoveNotation.Describe(move.Move)} "
-                + $"(depth {move.CompletedDepth}, {move.StopReason}, {move.ElapsedMs}ms)",
+                + $"(depth {move.CompletedDepth}, {move.StopReason}, {move.ElapsedMs}ms{HeldNote(move)})",
         };
+
+        /// <summary>
+        /// Said only when there was a wait to report. A run of lines each announcing a hold of zero
+        /// teaches a reader to stop reading the ones that mean something, which a report on this
+        /// project has already managed once - the summary above carries the "never held" case so
+        /// nothing is lost by leaving it off the lines themselves.
+        /// </summary>
+        private static string HeldNote(AiMoveRecord move) =>
+            move.GateHoldMs > 0 ? $", on board {move.GateHoldMs}ms later" : "";
     }
 }

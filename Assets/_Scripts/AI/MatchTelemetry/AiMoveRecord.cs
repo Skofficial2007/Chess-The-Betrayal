@@ -28,7 +28,7 @@ namespace ChessTheBetrayal.AI.MatchTelemetry
     public readonly struct AiMoveRecord
     {
         public AiMoveRecord(int plyNumber, Team team, MoveCommand move, AiMoveSource source,
-            int elapsedMs, int completedDepth, SearchStopReason stopReason)
+            int elapsedMs, int completedDepth, SearchStopReason stopReason, int gateHoldMs = 0)
         {
             PlyNumber = plyNumber;
             Team = team;
@@ -37,6 +37,7 @@ namespace ChessTheBetrayal.AI.MatchTelemetry
             ElapsedMs = elapsedMs;
             CompletedDepth = completedDepth;
             StopReason = stopReason;
+            GateHoldMs = gateHoldMs;
         }
 
         /// <summary>A ply the rules produced rather than either side choosing it.</summary>
@@ -50,7 +51,13 @@ namespace ChessTheBetrayal.AI.MatchTelemetry
         /// animation before it reaches the board — so the two are filled in at different moments.
         /// </summary>
         public AiMoveRecord WithPlyNumber(int plyNumber) =>
-            new AiMoveRecord(plyNumber, Team, Move, Source, ElapsedMs, CompletedDepth, StopReason);
+            new AiMoveRecord(plyNumber, Team, Move, Source, ElapsedMs, CompletedDepth, StopReason, GateHoldMs);
+
+        /// <summary>The same record with the wait between the move being decided and it reaching the
+        /// board. Filled in at the same moment the ply number is, since both are only known once the
+        /// move has actually landed.</summary>
+        public AiMoveRecord WithGateHold(int gateHoldMs) =>
+            new AiMoveRecord(PlyNumber, Team, Move, Source, ElapsedMs, CompletedDepth, StopReason, gateHoldMs);
 
         public int PlyNumber { get; }
 
@@ -62,5 +69,14 @@ namespace ChessTheBetrayal.AI.MatchTelemetry
         public int ElapsedMs { get; }
         public int CompletedDepth { get; }
         public SearchStopReason StopReason { get; }
+
+        /// <summary>
+        /// How long the move waited between being decided and reaching the board. Moves are paced
+        /// against whatever animation is still running, so a reply that arrives while the previous
+        /// capture is still playing is held back - and the fastest replies are the ones most likely
+        /// to be held, which is the opposite of what a bare elapsed time suggests. Zero when the
+        /// board was free, which is most of the time.
+        /// </summary>
+        public int GateHoldMs { get; }
     }
 }

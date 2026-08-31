@@ -101,7 +101,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.MatchTelemetry
 
             string text = telemetry.Render();
 
-            Assert.That(text, Does.Contain("elapsed ms: worst=300 mean=200 min=100"));
+            Assert.That(text, Does.Contain("elapsed ms over 2 searched moves: worst=300 mean=200 min=100"));
             Assert.That(text, Does.Contain("depth reached over 2 moves: worst=3 mean=4.0"),
                 "'Worst' depth means the shallowest reached, matching the device benchmark's own convention.");
         }
@@ -162,6 +162,74 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.MatchTelemetry
             Assert.That(text, Does.Not.Contain("A Defection spends a ply of its own"),
                 "This report contains no Defection and its ply numbers still change parity, so a "
                 + "Defection cannot be what the page offers as the explanation.");
+        }
+
+        /// <summary>
+        /// The elapsed line used to name no denominator at all while the depth line right under it
+        /// named its own, so a reader comparing the two had to guess whether they covered the same
+        /// moves. They do not: a move that stopped on a forced mate has an elapsed time worth
+        /// reporting and a depth that is not, so elapsed always counts more of them.
+        /// </summary>
+        [Test]
+        public void Render_ElapsedAndDepthEachNameTheirOwnDenominator_BecauseTheyDiffer()
+        {
+            var telemetry = new AiMatchTelemetry("match");
+            telemetry.RecordMove(Searched(2, Team.Black, elapsedMs: 3000, depth: 7));
+            telemetry.RecordMove(Searched(4, Team.Black, elapsedMs: 3000, depth: 7));
+            telemetry.RecordMove(Searched(6, Team.Black, elapsedMs: 40, depth: 2, SearchStopReason.MateFound));
+
+            string text = telemetry.Render();
+
+            Assert.That(text, Does.Contain("elapsed ms over 3 searched moves"));
+            Assert.That(text, Does.Contain("depth reached over 2 moves"),
+                "The mate is in the elapsed spread and out of the depth spread, which is the whole "
+                + "reason each line has to say what it counted.");
+        }
+
+        /// <summary>
+        /// A move waits behind whatever animation is still playing before it reaches the board, and
+        /// the fastest replies are the likeliest to be held - which a bare elapsed time hides
+        /// completely. The elapsed clock stops when the search hands the move over, so this is the
+        /// rest of what the player actually sat through.
+        /// </summary>
+        [Test]
+        public void Render_AMoveHeldBehindAnAnimation_SaysHowLongItWaitedToReachTheBoard()
+        {
+            var telemetry = new AiMatchTelemetry("match");
+            telemetry.RecordMove(Searched(2, Team.Black, elapsedMs: 23, depth: 6).WithGateHold(604));
+
+            string text = telemetry.Render();
+
+            Assert.That(text, Does.Contain("on board 604ms later"));
+            Assert.That(text, Does.Contain("held behind an animation: 1 of 1 plies, worst=604ms"));
+        }
+
+        /// <summary>
+        /// The "never happened" case gets a line of its own. Without it a reader has no way to tell a
+        /// match where nothing was ever held from one where the report simply does not mention it,
+        /// and would reasonably read the elapsed figures as the whole wait.
+        /// </summary>
+        [Test]
+        public void Render_WhenNothingWasEverHeldUp_SaysSoRatherThanStayingSilent()
+        {
+            var telemetry = new AiMatchTelemetry("match");
+            telemetry.RecordMove(Searched(2, Team.Black, elapsedMs: 3000, depth: 7));
+
+            Assert.That(telemetry.Render(), Does.Contain("held behind an animation: never"));
+        }
+
+        /// <summary>
+        /// A page of lines each reporting a hold of zero teaches whoever reads it to stop believing
+        /// the ones that mean something. This project has already shipped that mistake once, on a
+        /// benchmark line announcing an overshoot of "0ms" on 194 of 200 rows.
+        /// </summary>
+        [Test]
+        public void Render_AMoveThatWasNeverHeld_DoesNotSaySoOnItsOwnLine()
+        {
+            var telemetry = new AiMatchTelemetry("match");
+            telemetry.RecordMove(Searched(2, Team.Black, elapsedMs: 3000, depth: 7));
+
+            Assert.That(telemetry.Render(), Does.Not.Contain("on board 0ms later"));
         }
 
         /// <summary>
@@ -332,9 +400,18 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.MatchTelemetry
 
             // 3044ms against a 3000ms budget reads as a missed deadline next to a benchmark whose
             // worst overshoot across 200 searches was 10ms. It is not the same measurement: this
-            // clock starts when the move is asked for and stops when it reaches the board, so it
-            // carries the wait for the next frame as well.
-            Assert.That(telemetry.Render(), Does.Contain("reaching the board"));
+            // clock starts when the move is asked for and carries the wait for the next frame too.
+            //
+            // It used to say the clock ran until the move reached the board, and this test pinned
+            // that. It does not: it stops when the search hands the move over, and the move can then
+            // wait behind an animation still playing. The rest of that wait is reported separately
+            // now, so both halves are stated and neither claims to be the other.
+            string text = telemetry.Render();
+
+            Assert.That(text, Does.Contain("handing it over"));
+            Assert.That(text, Does.Not.Contain("to that move reaching the board"),
+                "The clock does not run that far, and saying it does overstates it by however long "
+                + "the board was busy.");
         }
 
         [Test]
