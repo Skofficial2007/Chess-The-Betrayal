@@ -37,7 +37,7 @@ namespace ChessTheBetrayal.Infrastructure
             }
 
             throw new InvalidOperationException(
-                $"{typeof(T).Name} was never registered — check Bootstrap.");
+                $"{typeof(T).Name} was never registered - check Bootstrap.");
         }
 
         public bool TryResolve<T>(out T service) where T : class

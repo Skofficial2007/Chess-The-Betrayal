@@ -104,7 +104,7 @@ namespace ChessTheBetrayal.AI.Positions
                 if (match == null)
                 {
                     throw new InvalidOperationException(
-                        $"Curated opening line {index}: move '{token}' is not legal — the authored line no longer matches the engine.");
+                        $"Curated opening line {index}: move '{token}' is not legal - the authored line no longer matches the engine.");
                 }
 
                 resolver.Advance(board, match.Value);
