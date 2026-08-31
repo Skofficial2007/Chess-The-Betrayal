@@ -124,7 +124,7 @@ namespace ChessTheBetrayal.Core.Engine
         {
             if (outcome.RequiresForcedSave)
             {
-                // Turn does not pass yet — BETRAYER-07 handles the forced Save move and final turn advancement.
+                // Turn does not pass yet — the forced Save below is what finally advances it.
                 return new TurnAdvanceResult(
                     TurnPhase.ForcedSave, true, true, false, outcome.DefectedSquare, outcome.DefectionMove);
             }
