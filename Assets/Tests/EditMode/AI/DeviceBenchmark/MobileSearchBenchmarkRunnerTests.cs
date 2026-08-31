@@ -217,6 +217,96 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.DeviceBenchmark
                 "A worker-thread cell must never label a line main-thread.");
         }
 
+        /// <summary>
+        /// A cell that did exactly what it was asked used to announce itself as "[budget-capped]".
+        /// The normal tier is the plain case: it completes depth 5, which is its configured ceiling,
+        /// and then spends what is left of its budget in the tie-break pass, which runs until the
+        /// hard timer stops it. The timer firing was the whole test, so the line read as a failure
+        /// and testers reported it as one.
+        /// </summary>
+        [Test]
+        public void OutcomeNote_ATierThatReachedItsCeilingAndSpentTheRest_DoesNotReadAsAFailure()
+        {
+            var timing = new MobileSearchBenchmarkRunner.SearchTiming(
+                seconds: 2.25, budgetCapped: true, depthReached: 5, hardMs: 2250,
+                stopReason: SearchStopReason.Ceiling);
+
+            string note = MobileSearchBenchmarkRunner.OutcomeNote(timing);
+
+            Assert.That(note, Does.Contain("ceiling"));
+            Assert.That(note, Does.Contain("tie-break"));
+            Assert.That(note, Does.Not.Contain("clock stopped"),
+                "Nothing stopped this search short - it finished every depth it was configured for.");
+        }
+
+        [Test]
+        public void OutcomeNote_ASearchTheClockCutShort_SaysSoPlainly()
+        {
+            var timing = new MobileSearchBenchmarkRunner.SearchTiming(
+                seconds: 3.0, budgetCapped: true, depthReached: 7, hardMs: 3000,
+                stopReason: SearchStopReason.Budget);
+
+            Assert.That(MobileSearchBenchmarkRunner.OutcomeNote(timing),
+                Does.Contain("the clock stopped it at depth 7"));
+        }
+
+        /// <summary>
+        /// The load-bearing half of the pair above. Both searches ran their timer out, so a check
+        /// that only looks for a word in one of them passes just as happily when the two render
+        /// identically - which is the state this replaced, where they did.
+        ///
+        /// Same elapsed time, same budget and above all the same depth, so the stop reason is the
+        /// only thing left that can tell them apart. Written first with different depths, which made
+        /// it pass on the depth alone and prove nothing about the branch it is here to guard.
+        /// </summary>
+        [Test]
+        public void OutcomeNote_ReachingTheCeilingAndBeingCutShortDoNotReadTheSame()
+        {
+            var reachedCeiling = new MobileSearchBenchmarkRunner.SearchTiming(
+                seconds: 3.0, budgetCapped: true, depthReached: 7, hardMs: 3000,
+                stopReason: SearchStopReason.Ceiling);
+            var cutShort = new MobileSearchBenchmarkRunner.SearchTiming(
+                seconds: 3.0, budgetCapped: true, depthReached: 7, hardMs: 3000,
+                stopReason: SearchStopReason.Budget);
+
+            Assert.That(MobileSearchBenchmarkRunner.OutcomeNote(reachedCeiling),
+                Is.Not.EqualTo(MobileSearchBenchmarkRunner.OutcomeNote(cutShort)));
+        }
+
+        [Test]
+        public void OutcomeNote_ASearchThatSettledEarly_SaysItStoppedOnItsOwn()
+        {
+            var timing = new MobileSearchBenchmarkRunner.SearchTiming(
+                seconds: 0.9, budgetCapped: false, depthReached: 6, hardMs: 3000,
+                stopReason: SearchStopReason.SettledEarly);
+
+            Assert.That(MobileSearchBenchmarkRunner.OutcomeNote(timing), Does.Contain("stopped early"));
+        }
+
+        [Test]
+        public void OutcomeNote_ASearchThatFoundAMate_SaysWhyItStoppedShallow()
+        {
+            var timing = new MobileSearchBenchmarkRunner.SearchTiming(
+                seconds: 0.04, budgetCapped: false, depthReached: 2, hardMs: 3000,
+                stopReason: SearchStopReason.MateFound);
+
+            Assert.That(MobileSearchBenchmarkRunner.OutcomeNote(timing), Does.Contain("forced mate"));
+        }
+
+        /// <summary>
+        /// A search cancelled before it finished a single depth has no depth to report, and the line
+        /// has to say that rather than leave a reader working it out from a missing clause.
+        /// </summary>
+        [Test]
+        public void OutcomeNote_ASearchThatCompletedNoDepth_SaysSo()
+        {
+            var timing = new MobileSearchBenchmarkRunner.SearchTiming(
+                seconds: 3.0, budgetCapped: true, depthReached: 0, hardMs: 3000,
+                stopReason: SearchStopReason.Budget);
+
+            Assert.That(MobileSearchBenchmarkRunner.OutcomeNote(timing), Is.EqualTo("no depth completed"));
+        }
+
         [Test]
         public void BudgetNote_WithinItsOwnBudget_ReportsNoOvershoot()
         {

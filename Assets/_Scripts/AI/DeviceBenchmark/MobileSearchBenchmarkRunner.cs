@@ -205,7 +205,8 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             stopwatch.Stop();
 
             timing = new SearchTiming(stopwatch.Elapsed.TotalSeconds, cts.IsCancellationRequested,
-                search.LastCompletedDepth, settings.TimeBudget.HardMs, _runElapsed.Elapsed.TotalMilliseconds);
+                search.LastCompletedDepth, settings.TimeBudget.HardMs, _runElapsed.Elapsed.TotalMilliseconds,
+                search.StopReason);
             return best;
         }
 
@@ -427,11 +428,36 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             }
         }
 
-        private static string FormatTiming(SearchTiming timing)
+        private static string FormatTiming(SearchTiming timing) =>
+            $"{timing.Seconds:F2}s ({OutcomeNote(timing)})";
+
+        /// <summary>
+        /// What actually became of the search, in words a reader will not mistake for a complaint.
+        ///
+        /// This used to print "[budget-capped]" whenever the hard timer fired, which is true of
+        /// nearly every search a deep tier runs and says nothing about whether anything went wrong.
+        /// It read as a failure. The clearest case is the normal tier: it completes depth 5, which is
+        /// its configured ceiling, and then spends the rest of its budget in the tie-break pass that
+        /// runs until the timer stops it - so a cell that did exactly what it was asked announced
+        /// itself as capped, and testers reported it.
+        ///
+        /// The stop reason is what separates them, because it describes how the depth loop ended
+        /// rather than whether the clock happened to be running at the finish.
+        /// </summary>
+        internal static string OutcomeNote(SearchTiming timing)
         {
-            string cappedNote = timing.BudgetCapped ? " [budget-capped]" : "";
-            string depthNote = timing.DepthReached > 0 ? $" (reached depth {timing.DepthReached})" : "";
-            return $"{timing.Seconds:F2}s{cappedNote}{depthNote}";
+            if (timing.DepthReached <= 0) return "no depth completed";
+
+            return timing.StopReason switch
+            {
+                SearchStopReason.Ceiling => timing.BudgetCapped
+                    ? $"reached depth {timing.DepthReached}, its ceiling, then spent what was left on the tie-break pass"
+                    : $"reached depth {timing.DepthReached}, its ceiling",
+                SearchStopReason.Budget => $"the clock stopped it at depth {timing.DepthReached}",
+                SearchStopReason.SettledEarly => $"settled at depth {timing.DepthReached} and stopped early",
+                SearchStopReason.MateFound => $"found a forced mate at depth {timing.DepthReached}",
+                _ => $"reached depth {timing.DepthReached}",
+            };
         }
 
         /// <summary>
@@ -452,11 +478,19 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
 
         private void Emit(string line) => OnLine?.Invoke(line);
 
-        /// <summary>One search's outcome: elapsed wall-clock time, whether the soft time budget cut
-        /// it off before MaxDepth, the deepest iterative-deepening depth it fully completed — the
-        /// only field that still distinguishes two runs which both hit the same budget cap (their
-        /// elapsed seconds are then identical by construction, but the depth reached is not) — and
-        /// the tier's own hard budget in milliseconds, which is what OvershootMs measures against.
+        /// <summary>One search's outcome: elapsed wall-clock time, whether the hard time budget's
+        /// own timer fired before the search returned, the deepest iterative-deepening depth it
+        /// fully completed — the only field that still distinguishes two runs which both hit the same
+        /// budget cap (their elapsed seconds are then identical by construction, but the depth
+        /// reached is not) — and the tier's own hard budget in milliseconds, which is what
+        /// OvershootMs measures against.
+        ///
+        /// BudgetCapped says the timer fired, and nothing more. It does NOT mean the tier fell short
+        /// of its configured depth: a search can complete every depth it was asked for and then keep
+        /// going in the tie-break pass, which runs until the same timer stops it. Read alongside
+        /// StopReason, which says how the depth loop itself ended, the two separate a tier that ran
+        /// out of time from one that finished its work and spent the remainder.
+        ///
         /// ElapsedSinceRunStartMs defaults to zero because most callers (every existing test) have no
         /// stake in when during a run a sample landed; only EmitThermalBuckets reads it, and it is
         /// only ever non-zero when a real run stamps it via TimedSearch.
@@ -468,15 +502,17 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             public readonly int DepthReached;
             public readonly int HardMs;
             public readonly double ElapsedSinceRunStartMs;
+            public readonly SearchStopReason StopReason;
 
             public SearchTiming(double seconds, bool budgetCapped, int depthReached, int hardMs,
-                double elapsedSinceRunStartMs = 0)
+                double elapsedSinceRunStartMs = 0, SearchStopReason stopReason = SearchStopReason.Unset)
             {
                 Seconds = seconds;
                 BudgetCapped = budgetCapped;
                 DepthReached = depthReached;
                 HardMs = hardMs;
                 ElapsedSinceRunStartMs = elapsedSinceRunStartMs;
+                StopReason = stopReason;
             }
 
             /// <summary>How far past this search's own budget the elapsed time actually landed.
