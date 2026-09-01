@@ -158,9 +158,16 @@ nothing here). Its own worst case is provable the same way the tester plan's is 
 impossible's 3000 ms hard budget is a **10-minute ceiling on any device**.
 
 The report gains a `--- Thermal curve ---` section for it: one line per minute of wall-clock elapsed,
-per tier and thread context, giving that minute's sample count and its worst/mean depth reached. A
-flat curve means the depth reached in minute 1 still holds in minute 10 — the phone sustains for a
-whole match. A curve that falls says the AI is quietly getting weaker as the game goes on, in a way
+per tier and thread context, giving that minute's sample count, its worst/mean depth reached, and how
+long that minute's searches took to climb to it. A flat curve means the depth reached in minute 1
+still holds in minute 10 — the phone sustains for a whole match.
+
+The climb is there because the other two columns cannot move on a run of this shape, and for a while
+it was missing. Every tier heavy enough to be worth a sustained run finishes on its budget every
+time, so the mean elapsed is pinned by construction; depth changes only in whole plies. A 200-cell
+run came back as eleven identical lines, which is not a flat curve so much as a section that had
+nothing to say. The climb is continuous and moves first: a phone slows by a few percent long before
+it loses a ply, and that is the part worth seeing coming. A curve that falls says the AI is quietly getting weaker as the game goes on, in a way
 the tester plan's short searches could never reveal. This section is populated for any plan, tester
 included, but is only informative on a run long and repetitive enough to show a trend — see the
 desktop reference below.
@@ -176,8 +183,11 @@ construction, so elapsed time carries nothing, and depth is whole plies — a de
 slower and read identically right up until it drops one. So a cell and its tier summary also report
 how long the deepening loop took to reach the depth it reports. Two runs that both reach depth 7 and
 took 1.2 s and 2.4 s to get there are a phone with room to spare and a phone about to lose a ply, and
-this is the only column that separates them. Whatever is left of the elapsed time went on the
-tie-break pass, which runs after the loop and returns when the budget's timer fires.
+this is the only column that separates them. What the rest of the elapsed time went on depends on how the
+loop ended, and the two are opposites. A cell that reached its ceiling spent it in the tie-break
+pass. A cell the clock stopped spent it on a deeper depth it had to abandon — only completed depths
+are timed, so an abandoned one lands in the remainder whole. Reporting both as the same thing said a
+device had been idling during the stretch it was working hardest, so each line now names which.
 
 **Where the overshoot verdict lives, and where it does not.** A per-cell line states its margin as a
 quantity — "+2ms past budget (3000ms)" over, "1080ms inside budget (1300ms)" under, and "on budget to
@@ -404,6 +414,15 @@ sustained ten minutes at the heaviest tier the game ships. That is the answer th
 to produce, and it is the good one: the depth a player sees on move 5 is the depth they see on move
 80. Battery went 48% to 44% over the same ten minutes.
 
+**And now with a number under it.** That conclusion was drawn from a column that could not have said
+anything else — 200 searches all reaching depth 7 is what a flat depth looks like and also what a
+useless measure looks like, and there was no way to tell from the report which one it was. With the
+climb reported per minute, a later 200-cell run on the same phone reads 0.9187 s across the first
+forty cells and 0.9420 s across the last forty: up two and a half percent inside the first minute,
+then level for nine more. An earlier run put the same figure at 1.3%. That is a chip warming up and
+settling into it, which is the shape you want, and it is the first time the section has said anything
+a flat depth column did not already imply.
+
 The device sits exactly one ply below the desktop reference, which reached a mean depth of 8 on this
 same position. The gap is real but it is also the whole of the gap — and it is worth noting that the
 desktop's 8 was marginal, dipping to 7 in two separate minutes, while the phone's 7 never wavered
@@ -487,7 +506,8 @@ renders a header, a summary, and every ply in order, the same shape and the same
 `BenchmarkReport`: nothing is formatted into text until a report is actually requested, so a match
 costs no per-move string building.
 
-**Three things a reader has to know about that log, all learned from the first one that came back.**
+**Four things a reader has to know about that log, every one of them learned from a report that came
+back off a phone.**
 
 *Only the AI's own plies are recorded*, so the ply numbers skip. The report says so on the page,
 because a gap otherwise reads as something having been dropped — which is exactly the conclusion the
@@ -497,6 +517,16 @@ next point was first mistaken for.
 refused or impossible, so it reaches no move-decided path, and the first real match log had a Black
 queen move off a1 with nothing anywhere putting a queen there. It is the one ply in a match that
 moves a piece between the two armies, so a log without it cannot account for the board it describes.
+
+*The match's one Betrayal is recorded whoever spends it.* Both players share a single Betrayal and
+it goes first come first served, so more often than not the side that takes it is the player — and
+only the AI's own plies are logged. A real match had White Act at ply 17 and the entire trace of it
+in the report was the AI's numbering stepping from 16 to 19, which a reader had to decode from the
+note about parity. That is worth more than a tidy log: the right is one flag on the board, so from
+that ply on the AI has a smaller set of moves to choose from and scores the position differently, and
+without a marker the searches either side of it look inexplicably unalike. The summary now carries
+the Act, who made it, and whether the Retribution was paid, refused into a Defection, or followed by
+a forced Save. A takeback puts it back on the table.
 
 *A move that stopped on a forced mate is kept out of the depth spread.* A search that finds a mate
 stops there whatever depth it is at, because no deeper look can change that answer. Pooling it with a
