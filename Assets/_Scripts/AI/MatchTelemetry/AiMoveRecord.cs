@@ -1,4 +1,4 @@
-using ChessTheBetrayal.AI.Search;
+﻿using ChessTheBetrayal.AI.Search;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 
@@ -83,10 +83,13 @@ namespace ChessTheBetrayal.AI.MatchTelemetry
 
         /// <summary>
         /// How long the deepening loop took to reach <see cref="CompletedDepth"/>, out of the whole
-        /// <see cref="ElapsedMs"/>. Whatever is left went on the tie-break pass, which runs after the
-        /// loop and returns only when the budget's timer fires - so a move that reports its ceiling
-        /// after three seconds may have reached that ceiling in one of them. Nothing else in a report
-        /// can tell those apart, and they mean opposite things about how hard the device was working.
+        /// <see cref="ElapsedMs"/> - so a move that reports its ceiling after three seconds may have
+        /// reached that ceiling in one of them. Nothing else in a report can tell those apart, and
+        /// they mean opposite things about how hard the device was working.
+        ///
+        /// Only completed depths are timed, so a depth the clock cut short is not in here. Where the
+        /// rest of the time went therefore depends on <see cref="StopReason"/>, which is why the
+        /// report asks it rather than naming the tie-break pass on every line.
         /// </summary>
         public int DepthLoopMs { get; }
     }

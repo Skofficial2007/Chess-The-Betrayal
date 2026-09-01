@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Text;
 using ChessTheBetrayal.AI.Search;
 using ChessTheBetrayal.Core.Match;
@@ -214,7 +214,7 @@ namespace ChessTheBetrayal.AI.MatchTelemetry
             text.AppendLine(heldCount == 0
                 ? "held behind an animation: never - every move reached the board as soon as it was decided"
                 : $"held behind an animation: {heldCount} of {_moves.Count} plies, worst={worstHold}ms "
-                    + "(added to the elapsed figures above, from the player's side)");
+                    + "(on top of the elapsed times above, not counted in them)");
         }
 
         /// <summary>
@@ -233,21 +233,33 @@ namespace ChessTheBetrayal.AI.MatchTelemetry
         };
 
         /// <summary>
-        /// Splits the elapsed time into the climb and the tie-break pass that follows it. A move
-        /// reporting its ceiling after three seconds may have reached that ceiling in one of them and
-        /// spent the other two settling which of several near-equal moves to play, and those say
-        /// opposite things about how hard the device was working. Nothing else in a report separates
-        /// them, and the stop reason cannot: it describes how the loop ended, not how long it took.
+        /// Splits the elapsed time into the climb to the depth reported and whatever came after it.
+        /// A move reporting its ceiling after three seconds may have reached that ceiling in one of
+        /// them and spent the other two choosing between near-equal moves, and those say opposite
+        /// things about how hard the device was working. Nothing else in a report separates them,
+        /// and the stop reason alone cannot: it describes how the loop ended, not how long it took.
         ///
-        /// Left off when the loop is all there was - a tier with no personality dials skips the pass
-        /// entirely, and "0ms in the tie-break pass" on every one of its lines is noise.
+        /// What the remainder went on depends on that ending, though, and the two are not the same
+        /// thing. A search that reached its ceiling spent it in the tie-break pass. A search the
+        /// clock stopped spent it on a deeper look it never got to finish - the depth clock only
+        /// records depths that completed, so an abandoned one lands here in full. Calling both
+        /// "settling" told a reader the device had time to spare on exactly the plies where it had
+        /// run out: one real match said it of four moves in thirteen.
+        ///
+        /// Left off when the climb is all there was - a tier with no personality dials skips the
+        /// pass entirely, and a trailing zero on every one of its lines is noise.
         /// </summary>
         private static string DepthLoopNote(AiMoveRecord move)
         {
             if (move.DepthLoopMs <= 0 || move.ElapsedMs <= 0) return "";
 
             int rest = move.ElapsedMs - move.DepthLoopMs;
-            return rest > 0 ? $" - {move.DepthLoopMs}ms to depth, {rest}ms settling" : "";
+            if (rest <= 0) return "";
+
+            string spentOn = move.StopReason == SearchStopReason.Budget
+                ? $"{rest}ms more before the clock stopped it"
+                : $"{rest}ms settling";
+            return $" - {move.DepthLoopMs}ms to depth, {spentOn}";
         }
 
         /// <summary>

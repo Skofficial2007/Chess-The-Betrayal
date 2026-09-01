@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using NUnit.Framework;
 using ChessTheBetrayal.AI.Search;
 using ChessTheBetrayal.AI.MatchTelemetry;
@@ -24,6 +24,13 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.MatchTelemetry
         private static AiMoveRecord Searched(int ply, Team team, int elapsedMs, int depth,
             SearchStopReason stopReason = SearchStopReason.Budget) =>
             new AiMoveRecord(ply, team, Move(0, 1, 0, 2), AiMoveSource.Searched, elapsedMs, depth, stopReason);
+
+        /// <summary>A searched ply with its depth clock filled in. Nothing in this fixture could
+        /// set that before, which is why the line it drives went out saying the wrong thing.</summary>
+        private static AiMoveRecord Timed(int ply, int elapsedMs, int depth, int depthLoopMs,
+            SearchStopReason stopReason) =>
+            new AiMoveRecord(ply, Team.Black, Move(0, 1, 0, 2), AiMoveSource.Searched, elapsedMs, depth,
+                stopReason, gateHoldMs: 0, depthLoopMs: depthLoopMs);
 
         private static AiMoveRecord Book(int ply, Team team) =>
             new AiMoveRecord(ply, team, Move(0, 1, 0, 2), AiMoveSource.Book, elapsedMs: 0, completedDepth: 0,
@@ -493,5 +500,74 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.MatchTelemetry
                 "A search that was taken back must stop setting the headline for the ones that stood.");
             Assert.That(report, Does.Contain("worst=7"));
         }
+
+        /// <summary>
+        /// The time after the last completed depth is not one thing. A search the clock stopped
+        /// spent it on a deeper look it never finished - the depth clock only records depths that
+        /// completed, so an abandoned one lands in the remainder whole - while a search that reached
+        /// its ceiling spent it in the tie-break pass. Calling both "settling" said the device had
+        /// room to spare on precisely the plies where it had run out.
+        ///
+        /// The two records differ in the stop reason and nothing else. An earlier attempt at this
+        /// pair varied the depth as well, which made the strings differ for a reason that had
+        /// nothing to do with what was being tested.
+        /// </summary>
+        [Test]
+        public void AMoveTheClockStopped_DoesNotDescribeItsLastStretchAsSettling()
+        {
+            var telemetry = new AiMatchTelemetry("clock-stopped");
+            telemetry.RecordMove(Timed(ply: 4, elapsedMs: 3029, depth: 6, depthLoopMs: 1631,
+                stopReason: SearchStopReason.Budget));
+
+            string text = telemetry.Render();
+
+            Assert.That(text, Does.Contain("1631ms to depth"));
+            Assert.That(text, Does.Contain("1398ms more before the clock stopped it"));
+            Assert.That(text, Does.Not.Contain("settling"),
+                "1398ms of an abandoned depth 7 is the device working, not the device settling.");
+        }
+
+        [Test]
+        public void AMoveThatReachedItsCeiling_StillCallsItsLastStretchSettling()
+        {
+            var telemetry = new AiMatchTelemetry("ceiling");
+            telemetry.RecordMove(Timed(ply: 4, elapsedMs: 3029, depth: 6, depthLoopMs: 1631,
+                stopReason: SearchStopReason.Ceiling));
+
+            Assert.That(telemetry.Render(), Does.Contain("1398ms settling"));
+        }
+
+        [Test]
+        public void TheSameTimingsUnderDifferentStopReasons_DoNotProduceTheSameLine()
+        {
+            var stopped = new AiMatchTelemetry("stopped");
+            stopped.RecordMove(Timed(ply: 4, elapsedMs: 3029, depth: 6, depthLoopMs: 1631,
+                stopReason: SearchStopReason.Budget));
+
+            var settled = new AiMatchTelemetry("settled");
+            settled.RecordMove(Timed(ply: 4, elapsedMs: 3029, depth: 6, depthLoopMs: 1631,
+                stopReason: SearchStopReason.Ceiling));
+
+            // Compared from the climb onwards, not across the whole line: the stop reason is
+            // printed earlier in it, so two whole lines differ whatever this note says and an
+            // assertion on them would pass with the note reduced to one fixed word.
+            Assert.That(AfterTheClimb(stopped.Render()), Is.Not.EqualTo(AfterTheClimb(settled.Render())),
+                "Same clock, same depth, different endings - the line has to say which.");
+        }
+
+        private static string AfterTheClimb(string report)
+        {
+            string line = PlyLine(report);
+            int climb = line.IndexOf("ms to depth, ", StringComparison.Ordinal);
+            return climb < 0 ? "" : line.Substring(climb);
+        }
+
+        private static string PlyLine(string report)
+        {
+            foreach (string line in report.Split('\n'))
+                if (line.StartsWith("ply ", StringComparison.Ordinal)) return line.TrimEnd();
+            return "";
+        }
+
     }
 }
