@@ -12,8 +12,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
     /// <summary>
     /// Pins the deeper reach of the search telemetry: the per-depth node curve now records past the
     /// old depth-7 stop, so the cost of the deepest tiers' 7->8->9 growth is visible instead of
-    /// dropped. All of it lives behind the same editor/development-build guard the other counters
-    /// use, so these tests also re-confirm the search stays allocation-free with the added fields.
+    /// dropped. The node curve lives behind the editor/development-build guard with the other
+    /// counters; the elapsed-ms curve does not, because a release build is where it is read from.
     /// </summary>
     [TestFixture]
     public class SearchTimeAttributionTests
@@ -30,37 +30,14 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         }
 
         /// <summary>
-        /// Zeroes every slot, including ones a shorter search will never write. Checked directly
-        /// because nothing running in the editor can check it any other way: the wholesale Reset is
-        /// compiled in here and clears the curve as a side effect, so a search-level test passes
-        /// whether or not this method is called at all. It was written that way first and stayed
-        /// green with the call removed.
-        ///
-        /// The call itself is held in place by an architecture check reading the source, since that
-        /// is the only thing that can tell the difference from inside the editor.
-        /// </summary>
-        [Test]
-        public void ResetElapsedMsCurve_ClearsEveryTrackedDepth()
-        {
-            var stats = new SearchStats();
-            for (int depth = 1; depth <= SearchStats.MaxTrackedCurveDepth; depth++)
-                stats.AssignElapsedMsAfterDepth(depth, depth * 100);
-
-            stats.ResetElapsedMsCurve();
-
-            for (int depth = 1; depth <= SearchStats.MaxTrackedCurveDepth; depth++)
-                Assert.That(stats.ElapsedMsAfterDepth(depth), Is.Zero, $"Depth {depth} kept its old time.");
-        }
-
-        /// <summary>
-        /// A deep search followed by a shallow one: the shallow one never reaches depth 9, so a time
+        /// A deep search followed by a shallow one: the shallow one never reaches depth 6, so a time
         /// still sitting in that slot came from the search before it.
         ///
-        /// Honest about what this covers. In the editor it is satisfied by either reset - the
-        /// wholesale one is compiled in here - so it cannot show which of them did the work, and it
-        /// would only fail if both were gone. The case it exists for is a release build, where the
-        /// wholesale reset is absent, and no test running here can reach that. Its companions are the
-        /// direct check above and the source-level one in the architecture fixture.
+        /// Reads the search's own curve rather than the copy in SearchStats, which matters. The copy
+        /// is cleared as a side effect of the wholesale telemetry reset, so asking it this question
+        /// gets an answer even when the curve's own clear has been removed - the first version of
+        /// this test did exactly that and stayed green with the clear deleted. The search's array is
+        /// cleared in one place and nowhere else, so this now fails if that goes.
         /// </summary>
         [Test]
         public void FindBestMove_AfterADeeperSearch_ReportsNoTimeForDepthsThisOneNeverReached()
@@ -72,16 +49,16 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             // half of the suite to prove exactly the same thing.
             _search.FindBestMove(board, new AISearchSettings(maxDepth: 6, TestTimeBudgets.Generous, BetrayalUsage.Full),
                 CancellationToken.None);
-            Assume.That(_search.Stats.ElapsedMsAfterDepth(6), Is.GreaterThan(0),
+            Assume.That(_search.ElapsedMsAfterDepth(6), Is.GreaterThan(0),
                 "The first search has to reach depth 6, or there is nothing left behind to catch.");
 
             _search.FindBestMove(board, new AISearchSettings(maxDepth: 3, TestTimeBudgets.Generous, BetrayalUsage.Full),
                 CancellationToken.None);
 
-            Assert.That(_search.Stats.ElapsedMsAfterDepth(6), Is.Zero,
+            Assert.That(_search.ElapsedMsAfterDepth(6), Is.Zero,
                 "A depth-3 search never reached depth 6, so a time recorded there belongs to the "
                 + "search before it.");
-            Assert.That(_search.Stats.ElapsedMsAfterDepth(3), Is.GreaterThanOrEqualTo(0),
+            Assert.That(_search.ElapsedMsAfterDepth(3), Is.GreaterThanOrEqualTo(0),
                 "The depth it did reach still has to be recorded.");
         }
 

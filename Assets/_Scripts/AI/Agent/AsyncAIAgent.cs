@@ -279,7 +279,7 @@ namespace ChessTheBetrayal.AI.Agent
                     _pendingResult = best;
                     _lastCompletedDepth = _search.LastCompletedDepth;
                     _lastStopReason = _search.StopReason;
-                    _lastDepthLoopMs = _search.Stats.ElapsedMsAfterDepth(_search.LastCompletedDepth);
+                    _lastDepthLoopMs = _search.ElapsedMsAfterDepth(_search.LastCompletedDepth);
                     _hasResult = true; // volatile write publishes _pendingResult, _lastCompletedDepth
                                         // and _lastStopReason to the main thread
                 }

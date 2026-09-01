@@ -349,6 +349,16 @@ namespace ChessTheBetrayal.AI.Search
         private int _lastCompletedDepth;
         private SearchStopReason _stopReason;
 
+        // Cumulative milliseconds at the moment each depth finished. Owned here rather than in
+        // SearchStats because that whole struct is compiled out of a release build, and a release
+        // build is exactly where this is read: it is what a report off a tester's phone is written
+        // from. The same reasoning already put the completed depth and the stop reason here.
+        //
+        // Sized once, indexed by depth with slot zero unused, and cleared per search rather than
+        // reallocated, so nothing here allocates once the search is running. A search configured
+        // deeper than the curve tracks simply stops recording past the end.
+        private readonly long[] _elapsedMsAfterDepth = new long[SearchStats.MaxTrackedCurveDepth + 1];
+
         /// <summary>The deepest iterative-deepening depth the last <see cref="FindBestMove"/> call
         /// fully completed, or 0 if it never completed one. Read after the call returns.</summary>
         public int LastCompletedDepth => _lastCompletedDepth;
@@ -357,6 +367,18 @@ namespace ChessTheBetrayal.AI.Search
         /// can end on the same depth for opposite reasons — one out of time, the other satisfied it
         /// had the answer — and only this tells them apart.</summary>
         public SearchStopReason StopReason => _stopReason;
+
+        /// <summary>
+        /// How many milliseconds into the search the given depth finished, or zero for a depth this
+        /// search never reached or one past the end of the curve.
+        ///
+        /// Available on every build, unlike the copy in <see cref="SearchStats"/>. A search reporting
+        /// depth 7 after three seconds may have taken one of them to climb there and spent the rest
+        /// in the tie-break pass; nothing else separates those, and they say opposite things about
+        /// how much headroom the device had. Depth alone is whole plies and cannot.
+        /// </summary>
+        public long ElapsedMsAfterDepth(int depth) =>
+            depth >= 1 && depth < _elapsedMsAfterDepth.Length ? _elapsedMsAfterDepth[depth] : 0L;
 
         public AlphaBetaSearch(IChessEngine engine, IPositionEvaluator evaluator, int maxSupportedDepth = 32,
                                 TranspositionTable transpositionTable = null)
@@ -543,7 +565,7 @@ namespace ChessTheBetrayal.AI.Search
             // hundreds of thousands of nodes. The curve is cleared here too: reading a value this
             // search never wrote would report the previous search's climb as this one's.
             long depthClockStart = Stopwatch.GetTimestamp();
-            _tt.Stats.ResetElapsedMsCurve();
+            Array.Clear(_elapsedMsAfterDepth, 0, _elapsedMsAfterDepth.Length);
             _tt.NewSearch();
             Array.Clear(_historyScores, 0, _historyScores.Length);
 
@@ -716,8 +738,11 @@ namespace ChessTheBetrayal.AI.Search
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                     _tt.Stats.AssignNodesAfterDepth(depth, _tt.Stats.NodesVisited + _tt.Stats.QNodesVisited);
 #endif
-                    _tt.Stats.AssignElapsedMsAfterDepth(depth,
-                        (Stopwatch.GetTimestamp() - depthClockStart) * 1000L / Stopwatch.Frequency);
+                    if (depth < _elapsedMsAfterDepth.Length)
+                    {
+                        _elapsedMsAfterDepth[depth] =
+                            (Stopwatch.GetTimestamp() - depthClockStart) * 1000L / Stopwatch.Frequency;
+                    }
 
                     // Early exit on forced mate found — no deeper search changes the decision. A
                     // mate's score is MateScore minus the remaining depth at the moment it was
@@ -830,6 +855,12 @@ namespace ChessTheBetrayal.AI.Search
             // exit path to set one and forget the other.
             _tt.Stats.LastCompletedDepth = _lastCompletedDepth;
             _tt.Stats.StopReason = _stopReason;
+
+            // The curve is owned above and copied here for the measurement suites, which read the
+            // whole picture out of one struct. Copied wholesale so a depth this search never reached
+            // reports the zero it was cleared to, rather than whatever the search before left there.
+            for (int depth = 1; depth <= SearchStats.MaxTrackedCurveDepth; depth++)
+                _tt.Stats.AssignElapsedMsAfterDepth(depth, _elapsedMsAfterDepth[depth]);
 #endif
 
             // Unbounded beyond the caller's own cancellation, and that costs a player real time: on

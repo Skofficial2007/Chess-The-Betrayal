@@ -70,14 +70,21 @@ namespace ChessTheBetrayal.Tests.EditMode.Architecture
         /// there, so the code compiles either way and every assertion about it passes either way.
         /// This reads the source instead, which is a proxy and is written down as one.
         ///
-        /// It matters because the builds that go to testers are release builds. Behind the guard the
-        /// number is compiled out of exactly the builds it exists to describe, which is where it
-        /// started and is easy to put back while tidying the two lines together again. The real
-        /// proof is a release build's report carrying a non-zero time; this is what fails first.
+        /// It matters because the builds that go to testers are release builds, so behind the guard
+        /// the number is compiled out of exactly the builds it exists to describe.
+        ///
+        /// All four parts are checked, and that is the lesson rather than thoroughness for its own
+        /// sake. An earlier version checked only that the write was outside a guard, and the curve
+        /// still lived inside SearchStats, which is itself compiled out - so the write was fine and
+        /// the thing being written to did not exist. The editor could not see it and neither could
+        /// this; a player build failed to compile. Storage, reader, write and reset all have to be
+        /// there, and the real proof is still a build for a real target.
         /// </summary>
         [Test]
-        [TestCase("AssignElapsedMsAfterDepth(depth,", TestName = "TheClimbToEachDepthIsTimed_OnEveryBuild")]
-        [TestCase("ResetElapsedMsCurve()", TestName = "AndTheCurveIsClearedPerSearch_OnEveryBuild")]
+        [TestCase("private readonly long[] _elapsedMsAfterDepth", TestName = "TheCurveItselfExists_OnEveryBuild")]
+        [TestCase("public long ElapsedMsAfterDepth(int depth)", TestName = "AndSoDoesTheWayToReadIt_OnEveryBuild")]
+        [TestCase("_elapsedMsAfterDepth[depth] =", TestName = "AndTheClimbIsTimedInto_OnEveryBuild")]
+        [TestCase("Array.Clear(_elapsedMsAfterDepth", TestName = "AndItIsClearedPerSearch_OnEveryBuild")]
         public void ThePerDepthClockIsCompiledIntoEveryBuild(string marker)
         {
             string path = Path.Combine(Application.dataPath, "_Scripts/AI/Search/AlphaBetaSearch.cs");

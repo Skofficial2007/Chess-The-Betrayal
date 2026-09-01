@@ -206,7 +206,7 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
 
             timing = new SearchTiming(stopwatch.Elapsed.TotalSeconds, cts.IsCancellationRequested,
                 search.LastCompletedDepth, settings.TimeBudget.HardMs, _runElapsed.Elapsed.TotalMilliseconds,
-                search.StopReason, search.Stats.ElapsedMsAfterDepth(search.LastCompletedDepth));
+                search.StopReason, search.ElapsedMsAfterDepth(search.LastCompletedDepth));
             return best;
         }
 
