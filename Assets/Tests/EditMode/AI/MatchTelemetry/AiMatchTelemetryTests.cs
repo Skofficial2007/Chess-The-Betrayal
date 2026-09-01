@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using NUnit.Framework;
 using ChessTheBetrayal.AI.Search;
 using ChessTheBetrayal.AI.MatchTelemetry;

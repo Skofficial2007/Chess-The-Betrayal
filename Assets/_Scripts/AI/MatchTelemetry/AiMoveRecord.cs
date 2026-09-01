@@ -1,4 +1,4 @@
-﻿using ChessTheBetrayal.AI.Search;
+using ChessTheBetrayal.AI.Search;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
 
