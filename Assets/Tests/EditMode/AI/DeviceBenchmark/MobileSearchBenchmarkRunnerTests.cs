@@ -589,6 +589,43 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.DeviceBenchmark
             Assert.That(minuteOne, Does.Contain("mean 5.5"));
         }
 
+        /// <summary>
+        /// A sustained run holds one tier on one position for as long as it takes, which is exactly
+        /// where the other two columns stop moving: the tier finishes on its budget every time and
+        /// depth only changes in whole plies. Two hundred cells over ten minutes came back as eleven
+        /// identical lines. The climb is the column that can still separate one minute from the
+        /// next, so a device slowing down has somewhere to show.
+        ///
+        /// The two buckets differ in the climb and in nothing else - same elapsed, same depth - so
+        /// this cannot pass on either of the columns that were already there.
+        /// </summary>
+        [Test]
+        public void EmitThermalBuckets_SaysHowLongEachMinutesClimbTook_NotJustHowDeepItGot()
+        {
+            var runner = new MobileSearchBenchmarkRunner();
+            string workerThread = MobileSearchBenchmarkRunner.WorkerThreadLabel;
+            runner.RecordTiming("impossible", workerThread,
+                new MobileSearchBenchmarkRunner.SearchTiming(seconds: 3.0, budgetCapped: true, depthReached: 7,
+                    hardMs: 3000, elapsedSinceRunStartMs: 5_000,
+                    stopReason: SearchStopReason.Budget, depthLoopMs: 880));
+            runner.RecordTiming("impossible", workerThread,
+                new MobileSearchBenchmarkRunner.SearchTiming(seconds: 3.0, budgetCapped: true, depthReached: 7,
+                    hardMs: 3000, elapsedSinceRunStartMs: 65_000,
+                    stopReason: SearchStopReason.Budget, depthLoopMs: 1_760));
+
+            var lines = new List<string>();
+            runner.OnLine += lines.Add;
+            runner.EmitThermalBuckets();
+
+            string minuteZero = lines.Single(l => l.StartsWith($"[impossible {workerThread}] minute 0:"));
+            string minuteOne = lines.Single(l => l.StartsWith($"[impossible {workerThread}] minute 1:"));
+
+            Assert.That(minuteZero, Does.Contain("0.88s"));
+            Assert.That(minuteOne, Does.Contain("1.76s"),
+                "A minute that took twice as long to reach the same depth has to read differently "
+                + "from one that did not - elapsed and depth are identical across these two.");
+        }
+
         [Test]
         public void EmitThermalBuckets_SkipsCombinationsWithNoSamplesRecorded_UnlikeEmitTierSummaries()
         {

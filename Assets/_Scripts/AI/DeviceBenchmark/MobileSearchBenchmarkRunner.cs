@@ -338,11 +338,15 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
 
         /// <summary>
         /// One line per minute of wall-clock elapsed since this runner started, for every
-        /// (tier, thread) combination that actually recorded a sample — how many searches landed
-        /// in that minute and how deep they reached. EmitTierSummaries answers "how deep does this
-        /// tier get" as a single worst/mean number for the whole run; that cannot show a depth that
-        /// holds for the first few minutes and then quietly drops as a device heats up, only a value
-        /// grouped by when each sample happened can. Unlike EmitTierSummaries there is no fixed
+        /// (tier, thread) combination that actually recorded a sample — how many searches landed in
+        /// that minute, how deep they reached, and how long the climb took. EmitTierSummaries
+        /// answers "how deep does this tier get" as a single worst/mean number for the whole run;
+        /// that cannot show a depth that holds for the first few minutes and then quietly drops as a
+        /// device heats up, only a value grouped by when each sample happened can.
+        ///
+        /// The climb is what actually carries that signal. Depth moves in whole plies and a
+        /// budget-bound tier finishes on its budget whatever the weather, so on a sustained run both
+        /// of those sit still and a device slowing down by a tenth shows up in neither. Unlike EmitTierSummaries there is no fixed
         /// universe of buckets to report absence against, so a combination with no samples at all is
         /// skipped rather than getting a placeholder line — a run that never reached minute 4 simply
         /// has no minute-4 line, which already reads as "nothing happened then."
@@ -398,8 +402,15 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             double meanSeconds = sumSeconds / samples.Count;
             double meanDepth = (double)sumDepth / samples.Count;
 
+            // The climb belongs here more than anywhere else in the report, and leaving it out cost
+            // a whole sustained run. Both of the other two columns are pinned for exactly the kind
+            // of run this section exists for: a budget-bound tier finishes on its budget every time,
+            // and depth only moves in whole plies. Two hundred cells over ten minutes came back as
+            // eleven identical lines, and the one measure that had moved - the climb drifting from
+            // 0.876s to 0.887s, which is a phone that is not throttling - was not among them.
             string line = $"[{profileId} {threadLabel}] minute {minute}: {samples.Count} samples, elapsed mean {meanSeconds:F2}s; "
-                + $"depth worst {worstDepth} mean {meanDepth:F1}";
+                + $"depth worst {worstDepth} mean {meanDepth:F1}"
+                + DepthCostNote(samples);
             Emit(line);
             return line;
         }
