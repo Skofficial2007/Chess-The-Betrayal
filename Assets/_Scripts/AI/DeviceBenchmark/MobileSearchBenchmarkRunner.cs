@@ -205,7 +205,8 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             stopwatch.Stop();
 
             timing = new SearchTiming(stopwatch.Elapsed.TotalSeconds, cts.IsCancellationRequested,
-                search.LastCompletedDepth, settings.TimeBudget.HardMs, _runElapsed.Elapsed.TotalMilliseconds);
+                search.LastCompletedDepth, settings.TimeBudget.HardMs, _runElapsed.Elapsed.TotalMilliseconds,
+                search.StopReason, search.ElapsedMsAfterDepth(search.LastCompletedDepth));
             return best;
         }
 
@@ -291,21 +292,61 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             double meanDepth = (double)sumDepth / samples.Count;
             string overshootNote = worstOvershootMs > 0 ? $"+{worstOvershootMs}ms" : "none";
 
+            // How long the climb to that depth took, which is the only figure here that can move on a
+            // device with headroom to spare. Every deep tier is pinned at its budget by construction,
+            // so elapsed says nothing, and depth is whole plies, so it cannot show a phone getting
+            // 30% slower until the moment it drops one.
+            string depthCostNote = DepthCostNote(samples);
+
             string line = $"[{profile.Id} {threadLabel}] {samples.Count} samples: elapsed worst {worstSeconds:F2}s mean {meanSeconds:F2}s min {minSeconds:F2}s "
-                + $"(budget {profile.TimeBudget.HardMs}ms, worst overshoot {overshootNote}); depth worst {worstDepth} mean {meanDepth:F1}";
+                + $"(budget {profile.TimeBudget.HardMs}ms, worst overshoot {overshootNote}); depth worst {worstDepth} mean {meanDepth:F1}{depthCostNote}";
             Emit(line);
             return line;
+        }
+
+        /// <summary>
+        /// The worst and mean time the deepening loop took to reach the depth it reported, across
+        /// the samples that recorded one.
+        ///
+        /// Reported alongside depth because it is the continuous half of the same measurement. Two
+        /// runs that both reach depth 7 look identical on every other column here, and one of them
+        /// may have taken twice as long to get there - which is a device on the edge of dropping a
+        /// ply next to one nowhere near it. Left off entirely when nothing recorded a time, rather
+        /// than printing zeroes that would read as an instant climb.
+        /// </summary>
+        internal static string DepthCostNote(List<SearchTiming> samples)
+        {
+            long worst = 0;
+            long sum = 0;
+            int counted = 0;
+
+            foreach (SearchTiming timing in samples)
+            {
+                if (timing.DepthLoopMs <= 0) continue;
+
+                counted++;
+                sum += timing.DepthLoopMs;
+                if (timing.DepthLoopMs > worst) worst = timing.DepthLoopMs;
+            }
+
+            if (counted == 0) return "";
+
+            return $"; reached that depth in worst {worst / 1000.0:F2}s mean {sum / counted / 1000.0:F2}s";
         }
 
         private const int ThermalBucketMs = 60_000;
 
         /// <summary>
         /// One line per minute of wall-clock elapsed since this runner started, for every
-        /// (tier, thread) combination that actually recorded a sample — how many searches landed
-        /// in that minute and how deep they reached. EmitTierSummaries answers "how deep does this
-        /// tier get" as a single worst/mean number for the whole run; that cannot show a depth that
-        /// holds for the first few minutes and then quietly drops as a device heats up, only a value
-        /// grouped by when each sample happened can. Unlike EmitTierSummaries there is no fixed
+        /// (tier, thread) combination that actually recorded a sample — how many searches landed in
+        /// that minute, how deep they reached, and how long the climb took. EmitTierSummaries
+        /// answers "how deep does this tier get" as a single worst/mean number for the whole run;
+        /// that cannot show a depth that holds for the first few minutes and then quietly drops as a
+        /// device heats up, only a value grouped by when each sample happened can.
+        ///
+        /// The climb is what actually carries that signal. Depth moves in whole plies and a
+        /// budget-bound tier finishes on its budget whatever the weather, so on a sustained run both
+        /// of those sit still and a device slowing down by a tenth shows up in neither. Unlike EmitTierSummaries there is no fixed
         /// universe of buckets to report absence against, so a combination with no samples at all is
         /// skipped rather than getting a placeholder line — a run that never reached minute 4 simply
         /// has no minute-4 line, which already reads as "nothing happened then."
@@ -361,8 +402,15 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             double meanSeconds = sumSeconds / samples.Count;
             double meanDepth = (double)sumDepth / samples.Count;
 
+            // The climb belongs here more than anywhere else in the report, and leaving it out cost
+            // a whole sustained run. Both of the other two columns are pinned for exactly the kind
+            // of run this section exists for: a budget-bound tier finishes on its budget every time,
+            // and depth only moves in whole plies. Two hundred cells over ten minutes came back as
+            // eleven identical lines, and the one measure that had moved - the climb drifting from
+            // 0.876s to 0.887s, which is a phone that is not throttling - was not among them.
             string line = $"[{profileId} {threadLabel}] minute {minute}: {samples.Count} samples, elapsed mean {meanSeconds:F2}s; "
-                + $"depth worst {worstDepth} mean {meanDepth:F1}";
+                + $"depth worst {worstDepth} mean {meanDepth:F1}"
+                + DepthCostNote(samples);
             Emit(line);
             return line;
         }
@@ -427,11 +475,45 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             }
         }
 
-        private static string FormatTiming(SearchTiming timing)
+        private static string FormatTiming(SearchTiming timing) =>
+            $"{timing.Seconds:F2}s ({OutcomeNote(timing)})";
+
+        /// <summary>
+        /// What actually became of the search, in words a reader will not mistake for a complaint.
+        ///
+        /// This used to print "[budget-capped]" whenever the hard timer fired, which is true of
+        /// nearly every search a deep tier runs and says nothing about whether anything went wrong.
+        /// It read as a failure. The clearest case is the normal tier: it completes depth 5, which is
+        /// its configured ceiling, and then spends the rest of its budget in the tie-break pass that
+        /// runs until the timer stops it - so a cell that did exactly what it was asked announced
+        /// itself as capped, and testers reported it.
+        ///
+        /// The stop reason is what separates them, because it describes how the depth loop ended
+        /// rather than whether the clock happened to be running at the finish.
+        ///
+        /// Every arm that names a depth also says how long the climb to it took, because the run
+        /// summary averages that number over all of them. Two arms used to leave it out, and the
+        /// summary counted those samples anyway - a real run reported a mean of 1.58s over eight
+        /// cells while the six it printed averaged 1.72s, with no way to reconcile the two.
+        /// </summary>
+        internal static string OutcomeNote(SearchTiming timing)
         {
-            string cappedNote = timing.BudgetCapped ? " [budget-capped]" : "";
-            string depthNote = timing.DepthReached > 0 ? $" (reached depth {timing.DepthReached})" : "";
-            return $"{timing.Seconds:F2}s{cappedNote}{depthNote}";
+            if (timing.DepthReached <= 0) return "no depth completed";
+
+            string reachedIn = timing.DepthLoopMs > 0 ? $" in {timing.DepthLoopMs / 1000.0:F2}s" : "";
+
+            return timing.StopReason switch
+            {
+                SearchStopReason.Ceiling => timing.BudgetCapped
+                    ? $"reached depth {timing.DepthReached}, its ceiling{reachedIn}, then spent what was left on the tie-break pass"
+                    : $"reached depth {timing.DepthReached}, its ceiling{reachedIn}",
+                SearchStopReason.Budget => $"the clock stopped it at depth {timing.DepthReached}, reached{reachedIn}",
+                SearchStopReason.SettledEarly => timing.BudgetCapped
+                    ? $"settled at depth {timing.DepthReached}{reachedIn} and stopped early, then spent what was left on the tie-break pass"
+                    : $"settled at depth {timing.DepthReached}{reachedIn} and stopped early",
+                SearchStopReason.MateFound => $"found a forced mate at depth {timing.DepthReached}{reachedIn}",
+                _ => $"reached depth {timing.DepthReached}{reachedIn}",
+            };
         }
 
         /// <summary>
@@ -445,18 +527,40 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         /// long run. The magnitude is still printed in full, and a device that misses by 2 ms and
         /// one that misses by 2 seconds still read nothing alike.
         /// </summary>
-        internal static string BudgetNote(SearchTiming timing) =>
-            timing.OvershootMsRounded > 0
-                ? $"+{timing.OvershootMsRounded}ms past budget ({timing.HardMs}ms)"
-                : $"within budget ({timing.HardMs}ms)";
+        internal static string BudgetNote(SearchTiming timing)
+        {
+            int overshoot = timing.OvershootMsRounded;
+            if (overshoot > 0) return $"+{overshoot}ms past budget ({timing.HardMs}ms)";
+
+            // How much room was left, not just that there was some. A bare "within budget" said the
+            // same thing about a tier finishing in a fifth of its budget and one finishing a
+            // millisecond inside it, and on a real run said it about 129 cells of 200 - showing only
+            // the tail of the distribution and hiding everything that was comfortable.
+            //
+            // Below a millisecond it says so in words instead. The figure is rounded, so a search a
+            // fraction inside its budget would otherwise print "0ms inside budget" - which is the
+            // shape that already taught one reader to stop believing these lines.
+            int room = -overshoot;
+            return room >= 1
+                ? $"{room}ms inside budget ({timing.HardMs}ms)"
+                : $"on budget to the millisecond ({timing.HardMs}ms)";
+        }
 
         private void Emit(string line) => OnLine?.Invoke(line);
 
-        /// <summary>One search's outcome: elapsed wall-clock time, whether the soft time budget cut
-        /// it off before MaxDepth, the deepest iterative-deepening depth it fully completed — the
-        /// only field that still distinguishes two runs which both hit the same budget cap (their
-        /// elapsed seconds are then identical by construction, but the depth reached is not) — and
-        /// the tier's own hard budget in milliseconds, which is what OvershootMs measures against.
+        /// <summary>One search's outcome: elapsed wall-clock time, whether the hard time budget's
+        /// own timer fired before the search returned, the deepest iterative-deepening depth it
+        /// fully completed — the only field that still distinguishes two runs which both hit the same
+        /// budget cap (their elapsed seconds are then identical by construction, but the depth
+        /// reached is not) — and the tier's own hard budget in milliseconds, which is what
+        /// OvershootMs measures against.
+        ///
+        /// BudgetCapped says the timer fired, and nothing more. It does NOT mean the tier fell short
+        /// of its configured depth: a search can complete every depth it was asked for and then keep
+        /// going in the tie-break pass, which runs until the same timer stops it. Read alongside
+        /// StopReason, which says how the depth loop itself ended, the two separate a tier that ran
+        /// out of time from one that finished its work and spent the remainder.
+        ///
         /// ElapsedSinceRunStartMs defaults to zero because most callers (every existing test) have no
         /// stake in when during a run a sample landed; only EmitThermalBuckets reads it, and it is
         /// only ever non-zero when a real run stamps it via TimedSearch.
@@ -468,15 +572,32 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             public readonly int DepthReached;
             public readonly int HardMs;
             public readonly double ElapsedSinceRunStartMs;
+            public readonly SearchStopReason StopReason;
+
+            /// <summary>
+            /// How long the deepening loop took to reach DepthReached, out of the whole elapsed
+            /// time - so two cells both pinned at three seconds can have spent one of them climbing
+            /// and one of them four times that, and only this tells them apart. Depth is quantised
+            /// to whole plies and cannot.
+            ///
+            /// Only completed depths are timed. Where the rest of a cell's time went depends on what
+            /// stopped the loop: a search that reached its ceiling spent it in the tie-break pass,
+            /// one the clock stopped spent it on a deeper depth it had to abandon. OutcomeNote asks
+            /// the stop reason rather than assuming either.
+            /// </summary>
+            public readonly long DepthLoopMs;
 
             public SearchTiming(double seconds, bool budgetCapped, int depthReached, int hardMs,
-                double elapsedSinceRunStartMs = 0)
+                double elapsedSinceRunStartMs = 0, SearchStopReason stopReason = SearchStopReason.Unset,
+                long depthLoopMs = 0)
             {
                 Seconds = seconds;
                 BudgetCapped = budgetCapped;
                 DepthReached = depthReached;
                 HardMs = hardMs;
                 ElapsedSinceRunStartMs = elapsedSinceRunStartMs;
+                StopReason = stopReason;
+                DepthLoopMs = depthLoopMs;
             }
 
             /// <summary>How far past this search's own budget the elapsed time actually landed.

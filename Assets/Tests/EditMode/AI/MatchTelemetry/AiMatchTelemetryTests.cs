@@ -25,6 +25,13 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.MatchTelemetry
             SearchStopReason stopReason = SearchStopReason.Budget) =>
             new AiMoveRecord(ply, team, Move(0, 1, 0, 2), AiMoveSource.Searched, elapsedMs, depth, stopReason);
 
+        /// <summary>A searched ply with its depth clock filled in. Nothing in this fixture could
+        /// set that before, which is why the line it drives went out saying the wrong thing.</summary>
+        private static AiMoveRecord Timed(int ply, int elapsedMs, int depth, int depthLoopMs,
+            SearchStopReason stopReason) =>
+            new AiMoveRecord(ply, Team.Black, Move(0, 1, 0, 2), AiMoveSource.Searched, elapsedMs, depth,
+                stopReason, gateHoldMs: 0, depthLoopMs: depthLoopMs);
+
         private static AiMoveRecord Book(int ply, Team team) =>
             new AiMoveRecord(ply, team, Move(0, 1, 0, 2), AiMoveSource.Book, elapsedMs: 0, completedDepth: 0,
                 stopReason: SearchStopReason.Unset);
@@ -101,7 +108,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.MatchTelemetry
 
             string text = telemetry.Render();
 
-            Assert.That(text, Does.Contain("elapsed ms: worst=300 mean=200 min=100"));
+            Assert.That(text, Does.Contain("elapsed ms over 2 searched moves: worst=300 mean=200 min=100"));
             Assert.That(text, Does.Contain("depth reached over 2 moves: worst=3 mean=4.0"),
                 "'Worst' depth means the shallowest reached, matching the device benchmark's own convention.");
         }
@@ -132,6 +139,168 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.MatchTelemetry
             // Only one side's plies are ever recorded, so the numbers skip by design. Said out
             // loud, because a gap in them otherwise reads as something having been dropped.
             Assert.That(telemetry.Render(), Does.Contain("ply numbers skip"));
+        }
+
+        /// <summary>
+        /// The page used to blame a Defection for the parity change, and a real match disproved it:
+        /// no Defection anywhere in the game, its own summary line saying so, and the parity changed
+        /// regardless. What actually does it is a Betrayal spending more than one ply inside a single
+        /// turn, whoever played it - the human's Act and Retribution did it here, and neither of
+        /// those is recorded at all, because only the AI's plies are.
+        ///
+        /// Built to the shape of that match rather than to the wording, so this fails for the reason
+        /// the original was wrong: nothing in it defected, and the numbers still change parity.
+        /// </summary>
+        [Test]
+        public void Render_WhenTheParityChangesWithNoDefectionAnywhere_DoesNotBlameOneForIt()
+        {
+            var telemetry = new AiMatchTelemetry("match");
+            telemetry.RecordMove(Searched(10, Team.Black, elapsedMs: 3000, depth: 7));
+            telemetry.RecordMove(Searched(12, Team.Black, elapsedMs: 3000, depth: 7));
+            // The human Acts and pays the Retribution here, two plies inside their own turn. Neither
+            // is the AI's, so neither is recorded; all that shows is Black's plies turning odd.
+            telemetry.RecordMove(Searched(15, Team.Black, elapsedMs: 3000, depth: 7));
+            telemetry.RecordMove(Searched(17, Team.Black, elapsedMs: 3000, depth: 7));
+
+            string text = telemetry.Render();
+
+            Assert.That(text, Does.Contain("0 by Defection"),
+                "The fixture has to be a match with no Defection in it, or it cannot catch this.");
+            Assert.That(text, Does.Not.Contain("A Defection spends a ply of its own"),
+                "This report contains no Defection and its ply numbers still change parity, so a "
+                + "Defection cannot be what the page offers as the explanation.");
+        }
+
+        /// <summary>
+        /// The elapsed line used to name no denominator at all while the depth line right under it
+        /// named its own, so a reader comparing the two had to guess whether they covered the same
+        /// moves. They do not: a move that stopped on a forced mate has an elapsed time worth
+        /// reporting and a depth that is not, so elapsed always counts more of them.
+        /// </summary>
+        [Test]
+        public void Render_ElapsedAndDepthEachNameTheirOwnDenominator_BecauseTheyDiffer()
+        {
+            var telemetry = new AiMatchTelemetry("match");
+            telemetry.RecordMove(Searched(2, Team.Black, elapsedMs: 3000, depth: 7));
+            telemetry.RecordMove(Searched(4, Team.Black, elapsedMs: 3000, depth: 7));
+            telemetry.RecordMove(Searched(6, Team.Black, elapsedMs: 40, depth: 2, SearchStopReason.MateFound));
+
+            string text = telemetry.Render();
+
+            Assert.That(text, Does.Contain("elapsed ms over 3 searched moves"));
+            Assert.That(text, Does.Contain("depth reached over 2 moves"),
+                "The mate is in the elapsed spread and out of the depth spread, which is the whole "
+                + "reason each line has to say what it counted.");
+        }
+
+        /// <summary>
+        /// A move waits behind whatever animation is still playing before it reaches the board, and
+        /// the fastest replies are the likeliest to be held - which a bare elapsed time hides
+        /// completely. The elapsed clock stops when the search hands the move over, so this is the
+        /// rest of what the player actually sat through.
+        /// </summary>
+        [Test]
+        public void Render_AMoveHeldBehindAnAnimation_SaysHowLongItWaitedToReachTheBoard()
+        {
+            var telemetry = new AiMatchTelemetry("match");
+            telemetry.RecordMove(Searched(2, Team.Black, elapsedMs: 23, depth: 6).WithGateHold(604));
+
+            string text = telemetry.Render();
+
+            Assert.That(text, Does.Contain("on board 604ms later"));
+            Assert.That(text, Does.Contain("held behind an animation: 1 of 1 plies, worst=604ms"));
+        }
+
+        /// <summary>
+        /// The "never happened" case gets a line of its own. Without it a reader has no way to tell a
+        /// match where nothing was ever held from one where the report simply does not mention it,
+        /// and would reasonably read the elapsed figures as the whole wait.
+        /// </summary>
+        [Test]
+        public void Render_WhenNothingWasEverHeldUp_SaysSoRatherThanStayingSilent()
+        {
+            var telemetry = new AiMatchTelemetry("match");
+            telemetry.RecordMove(Searched(2, Team.Black, elapsedMs: 3000, depth: 7));
+
+            Assert.That(telemetry.Render(), Does.Contain("held behind an animation: never"));
+        }
+
+        /// <summary>
+        /// A page of lines each reporting a hold of zero teaches whoever reads it to stop believing
+        /// the ones that mean something. This project has already shipped that mistake once, on a
+        /// benchmark line announcing an overshoot of "0ms" on 194 of 200 rows.
+        /// </summary>
+        [Test]
+        public void Render_AMoveThatWasNeverHeld_DoesNotSaySoOnItsOwnLine()
+        {
+            var telemetry = new AiMatchTelemetry("match");
+            telemetry.RecordMove(Searched(2, Team.Black, elapsedMs: 3000, depth: 7));
+
+            Assert.That(telemetry.Render(), Does.Not.Contain("on board 0ms later"));
+        }
+
+        /// <summary>
+        /// Nothing used to write an outcome into this report, so a tester sent back forty lines of
+        /// timings that never said who won or how - the first thing anybody opening it looks for.
+        /// </summary>
+        [Test]
+        public void Render_OnceTheMatchHasEnded_LeadsWithHowItEnded()
+        {
+            var telemetry = new AiMatchTelemetry("match");
+            telemetry.RecordMove(Searched(2, Team.Black, elapsedMs: 900, depth: 6));
+            telemetry.SetResult("Black won by checkmate.");
+
+            Assert.That(telemetry.Render(), Does.Contain("Result: Black won by checkmate."));
+        }
+
+        /// <summary>
+        /// A report can honestly be shared from a game still being played, so the absence gets a line
+        /// of its own. Saying nothing there reads as a report that forgot to mention the result
+        /// rather than one that has none to give.
+        /// </summary>
+        [Test]
+        public void Render_WithTheGameStillGoing_SaysThereIsNoResultYetRatherThanOmittingIt()
+        {
+            var telemetry = new AiMatchTelemetry("match");
+            telemetry.RecordMove(Searched(2, Team.Black, elapsedMs: 900, depth: 6));
+
+            Assert.That(telemetry.Render(), Does.Contain("Result: not recorded"));
+        }
+
+        /// <summary>
+        /// A checkmate can be taken back - the undo path clears the board's own game-over state for
+        /// exactly that reason - and the report has to come back with it. Left standing, the result
+        /// would head a report about a game that is still being played, and it would be the most
+        /// confident-looking line on the page.
+        /// </summary>
+        [Test]
+        public void RemoveAfterPly_AfterATakeback_DropsTheResultThePositionNoLongerSupports()
+        {
+            var telemetry = new AiMatchTelemetry("match");
+            telemetry.RecordMove(Searched(48, Team.White, elapsedMs: 900, depth: 6));
+            telemetry.RecordMove(Searched(50, Team.White, elapsedMs: 40, depth: 2, SearchStopReason.MateFound));
+            telemetry.SetResult("White won by checkmate.");
+
+            telemetry.RemoveAfterPly(48);
+
+            string text = telemetry.Render();
+            Assert.That(text, Does.Not.Contain("White won by checkmate."));
+            Assert.That(text, Does.Contain("Result: not recorded"));
+        }
+
+        /// <summary>
+        /// Which way the parity goes depends on the colour the AI is playing and on how many plies
+        /// the sequence took - an Act and a Retribution spend two, an Act, a Defection and a forced
+        /// Save spend three and leave the parity where it started. Naming one direction was wrong for
+        /// the first real match to arrive, which went the other way.
+        /// </summary>
+        [Test]
+        public void Render_DoesNotClaimTheParityAlwaysTurnsTheSameWay()
+        {
+            var telemetry = new AiMatchTelemetry("match");
+            telemetry.RecordMove(Searched(3, Team.White, elapsedMs: 100, depth: 5));
+
+            Assert.That(telemetry.Render(), Does.Not.Contain("from odd to even"));
         }
 
         [Test]
@@ -238,9 +407,18 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.MatchTelemetry
 
             // 3044ms against a 3000ms budget reads as a missed deadline next to a benchmark whose
             // worst overshoot across 200 searches was 10ms. It is not the same measurement: this
-            // clock starts when the move is asked for and stops when it reaches the board, so it
-            // carries the wait for the next frame as well.
-            Assert.That(telemetry.Render(), Does.Contain("reaching the board"));
+            // clock starts when the move is asked for and carries the wait for the next frame too.
+            //
+            // It used to say the clock ran until the move reached the board, and this test pinned
+            // that. It does not: it stops when the search hands the move over, and the move can then
+            // wait behind an animation still playing. The rest of that wait is reported separately
+            // now, so both halves are stated and neither claims to be the other.
+            string text = telemetry.Render();
+
+            Assert.That(text, Does.Contain("handing it over"));
+            Assert.That(text, Does.Not.Contain("to that move reaching the board"),
+                "The clock does not run that far, and saying it does overstates it by however long "
+                + "the board was busy.");
         }
 
         [Test]
@@ -322,5 +500,167 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.MatchTelemetry
                 "A search that was taken back must stop setting the headline for the ones that stood.");
             Assert.That(report, Does.Contain("worst=7"));
         }
+
+        /// <summary>
+        /// The time after the last completed depth is not one thing. A search the clock stopped
+        /// spent it on a deeper look it never finished - the depth clock only records depths that
+        /// completed, so an abandoned one lands in the remainder whole - while a search that reached
+        /// its ceiling spent it in the tie-break pass. Calling both "settling" said the device had
+        /// room to spare on precisely the plies where it had run out.
+        ///
+        /// The two records differ in the stop reason and nothing else. An earlier attempt at this
+        /// pair varied the depth as well, which made the strings differ for a reason that had
+        /// nothing to do with what was being tested.
+        /// </summary>
+        [Test]
+        public void AMoveTheClockStopped_DoesNotDescribeItsLastStretchAsSettling()
+        {
+            var telemetry = new AiMatchTelemetry("clock-stopped");
+            telemetry.RecordMove(Timed(ply: 4, elapsedMs: 3029, depth: 6, depthLoopMs: 1631,
+                stopReason: SearchStopReason.Budget));
+
+            string text = telemetry.Render();
+
+            Assert.That(text, Does.Contain("1631ms to depth"));
+            Assert.That(text, Does.Contain("1398ms more before the clock stopped it"));
+            Assert.That(text, Does.Not.Contain("settling"),
+                "1398ms of an abandoned depth 7 is the device working, not the device settling.");
+        }
+
+        [Test]
+        public void AMoveThatReachedItsCeiling_StillCallsItsLastStretchSettling()
+        {
+            var telemetry = new AiMatchTelemetry("ceiling");
+            telemetry.RecordMove(Timed(ply: 4, elapsedMs: 3029, depth: 6, depthLoopMs: 1631,
+                stopReason: SearchStopReason.Ceiling));
+
+            Assert.That(telemetry.Render(), Does.Contain("1398ms settling"));
+        }
+
+        [Test]
+        public void TheSameTimingsUnderDifferentStopReasons_DoNotProduceTheSameLine()
+        {
+            var stopped = new AiMatchTelemetry("stopped");
+            stopped.RecordMove(Timed(ply: 4, elapsedMs: 3029, depth: 6, depthLoopMs: 1631,
+                stopReason: SearchStopReason.Budget));
+
+            var settled = new AiMatchTelemetry("settled");
+            settled.RecordMove(Timed(ply: 4, elapsedMs: 3029, depth: 6, depthLoopMs: 1631,
+                stopReason: SearchStopReason.Ceiling));
+
+            // Compared from the climb onwards, not across the whole line: the stop reason is
+            // printed earlier in it, so two whole lines differ whatever this note says and an
+            // assertion on them would pass with the note reduced to one fixed word.
+            Assert.That(AfterTheClimb(stopped.Render()), Is.Not.EqualTo(AfterTheClimb(settled.Render())),
+                "Same clock, same depth, different endings - the line has to say which.");
+        }
+
+        /// <summary>
+        /// A match has one Betrayal and both players share it, so the side that spends it is often
+        /// not the AI - and the plies below hold the AI's own moves only. One real match had White
+        /// Act at ply 23 and the report's sole trace of it was the AI's numbering jumping from 22 to
+        /// 25, which a reader had to decode from a note about parity.
+        /// </summary>
+        [Test]
+        public void ABetrayalSpentByTheOpponent_IsInTheSummaryEvenThoughNoPlyOfItIsLogged()
+        {
+            var telemetry = new AiMatchTelemetry("opponent-acted");
+            telemetry.RecordMove(Searched(ply: 22, Team.Black, elapsedMs: 3017, depth: 7));
+            telemetry.NoteBetrayalAct(plyNumber: 23, initiator: Team.White);
+            telemetry.NoteRetribution(plyNumber: 24);
+            telemetry.RecordMove(Searched(ply: 25, Team.Black, elapsedMs: 3049, depth: 7));
+
+            Assert.That(telemetry.Render(),
+                Does.Contain("Betrayal: White Acted at ply 23 and paid the Retribution at ply 24."));
+        }
+
+        /// <summary>
+        /// The Act does not pass the turn, so the Retribution falls to the player who Acted. The
+        /// wording has to keep that straight: a report saying the other side owed it would be
+        /// stating the opposite of the rule.
+        /// </summary>
+        [Test]
+        public void ARetributionRefused_SaysWhoTheBetrayerJoined()
+        {
+            var telemetry = new AiMatchTelemetry("defected");
+            telemetry.NoteBetrayalAct(plyNumber: 11, initiator: Team.Black);
+            telemetry.NoteDefection(plyNumber: 12, gainedBy: Team.White);
+
+            Assert.That(telemetry.Render(),
+                Does.Contain("Betrayal: Black Acted at ply 11; no Retribution came, so the Betrayer joined White at ply 12."));
+        }
+
+        [Test]
+        public void ADefectionThatChecksTheInitiator_AlsoRecordsTheForcedSaveTheyGot()
+        {
+            var telemetry = new AiMatchTelemetry("defected-and-saved");
+            telemetry.NoteBetrayalAct(plyNumber: 11, initiator: Team.Black);
+            telemetry.NoteDefection(plyNumber: 12, gainedBy: Team.White);
+            telemetry.NoteForcedSave(plyNumber: 13);
+
+            Assert.That(telemetry.Render(), Does.Contain("joined White at ply 12, and Black was forced to Save at ply 13."));
+        }
+
+        [Test]
+        public void AMatchWhereNobodyBetrayed_SaysSoRatherThanSayingNothing()
+        {
+            var telemetry = new AiMatchTelemetry("untouched");
+            telemetry.RecordMove(Searched(ply: 2, Team.Black, elapsedMs: 900, depth: 5));
+
+            Assert.That(telemetry.Render(),
+                Does.Contain("Betrayal: unspent - neither side took the one this match had."));
+        }
+
+        /// <summary>
+        /// A takeback that unmakes the Act puts the Betrayal back on the table for both players, so
+        /// a summary still claiming it was spent would describe a board nobody is playing. The same
+        /// reasoning already clears the recorded result, and for the same reason: undo really can
+        /// reach back past either.
+        /// </summary>
+        [Test]
+        public void TakingBackTheAct_PutsTheBetrayalBackOnTheTable()
+        {
+            var telemetry = new AiMatchTelemetry("taken-back");
+            telemetry.NoteBetrayalAct(plyNumber: 23, initiator: Team.White);
+            telemetry.NoteRetribution(plyNumber: 24);
+
+            telemetry.RemoveAfterPly(22);
+
+            Assert.That(telemetry.Render(), Does.Contain("Betrayal: unspent"));
+            Assert.That(telemetry.Render(), Does.Not.Contain("ply 23"));
+        }
+
+        /// <summary>
+        /// A takeback can land inside the sequence, leaving an Act that is still owed a Retribution.
+        /// Clearing the whole note on any rewind would lose the Act; keeping the whole note would
+        /// leave a Retribution that has been unmade.
+        /// </summary>
+        [Test]
+        public void TakingBackOnlyTheRetribution_LeavesTheActStandingAndUnresolved()
+        {
+            var telemetry = new AiMatchTelemetry("half-taken-back");
+            telemetry.NoteBetrayalAct(plyNumber: 23, initiator: Team.White);
+            telemetry.NoteRetribution(plyNumber: 24);
+
+            telemetry.RemoveAfterPly(23);
+
+            Assert.That(telemetry.Render(),
+                Does.Contain("Betrayal: White Acted at ply 23 - still unresolved when this report was taken."));
+        }
+
+        private static string AfterTheClimb(string report)
+        {
+            string line = PlyLine(report);
+            int climb = line.IndexOf("ms to depth, ", StringComparison.Ordinal);
+            return climb < 0 ? "" : line.Substring(climb);
+        }
+
+        private static string PlyLine(string report)
+        {
+            foreach (string line in report.Split('\n'))
+                if (line.StartsWith("ply ", StringComparison.Ordinal)) return line.TrimEnd();
+            return "";
+        }
+
     }
 }

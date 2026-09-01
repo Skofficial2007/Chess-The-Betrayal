@@ -227,6 +227,11 @@ namespace ChessTheBetrayal.App
 
         private void Awake()
         {
+            // First line out, so a log captured from a tester says which build wrote the rest of it.
+            // The shared reports carry this same line in their headers; a logcat has no header to put
+            // it in, and it is the log people paste into a chat when something looks wrong.
+            Debug.Log($"[Chess: The Betrayal] {DeviceDescriptionReader.AppVersionLine}");
+
             ServiceLocator.Instance.Register(this);
 
             // Register under the Core-owned seams the presentation layer resolves. The locator keys
@@ -425,8 +430,11 @@ namespace ChessTheBetrayal.App
             ChessEngine.Initialize(NullDomainLogger.Instance);
         }
 
-        private void OnGameOverRaised(ChessTheBetrayal.Events.Payloads.GameOverPayload payload) =>
+        private void OnGameOverRaised(ChessTheBetrayal.Events.Payloads.GameOverPayload payload)
+        {
             _matchFlow.RecordMatchResult(payload.WinningTeam, payload.IsTimeout);
+            _aiCoordinator.NoteMatchEnded(payload.WinningTeam, payload.Reason);
+        }
 
         /// <summary>
         /// Loud-fails on any unassigned Inspector reference at Play-mode start instead of letting

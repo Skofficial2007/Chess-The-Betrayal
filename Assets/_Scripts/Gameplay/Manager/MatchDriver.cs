@@ -481,7 +481,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
             if (_logMoves)
             {
                 Debug.Log($"[MatchDriver] Game Over. Winner: {(winner.HasValue ? winner.ToString() : "Draw")}. Timeout: {byTimeout}");
-                Debug.Log($"[MatchDriver] Full move log ({MoveLog.Entries.Count} plies):\n{MoveLog.DumpToString()}");
+                LongLogMessage.Write($"[MatchDriver] Full move log ({MoveLog.Entries.Count} plies)", MoveLog.DumpToString());
             }
         }
 

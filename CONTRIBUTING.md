@@ -92,6 +92,23 @@ From the command line it is the same three names:
 A new test needs no category. Add `[Category(TestCategories.Slow)]` only if it plays games or waits
 on a real clock — and never to something already `[Explicit]`, which would start it.
 
+## Editor tests do not prove a player build compiles
+
+`UNITY_EDITOR` is always defined in the editor, so code behind `#if UNITY_EDITOR ||
+DEVELOPMENT_BUILD` compiles and passes its tests even where a release build rejects it. `dotnet
+build` on the generated csproj has the same blind spot, because Unity writes those with the
+editor's own symbols. This has broken an Android build before.
+
+If you change anything near one of those guards, compile the assembly without them. Copy its
+generated `.csproj`, delete `UNITY_EDITOR` and `DEVELOPMENT_BUILD` from `<DefineConstants>`, and
+build the copy:
+
+    dotnet build rel.csproj -v quiet --nologo
+
+Around twenty seconds an assembly, and `*.csproj` is generated and gitignored so the copy is
+disposable. Put the offending line back once and check the build goes red before you trust a clean
+run.
+
 ## What runs automatically
 
 Opening a pull request starts one job, and it is not the test suite. It checks that:

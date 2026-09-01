@@ -326,7 +326,8 @@ namespace ChessTheBetrayal.Gameplay.Manager
             if (_logMoves && _board != null && !_board.IsGameOver)
             {
                 Debug.Log($"[MatchFlowCoordinator] Match exited mid-game. Final position:\n{BoardStateDump.ToAscii(_board)}");
-                Debug.Log($"[MatchFlowCoordinator] Move log at exit ({_matchDriver.MoveLog.Entries.Count} plies):\n{_matchDriver.MoveLog.DumpToString()}");
+                LongLogMessage.Write($"[MatchFlowCoordinator] Move log at exit ({_matchDriver.MoveLog.Entries.Count} plies)",
+                    _matchDriver.MoveLog.DumpToString());
             }
 
             _board.Clear();

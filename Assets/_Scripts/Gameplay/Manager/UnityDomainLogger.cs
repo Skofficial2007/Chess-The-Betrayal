@@ -27,21 +27,21 @@ namespace ChessTheBetrayal.Gameplay.Manager
             { DomainEventCode.Engine_IllegalMoveRequested,     "[ChessEngine] Illegal move requested" },
             { DomainEventCode.Engine_MoveHistoryUnderflow,     "[ChessEngine] Move history underflow on undo" },
             { DomainEventCode.Board_PieceSetOutOfBounds,       "[BoardState] SetPiece called with out-of-bounds coordinates" },
-            { DomainEventCode.Board_ZobristDesync,             "[BoardState] Zobrist hash desync — incremental hash does not match full recompute" },
+            { DomainEventCode.Board_ZobristDesync,             "[BoardState] Zobrist hash desync - incremental hash does not match full recompute" },
             { DomainEventCode.Betrayal_RightAlreadyConsumed,   "[Betrayal] Betrayal right already consumed this match" },
             { DomainEventCode.Betrayal_KingTargetedAsVictim,   "[Betrayal] INVARIANT VIOLATED: King cannot be the Victim" },
             { DomainEventCode.Betrayal_KingTargetedAsBetrayer, "[Betrayal] INVARIANT VIOLATED: King cannot be the Betrayer" },
-            { DomainEventCode.Betrayal_RetributionPieceNone,   "[Betrayal] No executioner piece can reach the Betrayer — Defection triggered" },
-            { DomainEventCode.Betrayal_DefectionResolved,      "[Betrayal] Defection resolved — Betrayer joined opponent's army" },
-            { DomainEventCode.Betrayal_ForcedSaveRequired,     "[Betrayal] Defection placed own King in check — ForcedSave phase active" },
+            { DomainEventCode.Betrayal_RetributionPieceNone,   "[Betrayal] No executioner piece can reach the Betrayer - Defection triggered" },
+            { DomainEventCode.Betrayal_DefectionResolved,      "[Betrayal] Defection resolved - Betrayer joined opponent's army" },
+            { DomainEventCode.Betrayal_ForcedSaveRequired,     "[Betrayal] Defection placed own King in check - ForcedSave phase active" },
             { DomainEventCode.AI_TranspositionHashCollision,   "[AI] Transposition table hash collision at ply" },
             { DomainEventCode.AI_SearchDepthExceeded,          "[AI] Search depth exceeded maximum budget at ply" },
             { DomainEventCode.AI_BetrayalBranchExpansion,      "[AI] Betrayal branch expansion factor at node" },
-            { DomainEventCode.AI_SearchRequested,              "[AI] Search requested — depth" },
-            { DomainEventCode.AI_MoveDecided,                  "[AI] Move decided — elapsed ms" },
+            { DomainEventCode.AI_SearchRequested,              "[AI] Search requested - depth" },
+            { DomainEventCode.AI_MoveDecided,                  "[AI] Move decided - elapsed ms" },
             { DomainEventCode.AI_SearchCancelled,              "[AI] Search cancelled (undo)" },
             { DomainEventCode.AI_BookMovePlayed,               "[AI] Opening book move played" },
-            { DomainEventCode.AI_LeftOpeningBook,              "[AI] Left the opening book — thinking for itself from here" },
+            { DomainEventCode.AI_LeftOpeningBook,              "[AI] Left the opening book - thinking for itself from here" },
         };
 
         public UnityDomainLogger(bool verbose = false, Action<DomainLogEvent> onFatalError = null)
@@ -83,7 +83,12 @@ namespace ChessTheBetrayal.Gameplay.Manager
             }
         }
 
-        private static string Format(DomainLogEvent evt)
+        /// <summary>
+        /// Internal rather than private so the wording can be checked without a console to read it
+        /// from. What a log line says is the only part of this class worth asserting, and it is the
+        /// part that goes to somebody outside the project.
+        /// </summary>
+        internal static string Format(DomainLogEvent evt)
         {
             if (_prefixes.TryGetValue(evt.Code, out string prefix))
             {

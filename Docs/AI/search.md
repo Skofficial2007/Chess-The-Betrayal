@@ -288,6 +288,7 @@ Verified automatically, all in seconds:
 | A narrow-window failure is always caught and re-searched | `AspirationWindowExperimentTests` |
 | Entries survive a round trip, and a clear wipes every view of a shared table | `TranspositionTableTests`, `TranspositionTableLifecycleTests` |
 | A winning capture is still found with delta pruning active | `QuiescenceDeltaPruningTests` |
+| Quiescence skips a capture that loses material on the recapture, so the search really is consulting static exchange evaluation | `SearchGuardTelemetryTests` |
 | Null move, reduction and narrow-window activity all register | `SearchTelemetryTests` |
 | The search allocates nothing | `SearchTelemetryTests` |
 | Every tier arrives inside its hard budget and reaches a depth floor | `AIProfileSearchBenchmarkTests` |
@@ -302,7 +303,7 @@ If you go looking for that fixture, it lives inside `AIProfileStrengthOrderingTe
 full statistical suite, which is marked explicit and does not run in an ordinary pass. Naming the file
 is not the same as naming the class, and a command-line filter selects classes.
 
-Three further things are **not** settled, and are worth knowing before you trust anything above:
+Two further things are **not** settled, and are worth knowing before you trust anything above:
 
 **Aspiration windows have never been measured on this engine.** They are implemented, tested for
 correctness, and switched off. The literature is genuinely mixed — there is a documented case of a
@@ -315,11 +316,6 @@ the node count at depth 9, and it was never buying correctness in the first plac
 already refuses to stand pat mid-sequence. Depth spent uniformly buys more than depth spent only on
 Betrayal lines. It is off by a single constant with the machinery still wired, so re-enabling it for
 a measured comparison is a one-line change.
-
-**Nothing proves the search consults static exchange evaluation.** The exchange calculator has its
-own tests and they pass. But disable the guard both call sites check and no ordering test, no
-benchmark, and no telemetry counter notices the search has stopped using it. The fixture covers the
-calculator; nothing covers the wiring.
 
 ## What it costs: measured
 

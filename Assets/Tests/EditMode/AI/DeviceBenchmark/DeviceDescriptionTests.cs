@@ -29,6 +29,10 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.DeviceBenchmark
             Assert.That(labels, Is.EquivalentTo(new[]
             {
                 "Device model", "OS", "CPU", "GPU (chipset proxy)", "RAM", "Screen", "Build",
+                // Names the software, not the phone: a version somebody chose and an id regenerated
+                // per build. Neither is derived from the device or from whoever is holding it, which
+                // is the question this list exists to keep asking.
+                "App version",
             }));
         }
 
@@ -125,6 +129,58 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.DeviceBenchmark
             Assert.That(lines[0], Does.StartWith("Device model:"));
         }
 
+        /// <summary>
+        /// The report a tester sends back has to name the build that produced it, or it cannot be
+        /// read against the code. Both halves are asserted because they answer different questions:
+        /// the version is what a person quotes, and the id is what actually separates two builds
+        /// carrying the same version, which is most of them.
+        /// </summary>
+        [Test]
+        public void ToReportLines_NameTheBuildThatProducedThem()
+        {
+            string line = SampleDescription().ToReportLines().Single(l => l.StartsWith("App version:"));
+
+            Assert.That(line, Does.Contain("0.4.1"));
+            Assert.That(line, Does.Contain("3f9c1d5b7a2e4086"));
+        }
+
+        /// <summary>
+        /// An editor session was never built, so Unity hands back an empty build id. Saying so beats
+        /// printing a line that trails off after the word "build", which reads as a report that was
+        /// cut short rather than one honestly reporting it has no build to name.
+        /// </summary>
+        [Test]
+        public void ToReportLines_WithNoBuildIdToReport_SayThereIsNoneRatherThanTrailingOff()
+        {
+            DeviceDescription editorRun = SampleDescription();
+            editorRun.BuildId = string.Empty;
+
+            string line = editorRun.ToReportLines().Single(l => l.StartsWith("App version:"));
+
+            Assert.That(line, Does.Not.EndWith("build "));
+            Assert.That(line, Does.Contain("not a build"));
+        }
+
+        /// <summary>
+        /// The startup log line and the report header are the same sentence from the same place. Two
+        /// copies would only have to drift once for a log and the report beside it to claim different
+        /// builds, which is worse than neither of them saying anything.
+        ///
+        /// Asserted against a description with nothing in its build id on purpose. A hand-written
+        /// second copy of this line renders identically to the real one whenever every field happens
+        /// to be filled in, so a fully-populated sample lets a duplicate pass as the original — this
+        /// check was written that way first and stayed green while exactly that was done to it. The
+        /// empty field is where a copy has to reproduce the fallback wording or diverge.
+        /// </summary>
+        [Test]
+        public void TheStartupLogLineAndTheReportHeaderAreOneSentence()
+        {
+            DeviceDescription editorRun = SampleDescription();
+            editorRun.BuildId = string.Empty;
+
+            Assert.That(editorRun.ToReportLines(), Does.Contain(editorRun.AppVersionLine));
+        }
+
         private static DeviceDescription SampleDescription() => new DeviceDescription
         {
             Model = "TestPhone",
@@ -144,6 +200,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.DeviceBenchmark
             ScriptingBackend = "IL2CPP",
             ProcessBits = 64,
             Platform = "Android",
+            AppVersion = "0.4.1",
+            BuildId = "3f9c1d5b7a2e4086",
         };
     }
 }

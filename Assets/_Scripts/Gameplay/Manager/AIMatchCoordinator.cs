@@ -63,6 +63,12 @@ namespace ChessTheBetrayal.Gameplay.Manager
         // main-thread clock; started in TryRequestMove, read in HandleMoveDecided.
         private readonly Stopwatch _searchStopwatch = new Stopwatch();
 
+        // Times the other half of the wait: from the move being handed to the pacing gate to it
+        // actually reaching the board. A clock of its own rather than reading the one above a second
+        // time, because applying a ply raises the turn change that asks for the next move, which
+        // restarts that one - the two spans overlap by design and cannot share a stopwatch.
+        private readonly Stopwatch _deliveryStopwatch = new Stopwatch();
+
         /// <summary>True once <see cref="SetAIMode"/> has constructed an agent for this session.</summary>
         public bool IsAiMode => _aiAgent != null;
 
@@ -173,8 +179,14 @@ namespace ChessTheBetrayal.Gameplay.Manager
             // budget or one comfortably inside it depending entirely on which budget it had, and
             // nothing else in the file says. Taken from the settings the agent was actually built
             // with rather than the profile row, since a caller may substitute them.
+            //
+            // Both halves of the budget, not just the ceiling. A settled position is allowed to stop
+            // at the soft figure, so a report showing every move sitting on the hard one is saying
+            // that never happened - and a reader with only the hard number has no way to tell that
+            // from a tier which was never given the choice.
             Telemetry.AppendHeaderLine(
-                $"AI tier: {profile.Id} (max depth {settings.MaxDepth}, budget {settings.TimeBudget.HardMs}ms)");
+                $"AI tier: {profile.Id} (max depth {settings.MaxDepth}, "
+                + $"budget {settings.TimeBudget.SoftMs}ms soft / {settings.TimeBudget.HardMs}ms hard)");
         }
 
         /// <summary>Call once it's aiTeam's turn in a live match to kick off a background search.</summary>
@@ -271,10 +283,13 @@ namespace ChessTheBetrayal.Gameplay.Manager
 
             if (RecordTelemetry && _aiAgent is AsyncAIAgent recordingAgent)
             {
+                long depthLoopMs = recordingAgent.DepthLoopMs;
                 HoldForPlyNumber(new AiMoveRecord(PlyNumberPendingUntilItLands, _aiTeam, move,
-                    AiMoveSource.Searched, auxMs, recordingAgent.LastCompletedDepth, recordingAgent.StopReason));
+                    AiMoveSource.Searched, auxMs, recordingAgent.LastCompletedDepth, recordingAgent.StopReason,
+                    depthLoopMs: depthLoopMs > int.MaxValue ? int.MaxValue : (int)depthLoopMs));
             }
 
+            _deliveryStopwatch.Restart();
             _playMove(move);
 
             Activity = AgentActivity.Idle;
@@ -301,6 +316,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
                     AiMoveSource.Book, elapsedMs: 0, completedDepth: 0, stopReason: SearchStopReason.Unset));
             }
 
+            _deliveryStopwatch.Restart();
             _playMove(move);
 
             Activity = AgentActivity.Idle;
@@ -327,6 +343,8 @@ namespace ChessTheBetrayal.Gameplay.Manager
         /// </summary>
         public void NotePlyApplied(MoveCommand move, int plyNumber)
         {
+            NoteBetrayalStage(move, plyNumber);
+
             if (_plyAwaitingItsNumber == null || Telemetry == null) return;
 
             AiMoveRecord held = _plyAwaitingItsNumber.Value;
@@ -334,7 +352,16 @@ namespace ChessTheBetrayal.Gameplay.Manager
                 || held.Move.EndPosition != move.EndPosition
                 || held.Move.Stage != move.Stage) return;
 
-            Telemetry.RecordMove(held.WithPlyNumber(plyNumber));
+            // The gate applies a move immediately when the board is free and queues it behind a
+            // running animation otherwise, so this is where the second half of the player's wait
+            // becomes known. The elapsed time recorded above stops when the search handed the move
+            // over; whatever this adds is time the player sat through and no search figure shows.
+            long heldMs = _deliveryStopwatch.IsRunning ? _deliveryStopwatch.ElapsedMilliseconds : 0;
+            _deliveryStopwatch.Reset();
+
+            Telemetry.RecordMove(held
+                .WithPlyNumber(plyNumber)
+                .WithGateHold(heldMs > int.MaxValue ? int.MaxValue : (int)heldMs));
             _plyAwaitingItsNumber = null;
         }
 
@@ -350,6 +377,52 @@ namespace ChessTheBetrayal.Gameplay.Manager
         /// </summary>
         public void NotePliesUnmade(int lastSurvivingPlyNumber) =>
             Telemetry?.RemoveAfterPly(lastSurvivingPlyNumber);
+
+        /// <summary>
+        /// Records how the match ended. Nothing else was writing an outcome into the report, so a
+        /// tester sent back forty lines of timings that never said who won or how - the one thing
+        /// somebody reading it would want first.
+        ///
+        /// Worded here rather than in the report itself: the vocabulary for an ending belongs to the
+        /// event that announced it, and the AI assembly this report lives in does not reference the
+        /// events. Passing the finished sentence keeps that boundary where it is.
+        /// </summary>
+        public void NoteMatchEnded(Team? winner, ChessTheBetrayal.Events.Payloads.GameEndReason reason)
+        {
+            if (!RecordTelemetry || Telemetry == null) return;
+
+            Telemetry.SetResult(MatchResultLine.Describe(winner, reason));
+        }
+
+        /// <summary>
+        /// The match's one Betrayal, whichever side spends it. Read off the ply itself because this
+        /// is raised for every ply including the opponent's, and an opponent's Betrayal reaches the
+        /// report through no other route - the plies below hold the AI's own moves, so a Betrayal
+        /// the player took used to show up as nothing but a jump in the numbering.
+        ///
+        /// Ahead of the ply-number matching above, deliberately: that returns as soon as it sees no
+        /// AI move waiting, which is every ply the opponent plays.
+        ///
+        /// The Defection is not here. It never reaches the board through a move being applied - the
+        /// rules produce it - so it arrives on its own event and is recorded in RecordDefection.
+        /// </summary>
+        private void NoteBetrayalStage(MoveCommand move, int plyNumber)
+        {
+            if (!RecordTelemetry || Telemetry == null) return;
+
+            switch (move.Stage)
+            {
+                case BetrayalStage.Act:
+                    Telemetry.NoteBetrayalAct(plyNumber, move.PieceTeam);
+                    break;
+                case BetrayalStage.Retribution:
+                    Telemetry.NoteRetribution(plyNumber);
+                    break;
+                case BetrayalStage.DefensiveOverride:
+                    Telemetry.NoteForcedSave(plyNumber);
+                    break;
+            }
+        }
 
         /// <summary>
         /// Records a Betrayer changing sides. Nothing here decides that move — the rules produce it
@@ -373,6 +446,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
             // the other one.
             Team gainedBy = move.PieceTeam == Team.White ? Team.Black : Team.White;
             Telemetry.RecordMove(AiMoveRecord.ForDefection(plyNumber, gainedBy, move));
+            Telemetry.NoteDefection(plyNumber, gainedBy);
         }
 
         /// <summary>

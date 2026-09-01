@@ -72,6 +72,7 @@ namespace ChessTheBetrayal.AI.Agent
         private MoveCommand _pendingResult;
         private int _lastCompletedDepth;
         private SearchStopReason _lastStopReason;
+        private long _lastDepthLoopMs;
         private CancellationTokenSource _cts;
 
         // Whether this agent has played a book move yet, and whether it has already announced
@@ -109,6 +110,16 @@ namespace ChessTheBetrayal.AI.Agent
         public int LastCompletedDepth => _lastCompletedDepth;
 
         public SearchStopReason StopReason => _lastStopReason;
+
+        /// <summary>
+        /// How long the deepening loop took to reach <see cref="LastCompletedDepth"/>, against the
+        /// whole time the caller waited. The remainder went on the tie-break pass, which runs after
+        /// the loop and stops only when the budget's own timer fires.
+        ///
+        /// Published by the same volatile write as the two above, and read on the main thread once
+        /// the result is collected. Zero for a book move, which searched nothing.
+        /// </summary>
+        public long DepthLoopMs => _lastDepthLoopMs;
 
         /// <summary>
         /// Cancels any in-flight search without disposing the agent — distinct from Dispose(),
@@ -194,6 +205,7 @@ namespace ChessTheBetrayal.AI.Agent
                     _pendingResultFromBook = true;
                     _lastCompletedDepth = 0;
                     _lastStopReason = SearchStopReason.Unset;
+                    _lastDepthLoopMs = 0;
                     _hasResult = true;
                     return;
                 }
@@ -267,6 +279,7 @@ namespace ChessTheBetrayal.AI.Agent
                     _pendingResult = best;
                     _lastCompletedDepth = _search.LastCompletedDepth;
                     _lastStopReason = _search.StopReason;
+                    _lastDepthLoopMs = _search.ElapsedMsAfterDepth(_search.LastCompletedDepth);
                     _hasResult = true; // volatile write publishes _pendingResult, _lastCompletedDepth
                                         // and _lastStopReason to the main thread
                 }

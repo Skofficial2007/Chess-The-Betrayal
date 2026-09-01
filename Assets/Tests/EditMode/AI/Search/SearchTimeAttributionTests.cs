@@ -12,8 +12,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
     /// <summary>
     /// Pins the deeper reach of the search telemetry: the per-depth node curve now records past the
     /// old depth-7 stop, so the cost of the deepest tiers' 7->8->9 growth is visible instead of
-    /// dropped. All of it lives behind the same editor/development-build guard the other counters
-    /// use, so these tests also re-confirm the search stays allocation-free with the added fields.
+    /// dropped. The node curve lives behind the editor/development-build guard with the other
+    /// counters; the elapsed-ms curve does not, because a release build is where it is read from.
     /// </summary>
     [TestFixture]
     public class SearchTimeAttributionTests
@@ -27,6 +27,39 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             _engine = new ChessEngineAdapter();
             _search = new AlphaBetaSearch(_engine, new BetrayalAwareEvaluator(),
                 transpositionTable: new TranspositionTable(log2Size: 20));
+        }
+
+        /// <summary>
+        /// A deep search followed by a shallow one: the shallow one never reaches depth 6, so a time
+        /// still sitting in that slot came from the search before it.
+        ///
+        /// Reads the search's own curve rather than the copy in SearchStats, which matters. The copy
+        /// is cleared as a side effect of the wholesale telemetry reset, so asking it this question
+        /// gets an answer even when the curve's own clear has been removed - the first version of
+        /// this test did exactly that and stayed green with the clear deleted. The search's array is
+        /// cleared in one place and nowhere else, so this now fails if that goes.
+        /// </summary>
+        [Test]
+        public void FindBestMove_AfterADeeperSearch_ReportsNoTimeForDepthsThisOneNeverReached()
+        {
+            BoardState board = BoardSetup.CreateStandard();
+
+            // Six rather than the nine the fixture's other searches use. All this needs is a depth
+            // the second search will not reach, and going deeper for that costs a second of the fast
+            // half of the suite to prove exactly the same thing.
+            _search.FindBestMove(board, new AISearchSettings(maxDepth: 6, TestTimeBudgets.Generous, BetrayalUsage.Full),
+                CancellationToken.None);
+            Assume.That(_search.ElapsedMsAfterDepth(6), Is.GreaterThan(0),
+                "The first search has to reach depth 6, or there is nothing left behind to catch.");
+
+            _search.FindBestMove(board, new AISearchSettings(maxDepth: 3, TestTimeBudgets.Generous, BetrayalUsage.Full),
+                CancellationToken.None);
+
+            Assert.That(_search.ElapsedMsAfterDepth(6), Is.Zero,
+                "A depth-3 search never reached depth 6, so a time recorded there belongs to the "
+                + "search before it.");
+            Assert.That(_search.ElapsedMsAfterDepth(3), Is.GreaterThanOrEqualTo(0),
+                "The depth it did reach still has to be recorded.");
         }
 
         [Test]

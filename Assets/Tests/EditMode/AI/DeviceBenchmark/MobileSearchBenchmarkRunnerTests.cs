@@ -217,6 +217,119 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.DeviceBenchmark
                 "A worker-thread cell must never label a line main-thread.");
         }
 
+        /// <summary>
+        /// A cell that did exactly what it was asked used to announce itself as "[budget-capped]".
+        /// The normal tier is the plain case: it completes depth 5, which is its configured ceiling,
+        /// and then spends what is left of its budget in the tie-break pass, which runs until the
+        /// hard timer stops it. The timer firing was the whole test, so the line read as a failure
+        /// and testers reported it as one.
+        /// </summary>
+        [Test]
+        public void OutcomeNote_ATierThatReachedItsCeilingAndSpentTheRest_DoesNotReadAsAFailure()
+        {
+            var timing = new MobileSearchBenchmarkRunner.SearchTiming(
+                seconds: 2.25, budgetCapped: true, depthReached: 5, hardMs: 2250,
+                stopReason: SearchStopReason.Ceiling);
+
+            string note = MobileSearchBenchmarkRunner.OutcomeNote(timing);
+
+            Assert.That(note, Does.Contain("ceiling"));
+            Assert.That(note, Does.Contain("tie-break"));
+            Assert.That(note, Does.Not.Contain("clock stopped"),
+                "Nothing stopped this search short - it finished every depth it was configured for.");
+        }
+
+        [Test]
+        public void OutcomeNote_ASearchTheClockCutShort_SaysSoPlainly()
+        {
+            var timing = new MobileSearchBenchmarkRunner.SearchTiming(
+                seconds: 3.0, budgetCapped: true, depthReached: 7, hardMs: 3000,
+                stopReason: SearchStopReason.Budget);
+
+            Assert.That(MobileSearchBenchmarkRunner.OutcomeNote(timing),
+                Does.Contain("the clock stopped it at depth 7"));
+        }
+
+        /// <summary>
+        /// The load-bearing half of the pair above. Both searches ran their timer out, so a check
+        /// that only looks for a word in one of them passes just as happily when the two render
+        /// identically - which is the state this replaced, where they did.
+        ///
+        /// Same elapsed time, same budget and above all the same depth, so the stop reason is the
+        /// only thing left that can tell them apart. Written first with different depths, which made
+        /// it pass on the depth alone and prove nothing about the branch it is here to guard.
+        /// </summary>
+        [Test]
+        public void OutcomeNote_ReachingTheCeilingAndBeingCutShortDoNotReadTheSame()
+        {
+            var reachedCeiling = new MobileSearchBenchmarkRunner.SearchTiming(
+                seconds: 3.0, budgetCapped: true, depthReached: 7, hardMs: 3000,
+                stopReason: SearchStopReason.Ceiling);
+            var cutShort = new MobileSearchBenchmarkRunner.SearchTiming(
+                seconds: 3.0, budgetCapped: true, depthReached: 7, hardMs: 3000,
+                stopReason: SearchStopReason.Budget);
+
+            Assert.That(MobileSearchBenchmarkRunner.OutcomeNote(reachedCeiling),
+                Is.Not.EqualTo(MobileSearchBenchmarkRunner.OutcomeNote(cutShort)));
+        }
+
+        [Test]
+        public void OutcomeNote_ASearchThatSettledEarly_SaysItStoppedOnItsOwn()
+        {
+            var timing = new MobileSearchBenchmarkRunner.SearchTiming(
+                seconds: 0.9, budgetCapped: false, depthReached: 6, hardMs: 3000,
+                stopReason: SearchStopReason.SettledEarly);
+
+            Assert.That(MobileSearchBenchmarkRunner.OutcomeNote(timing), Does.Contain("stopped early"));
+        }
+
+        /// <summary>
+        /// Driven off the enum rather than written out once per case, because the summary averages
+        /// this number over every sample that recorded one and cannot know which lines withheld it.
+        /// Two arms did: a real run's aggressive tier reported a mean climb of 1.58s over eight
+        /// cells while the six it actually printed averaged 1.72s, and nothing in the report closed
+        /// that gap. A reason added later gets caught here instead of quietly repeating it.
+        /// </summary>
+        [Test]
+        [TestCase(SearchStopReason.Ceiling)]
+        [TestCase(SearchStopReason.Budget)]
+        [TestCase(SearchStopReason.SettledEarly)]
+        [TestCase(SearchStopReason.MateFound)]
+        [TestCase(SearchStopReason.Unset)]
+        public void OutcomeNote_WhateverStoppedIt_SaysHowLongTheClimbTook(SearchStopReason stopReason)
+        {
+            var timing = new MobileSearchBenchmarkRunner.SearchTiming(
+                seconds: 3.0, budgetCapped: true, depthReached: 7, hardMs: 3000,
+                stopReason: stopReason, depthLoopMs: 1170);
+
+            Assert.That(MobileSearchBenchmarkRunner.OutcomeNote(timing), Does.Contain("1.17s"),
+                $"A {stopReason} cell is counted in the run's mean climb, so it has to show its own.");
+        }
+
+        [Test]
+        public void OutcomeNote_ASearchThatFoundAMate_SaysWhyItStoppedShallow()
+        {
+            var timing = new MobileSearchBenchmarkRunner.SearchTiming(
+                seconds: 0.04, budgetCapped: false, depthReached: 2, hardMs: 3000,
+                stopReason: SearchStopReason.MateFound);
+
+            Assert.That(MobileSearchBenchmarkRunner.OutcomeNote(timing), Does.Contain("forced mate"));
+        }
+
+        /// <summary>
+        /// A search cancelled before it finished a single depth has no depth to report, and the line
+        /// has to say that rather than leave a reader working it out from a missing clause.
+        /// </summary>
+        [Test]
+        public void OutcomeNote_ASearchThatCompletedNoDepth_SaysSo()
+        {
+            var timing = new MobileSearchBenchmarkRunner.SearchTiming(
+                seconds: 3.0, budgetCapped: true, depthReached: 0, hardMs: 3000,
+                stopReason: SearchStopReason.Budget);
+
+            Assert.That(MobileSearchBenchmarkRunner.OutcomeNote(timing), Is.EqualTo("no depth completed"));
+        }
+
         [Test]
         public void BudgetNote_WithinItsOwnBudget_ReportsNoOvershoot()
         {
@@ -224,8 +337,29 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.DeviceBenchmark
 
             string note = MobileSearchBenchmarkRunner.BudgetNote(timing);
 
-            Assert.That(note, Does.Contain("within budget"));
+            // Says how much room was left, not merely that there was some. "Within budget" read the
+            // same on a tier finishing in a fifth of its budget as on one a millisecond inside it,
+            // and 129 cells of a real 200-cell run said exactly that.
+            Assert.That(note, Does.Contain("500ms inside budget"));
             Assert.That(note, Does.Not.Contain("past budget"));
+        }
+
+        /// <summary>
+        /// Rounded to the millisecond, a search a fraction inside its budget has no room left to
+        /// report. Printing "0ms inside budget" is the shape that already taught a reader to stop
+        /// believing these lines, on a run where 194 rows of 200 announced an overshoot of zero.
+        /// </summary>
+        [Test]
+        public void BudgetNote_AFractionInsideItsBudget_SaysSoInWordsRatherThanPrintingZero()
+        {
+            var timing = new MobileSearchBenchmarkRunner.SearchTiming(
+                seconds: 2.9997, budgetCapped: true, depthReached: 7, hardMs: 3000);
+
+            string note = MobileSearchBenchmarkRunner.BudgetNote(timing);
+
+            Assert.That(note, Does.Contain("on budget to the millisecond"));
+            Assert.That(note, Does.Not.Contain("0ms inside"),
+                "A rounded-away margin must not be printed as a magnitude of zero.");
         }
 
         [Test]
@@ -251,7 +385,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.DeviceBenchmark
         }
 
         [Test]
-        public void BudgetNote_AnOvershootTooSmallToPrint_ReadsAsWithinBudget()
+        public void BudgetNote_AnOvershootTooSmallToPrint_IsNotAnnouncedAsOne()
         {
             // 0.3ms past a 3000ms budget. Exact enough to be a positive number, far too small to
             // survive being rendered at whole-millisecond precision — a run of 200 searches on a
@@ -261,9 +395,9 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.DeviceBenchmark
 
             string note = MobileSearchBenchmarkRunner.BudgetNote(timing);
 
-            Assert.That(note, Does.Contain("within budget"),
+            Assert.That(note, Does.Contain("on budget to the millisecond"),
                 "An overshoot that rounds away to nothing must not be announced as one.");
-            Assert.That(note, Does.Not.Contain("0ms past budget"));
+            Assert.That(note, Does.Not.Contain("past budget"));
         }
 
         [Test]
@@ -453,6 +587,43 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.DeviceBenchmark
                 "65s and 90s both fall in minute 1 (60s-119s), so they must be grouped together.");
             Assert.That(minuteOne, Does.Contain("depth worst 5"));
             Assert.That(minuteOne, Does.Contain("mean 5.5"));
+        }
+
+        /// <summary>
+        /// A sustained run holds one tier on one position for as long as it takes, which is exactly
+        /// where the other two columns stop moving: the tier finishes on its budget every time and
+        /// depth only changes in whole plies. Two hundred cells over ten minutes came back as eleven
+        /// identical lines. The climb is the column that can still separate one minute from the
+        /// next, so a device slowing down has somewhere to show.
+        ///
+        /// The two buckets differ in the climb and in nothing else - same elapsed, same depth - so
+        /// this cannot pass on either of the columns that were already there.
+        /// </summary>
+        [Test]
+        public void EmitThermalBuckets_SaysHowLongEachMinutesClimbTook_NotJustHowDeepItGot()
+        {
+            var runner = new MobileSearchBenchmarkRunner();
+            string workerThread = MobileSearchBenchmarkRunner.WorkerThreadLabel;
+            runner.RecordTiming("impossible", workerThread,
+                new MobileSearchBenchmarkRunner.SearchTiming(seconds: 3.0, budgetCapped: true, depthReached: 7,
+                    hardMs: 3000, elapsedSinceRunStartMs: 5_000,
+                    stopReason: SearchStopReason.Budget, depthLoopMs: 880));
+            runner.RecordTiming("impossible", workerThread,
+                new MobileSearchBenchmarkRunner.SearchTiming(seconds: 3.0, budgetCapped: true, depthReached: 7,
+                    hardMs: 3000, elapsedSinceRunStartMs: 65_000,
+                    stopReason: SearchStopReason.Budget, depthLoopMs: 1_760));
+
+            var lines = new List<string>();
+            runner.OnLine += lines.Add;
+            runner.EmitThermalBuckets();
+
+            string minuteZero = lines.Single(l => l.StartsWith($"[impossible {workerThread}] minute 0:"));
+            string minuteOne = lines.Single(l => l.StartsWith($"[impossible {workerThread}] minute 1:"));
+
+            Assert.That(minuteZero, Does.Contain("0.88s"));
+            Assert.That(minuteOne, Does.Contain("1.76s"),
+                "A minute that took twice as long to reach the same depth has to read differently "
+                + "from one that did not - elapsed and depth are identical across these two.");
         }
 
         [Test]

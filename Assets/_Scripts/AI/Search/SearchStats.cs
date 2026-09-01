@@ -37,8 +37,13 @@ namespace ChessTheBetrayal.AI.Search
     /// Search telemetry. Plain counters, no allocation, reset once per FindBestMove — exists purely
     /// to measure each pruning mechanism's node-count impact on fixed regression positions.
     /// Conditional-compiled: every counter increment lives behind the editor/development-build
-    /// guard, so a release build pays zero cost (not even a branch) for tracking it. See
-    /// AlphaBetaSearch/TranspositionTable's #if sites.
+    /// guard, so a release build pays nothing for tracking them. See AlphaBetaSearch/
+    /// TranspositionTable's #if sites.
+    ///
+    /// The elapsed-ms curve here is a copy. A report shared from a phone comes from a release build,
+    /// where none of this exists, so the search owns that curve itself (AlphaBetaSearch.
+    /// ElapsedMsAfterDepth) and copies it in here once it returns — the same arrangement
+    /// LastCompletedDepth and StopReason already use.
     /// </summary>
     public struct SearchStats
     {
@@ -303,6 +308,10 @@ namespace ChessTheBetrayal.AI.Search
             double scaledTicks = (double)sampledTicks * calls / samples;
             return scaledTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
         }
+
+        /// <summary>How deep the two curves above are tracked. A search may legitimately be
+        /// configured deeper; the curves simply stop recording past here rather than failing it.</summary>
+        public const int MaxTrackedCurveDepth = 12;
 
         /// <summary>Records the cumulative wall-clock milliseconds elapsed at the moment a depth in
         /// 1..12 fully completes. Same ceiling and out-of-range handling as the node curve above.</summary>

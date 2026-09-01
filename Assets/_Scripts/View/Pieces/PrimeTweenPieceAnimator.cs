@@ -1567,7 +1567,7 @@ namespace ChessTheBetrayal.View.Pieces
             if (_selectionOutlineMaterial == null)
             {
                 Debug.LogWarning($"[{nameof(PrimeTweenPieceAnimator)}] No selection outline material was " +
-                    "injected (see ChessPiece.SetSelectionOutlineMaterial) — this piece will select without an outline ring.");
+                    "injected (see ChessPiece.SetSelectionOutlineMaterial) - this piece will select without an outline ring.");
                 return false;
             }
 

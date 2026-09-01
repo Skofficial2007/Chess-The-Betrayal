@@ -38,6 +38,8 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         public string ScriptingBackend { get; set; }
         public int ProcessBits { get; set; }
         public string Platform { get; set; }
+        public string AppVersion { get; set; }
+        public string BuildId { get; set; }
 
         /// <summary>
         /// The header block, in the order it is read. Unity has no direct "chipset name" API, so the
@@ -60,6 +62,27 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             $"RAM: {SystemMemoryMb}MB system, {GraphicsMemoryMb}MB graphics",
             $"Screen: {ScreenWidth}x{ScreenHeight} @ {ScreenDpi}dpi",
             $"Build: {BuildType}, {ScriptingBackend}, {ProcessBits}-bit, platform {Platform}",
+            AppVersionLine,
         };
+
+        /// <summary>
+        /// Which build produced this, so a report can be tied back to the code that made it. Every
+        /// other line here describes the phone; without this one a report that arrives on its own
+        /// says nothing about what was running on it, and once several testers hold several builds
+        /// off a moving branch, a timing nobody can attribute is a timing nobody can act on.
+        ///
+        /// Two parts, because neither answers on its own. The version is the number a human quotes
+        /// and it only changes when someone decides it does, so two builds a week apart usually
+        /// share one. The id is regenerated for every build, so it is what actually separates them —
+        /// unreadable by design, and only ever compared, never read aloud.
+        ///
+        /// Also written to the log at startup, from here, so the log and the report can never
+        /// disagree about which build they came from.
+        /// </summary>
+        public string AppVersionLine =>
+            $"App version: {Or(AppVersion, "unknown")}, build {Or(BuildId, "(none - not a build)")}";
+
+        private static string Or(string value, string fallback) =>
+            string.IsNullOrEmpty(value) ? fallback : value;
     }
 }

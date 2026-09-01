@@ -52,6 +52,50 @@ namespace ChessTheBetrayal.View.Camera
             // missing a visual for exactly that reason. Consumers resolve it optionally, so a scene
             // without a camera controller simply does not shake.
             ServiceLocator.Instance.Register<ICameraShake>(this);
+
+            // Before anything is on screen, so the board is already framed correctly for this
+            // device by the time the menu camera is first seen. Doing it later would show the
+            // adjustment happening, and doing it per match would repeat a decision that cannot
+            // change while the game is running.
+            FrameBoardForThisDevice();
+        }
+
+        /// <summary>
+        /// Widens the seated cameras when the game is running on a handheld, where the board would
+        /// otherwise overflow the screen.
+        ///
+        /// Only the two seats are touched. The menu camera is left as authored, since it is framing
+        /// a title screen rather than a board that has to be readable square by square.
+        /// </summary>
+        private void FrameBoardForThisDevice()
+        {
+            ApplyBoardFocalLength(whiteTeamCam);
+            ApplyBoardFocalLength(blackTeamCam);
+        }
+
+        /// <summary>
+        /// Cinemachine stores a lens as a field of view; the focal length in millimetres is what the
+        /// inspector shows for a physical camera, and the two are the same setting seen through the
+        /// sensor height. Converting both ways through Unity's own helpers keeps this agreeing with
+        /// whatever the inspector displays instead of re-deriving the relationship here.
+        /// </summary>
+        private static void ApplyBoardFocalLength(CinemachineCamera cam)
+        {
+            if (cam == null) return;
+
+            LensSettings lens = cam.Lens;
+            float sensorHeightMm = lens.PhysicalProperties.SensorSize.y;
+
+            // A sensor with no height gives no way to talk about focal length at all, and dividing
+            // by it would produce an infinity that silently becomes a broken frustum.
+            if (sensorHeightMm <= 0f) return;
+
+            float authoredMm = UnityEngine.Camera.FieldOfViewToFocalLength(lens.FieldOfView, sensorHeightMm);
+            float wantedMm = BoardFramingPolicy.FocalLengthMmFor(Application.isMobilePlatform, authoredMm);
+            if (Mathf.Approximately(wantedMm, authoredMm)) return;
+
+            lens.FieldOfView = UnityEngine.Camera.FocalLengthToFieldOfView(wantedMm, sensorHeightMm);
+            cam.Lens = lens;
         }
 
         /// <summary>
