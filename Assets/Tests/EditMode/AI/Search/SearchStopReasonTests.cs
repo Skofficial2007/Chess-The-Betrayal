@@ -1,4 +1,4 @@
-using System.Threading;
+﻿using System.Threading;
 using NUnit.Framework;
 using ChessTheBetrayal.AI.Search;
 using ChessTheBetrayal.AI.Profiles;
@@ -210,6 +210,32 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
             }
 
             Assert.That(_search.Stats.StopReason, Is.EqualTo(SearchStopReason.SettledEarly));
+        }
+
+        [Test]
+        public void FindBestMove_SettlesOnTheLastDepthItHad_ReportsCeilingNotSettledEarly()
+        {
+            // The same quiet position and the same settle-early path as the test above, with one
+            // difference: the ceiling is the depth it settles on, so there was no deeper search to
+            // skip and no time handed back. A real run showed the two side by side - one search
+            // "reached depth 7, its ceiling" and the next "settled at depth 7 and stopped early",
+            // same tier, same ceiling, same three seconds spent.
+            //
+            // MaxDepth is the settle-check's own floor because that is the only depth where the
+            // check can fire at all here, which keeps the arrangement honest if that floor moves.
+            BoardState board = QuietPosition();
+            var settings = new AISearchSettings(AIProfileGuardrails.ShallowSearchDepthThreshold,
+                new AITimeBudget(1, 10_000), BetrayalUsage.Full);
+
+            using (var cts = new CancellationTokenSource())
+            {
+                cts.CancelAfter(10_000);
+                _search.FindBestMove(board, settings, cts.Token, enableInstabilityTimeManagement: true);
+            }
+
+            Assert.That(_search.Stats.LastCompletedDepth, Is.EqualTo(settings.MaxDepth),
+                "The search has to actually reach its ceiling, or this is asserting nothing.");
+            Assert.That(_search.Stats.StopReason, Is.EqualTo(SearchStopReason.Ceiling));
         }
 
         [Test]

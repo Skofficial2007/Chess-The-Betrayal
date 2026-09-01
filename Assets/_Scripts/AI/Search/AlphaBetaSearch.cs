@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
@@ -812,7 +812,15 @@ namespace ChessTheBetrayal.AI.Search
                             // the answer, so stop now rather than spend the rest of the budget.
                             if (stable && elapsedMs >= settings.TimeBudget.SoftMs)
                             {
-                                _stopReason = SearchStopReason.SettledEarly;
+                                // Settling on the last configured depth saved nothing - there was no
+                                // deeper search left to skip - so it is a ceiling stop and the
+                                // fallthrough below would have called it one. Reporting it as an
+                                // early stop had two searches that ended in the same place describe
+                                // themselves in opposite words, and told a reader time had been given
+                                // back that was never there to give.
+                                _stopReason = depth >= settings.MaxDepth
+                                    ? SearchStopReason.Ceiling
+                                    : SearchStopReason.SettledEarly;
                                 break;
                             }
 
