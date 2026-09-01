@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
@@ -479,6 +479,11 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         ///
         /// The stop reason is what separates them, because it describes how the depth loop ended
         /// rather than whether the clock happened to be running at the finish.
+        ///
+        /// Every arm that names a depth also says how long the climb to it took, because the run
+        /// summary averages that number over all of them. Two arms used to leave it out, and the
+        /// summary counted those samples anyway - a real run reported a mean of 1.58s over eight
+        /// cells while the six it printed averaged 1.72s, with no way to reconcile the two.
         /// </summary>
         internal static string OutcomeNote(SearchTiming timing)
         {
@@ -492,9 +497,11 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
                     ? $"reached depth {timing.DepthReached}, its ceiling{reachedIn}, then spent what was left on the tie-break pass"
                     : $"reached depth {timing.DepthReached}, its ceiling{reachedIn}",
                 SearchStopReason.Budget => $"the clock stopped it at depth {timing.DepthReached}, reached{reachedIn}",
-                SearchStopReason.SettledEarly => $"settled at depth {timing.DepthReached} and stopped early",
-                SearchStopReason.MateFound => $"found a forced mate at depth {timing.DepthReached}",
-                _ => $"reached depth {timing.DepthReached}",
+                SearchStopReason.SettledEarly => timing.BudgetCapped
+                    ? $"settled at depth {timing.DepthReached}{reachedIn} and stopped early, then spent what was left on the tie-break pass"
+                    : $"settled at depth {timing.DepthReached}{reachedIn} and stopped early",
+                SearchStopReason.MateFound => $"found a forced mate at depth {timing.DepthReached}{reachedIn}",
+                _ => $"reached depth {timing.DepthReached}{reachedIn}",
             };
         }
 
@@ -557,11 +564,15 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             public readonly SearchStopReason StopReason;
 
             /// <summary>
-            /// How long the deepening loop took to reach DepthReached, out of the whole elapsed time.
-            /// The rest went on the tie-break pass, which runs after the loop and stops only when the
-            /// budget's timer fires - so two cells both pinned at three seconds can have spent one of
-            /// them climbing and one of them four times that, and only this tells them apart. Depth
-            /// is quantised to whole plies and cannot.
+            /// How long the deepening loop took to reach DepthReached, out of the whole elapsed
+            /// time - so two cells both pinned at three seconds can have spent one of them climbing
+            /// and one of them four times that, and only this tells them apart. Depth is quantised
+            /// to whole plies and cannot.
+            ///
+            /// Only completed depths are timed. Where the rest of a cell's time went depends on what
+            /// stopped the loop: a search that reached its ceiling spent it in the tie-break pass,
+            /// one the clock stopped spent it on a deeper depth it had to abandon. OutcomeNote asks
+            /// the stop reason rather than assuming either.
             /// </summary>
             public readonly long DepthLoopMs;
 

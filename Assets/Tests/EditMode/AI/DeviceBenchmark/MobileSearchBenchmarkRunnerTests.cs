@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using NUnit.Framework;
@@ -281,6 +281,29 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.DeviceBenchmark
                 stopReason: SearchStopReason.SettledEarly);
 
             Assert.That(MobileSearchBenchmarkRunner.OutcomeNote(timing), Does.Contain("stopped early"));
+        }
+
+        /// <summary>
+        /// Driven off the enum rather than written out once per case, because the summary averages
+        /// this number over every sample that recorded one and cannot know which lines withheld it.
+        /// Two arms did: a real run's aggressive tier reported a mean climb of 1.58s over eight
+        /// cells while the six it actually printed averaged 1.72s, and nothing in the report closed
+        /// that gap. A reason added later gets caught here instead of quietly repeating it.
+        /// </summary>
+        [Test]
+        [TestCase(SearchStopReason.Ceiling)]
+        [TestCase(SearchStopReason.Budget)]
+        [TestCase(SearchStopReason.SettledEarly)]
+        [TestCase(SearchStopReason.MateFound)]
+        [TestCase(SearchStopReason.Unset)]
+        public void OutcomeNote_WhateverStoppedIt_SaysHowLongTheClimbTook(SearchStopReason stopReason)
+        {
+            var timing = new MobileSearchBenchmarkRunner.SearchTiming(
+                seconds: 3.0, budgetCapped: true, depthReached: 7, hardMs: 3000,
+                stopReason: stopReason, depthLoopMs: 1170);
+
+            Assert.That(MobileSearchBenchmarkRunner.OutcomeNote(timing), Does.Contain("1.17s"),
+                $"A {stopReason} cell is counted in the run's mean climb, so it has to show its own.");
         }
 
         [Test]
