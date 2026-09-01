@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using ChessTheBetrayal.AI.Search;
@@ -343,6 +343,8 @@ namespace ChessTheBetrayal.Gameplay.Manager
         /// </summary>
         public void NotePlyApplied(MoveCommand move, int plyNumber)
         {
+            NoteBetrayalStage(move, plyNumber);
+
             if (_plyAwaitingItsNumber == null || Telemetry == null) return;
 
             AiMoveRecord held = _plyAwaitingItsNumber.Value;
@@ -393,6 +395,36 @@ namespace ChessTheBetrayal.Gameplay.Manager
         }
 
         /// <summary>
+        /// The match's one Betrayal, whichever side spends it. Read off the ply itself because this
+        /// is raised for every ply including the opponent's, and an opponent's Betrayal reaches the
+        /// report through no other route - the plies below hold the AI's own moves, so a Betrayal
+        /// the player took used to show up as nothing but a jump in the numbering.
+        ///
+        /// Ahead of the ply-number matching above, deliberately: that returns as soon as it sees no
+        /// AI move waiting, which is every ply the opponent plays.
+        ///
+        /// The Defection is not here. It never reaches the board through a move being applied - the
+        /// rules produce it - so it arrives on its own event and is recorded in RecordDefection.
+        /// </summary>
+        private void NoteBetrayalStage(MoveCommand move, int plyNumber)
+        {
+            if (!RecordTelemetry || Telemetry == null) return;
+
+            switch (move.Stage)
+            {
+                case BetrayalStage.Act:
+                    Telemetry.NoteBetrayalAct(plyNumber, move.PieceTeam);
+                    break;
+                case BetrayalStage.Retribution:
+                    Telemetry.NoteRetribution(plyNumber);
+                    break;
+                case BetrayalStage.DefensiveOverride:
+                    Telemetry.NoteForcedSave(plyNumber);
+                    break;
+            }
+        }
+
+        /// <summary>
         /// Records a Betrayer changing sides. Nothing here decides that move — the rules produce it
         /// when Retribution is refused or impossible — so it reaches neither of the hand-offs above
         /// and would go unrecorded. It matters because it is the one ply in a match that moves a
@@ -414,6 +446,7 @@ namespace ChessTheBetrayal.Gameplay.Manager
             // the other one.
             Team gainedBy = move.PieceTeam == Team.White ? Team.Black : Team.White;
             Telemetry.RecordMove(AiMoveRecord.ForDefection(plyNumber, gainedBy, move));
+            Telemetry.NoteDefection(plyNumber, gainedBy);
         }
 
         /// <summary>

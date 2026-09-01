@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Text;
 using ChessTheBetrayal.AI.Search;
+using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Match;
 
 namespace ChessTheBetrayal.AI.MatchTelemetry
@@ -22,6 +23,15 @@ namespace ChessTheBetrayal.AI.MatchTelemetry
         private readonly List<string> _headerLines = new List<string>();
         private readonly List<AiMoveRecord> _moves = new List<AiMoveRecord>();
         private string _result;
+
+        // The one Betrayal a match has. Ply numbers start at one, so zero means it has not happened;
+        // the same convention the coordinator already uses for a ply that has not landed yet.
+        private int _actPly;
+        private Team _initiator;
+        private int _retributionPly;
+        private int _defectionPly;
+        private Team _defectedTo;
+        private int _forcedSavePly;
 
         public AiMatchTelemetry(string matchId)
         {
@@ -51,6 +61,39 @@ namespace ChessTheBetrayal.AI.MatchTelemetry
         public void SetResult(string result) => _result = result;
 
         /// <summary>
+        /// The Act: a player has turned one of their own pieces on another. A match has exactly one
+        /// Betrayal and both players share it, so this can only happen once and it can be the
+        /// opponent who spends it - which is the case worth recording, because nothing else here
+        /// would show it. Only the AI's own plies are logged, so an opponent's Betrayal used to
+        /// leave nothing behind but a jump in the ply numbering.
+        ///
+        /// It matters beyond the bookkeeping. The right is a single flag on the board, so from this
+        /// ply on the AI has a permanently smaller set of moves to choose from and scores the
+        /// position differently, and a report with no marker for when that changed cannot explain
+        /// why the searches before and after it do not compare.
+        /// </summary>
+        public void NoteBetrayalAct(int plyNumber, Team initiator)
+        {
+            _actPly = plyNumber;
+            _initiator = initiator;
+        }
+
+        /// <summary>The Act does not pass the turn, so the Retribution is owed by the same player
+        /// who Acted - never the opponent.</summary>
+        public void NoteRetribution(int plyNumber) => _retributionPly = plyNumber;
+
+        /// <summary>The Retribution was refused or impossible, so the Betrayer changed sides.</summary>
+        public void NoteDefection(int plyNumber, Team gainedBy)
+        {
+            _defectionPly = plyNumber;
+            _defectedTo = gainedBy;
+        }
+
+        /// <summary>A Defection that leaves the initiator's own king in check buys them one forced
+        /// Save before the turn passes.</summary>
+        public void NoteForcedSave(int plyNumber) => _forcedSavePly = plyNumber;
+
+        /// <summary>
         /// Drops every ply recorded above <paramref name="lastSurvivingPlyNumber"/> — the report's
         /// half of a takeback, the same job MatchMoveLog.RemoveLast does for the move log. The
         /// caller unmakes the plies on the board; this only keeps the report in step with them.
@@ -68,6 +111,16 @@ namespace ChessTheBetrayal.AI.MatchTelemetry
             {
                 if (_moves[i].PlyNumber > lastSurvivingPlyNumber) _moves.RemoveAt(i);
             }
+
+            // Same reasoning as the ending below: a takeback that unmakes the Act puts the match's
+            // one Betrayal back on the table, and a summary still claiming it was spent would be
+            // describing a board that no longer exists. Each stage is cleared on its own number
+            // because a takeback can land in the middle of the sequence - unmaking the Retribution
+            // while leaving the Act that is still owed one.
+            if (_actPly > lastSurvivingPlyNumber) { _actPly = 0; _initiator = default; }
+            if (_retributionPly > lastSurvivingPlyNumber) _retributionPly = 0;
+            if (_defectionPly > lastSurvivingPlyNumber) { _defectionPly = 0; _defectedTo = default; }
+            if (_forcedSavePly > lastSurvivingPlyNumber) _forcedSavePly = 0;
 
             // Any ending recorded for this match described a position that has just been taken back.
             // A checkmate can be undone - the undo path clears the board's own game-over state for
@@ -116,6 +169,8 @@ namespace ChessTheBetrayal.AI.MatchTelemetry
             text.AppendLine(_result != null
                 ? $"Result: {_result}"
                 : "Result: not recorded - this report was taken before the game ended.");
+
+            text.AppendLine(DescribeBetrayal());
 
             int searchedCount = 0;
             int bookCount = 0;
@@ -215,6 +270,33 @@ namespace ChessTheBetrayal.AI.MatchTelemetry
                 ? "held behind an animation: never - every move reached the board as soon as it was decided"
                 : $"held behind an animation: {heldCount} of {_moves.Count} plies, worst={worstHold}ms "
                     + "(on top of the elapsed times above, not counted in them)");
+        }
+
+        /// <summary>
+        /// What became of the match's single Betrayal, in one line, whichever side spent it.
+        ///
+        /// Worth a line of its own rather than being left to the plies below, because the plies hold
+        /// the AI's moves and nothing else: an opponent who Acts leaves no trace there at all. Said
+        /// even when nobody took it, since "unspent" is a fact about the match and silence would
+        /// read as a report that forgot to mention it.
+        /// </summary>
+        private string DescribeBetrayal()
+        {
+            if (_actPly == 0) return "Betrayal: unspent - neither side took the one this match had.";
+
+            var line = new StringBuilder($"Betrayal: {_initiator} Acted at ply {_actPly}");
+
+            if (_retributionPly > 0)
+            {
+                // The Act does not pass the turn, so this is the initiator paying their own debt.
+                return line.Append($" and paid the Retribution at ply {_retributionPly}.").ToString();
+            }
+
+            if (_defectionPly == 0) return line.Append(" - still unresolved when this report was taken.").ToString();
+
+            line.Append($"; no Retribution came, so the Betrayer joined {_defectedTo} at ply {_defectionPly}");
+            if (_forcedSavePly > 0) line.Append($", and {_initiator} was forced to Save at ply {_forcedSavePly}");
+            return line.Append('.').ToString();
         }
 
         /// <summary>

@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading;
@@ -238,6 +238,38 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
 
             Assert.That(_coordinator.Telemetry.MoveCount, Is.Zero,
                 "Nothing must be recorded unless RecordTelemetry was explicitly turned on.");
+        }
+
+        /// <summary>
+        /// The whole point of reading the Betrayal off the ply rather than off the AI's own moves:
+        /// the side that spends the match's one Betrayal is often the player, and this coordinator
+        /// hears about their plies too. NotePlyApplied returns early the moment it finds no AI move
+        /// waiting for a number, which is every ply the opponent makes, so the Betrayal has to be
+        /// noticed ahead of that - with nothing pending, as here.
+        /// </summary>
+        [Test]
+        public void NotePlyApplied_AnOpponentActAndRetribution_ReachTheReportWithNoAiMovePending()
+        {
+            _board.CurrentTurn = Team.Black;
+            _coordinator.SetAIMode(Team.Black, BetrayalUsage.Full, "normal");
+            _coordinator.RecordTelemetry = true;
+
+            var betrayer = new PieceData(Team.White, ChessPieceType.Knight, moveDirection: 1, startRow: 0);
+            var victim = new PieceData(Team.White, ChessPieceType.Pawn, moveDirection: 1, startRow: 1);
+            MoveCommand act = new MoveCommand(new Vector2Int(1, 0), new Vector2Int(0, 2), betrayer, victim)
+                .WithStage(BetrayalStage.Act);
+
+            // The Act does not pass the turn, so both of these plies are White's.
+            _coordinator.NotePlyApplied(act, plyNumber: 23);
+            _coordinator.NotePlyApplied(
+                new MoveCommand(new Vector2Int(0, 0), new Vector2Int(0, 2), victim, betrayer)
+                    .WithStage(BetrayalStage.Retribution),
+                plyNumber: 24);
+
+            Assert.That(_coordinator.Telemetry.MoveCount, Is.Zero,
+                "Neither ply is the AI's, so neither belongs in the ply list.");
+            Assert.That(_coordinator.Telemetry.Render(),
+                Does.Contain("Betrayal: White Acted at ply 23 and paid the Retribution at ply 24."));
         }
 
         [Test]

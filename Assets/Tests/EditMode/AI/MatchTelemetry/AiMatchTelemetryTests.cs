@@ -555,6 +555,99 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.MatchTelemetry
                 "Same clock, same depth, different endings - the line has to say which.");
         }
 
+        /// <summary>
+        /// A match has one Betrayal and both players share it, so the side that spends it is often
+        /// not the AI - and the plies below hold the AI's own moves only. One real match had White
+        /// Act at ply 23 and the report's sole trace of it was the AI's numbering jumping from 22 to
+        /// 25, which a reader had to decode from a note about parity.
+        /// </summary>
+        [Test]
+        public void ABetrayalSpentByTheOpponent_IsInTheSummaryEvenThoughNoPlyOfItIsLogged()
+        {
+            var telemetry = new AiMatchTelemetry("opponent-acted");
+            telemetry.RecordMove(Searched(ply: 22, Team.Black, elapsedMs: 3017, depth: 7));
+            telemetry.NoteBetrayalAct(plyNumber: 23, initiator: Team.White);
+            telemetry.NoteRetribution(plyNumber: 24);
+            telemetry.RecordMove(Searched(ply: 25, Team.Black, elapsedMs: 3049, depth: 7));
+
+            Assert.That(telemetry.Render(),
+                Does.Contain("Betrayal: White Acted at ply 23 and paid the Retribution at ply 24."));
+        }
+
+        /// <summary>
+        /// The Act does not pass the turn, so the Retribution falls to the player who Acted. The
+        /// wording has to keep that straight: a report saying the other side owed it would be
+        /// stating the opposite of the rule.
+        /// </summary>
+        [Test]
+        public void ARetributionRefused_SaysWhoTheBetrayerJoined()
+        {
+            var telemetry = new AiMatchTelemetry("defected");
+            telemetry.NoteBetrayalAct(plyNumber: 11, initiator: Team.Black);
+            telemetry.NoteDefection(plyNumber: 12, gainedBy: Team.White);
+
+            Assert.That(telemetry.Render(),
+                Does.Contain("Betrayal: Black Acted at ply 11; no Retribution came, so the Betrayer joined White at ply 12."));
+        }
+
+        [Test]
+        public void ADefectionThatChecksTheInitiator_AlsoRecordsTheForcedSaveTheyGot()
+        {
+            var telemetry = new AiMatchTelemetry("defected-and-saved");
+            telemetry.NoteBetrayalAct(plyNumber: 11, initiator: Team.Black);
+            telemetry.NoteDefection(plyNumber: 12, gainedBy: Team.White);
+            telemetry.NoteForcedSave(plyNumber: 13);
+
+            Assert.That(telemetry.Render(), Does.Contain("joined White at ply 12, and Black was forced to Save at ply 13."));
+        }
+
+        [Test]
+        public void AMatchWhereNobodyBetrayed_SaysSoRatherThanSayingNothing()
+        {
+            var telemetry = new AiMatchTelemetry("untouched");
+            telemetry.RecordMove(Searched(ply: 2, Team.Black, elapsedMs: 900, depth: 5));
+
+            Assert.That(telemetry.Render(),
+                Does.Contain("Betrayal: unspent - neither side took the one this match had."));
+        }
+
+        /// <summary>
+        /// A takeback that unmakes the Act puts the Betrayal back on the table for both players, so
+        /// a summary still claiming it was spent would describe a board nobody is playing. The same
+        /// reasoning already clears the recorded result, and for the same reason: undo really can
+        /// reach back past either.
+        /// </summary>
+        [Test]
+        public void TakingBackTheAct_PutsTheBetrayalBackOnTheTable()
+        {
+            var telemetry = new AiMatchTelemetry("taken-back");
+            telemetry.NoteBetrayalAct(plyNumber: 23, initiator: Team.White);
+            telemetry.NoteRetribution(plyNumber: 24);
+
+            telemetry.RemoveAfterPly(22);
+
+            Assert.That(telemetry.Render(), Does.Contain("Betrayal: unspent"));
+            Assert.That(telemetry.Render(), Does.Not.Contain("ply 23"));
+        }
+
+        /// <summary>
+        /// A takeback can land inside the sequence, leaving an Act that is still owed a Retribution.
+        /// Clearing the whole note on any rewind would lose the Act; keeping the whole note would
+        /// leave a Retribution that has been unmade.
+        /// </summary>
+        [Test]
+        public void TakingBackOnlyTheRetribution_LeavesTheActStandingAndUnresolved()
+        {
+            var telemetry = new AiMatchTelemetry("half-taken-back");
+            telemetry.NoteBetrayalAct(plyNumber: 23, initiator: Team.White);
+            telemetry.NoteRetribution(plyNumber: 24);
+
+            telemetry.RemoveAfterPly(23);
+
+            Assert.That(telemetry.Render(),
+                Does.Contain("Betrayal: White Acted at ply 23 - still unresolved when this report was taken."));
+        }
+
         private static string AfterTheClimb(string report)
         {
             string line = PlyLine(report);
