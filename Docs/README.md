@@ -34,6 +34,14 @@ pressure. `Multiplayer/move-and-clock-authority.md` covers who decides whether a
 owns the clock, and which parts of the Betrayal a client must never be trusted to report about
 itself.
 
+## Rendering
+
+How the game is configured to draw itself on Windows and on Android from one scene.
+`Rendering/pipeline-assets.md` says which asset applies to which platform, the order the volume
+profiles override each other in, and which file to edit to change one platform without touching the
+other. Read it before changing anything under `Assets/Settings&Actions/Settings/`, because two of
+those assets are shared between both platforms and the names do not tell you which.
+
 ## Playtests
 
 Logs from manual play sessions against a difficulty tier, one file per session. The automated
