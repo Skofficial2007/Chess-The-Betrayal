@@ -29,9 +29,15 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
     /// and a bound never looks worse than the truth. Every window here is therefore measured against
     /// a pass allowed to finish, where every score is real.
     ///
-    /// Scoped to the two tiers the deadline can actually change. Easy and normal finish their pass
-    /// inside their budget already, and extreme spends its whole budget on the depth loop so the
-    /// pass never starts — none of the three can move either way.
+    /// Scoped to the two tiers the deadline can change on a desktop. Easy and normal finish their
+    /// pass inside their budget here, and extreme spends its whole budget on the depth loop so the
+    /// pass never starts — none of the three can move either way on this machine.
+    ///
+    /// That scoping does not hold on a phone, and the numbers below are a desktop's. A low-end
+    /// device running a real match at the normal tier spent its whole budget with the pass still
+    /// going, and easy burned two thirds of its own on one position — so both of the tiers excluded
+    /// here as unaffected are affected there. Widening this probe means running it on the device,
+    /// not adding tiers to the list.
     ///
     /// Explicit and generously timed: this runs unbounded searches on purpose and is decision
     /// support, not a gate. Nothing here asserts a verdict; read the table.

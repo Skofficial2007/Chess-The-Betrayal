@@ -251,6 +251,47 @@ This is what stops the engine stalling for three seconds over a forced recapture
 instantly. It activates only for callers that opt in, which in practice means real gameplay and
 on-device benchmarking; anything else runs to its configured depth.
 
+### The candidate rescore pass, and what it costs
+
+Alpha-beta returns exact values only for the move it settles on. Everything behind the best move
+carries a bound rather than a score, and a bound is not something a tier's personality can choose
+between — a blunder roll landing on a bound is choosing at random. So after the depth loop finishes,
+every root move within the tier's own margin of the best is re-searched with a full window, and only
+those settled moves are offered to the selection.
+
+The margin is the wider of a tier's two dials, so the tiers most players meet carry the widest ones:
+`easy` 120cp, `normal` 80cp, `impossible` 0 and therefore no pass at all.
+
+**This is the largest single consumer of a move's time on a real device, and it is worth knowing
+before reading any timing.** The pass runs until the hard clock stops it, so on two phones running
+real matches:
+
+| device, tier | climb to the depth played | rescore pass | abandoned deeper depth |
+|---|---:|---:|---:|
+| mid-range, `aggressive` | 18.5s (35%) | **31.5s (59%)** | 3.0s (6%) |
+| low-end, `normal` | 18.3s (54%) | **9.8s (29%)** | 5.9s (17%) |
+
+The worst single move spent 2896ms of 3037ms in the pass, after reaching its depth in 141ms.
+
+It scales the wrong way. A device that climbs faster does not answer sooner — it hands the surplus to
+the pass, which runs to the same clock either way. Faster hardware makes the share larger, not
+smaller.
+
+**Stopping it on a wall clock was tried and rejected.** Cutting the pass at the soft budget took a
+heavy turn from about three seconds to one, but the pass walks the root list in order while the moves
+a tie-break chooses between are spread along it, so it settled the wrong ones: the `aggressive` tier
+went from four moves inside its window to one, and a window reaching the selection with one move in it
+is a tier with no personality left. `RescoreBudgetTests` guards the invariant that survived that —
+every tier chooses from its whole window — and `RescoreDeadlineDecisionProbe` holds the measurements.
+
+The cost is not a constant that could be dialled out. It is however many root moves fall inside the
+margin, which is a property of the position: on one opening the `aggressive` tier used its whole three
+seconds, and on another it returned in 1.44s with the pass finding nothing in contention.
+
+Where the clock does stop the pass part-way, nothing breaks. `RootScoresExactCount` records how far it
+got and the selection only ever picks within that, so a tier that cannot afford the whole pass plays
+its best move rather than a bound. `Assets/_Scripts/AI/Search/AlphaBetaSearch.cs`.
+
 ### Aspiration windows
 
 Search each depth after the first inside a narrow window guessed from the previous depth's score
