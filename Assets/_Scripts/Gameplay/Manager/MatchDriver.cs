@@ -66,6 +66,11 @@ namespace ChessTheBetrayal.Gameplay.Manager
         // each of PlayMove's turn-ending branches, then cleared for the next turn.
         private readonly List<MoveCommand> _currentTurnMoves = new List<MoveCommand>(4);
 
+        // Asked once per Defection that checks its own king: is there a Save to make at all? Held
+        // as a field rather than made on the spot because a Defection is a move like any other and
+        // this runs on the move path.
+        private readonly List<MoveCommand> _forcedSaveProbe = new List<MoveCommand>(32);
+
         /// <summary>
         /// Fires once a turn is fully resolved (never on the intermediate Act ply), carrying every
         /// MoveCommand that turn applied in order. UndoService is the only intended subscriber —
@@ -362,6 +367,41 @@ namespace ChessTheBetrayal.Gameplay.Manager
 
             if (result.RequiresForcedSave)
             {
+                // A Save is owed. Whether one exists is a different question, and this is the only
+                // place it ever gets asked: everything downstream assumes the answer is yes and
+                // waits for a move that, in a mating Defection, nobody can make. The match had no
+                // way to end and no way out but abandoning it — Undo is disabled in this phase too.
+                //
+                // Asked through GetForcedSaveMoves rather than CheckForGameEnd, and that is the
+                // whole trick: EvaluateGameState deliberately answers Normal for any open Betrayal
+                // sub-phase, so the obvious call would report a healthy game about a dead one. The
+                // search already scores this position as mate when it is thinking about it; this is
+                // the live match finally asking the same question.
+                _engine.GetForcedSaveMoves(_board, _board.CurrentTurn, _forcedSaveProbe);
+
+                if (_forcedSaveProbe.Count == 0)
+                {
+                    // The Defection is the move that ended the game, so it is recorded as such
+                    // rather than as the Normal ply the waiting branch below writes.
+                    if (result.DefectionMove.HasValue)
+                    {
+                        MoveLog.Record(result.DefectionMove.Value, PlyNumberForLog, GameState.Checkmate);
+                        _betrayalSequencePlyNumber = -1;
+                    }
+
+                    _domainLogger?.LogWarning(new DomainLogEvent(DomainEventCode.Betrayal_ForcedSaveImpossible));
+
+                    // Whoever owes the Save is the side that cannot make one, so the other side
+                    // wins — the same reading CheckForGameEnd's own checkmate arm makes.
+                    Team owesTheSave = _board.CurrentTurn;
+                    EndGame(owesTheSave == Team.White ? Team.Black : Team.White);
+
+                    // The turn is over, however it ended. Without this the takeback has no record
+                    // of the plies that led here and the game-over screen's Undo lands short.
+                    FlushCompletedTurn();
+                    return;
+                }
+
                 // The Defection is a ply like any other and this is the record of every one of
                 // them. Written here rather than through CheckForGameEnd because the turn has not
                 // resolved: a Save is still owed, so there is no check or mate to attach to it yet
