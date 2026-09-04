@@ -16,29 +16,25 @@ using ChessTheBetrayal.Tests.EditMode.Support;
 namespace ChessTheBetrayal.Tests.EditMode.AI.Search
 {
     /// <summary>
-    /// Asks whether the quiet midgame benchmark position really does hold a forced mate seven plies
-    /// deep, because two devices disagree about it and both cannot be right.
+    /// Whether the quiet midgame position really holds a forced mate seven plies deep. Two devices
+    /// disagree and both cannot be right.
     ///
-    /// Running the impossible tier two hundred times against that one position, a phone reported a
-    /// forced mate on three of them and played h2-h4; on the other hundred and ninety-seven it ran
-    /// out of clock at depth six and played the queen capture. A second, faster phone completed
-    /// depth seven on all two hundred and never reported a mate at all. So either the mate is real
-    /// and the faster device misses it every single time despite reaching the depth that shows it,
-    /// or the mate is not real and something produced a mate-magnitude score that nothing checked.
+    /// Running the impossible tier two hundred times against it, one phone reported a forced mate on
+    /// three and played h2-h4, and ran out of clock at depth six on the rest. A faster phone
+    /// completed depth seven on all two hundred and reported no mate at all.
     ///
-    /// The position is worth knowing before reading the numbers: it is mirror-symmetric, and it sets
-    /// BetrayalRightAvailable, so the tree includes Act, Retribution and Defection lines. A forced
-    /// mate in three and a half moves is not absurd there the way it would be in ordinary chess, and
-    /// a quiet rook-pawn push is not obviously a wrong first move for one. That is exactly why this
-    /// has to be measured rather than argued about.
+    /// Worth knowing before reading the numbers: the position is mirror-symmetric and leaves the
+    /// Betrayal unspent, so the tree carries Act, Retribution and Defection lines. A mate three and a
+    /// half moves deep is not absurd there the way it would be in ordinary chess, and a rook-pawn
+    /// push is not obviously the wrong first move for one - which is why this is measured rather
+    /// than argued.
     ///
-    /// The deciding comparison is the first arm against the second. An unbounded search is given as
-    /// much time as it wants at each depth in turn, so whatever depth seven really holds, it finds.
-    /// If that arm reports a mate, then every completed depth-seven search should report one - and
-    /// the faster phone completed two hundred of them without doing so.
+    /// The first arm settles it. An unbounded search takes as long as it needs at each depth, so
+    /// whatever depth seven holds it will find. If it reports a mate then every completed
+    /// depth-seven search should report one, and the faster phone completed two hundred without.
     ///
-    /// Explicit and measurement-only: it runs unbounded searches on purpose and asserts no verdict.
-    /// Read the table.
+    /// Explicit and measurement-only: it runs unbounded searches deliberately and asserts no
+    /// verdict. Read the table.
     /// </summary>
     [TestFixture]
     [Explicit("Measurement only - runs unbounded searches to settle what depth 7 actually holds.")]
@@ -132,10 +128,10 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
 
         /// <summary>
         /// The same question at the volume it needs. The phone hit this on three runs in two hundred,
-        /// and a hundred and sixty searches finding none says less than it looks like it does: at that
-        /// rate an empty result comes up about one time in eleven by luck alone. This narrows it on the
-        /// two clocks that leave the search where the phone's was, and nowhere else - a wide sweep at
-        /// this rep count would spend its time on depths that were never in question.
+        /// so a hundred and sixty searches finding none proves less than it looks - at that rate an
+        /// empty result comes up about one time in eleven by luck. This narrows it to the two clocks
+        /// that leave the search where the phone's was; a wide sweep at this rep count would spend
+        /// its time on depths that were never in question.
         /// </summary>
         [Test]
         [Timeout(TimeoutMs)]

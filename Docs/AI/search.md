@@ -80,10 +80,15 @@ not anything is standing there. Used by both Betrayal target generation and chec
 | impossible | 9 | 1200 ms | 3000 ms |
 
 **The depth is a ceiling, not a promise.** easy and normal are shallow by design — their difficulty
-comes from that plus a blunder rate — and they reach their full depth in a fraction of their budget.
-The four deeper tiers are budget-bound: they reach whatever depth the clock allows on the hardware in
-front of them, deeper on a faster machine, and iterative deepening always keeps the last completed
-depth's move, so being stopped is never a wasted search.
+comes from that plus a blunder rate — and on a desktop they reach their full depth in a fraction of
+their budget. The four deeper tiers are budget-bound: they reach whatever depth the clock allows on
+the hardware in front of them, deeper on a faster machine, and iterative deepening always keeps the
+last completed depth's move, so being stopped is never a wasted search.
+
+That last part is a desktop's experience. On a low-end phone normal averaged depth 4.7 over a
+benchmark sweep — its ceiling on some positions, stopped at 4 on others — so it is budget-bound
+there too. Reaching a ceiling early is also not the same as answering early; see the rescore pass
+under **How long a move takes**.
 
 One consequence worth knowing before tuning anything: on a middlegame position at three seconds, the
 four deep tiers can all bottom out at the same depth, in which case what separates them is their
@@ -251,46 +256,36 @@ This is what stops the engine stalling for three seconds over a forced recapture
 instantly. It activates only for callers that opt in, which in practice means real gameplay and
 on-device benchmarking; anything else runs to its configured depth.
 
-### The candidate rescore pass, and what it costs
+### The candidate rescore pass
 
-Alpha-beta returns exact values only for the move it settles on. Everything behind the best move
-carries a bound rather than a score, and a bound is not something a tier's personality can choose
-between — a blunder roll landing on a bound is choosing at random. So after the depth loop finishes,
-every root move within the tier's own margin of the best is re-searched with a full window, and only
-those settled moves are offered to the selection.
+Alpha-beta only returns an exact value for the move it settles on; everything behind it carries a
+bound. A tie-break or a blunder roll landing on a bound is choosing at random, so once the depth loop
+finishes, every root move within the tier's margin of the best is re-searched with a full window and
+the selection picks only from those. The margin is the wider of the tier's two dials: easy 120cp,
+normal 80cp, impossible 0, which skips the pass altogether.
 
-The margin is the wider of a tier's two dials, so the tiers most players meet carry the widest ones:
-`easy` 120cp, `normal` 80cp, `impossible` 0 and therefore no pass at all.
-
-**This is the largest single consumer of a move's time on a real device, and it is worth knowing
-before reading any timing.** The pass runs until the hard clock stops it, so on two phones running
-real matches:
+It runs until the hard clock stops it, and on a phone that is where most of a move goes. Two devices
+playing real matches:
 
 | device, tier | climb to the depth played | rescore pass | abandoned deeper depth |
 |---|---:|---:|---:|
-| mid-range, `aggressive` | 18.5s (35%) | **31.5s (59%)** | 3.0s (6%) |
-| low-end, `normal` | 18.3s (54%) | **9.8s (29%)** | 5.9s (17%) |
+| mid-range, aggressive | 18.5s (35%) | 31.5s (59%) | 3.0s (6%) |
+| low-end, normal | 18.3s (54%) | 9.8s (29%) | 5.9s (17%) |
 
-The worst single move spent 2896ms of 3037ms in the pass, after reaching its depth in 141ms.
+The worst single move gave 2896 ms of 3037 ms to the pass after reaching its depth in 141 ms. A
+faster device does not answer sooner; it hands the pass a bigger surplus.
 
-It scales the wrong way. A device that climbs faster does not answer sooner — it hands the surplus to
-the pass, which runs to the same clock either way. Faster hardware makes the share larger, not
-smaller.
+Cutting it short on a wall clock was tried and dropped. Stopping at the soft budget took a heavy turn
+from about three seconds to one, but the pass walks the root list in order while the contenders are
+spread along it, so it settled the wrong ones — aggressive went from four moves inside its window to
+one. `RescoreBudgetTests` guards what came out of that: every tier chooses from its whole window.
+`RescoreDeadlineDecisionProbe` has the measurements.
 
-**Stopping it on a wall clock was tried and rejected.** Cutting the pass at the soft budget took a
-heavy turn from about three seconds to one, but the pass walks the root list in order while the moves
-a tie-break chooses between are spread along it, so it settled the wrong ones: the `aggressive` tier
-went from four moves inside its window to one, and a window reaching the selection with one move in it
-is a tier with no personality left. `RescoreBudgetTests` guards the invariant that survived that —
-every tier chooses from its whole window — and `RescoreDeadlineDecisionProbe` holds the measurements.
-
-The cost is not a constant that could be dialled out. It is however many root moves fall inside the
-margin, which is a property of the position: on one opening the `aggressive` tier used its whole three
-seconds, and on another it returned in 1.44s with the pass finding nothing in contention.
-
-Where the clock does stop the pass part-way, nothing breaks. `RootScoresExactCount` records how far it
-got and the selection only ever picks within that, so a tier that cannot afford the whole pass plays
-its best move rather than a bound. `Assets/_Scripts/AI/Search/AlphaBetaSearch.cs`.
+What it costs depends on how many root moves fall inside the margin, which is a property of the
+position rather than the tier — aggressive spent its whole three seconds on one opening and returned
+1.5s under budget on another. If the clock does stop it part-way, `RootScoresExactCount` records how
+far it got and the selection stays inside that.
+`Assets/_Scripts/AI/Search/AlphaBetaSearch.cs`.
 
 ### Aspiration windows
 

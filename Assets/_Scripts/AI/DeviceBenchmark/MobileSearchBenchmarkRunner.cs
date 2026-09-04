@@ -318,14 +318,12 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         /// ply next to one nowhere near it. Left off entirely when nothing recorded a time, rather
         /// than printing zeroes that would read as an instant climb.
         ///
-        /// onlyDepth restricts the average to samples that reached one particular depth, and a
-        /// caller comparing one group of samples against another has to pass it. Reaching depth 7
-        /// costs several times what reaching depth 6 costs, so an average over a mixture is really
-        /// a measure of the mixture: change how many samples got the extra ply and the figure moves
-        /// on its own, with the device doing exactly the same work throughout. A run summary spread
-        /// deliberately across several positions has no single depth to speak for it and passes
-        /// AnyDepth, which is why its figure says what the whole sweep cost rather than tracking
-        /// anything.
+        /// onlyDepth restricts the average to one depth, and any caller comparing groups of samples
+        /// against each other needs it. Reaching depth 7 costs several times what depth 6 costs, so an
+        /// average over a mixture measures the mixture — change how many samples got the extra ply and
+        /// the figure moves while the device does identical work. A run summary sweeping several
+        /// positions has no one depth to speak for it and passes AnyDepth, so its figure says what the
+        /// sweep cost rather than tracking anything over time.
         /// </summary>
         internal static string DepthCostNote(List<SearchTiming> samples, int onlyDepth = AnyDepth)
         {
@@ -345,9 +343,9 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
 
             if (onlyDepth != AnyDepth)
             {
-                // Said rather than left blank: a gap in the series is itself a reading, and a minute
-                // where nothing reached the usual depth is the clearest sign of a device falling off
-                // one that a run like this can produce.
+                // Said rather than left blank — a minute that never reached the depth the rest of the
+                // run held is the clearest sign of a device dropping a ply, and a gap would read as
+                // nothing having happened.
                 return counted == 0
                     ? $"; nothing reached depth {onlyDepth}"
                     : $"; climbed to depth {onlyDepth} in worst {worst / 1000.0:F2}s "
@@ -404,9 +402,9 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
                     bucket.Add(timing);
                 }
 
-                // One depth for the whole series, chosen once here rather than per minute. Picking
-                // it inside each bucket would let the depth being reported change from one line to
-                // the next, which is the same mixing problem wearing a different hat.
+                // Chosen once for the whole series rather than per bucket: picking it inside each
+                // minute would let the depth being reported change between lines, which is the same
+                // mixing problem in a different place.
                 int depthToTrack = MostReachedDepth(samples);
 
                 foreach (KeyValuePair<int, List<SearchTiming>> entry in byMinute)
@@ -417,10 +415,9 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         }
 
         /// <summary>
-        /// The depth most of a run's samples actually reached, which is the one worth following
-        /// across the minutes. Ties go to the shallower, since that is the depth more of the run
-        /// will have in common and a series with a value in every bucket says more than one with
-        /// holes in it.
+        /// The depth most of a run's samples reached, which is the one worth following across the
+        /// minutes. Ties go to the shallower: more of the run will have it in common, so the series
+        /// is likelier to have a value in every bucket.
         /// </summary>
         internal static int MostReachedDepth(List<SearchTiming> samples)
         {
@@ -474,10 +471,10 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             // 0.876s to 0.887s, which is a phone that is not throttling - was not among them.
             //
             // Held to one depth for the same reason it is here at all. Averaged over whatever each
-            // sample happened to reach, the climb tracked the mixture instead of the device: a run
-            // where a handful of searches squeezed out an extra ply showed a twenty per cent hump
-            // in the middle of it and read as a phone in trouble, while the samples at the depth it
-            // actually held were flat to within a few thousandths of a second throughout.
+            // sample reached, it tracks the mixture rather than the device: on a ten-minute run
+            // where eleven searches out of two hundred squeezed out an extra ply, the curve showed a
+            // 20% hump in the middle while the samples at the depth the phone actually held were
+            // flat throughout.
             string line = $"[{profileId} {threadLabel}] minute {minute}: {samples.Count} samples, elapsed mean {meanSeconds:F2}s; "
                 + $"depth worst {worstDepth} mean {meanDepth:F1}"
                 + DepthCostNote(samples, depthToTrack);

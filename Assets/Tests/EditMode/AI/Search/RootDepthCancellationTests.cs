@@ -10,28 +10,25 @@ using ChessTheBetrayal.Tooling;
 namespace ChessTheBetrayal.Tests.EditMode.AI.Search
 {
     /// <summary>
-    /// What the deepening loop is allowed to keep when the clock stops it part-way through a depth.
+    /// What the deepening loop may keep when the clock stops it part-way through a depth.
     ///
-    /// A depth is only worth committing if every root move in it was actually searched. The loop
-    /// asks the cancellation token at the top of each root move, which catches a cancellation during
-    /// any move except the last one - that one has no next turn of the loop to be caught by, so the
-    /// scan ran off the end still believing it had finished. The move's own score came from a search
-    /// that returned early, and a search that returns early returns nothing worth having.
+    /// It asks the token at the top of each root move, which covers every move but the last - that
+    /// one has no next iteration to catch it, so the scan reached its bound still marked complete and
+    /// kept a score from a search that had already returned early.
     ///
-    /// The rule this holds the loop to is the one the candidate rescore pass in the same file
-    /// already follows: a score whose search was cancelled is discarded, not published.
+    /// Same rule the candidate rescore pass in that file already follows: a score whose search was
+    /// cancelled is discarded rather than published.
     /// </summary>
     [TestFixture]
     public class RootDepthCancellationTests
     {
         /// <summary>
-        /// Cancels the moment it is asked about a position other than the one the search started
-        /// from, which is to say from inside a root move's own subtree.
+        /// Cancels as soon as it is asked about any position other than the starting one, which
+        /// means it fires from inside a root move's subtree.
         ///
-        /// Timing it by the board rather than by counting calls is what makes this reliable. A count
-        /// would have to assume how many times the search evaluates before it reaches the first root
-        /// move, and getting that wrong by one cancels before the loop starts - where the existing
-        /// check catches it, and the test passes while proving nothing.
+        /// Triggering on the board rather than on a call count is what makes it reliable. A count
+        /// would have to assume how many evaluations happen before the loop starts, and being off by
+        /// one cancels early - where the existing check catches it and the test passes regardless.
         /// </summary>
         private sealed class CancelInsideTheFirstRootMove : IPositionEvaluator
         {
@@ -70,12 +67,12 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         private static readonly Vector2Int KingSquare = BoardSetup.AlgebraicToVector("h1");
 
         /// <summary>
-        /// White has nothing but a king, and a black rook down the g-file leaves it one square to
-        /// step to. One root move means the move the clock interrupts is unavoidably the last one,
-        /// with no assumption about the order the search happens to visit them in.
+        /// White has only a king, and a black rook on the g-file leaves it one square to step to.
+        /// With one root move the interrupted move is necessarily the last, so nothing here depends
+        /// on the order the search visits them in.
         ///
-        /// Nothing to betray, either: an Act captures a friendly piece and there is no second white
-        /// piece on the board, so the count below is the king's own moves and nothing else.
+        /// Nothing to betray either - an Act captures a friendly piece and there is no second white
+        /// piece - so the count below is the king's own moves.
         /// </summary>
         private static BoardState AKingWithExactlyOneMove()
         {
@@ -117,9 +114,8 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Search
         }
 
         /// <summary>
-        /// The same failure said the other way round, because the reported depth is not the only
-        /// thing a caller reads. A depth wrongly kept also reports the tier as having finished the
-        /// work it was asked for, when the clock is what ended it.
+        /// The same failure from the other side. A depth wrongly kept also reports the tier as
+        /// having finished what it was asked for, when the clock is what ended it.
         /// </summary>
         [Test]
         public void ACancelledLastRootMoveIsReportedAsTheClockStopping()

@@ -627,15 +627,14 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.DeviceBenchmark
         }
 
         /// <summary>
-        /// The climb is the one column on this line that can move, so what moves it has to be the
-        /// device and nothing else.
+        /// The climb is the only column on this line that can move, so what moves it has to be the
+        /// device.
         ///
-        /// Reaching one more ply costs several times what the ply below it cost, so averaging across
-        /// samples that reached different depths measures the mixture rather than the machine. Both
-        /// minutes here do identical work at depth 6; the second one also gets a single lucky search
-        /// through to depth 7. Averaged together that alone drags the second minute from 1.30s to
-        /// 1.73s and reads as a phone falling behind, which is exactly the false alarm a real
-        /// ten-minute run produced.
+        /// One more ply costs several times the ply below it, so averaging across samples that
+        /// reached different depths measures the mixture. Both minutes here do identical work at
+        /// depth 6 and the second also gets one search through to depth 7; averaged together that
+        /// alone drags it from 1.30s to 1.73s, which is the false alarm a real ten-minute run
+        /// produced.
         /// </summary>
         [Test]
         public void EmitThermalBuckets_ClimbIgnoresSamplesThatReachedADifferentDepth()
@@ -675,7 +674,7 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.DeviceBenchmark
 
         /// <summary>
         /// A minute that never reached the depth the rest of the run held is the strongest signal a
-        /// sustained run can give, so it gets said rather than left as a blank where a number was.
+        /// sustained run can give, so it is stated rather than left blank.
         /// </summary>
         [Test]
         public void EmitThermalBuckets_SaysWhenAMinuteNeverReachedTheDepthBeingTracked()
