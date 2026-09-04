@@ -14,7 +14,9 @@
     "ChessTheBetrayal.UI",
     "ChessTheBetrayal.View",
     "ChessTheBetrayal.Infrastructure",
-    "PrimeTween.Runtime"
+    "PrimeTween.Runtime",
+    "Unity.InputSystem",
+    "Unity.InputSystem.TestFramework"
   ],
   "includePlatforms": ["Editor"],
   "excludePlatforms": [],

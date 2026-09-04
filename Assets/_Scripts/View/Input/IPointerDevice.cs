@@ -12,13 +12,22 @@ namespace ChessTheBetrayal.View.Input
     public interface IPointerDevice
     {
         /// <summary>
+        /// Takes this frame's reading, once, before any of the answers below are asked for.
+        ///
+        /// A pointer put together from several fingers has to decide which one it is speaking for,
+        /// and that decision belongs to the frame rather than to whichever property is read first.
+        /// A device with nothing to decide may do nothing here.
+        /// </summary>
+        void ReadThisFrame();
+
+        /// <summary>
         /// True for hardware that always has a meaningful cursor position, whether or not a button
         /// is held — a mouse. False for a finger, which has no position between taps: the last
         /// place it touched is stale data, not a hover.
         /// </summary>
         bool ReportsPositionWhileIdle { get; }
 
-        /// <summary>True while the primary button/finger is down. False on the frame it lifts.</summary>
+        /// <summary>True while the followed button/finger is down. False on the frame it lifts.</summary>
         bool IsPressed { get; }
 
         /// <summary>True only on the frame the primary button/finger went down.</summary>
