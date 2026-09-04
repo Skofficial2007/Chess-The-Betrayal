@@ -9,6 +9,7 @@ using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.AI.Search;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
+using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.AI.Agent;
 
 namespace ChessTheBetrayal.AI.DeviceBenchmark
@@ -426,7 +427,7 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             MoveCommand best = TimedSearch(search, board, settings, rescoreMargin, out SearchTiming timing);
             RecordTiming(profile.Id, threadLabel, timing);
 
-            Emit($"[{profile.Id} {threadLabel}] {positionName} single-move rep{repeatIndex + 1} depth {profile.MaxDepth}: {FormatTiming(timing)}, best={best} - {BudgetNote(timing)}");
+            Emit($"[{profile.Id} {threadLabel}] {positionName} single-move rep{repeatIndex + 1} depth {profile.MaxDepth}: {FormatTiming(timing)}, best={MoveNotation.Describe(best)} - {BudgetNote(timing)}");
         }
 
         private void RunMultiMove(AIProfile profile, string positionName, BoardState board, int repeatIndex,
