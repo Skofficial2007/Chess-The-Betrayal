@@ -626,6 +626,102 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.DeviceBenchmark
                 + "from one that did not - elapsed and depth are identical across these two.");
         }
 
+        /// <summary>
+        /// The climb is the one column on this line that can move, so what moves it has to be the
+        /// device and nothing else.
+        ///
+        /// Reaching one more ply costs several times what the ply below it cost, so averaging across
+        /// samples that reached different depths measures the mixture rather than the machine. Both
+        /// minutes here do identical work at depth 6; the second one also gets a single lucky search
+        /// through to depth 7. Averaged together that alone drags the second minute from 1.30s to
+        /// 1.73s and reads as a phone falling behind, which is exactly the false alarm a real
+        /// ten-minute run produced.
+        /// </summary>
+        [Test]
+        public void EmitThermalBuckets_ClimbIgnoresSamplesThatReachedADifferentDepth()
+        {
+            var runner = new MobileSearchBenchmarkRunner();
+            string workerThread = MobileSearchBenchmarkRunner.WorkerThreadLabel;
+
+            foreach (double minute in new[] { 0d, 1d })
+            {
+                for (int i = 0; i < 3; i++)
+                {
+                    runner.RecordTiming("impossible", workerThread,
+                        new MobileSearchBenchmarkRunner.SearchTiming(seconds: 3.0, budgetCapped: true,
+                            depthReached: 6, hardMs: 3000, elapsedSinceRunStartMs: minute * 60_000 + i,
+                            stopReason: SearchStopReason.Budget, depthLoopMs: 1_300));
+                }
+            }
+
+            runner.RecordTiming("impossible", workerThread,
+                new MobileSearchBenchmarkRunner.SearchTiming(seconds: 3.0, budgetCapped: true,
+                    depthReached: 7, hardMs: 3000, elapsedSinceRunStartMs: 65_000,
+                    stopReason: SearchStopReason.Budget, depthLoopMs: 3_000));
+
+            var lines = new List<string>();
+            runner.OnLine += lines.Add;
+            runner.EmitThermalBuckets();
+
+            string minuteZero = lines.Single(l => l.StartsWith($"[impossible {workerThread}] minute 0:"));
+            string minuteOne = lines.Single(l => l.StartsWith($"[impossible {workerThread}] minute 1:"));
+
+            Assert.That(minuteZero, Does.Contain("mean 1.30s"));
+            Assert.That(minuteOne, Does.Contain("mean 1.30s"),
+                "Both minutes climbed to depth 6 in the same time. A single deeper search landing in one "
+                + "of them is not the device slowing down and must not read as though it were.");
+            Assert.That(minuteOne, Does.Not.Contain("1.73s"));
+        }
+
+        /// <summary>
+        /// A minute that never reached the depth the rest of the run held is the strongest signal a
+        /// sustained run can give, so it gets said rather than left as a blank where a number was.
+        /// </summary>
+        [Test]
+        public void EmitThermalBuckets_SaysWhenAMinuteNeverReachedTheDepthBeingTracked()
+        {
+            var runner = new MobileSearchBenchmarkRunner();
+            string workerThread = MobileSearchBenchmarkRunner.WorkerThreadLabel;
+
+            for (int i = 0; i < 3; i++)
+            {
+                runner.RecordTiming("impossible", workerThread,
+                    new MobileSearchBenchmarkRunner.SearchTiming(seconds: 3.0, budgetCapped: true,
+                        depthReached: 6, hardMs: 3000, elapsedSinceRunStartMs: i,
+                        stopReason: SearchStopReason.Budget, depthLoopMs: 1_300));
+            }
+
+            runner.RecordTiming("impossible", workerThread,
+                new MobileSearchBenchmarkRunner.SearchTiming(seconds: 3.0, budgetCapped: true,
+                    depthReached: 5, hardMs: 3000, elapsedSinceRunStartMs: 65_000,
+                    stopReason: SearchStopReason.Budget, depthLoopMs: 400));
+
+            var lines = new List<string>();
+            runner.OnLine += lines.Add;
+            runner.EmitThermalBuckets();
+
+            string minuteOne = lines.Single(l => l.StartsWith($"[impossible {workerThread}] minute 1:"));
+
+            Assert.That(minuteOne, Does.Contain("nothing reached depth 6"),
+                "A minute that dropped a ply is the reading, not a gap to pass over in silence.");
+        }
+
+        [Test]
+        public void MostReachedDepth_PrefersTheShallowerWhenTwoDepthsAreEquallyCommon()
+        {
+            var samples = new List<MobileSearchBenchmarkRunner.SearchTiming>
+            {
+                new MobileSearchBenchmarkRunner.SearchTiming(seconds: 3.0, budgetCapped: true, depthReached: 6,
+                    hardMs: 3000, stopReason: SearchStopReason.Budget, depthLoopMs: 1_300),
+                new MobileSearchBenchmarkRunner.SearchTiming(seconds: 3.0, budgetCapped: true, depthReached: 7,
+                    hardMs: 3000, stopReason: SearchStopReason.Budget, depthLoopMs: 2_900),
+            };
+
+            Assert.That(MobileSearchBenchmarkRunner.MostReachedDepth(samples), Is.EqualTo(6),
+                "The shallower depth is the one more of a struggling run will have in common, and a "
+                + "series with a value in every minute says more than one full of holes.");
+        }
+
         [Test]
         public void EmitThermalBuckets_SkipsCombinationsWithNoSamplesRecorded_UnlikeEmitTierSummaries()
         {
