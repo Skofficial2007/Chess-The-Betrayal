@@ -102,6 +102,53 @@ namespace ChessTheBetrayal.Tests.EditMode.Gameplay.Manager
         /// gate has to reopen immediately, or the player's own next move would sit behind the
         /// remains of a pacing window belonging to a move that never happened.
         /// </summary>
+        /// <summary>
+        /// A Betrayal Act that ends in a Defection leaves the board with a piece swap still to
+        /// play, and no move command can say it is coming - only the driver applying the Act finds
+        /// that out. Whoever learns of it holds the gate for it, and the point of holding is that
+        /// the move behind it genuinely waits.
+        /// </summary>
+        [Test]
+        public void HoldFor_KeepsTheNextMoveWaitingBeyondTheOneInFront()
+        {
+            _gate.Enqueue(MakeMove(0));
+            _gate.Enqueue(MakeMove(1));
+
+            _gate.HoldFor(0.5f);
+
+            _gate.Tick(1f);
+            Assert.That(_playedMoves, Has.Count.EqualTo(1),
+                "The move in front had a second budgeted and the swap adds half of one on top.");
+
+            _gate.Tick(0.5f);
+            Assert.That(_playedMoves, Has.Count.EqualTo(2), "and then it goes.");
+        }
+
+        [Test]
+        public void HoldFor_OnAnIdleGate_StillMakesTheNextMoveWait()
+        {
+            _gate.HoldFor(0.5f);
+            _gate.Enqueue(MakeMove(0));
+
+            Assert.That(_playedMoves, Is.Empty, "Work the board picked up is waited out either way.");
+
+            _gate.Tick(0.5f);
+            Assert.That(_playedMoves, Has.Count.EqualTo(1));
+        }
+
+        [Test]
+        public void HoldFor_NothingOrLess_ChangesNothing()
+        {
+            _gate.Enqueue(MakeMove(0));
+            _gate.Enqueue(MakeMove(1));
+
+            _gate.HoldFor(0f);
+            _gate.HoldFor(-5f);
+
+            _gate.Tick(1f);
+            Assert.That(_playedMoves, Has.Count.EqualTo(2), "The move in front kept exactly its own second.");
+        }
+
         [Test]
         public void Clear_DropsQueuedMovesAndReopensTheGate()
         {

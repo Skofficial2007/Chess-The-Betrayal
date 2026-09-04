@@ -9,6 +9,7 @@ using ChessTheBetrayal.AI.Profiles;
 using ChessTheBetrayal.AI.Search;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
+using ChessTheBetrayal.Core.Match;
 using ChessTheBetrayal.AI.Agent;
 
 namespace ChessTheBetrayal.AI.DeviceBenchmark
@@ -304,6 +305,9 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             return line;
         }
 
+        /// <summary>Passed as the depth filter to mean "every sample, whatever depth it reached".</summary>
+        internal const int AnyDepth = 0;
+
         /// <summary>
         /// The worst and mean time the deepening loop took to reach the depth it reported, across
         /// the samples that recorded one.
@@ -313,8 +317,15 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
         /// may have taken twice as long to get there - which is a device on the edge of dropping a
         /// ply next to one nowhere near it. Left off entirely when nothing recorded a time, rather
         /// than printing zeroes that would read as an instant climb.
+        ///
+        /// onlyDepth restricts the average to one depth, and any caller comparing groups of samples
+        /// against each other needs it. Reaching depth 7 costs several times what depth 6 costs, so an
+        /// average over a mixture measures the mixture — change how many samples got the extra ply and
+        /// the figure moves while the device does identical work. A run summary sweeping several
+        /// positions has no one depth to speak for it and passes AnyDepth, so its figure says what the
+        /// sweep cost rather than tracking anything over time.
         /// </summary>
-        internal static string DepthCostNote(List<SearchTiming> samples)
+        internal static string DepthCostNote(List<SearchTiming> samples, int onlyDepth = AnyDepth)
         {
             long worst = 0;
             long sum = 0;
@@ -323,10 +334,22 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             foreach (SearchTiming timing in samples)
             {
                 if (timing.DepthLoopMs <= 0) continue;
+                if (onlyDepth != AnyDepth && timing.DepthReached != onlyDepth) continue;
 
                 counted++;
                 sum += timing.DepthLoopMs;
                 if (timing.DepthLoopMs > worst) worst = timing.DepthLoopMs;
+            }
+
+            if (onlyDepth != AnyDepth)
+            {
+                // Said rather than left blank — a minute that never reached the depth the rest of the
+                // run held is the clearest sign of a device dropping a ply, and a gap would read as
+                // nothing having happened.
+                return counted == 0
+                    ? $"; nothing reached depth {onlyDepth}"
+                    : $"; climbed to depth {onlyDepth} in worst {worst / 1000.0:F2}s "
+                        + $"mean {sum / counted / 1000.0:F2}s over {counted} of {samples.Count}";
             }
 
             if (counted == 0) return "";
@@ -379,14 +402,52 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
                     bucket.Add(timing);
                 }
 
+                // Chosen once for the whole series rather than per bucket: picking it inside each
+                // minute would let the depth being reported change between lines, which is the same
+                // mixing problem in a different place.
+                int depthToTrack = MostReachedDepth(samples);
+
                 foreach (KeyValuePair<int, List<SearchTiming>> entry in byMinute)
-                    lines.Add(EmitThermalBucketLine(profileId, threadLabel, entry.Key, entry.Value));
+                    lines.Add(EmitThermalBucketLine(profileId, threadLabel, entry.Key, entry.Value, depthToTrack));
             }
 
             return lines;
         }
 
-        private string EmitThermalBucketLine(string profileId, string threadLabel, int minute, List<SearchTiming> samples)
+        /// <summary>
+        /// The depth most of a run's samples reached, which is the one worth following across the
+        /// minutes. Ties go to the shallower: more of the run will have it in common, so the series
+        /// is likelier to have a value in every bucket.
+        /// </summary>
+        internal static int MostReachedDepth(List<SearchTiming> samples)
+        {
+            var countsByDepth = new Dictionary<int, int>();
+
+            foreach (SearchTiming timing in samples)
+            {
+                if (timing.DepthLoopMs <= 0) continue;
+
+                countsByDepth.TryGetValue(timing.DepthReached, out int seen);
+                countsByDepth[timing.DepthReached] = seen + 1;
+            }
+
+            int best = AnyDepth;
+            int bestCount = 0;
+
+            foreach (KeyValuePair<int, int> entry in countsByDepth)
+            {
+                if (entry.Value < bestCount) continue;
+                if (entry.Value == bestCount && entry.Key > best) continue;
+
+                best = entry.Key;
+                bestCount = entry.Value;
+            }
+
+            return best;
+        }
+
+        private string EmitThermalBucketLine(string profileId, string threadLabel, int minute,
+            List<SearchTiming> samples, int depthToTrack)
         {
             double sumSeconds = 0;
             int worstDepth = samples[0].DepthReached;
@@ -408,9 +469,15 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             // and depth only moves in whole plies. Two hundred cells over ten minutes came back as
             // eleven identical lines, and the one measure that had moved - the climb drifting from
             // 0.876s to 0.887s, which is a phone that is not throttling - was not among them.
+            //
+            // Held to one depth for the same reason it is here at all. Averaged over whatever each
+            // sample reached, it tracks the mixture rather than the device: on a ten-minute run
+            // where eleven searches out of two hundred squeezed out an extra ply, the curve showed a
+            // 20% hump in the middle while the samples at the depth the phone actually held were
+            // flat throughout.
             string line = $"[{profileId} {threadLabel}] minute {minute}: {samples.Count} samples, elapsed mean {meanSeconds:F2}s; "
                 + $"depth worst {worstDepth} mean {meanDepth:F1}"
-                + DepthCostNote(samples);
+                + DepthCostNote(samples, depthToTrack);
             Emit(line);
             return line;
         }
@@ -426,7 +493,7 @@ namespace ChessTheBetrayal.AI.DeviceBenchmark
             MoveCommand best = TimedSearch(search, board, settings, rescoreMargin, out SearchTiming timing);
             RecordTiming(profile.Id, threadLabel, timing);
 
-            Emit($"[{profile.Id} {threadLabel}] {positionName} single-move rep{repeatIndex + 1} depth {profile.MaxDepth}: {FormatTiming(timing)}, best={best} - {BudgetNote(timing)}");
+            Emit($"[{profile.Id} {threadLabel}] {positionName} single-move rep{repeatIndex + 1} depth {profile.MaxDepth}: {FormatTiming(timing)}, best={MoveNotation.Describe(best)} - {BudgetNote(timing)}");
         }
 
         private void RunMultiMove(AIProfile profile, string positionName, BoardState board, int repeatIndex,

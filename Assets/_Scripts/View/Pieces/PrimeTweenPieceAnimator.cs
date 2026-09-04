@@ -369,6 +369,11 @@ namespace ChessTheBetrayal.View.Pieces
         private float? _settleBobBaseY;
         private Sequence _stampSequence;
 
+        // Where whatever is currently carrying this piece undertook to leave it, or null when
+        // nothing is carrying it anywhere. Read only when a journey is cut short - see
+        // TakeOverPosition, which is the one place it matters.
+        private Vector3? _travelDestination;
+
         // The lean runs alongside the stamp rather than inside it, because the victim plays one too
         // and it has no stamp of its own to hang it on. _leaning says whether the resting rotation
         // below is a real one worth putting back — a strike cut off halfway would otherwise leave
@@ -458,6 +463,8 @@ namespace ChessTheBetrayal.View.Pieces
             // skip it outright rather than let a harmless no-op animation spam the console.
             if (_transform.position == worldPos) return;
 
+            _travelDestination = worldPos;
+
             if (arc)
             {
                 // A knight "hops" rather than slides through occupied squares. This once ran two
@@ -503,6 +510,8 @@ namespace ChessTheBetrayal.View.Pieces
 
             TakeOverPosition(PositionWriter.Castle);
 
+            _travelDestination = worldPos;
+
             // The startDelay is what makes this a staggered two-piece maneuver rather than a
             // simultaneous teleport: the rook's glide is chained after a Delay so it visibly
             // starts a beat behind the king (BoardVisuals kicks off the king's own MoveTo at the
@@ -547,6 +556,8 @@ namespace ChessTheBetrayal.View.Pieces
                 onArrived?.Invoke();
                 return;
             }
+
+            _travelDestination = worldPos;
 
             _promotionApproachSequence = Sequence.Create(useUnscaledTime: true)
                 .Chain(Tween.Position(_transform, worldPos, MoveTravelTiming.SecondsForTiles(tilesTravelled), BoardGlideEase, useUnscaledTime: true))
@@ -600,6 +611,8 @@ namespace ChessTheBetrayal.View.Pieces
             }
 
             TakeOverPosition(PositionWriter.Stamp);
+
+            _travelDestination = worldPos;
 
             Vector3 restScale = _transform.localScale;
             // Where the strike is staged from. With ground to cover that is the square next to the
@@ -879,6 +892,8 @@ namespace ChessTheBetrayal.View.Pieces
 
             TakeOverPosition(PositionWriter.Death);
 
+            _travelDestination = graveyardWorldPos;
+
             Vector3 startPos = _transform.position;
             float journeySeconds = MoveTravelTiming.SecondsForTiles(tilesTravelled);
 
@@ -908,6 +923,8 @@ namespace ChessTheBetrayal.View.Pieces
             }
 
             TakeOverPosition(PositionWriter.Death);
+
+            _travelDestination = boardWorldPos;
 
             Vector3 startPos = _transform.position;
             float journeySeconds = MoveTravelTiming.SecondsForTiles(tilesTravelled);
@@ -1152,11 +1169,39 @@ namespace ChessTheBetrayal.View.Pieces
         /// asked through their own helpers, since a rattle or a raise cut halfway leaves the piece
         /// somewhere it never stood and nothing later puts a rotation back on its own.
         /// </summary>
+        /// <summary>
+        /// Whether one of the journeys that carries a piece from one place to another is still
+        /// running. The stamp, the two graveyard trips and the promotion walk all share
+        /// _stampSequence or a sequence of their own; a shake or a lift is not a journey, since
+        /// neither of those has anywhere it is going.
+        /// </summary>
+        private bool IsTravelling =>
+            _moveTween.isAlive || _castleSequence.isAlive ||
+            _promotionApproachSequence.isAlive || _stampSequence.isAlive;
+
         private void TakeOverPosition(PositionWriter next)
         {
             // A descent ends on the square it was returning to rather than being cut short in
             // mid-air, so whatever takes the piece over starts from where the piece belongs.
             FinishAnyDescent();
+
+            // The same idea for everything that travels. A journey stopped halfway leaves the
+            // piece standing between two squares, and nothing afterwards ever puts it right: the
+            // game applied the move long ago, and only a full rebuild of the position writes every
+            // piece's place again. So a journey that is taken over still finishes where it said it
+            // was going, even though it stops being watchable at that moment.
+            //
+            // Written straight to the transform rather than by completing the tween. These carry
+            // callbacks that must not fire early - a castling rook's settle, a promotion's morph,
+            // a piece announcing that it has reached the pile - and completing them would run the
+            // lot. Costs a small snap when a piece is interrupted, which is the cheaper of the two
+            // things to be wrong about.
+            if (_travelDestination.HasValue && IsTravelling)
+            {
+                _transform.position = _travelDestination.Value;
+            }
+
+            _travelDestination = null;
 
             _moveTween.Stop();
             _punchSequence.Stop();
@@ -1341,31 +1386,25 @@ namespace ChessTheBetrayal.View.Pieces
         /// </summary>
         public void LiftSelect()
         {
-            // A piece still on its way back down has one place to be, the square underneath it, so
-            // end the descent there rather than wherever it had got to. The rest position further
-            // down is read straight off the transform, and two taps inside a tenth of a second
-            // would otherwise record mid-air as the place to set the piece down — which is not
-            // recovered, because every lift after it is measured from there in turn.
-            FinishAnyDescent();
-
-            // Re-lifting an already-lifted piece (a stale/duplicate select) would otherwise stack
-            // a second rest position on top of the lifted one, so restart from a clean slate first.
-            StopLiftTweens();
-
-            // A rattle has the piece a few centimetres off its square at every moment except its
-            // last, and the line below is about to record where the piece is standing as the place
-            // to set it back down. Recorded mid-rattle that is somewhere the piece never stood, and
-            // the error outlives the rattle by the whole rest of the game — worse, the next rattle
-            // decays to the wrong place too, so answering three checks this way walks the piece a
-            // third of the way off its square.
+            // Everything that could still be moving this piece has to let go before the line
+            // below reads where it is standing, and the shared hand-over is what knows the full
+            // list. Picking a piece up used to end a descent, a previous lift and a rattle, and
+            // leave every travel running: a player tapping a piece that was still sliding got a
+            // glide and a lift writing the same transform on the same frames, and the place to set
+            // the piece back down recorded from somewhere between two squares.
             //
-            // Ending the rattle rather than waiting it out, which is what a move does instead: a
-            // move had nobody waiting on it, a tap has the player waiting on it, and making
-            // selection up to ShakeDuration late would be a worse answer than losing the rattle.
-            // Nothing is lost by ending it — a player reaching for the king has plainly seen the
-            // warning, and the check frame under it is a board marker that stays put regardless.
-            StopShake();
-            _positionOwner = PositionWriter.Lift;
+            // That last part is the reason this is worth more than tidiness. The rest position
+            // outlives the tap by the whole rest of the game — every later lift is measured from
+            // it in turn — so a single mistimed tap walks the piece permanently off its square.
+            // Handing over first means a travel cut short here still puts the piece on the square
+            // it was going to, and the rest position is read off a piece that is standing on one.
+            //
+            // The rattle goes with the rest rather than being waited out, which is what a move
+            // does instead: a move had nobody waiting on it, a tap has the player waiting on it,
+            // and making selection up to ShakeDuration late would be the worse answer. Nothing is
+            // lost by ending it — a player reaching for the king has plainly seen the warning, and
+            // the check frame under it is a board marker that stays put regardless.
+            TakeOverPosition(PositionWriter.Lift);
 
             _liftRestPosition = _transform.position;
             _liftRestScale = _transform.localScale;

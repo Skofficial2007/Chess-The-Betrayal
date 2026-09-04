@@ -16,11 +16,24 @@ namespace ChessTheBetrayal.UI.Manager
     public static class BoardInputBlocking
     {
         /// <summary>
-        /// <paramref name="aPanelIsCoveringTheBoard"/> is the manager's own read of its panels, which
-        /// needs a scene. <paramref name="question"/> is null before the gate exists and while there
-        /// is nothing to ask with, neither of which blocks anything.
+        /// Names whatever is stopping the board, or null when nothing is.
+        ///
+        /// Worth a name rather than a flag because the two causes look identical from the board's
+        /// side and nothing alike from the player's. A panel is something they can see and close. A
+        /// question that never drew itself leaves a live-looking board that ignores every tap, and
+        /// told apart only by a yes or no, that case has to be reconstructed from memory afterwards.
+        ///
+        /// <paramref name="coveringPanel"/> is the manager's own read of its panels, which needs a
+        /// scene. <paramref name="question"/> is null before the gate exists and while there is
+        /// nothing to ask with, neither of which blocks anything.
+        /// </summary>
+        public static string WhatBlocksTheBoard(string coveringPanel, IConfirmationGate question) =>
+            coveringPanel ?? (question != null && question.IsOpen ? "a confirmation question" : null);
+
+        /// <summary>
+        /// The same rule as a yes or no, for callers with nothing to say about the answer.
         /// </summary>
         public static bool BlocksTheBoard(bool aPanelIsCoveringTheBoard, IConfirmationGate question) =>
-            aPanelIsCoveringTheBoard || (question != null && question.IsOpen);
+            WhatBlocksTheBoard(aPanelIsCoveringTheBoard ? "a panel" : null, question) != null;
     }
 }

@@ -121,6 +121,13 @@ namespace ChessTheBetrayal.Tests.EditMode.Architecture
                     "ChessTheBetrayal.View",
                     "ChessTheBetrayal.Infrastructure",
                     "PrimeTween.Runtime",
+
+                    // The input system, and the harness that can drive a fake touchscreen through
+                    // it. Granted for the same reason PrimeTween is: what the game reads from a
+                    // touchscreen when several fingers are involved cost a device session to work
+                    // out, and the only way to hold that knowledge is to exercise a real one.
+                    "Unity.InputSystem",
+                    "Unity.InputSystem.TestFramework",
                 },
             };
 

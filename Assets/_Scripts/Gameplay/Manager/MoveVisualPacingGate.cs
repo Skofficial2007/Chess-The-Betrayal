@@ -46,6 +46,17 @@ namespace ChessTheBetrayal.Gameplay.Manager
         public void Tick(float deltaSeconds) => _queue.Tick(deltaSeconds);
 
         /// <summary>
+        /// Holds the gate shut for <paramref name="extraSeconds"/> longer than the move in front
+        /// of it asked for.
+        ///
+        /// A move's estimate covers the move. A Betrayal Act that ends in a Defection also has the
+        /// Betrayer turning into the other side's piece to play afterwards, and no move command
+        /// carries the fact that it is coming - the driver resolves it while applying the Act. So
+        /// whoever learns of it says so here, rather than every estimate pretending to know.
+        /// </summary>
+        public void HoldFor(float extraSeconds) => _queue.ExtendHold(extraSeconds);
+
+        /// <summary>
         /// Throws away every queued move and reopens the gate immediately.
         ///
         /// Undo is the caller this exists for. A move waiting in here has been decided but has NOT

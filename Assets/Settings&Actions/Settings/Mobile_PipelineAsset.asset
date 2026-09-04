@@ -17,16 +17,16 @@ MonoBehaviour:
   m_RendererType: 1
   m_RendererData: {fileID: 0}
   m_RendererDataList:
-  - {fileID: 11400000, guid: e727ab1f0c4850444ab7b3336b480717, type: 2}
+  - {fileID: 11400000, guid: 7aad6a6ecaed4de59ef08379352c7846, type: 2}
   m_DefaultRendererIndex: 0
   m_RequireDepthTexture: 0
   m_RequireOpaqueTexture: 0
   m_OpaqueDownsampling: 1
   m_SupportsTerrainHoles: 1
-  m_SupportsHDR: 1
+  m_SupportsHDR: 0
   m_HDRColorBufferPrecision: 0
   m_MSAA: 1
-  m_RenderScale: 1
+  m_RenderScale: 0.625
   m_UpscalingFilter: 0
   m_FsrOverrideSharpness: 0
   m_FsrSharpness: 0.92
@@ -44,34 +44,34 @@ MonoBehaviour:
   m_MainLightRenderingMode: 1
   m_MainLightShadowsSupported: 1
   m_MainLightShadowmapResolution: 2048
-  m_AdditionalLightsRenderingMode: 1
+  m_AdditionalLightsRenderingMode: 0
   m_AdditionalLightsPerObjectLimit: 2
-  m_AdditionalLightShadowsSupported: 1
-  m_AdditionalLightsShadowmapResolution: 2048
+  m_AdditionalLightShadowsSupported: 0
+  m_AdditionalLightsShadowmapResolution: 1024
   m_AdditionalLightsShadowResolutionTierLow: 256
   m_AdditionalLightsShadowResolutionTierMedium: 512
   m_AdditionalLightsShadowResolutionTierHigh: 1024
-  m_ReflectionProbeBlending: 1
-  m_ReflectionProbeBoxProjection: 1
-  m_ReflectionProbeAtlas: 1
-  m_ShadowDistance: 40
-  m_ShadowCascadeCount: 2
+  m_ReflectionProbeBlending: 0
+  m_ReflectionProbeBoxProjection: 0
+  m_ReflectionProbeAtlas: 0
+  m_ShadowDistance: 25
+  m_ShadowCascadeCount: 1
   m_Cascade2Split: 0.33333334
   m_Cascade3Split: {x: 0.1, y: 0.3}
   m_Cascade4Split: {x: 0.06666667, y: 0.2, z: 0.46666667}
-  m_CascadeBorder: 0.2
+  m_CascadeBorder: 0.1
   m_ShadowDepthBias: 1
-  m_ShadowNormalBias: 1
+  m_ShadowNormalBias: 0.25
   m_AnyShadowsSupported: 1
   m_SoftShadowsSupported: 1
   m_ConservativeEnclosingSphere: 0
   m_NumIterationsEnclosingSphere: 64
-  m_SoftShadowQuality: 2
-  m_AdditionalLightsCookieResolution: 2048
+  m_SoftShadowQuality: 1
+  m_AdditionalLightsCookieResolution: 256
   m_AdditionalLightsCookieFormat: 3
   m_UseSRPBatcher: 1
   m_SupportsDynamicBatching: 0
-  m_MixedLightingSupported: 1
+  m_MixedLightingSupported: 0
   m_SupportsLightCookies: 1
   m_SupportsLightLayers: 0
   m_DebugLevel: 0
@@ -92,7 +92,7 @@ MonoBehaviour:
   m_MaxPixelLights: 0
   m_ShadowAtlasResolution: 256
   m_VolumeFrameworkUpdateMode: 0
-  m_VolumeProfile: {fileID: 0}
+  m_VolumeProfile: {fileID: 11400000, guid: 28d7b3a944f14d6fa948123b460fd3de, type: 2}
   apvScenesData:
     obsoleteSceneBounds:
       m_Keys: []
@@ -101,8 +101,8 @@ MonoBehaviour:
       m_Keys: []
       m_Values: 
   m_PrefilteringModeMainLightShadows: 3
-  m_PrefilteringModeAdditionalLight: 3
-  m_PrefilteringModeAdditionalLightShadows: 2
+  m_PrefilteringModeAdditionalLight: 0
+  m_PrefilteringModeAdditionalLightShadows: 0
   m_PrefilterXRKeywords: 1
   m_PrefilteringModeForwardPlus: 0
   m_PrefilteringModeDeferredRendering: 0
@@ -133,8 +133,8 @@ MonoBehaviour:
   m_PrefilterUseLegacyLightmaps: 0
   m_PrefilterBicubicLightmapSampling: 1
   m_PrefilterReflectionProbeRotation: 1
-  m_PrefilterReflectionProbeBlending: 0
-  m_PrefilterReflectionProbeBoxProjection: 0
+  m_PrefilterReflectionProbeBlending: 1
+  m_PrefilterReflectionProbeBoxProjection: 1
   m_PrefilterReflectionProbeAtlas: 1
   m_ShaderVariantLogLevel: 0
   m_ShadowCascades: 0

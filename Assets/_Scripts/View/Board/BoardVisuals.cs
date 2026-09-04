@@ -80,15 +80,17 @@ namespace ChessTheBetrayal.View.Board
 
         #region Private Fields
 
-        // Maps logical grid coordinates to visual GameObjects
-        private Dictionary<Vector2Int, ChessPiece> _piecesByPosition = new Dictionary<Vector2Int, ChessPiece>();
+        // Which piece the board is showing on each square. See BoardOccupancy: moving a piece
+        // across is one call rather than a removal and an insertion written side by side, because
+        // those two written separately are what leaves a square momentarily belonging to nobody.
+        private readonly BoardOccupancy<ChessPiece> _occupancy = new BoardOccupancy<ChessPiece>();
 
         // Tracks a capture-stamp victim whose death is still waiting on the ATTACKER's
         // onDescentStart callback (see AnimateMove) — keyed by the attacker, since the attacker is
         // what a same-frame Betrayal Defection can destroy mid-leap (SwapPieceTeam spins and
         // destroys the Betrayer immediately after its own Act-stage capture stamp starts, before
         // the leap ever reaches its fall phase). Without this, the victim was already removed from
-        // _piecesByPosition but never told to animate anywhere — visually stuck on the board,
+        // the board's occupancy but never told to animate anywhere — visually stuck on the board,
         // overlapping the Betrayer's old square, forever. FlushPendingStampVictim (called from
         // SwapPieceTeam and anywhere else that can destroy an attacker mid-stamp) is the safety net:
         // if the attacker never delivers its callback, send the victim to the graveyard directly.
@@ -1204,7 +1206,7 @@ namespace ChessTheBetrayal.View.Board
 
         /// <summary>
         /// Instantiates a single piece GameObject at the specified position and keys it into
-        /// _piecesByPosition. Returns the spawned ChessPiece (null on a bad prefab index) so
+        /// the board's occupancy. Returns the spawned ChessPiece (null on a bad prefab index) so
         /// callers that need to animate it in — promotion and defection's reveal transitions —
         /// don't have to look it back up.
         ///
@@ -1244,7 +1246,7 @@ namespace ChessTheBetrayal.View.Board
             visualPiece.SetSelectionOutlineMaterial(selectionOutlineMaterial);
 
             // Store in lookup
-            _piecesByPosition[pos] = visualPiece;
+            _occupancy.Place(pos, visualPiece);
 
             if (spawnDissolveDelay >= 0f)
             {
@@ -1306,7 +1308,7 @@ namespace ChessTheBetrayal.View.Board
             }
 
             // Clear collections
-            _piecesByPosition.Clear();
+            _occupancy.Clear();
             _graveyard.Clear();
             _destroyQueue.Clear();
 
@@ -1369,6 +1371,7 @@ namespace ChessTheBetrayal.View.Board
             // because the attacker never ends up standing on it as itself — see CaptureFate.
             CapturedPieceFate victimFate = CaptureFate.Of(move);
             ChessPiece stampVictim = null;
+            GraveyardSlot stampVictimSlot = default;
 
             if (victimFate != CapturedPieceFate.NothingCaptured)
             {
@@ -1376,16 +1379,23 @@ namespace ChessTheBetrayal.View.Board
                     ? move.EnPassantCapturePosition.Value
                     : move.EndPosition;
 
-                if (_piecesByPosition.TryGetValue(capturePos, out ChessPiece deadPiece))
+                if (_occupancy.TryTake(capturePos, out ChessPiece deadPiece))
                 {
-                    _piecesByPosition.Remove(capturePos);
-
                     if (victimFate == CapturedPieceFate.CrushedByTheStamp)
                     {
                         // Deferred to the attacker's onImpact below (see step 2) so the victim's
                         // squash lands on the exact same frame the attacker's lunge does, rather
                         // than starting immediately and running out of sync with the stomp.
+                        //
+                        // The place in the pile, though, is claimed right here with the move, and
+                        // not when the crush finishes playing. A takeback puts a capture back by
+                        // taking the last piece off that side's pile and trusting it to be the one
+                        // the move records, and the crush runs for most of a second: claim the
+                        // place at the end of it and an undo pressed in the meantime finds a pile
+                        // this victim has not joined, hands back whoever is beneath it, and leaves
+                        // two pieces wearing each other's identities.
                         stampVictim = deadPiece;
+                        stampVictimSlot = ReserveGraveyardSlot(deadPiece);
                     }
                     else
                     {
@@ -1395,10 +1405,8 @@ namespace ChessTheBetrayal.View.Board
             }
 
             // 2. Move the Primary Piece
-            if (_piecesByPosition.TryGetValue(move.StartPosition, out ChessPiece movingPiece))
+            if (_occupancy.TryTake(move.StartPosition, out ChessPiece movingPiece))
             {
-                _piecesByPosition.Remove(move.StartPosition);
-
                 // Handle Promotion: walk the pawn onto the last rank, play its vanish animation
                 // there, then — once that completes — destroy it and spawn the promoted piece with
                 // its own reveal animation. Each step is deferred to the previous one's callback
@@ -1452,7 +1460,7 @@ namespace ChessTheBetrayal.View.Board
                     // with the identical tiny settle bob the rook plays once IT arrives below —
                     // "two pieces settling into place together," not a simultaneous teleport with
                     // an uncoordinated landing.
-                    _piecesByPosition[move.EndPosition] = movingPiece;
+                    _occupancy.Place(move.EndPosition, movingPiece);
 
                     Vector3 kingTargetPos = GetTileCenter(move.EndPosition.x, move.EndPosition.y);
                     kingTargetPos.y += pieceYOffset;
@@ -1466,7 +1474,7 @@ namespace ChessTheBetrayal.View.Board
                     // two pieces never overlap at full size and the crush lands in sync with the
                     // attacker's touchdown. Driving both animators off this one shared beat keeps
                     // them visually synced without either needing to know the other exists.
-                    _piecesByPosition[move.EndPosition] = movingPiece;
+                    _occupancy.Place(move.EndPosition, movingPiece);
 
                     Vector3 stampTargetPos = GetTileCenter(move.EndPosition.x, move.EndPosition.y);
                     stampTargetPos.y += pieceYOffset;
@@ -1475,6 +1483,7 @@ namespace ChessTheBetrayal.View.Board
                     // bury it. Handing it over clears the local, so the sweep below can tell a
                     // victim somebody is dealing with from one nobody is.
                     ChessPiece victimForClosure = stampVictim;
+                    GraveyardSlot slotForClosure = stampVictimSlot;
                     ChessPiece attackerForClosure = movingPiece;
                     stampVictim = null;
 
@@ -1511,7 +1520,7 @@ namespace ChessTheBetrayal.View.Board
                         onDescentStart: () =>
                         {
                             if (victimForClosure == null) return;
-                            victimForClosure.PlayStompedDeath(() => SendToGraveyard(victimForClosure));
+                            victimForClosure.PlayStompedDeath(() => PlaceInGraveyard(victimForClosure, slotForClosure));
                         },
                         onImpact: () => ShakeCamera(victimHeft),
                         onSettled: () =>
@@ -1543,7 +1552,7 @@ namespace ChessTheBetrayal.View.Board
                 else
                 {
                     // Standard move: update dictionary and slide piece
-                    _piecesByPosition[move.EndPosition] = movingPiece;
+                    _occupancy.Place(move.EndPosition, movingPiece);
 
                     Vector3 targetPos = GetTileCenter(move.EndPosition.x, move.EndPosition.y);
                     targetPos.y += pieceYOffset;
@@ -1566,6 +1575,19 @@ namespace ChessTheBetrayal.View.Board
                     }
                 }
             }
+            else
+            {
+                // Nothing on the square the move says it came from. The domain has already applied
+                // the move, so the board on screen is now a piece behind the game and no later
+                // event puts it right — every branch above is reached only through this lookup.
+                //
+                // Said out loud rather than recovered from. Rebuilding the position from here would
+                // destroy the pieces the rest of this method is still animating, and the one cause
+                // this ever had is fixed above; what is left is a tripwire, and a tripwire that
+                // stays quiet is the reason this cost a session on a phone to find.
+                Debug.LogError($"[BoardVisuals] No piece on {move.StartPosition} to play {move} with. " +
+                               "The board is now behind the game.");
+            }
 
             // A victim nobody claimed still has to be buried. It has already been taken off the
             // board, so if nothing animates it away it belongs to no collection at all — not the
@@ -1578,7 +1600,7 @@ namespace ChessTheBetrayal.View.Board
             // plain death is the honest answer: there is no landing to crush against.
             if (stampVictim != null)
             {
-                AnimateDeath(stampVictim);
+                AnimateDeathTo(stampVictim, stampVictimSlot);
             }
 
             // 3. Handle Castling (move the Rook) — starts CastleRookStartDelay seconds after the
@@ -1586,10 +1608,8 @@ namespace ChessTheBetrayal.View.Board
             // rook tucks in right behind it, rather than both pieces sliding in lockstep.
             if (move.IsCastling && move.RookStartPosition.HasValue && move.RookEndPosition.HasValue)
             {
-                if (_piecesByPosition.TryGetValue(move.RookStartPosition.Value, out ChessPiece rook))
+                if (_occupancy.TryMove(move.RookStartPosition.Value, move.RookEndPosition.Value, out ChessPiece rook))
                 {
-                    _piecesByPosition.Remove(move.RookStartPosition.Value);
-                    _piecesByPosition[move.RookEndPosition.Value] = rook;
 
                     Vector3 rookPos = GetTileCenter(move.RookEndPosition.Value.x, move.RookEndPosition.Value.y);
                     rookPos.y += pieceYOffset;
@@ -1646,10 +1666,8 @@ namespace ChessTheBetrayal.View.Board
             // beat it followed on the way out.
             if (move.IsCastling && move.RookStartPosition.HasValue && move.RookEndPosition.HasValue)
             {
-                if (_piecesByPosition.TryGetValue(move.RookEndPosition.Value, out ChessPiece rook))
+                if (_occupancy.TryMove(move.RookEndPosition.Value, move.RookStartPosition.Value, out ChessPiece rook))
                 {
-                    _piecesByPosition.Remove(move.RookEndPosition.Value);
-                    _piecesByPosition[move.RookStartPosition.Value] = rook;
                     rook.PlayCastleMove(PieceWorldPosition(move.RookStartPosition.Value), PrimeTweenPieceAnimator.CastleRookStartDelay);
                 }
             }
@@ -1662,10 +1680,8 @@ namespace ChessTheBetrayal.View.Board
             {
                 RestorePromotedPawn(move);
             }
-            else if (_piecesByPosition.TryGetValue(move.EndPosition, out ChessPiece movingPiece))
+            else if (_occupancy.TryMove(move.EndPosition, move.StartPosition, out ChessPiece movingPiece))
             {
-                _piecesByPosition.Remove(move.EndPosition);
-                _piecesByPosition[move.StartPosition] = movingPiece;
 
                 // An Act being taken back takes its Betrayer glow with it — there is no longer a
                 // betrayal pending for it to be marking.
@@ -1807,6 +1823,25 @@ namespace ChessTheBetrayal.View.Board
                 return;
             }
 
+            // The pile hands back whoever is on the end of it, and the move says who that ought to
+            // be. Nothing used to compare the two, so a pile that had fallen out of step with the
+            // game put the wrong piece on the square wearing the right one's identity — a queen
+            // moving like a queen while a pawn's model stood in its place — with no error anywhere
+            // and no way to tell from the board that anything had gone wrong.
+            //
+            // Putting the recorded piece back instead keeps the board honest, and saying so is the
+            // point: this is the only moment the two records can be seen to disagree.
+            if (victim.team != captured.Team || victim.type != captured.Type)
+            {
+                Debug.LogError($"[BoardVisuals] Taking back {move} wanted {captured.Team} {captured.Type} " +
+                               $"off the death pile and was handed {victim.team} {victim.type}. " +
+                               "Putting the recorded piece back instead.");
+
+                Destroy(victim.gameObject);
+                SpawnSinglePiece(captured, capturePos);
+                return;
+            }
+
             // Turned to face its own side's direction before it sets off, so it travels home facing
             // the way it will stand rather than spinning round on arrival.
             ApplyRestingRotation(victim.transform, captured.Team, captured.Type, captured.MoveDirection);
@@ -1814,7 +1849,7 @@ namespace ChessTheBetrayal.View.Board
             // Claim the square immediately, not on arrival: the board already believes the piece is
             // there, and anything that looks in between (the next ply of the same takeback, a rebuild)
             // must find it rather than an empty square with a piece in flight toward it.
-            _piecesByPosition[capturePos] = victim;
+            _occupancy.Place(capturePos, victim);
 
             Vector3 homeSquare = PieceWorldPosition(capturePos);
 
@@ -1877,8 +1912,7 @@ namespace ChessTheBetrayal.View.Board
         private void PlaySwapBack(Vector2Int outgoingSquare, PieceTransitionStyle style, PieceData incoming,
             Vector2Int incomingSquare, Vector2Int revealAtSquare, System.Action<ChessPiece> onRevealed)
         {
-            _piecesByPosition.TryGetValue(outgoingSquare, out ChessPiece outgoing);
-            _piecesByPosition.Remove(outgoingSquare);
+            _occupancy.TryTake(outgoingSquare, out ChessPiece outgoing);
 
             if (outgoing != null)
             {
@@ -1926,39 +1960,67 @@ namespace ChessTheBetrayal.View.Board
         }
 
         /// <summary>
-        /// Finds team's king among the currently spawned pieces and shows the check-warning frame
-        /// under it plus a startle shake — the same lookup pattern ThreatPulseOwnKing already uses,
-        /// kept as its own linear scan rather than a maintained king-position cache since it only
-        /// runs once per move and the board never has more than one king per team.
+        /// Frames a side's king in red and gives it a startle shake, so a check reads as
+        /// something that just happened to that king rather than as a HUD message.
         /// </summary>
         private void ShowKingInCheck(Team team)
         {
-            foreach (var kv in _piecesByPosition)
+            if (!TryFindKing(team, out Vector2Int square, out ChessPiece king)) return;
+
+            SetKingInCheckHighlight(square);
+            king.Shake();
+        }
+
+        /// <summary>
+        /// Finds a side's king among the pieces the board is currently showing, and the square it
+        /// is standing on.
+        ///
+        /// A walk over the pieces rather than a king position kept up to date alongside every
+        /// move: it runs twice a move at most, there is only ever one king per side to find, and a
+        /// cache would be one more thing to keep honest while an animation is still catching up.
+        ///
+        /// Answers false rather than throwing when there is no king to find. Both callers can be
+        /// reached in the moment a Betrayal sub-sequence is resolving several phases in one frame,
+        /// where a piece may be between the square it left and the one it is going to.
+        /// </summary>
+        private bool TryFindKing(Team team, out Vector2Int square, out ChessPiece king)
+        {
+            foreach (KeyValuePair<Vector2Int, ChessPiece> entry in _occupancy.Entries)
             {
-                ChessPiece piece = kv.Value;
-                if (piece.team == team && piece.type == ChessPieceType.King)
+                ChessPiece piece = entry.Value;
+                if (piece != null && piece.team == team && piece.type == ChessPieceType.King)
                 {
-                    SetKingInCheckHighlight(kv.Key);
-                    piece.Shake();
-                    return;
+                    square = entry.Key;
+                    king = piece;
+                    return true;
                 }
             }
+
+            square = Vector2Int.Invalid;
+            king = null;
+            return false;
         }
 
         /// <summary>
         /// Animates a captured piece moving to the death pile. Used for en passant (and the
         /// defensive fallback below) — the attacker never visually lands on this victim's square,
         /// so there's no impact beat to crush against. Instead the victim plays its own hop-and-
-        /// shrink glide (PlayEnPassantDeath) straight to its reserved graveyard slot, then snaps to
-        /// death-pile scale/facing on arrival. Direct captures use PlayStompedDeath -> SendToGraveyard
-        /// instead (see AnimateMove), which crushes the piece flat in place first.
+        /// shrink glide (PlayEnPassantDeath) straight to its place in the pile, then snaps to
+        /// death-pile scale/facing on arrival. Direct captures use PlayStompedDeath followed by
+        /// PlaceInGraveyard instead (see AnimateMove), crushing the piece flat where it stood
+        /// first.
         /// </summary>
-        private void AnimateDeath(ChessPiece victim)
+        private void AnimateDeath(ChessPiece victim) => AnimateDeathTo(victim, ReserveGraveyardSlot(victim));
+
+        /// <summary>
+        /// The same death, for a victim whose place in the pile has already been claimed — the
+        /// stamp claims it when the move is applied and only crushes the piece afterwards, so by
+        /// the time anything here runs the pile already knows where this one belongs.
+        /// </summary>
+        private void AnimateDeathTo(ChessPiece victim, GraveyardSlot slot)
         {
             victim.DisableCollider();
             victim.SetBetrayerGlow(false);
-
-            GraveyardSlot slot = ReserveGraveyardSlot(victim);
 
             victim.PlayEnPassantDeath(slot.Position, TilesBetween(victim.transform.position, slot.Position), onArrived: () =>
             {
@@ -1969,30 +2031,34 @@ namespace ChessTheBetrayal.View.Board
         }
 
         /// <summary>
-        /// Claims the next open slot in the victim's own side's death pile and returns where it
-        /// stands. Pure bookkeeping — no visual mutation — so callers can find out where a piece is
-        /// headed before it starts animating toward the graveyard (PlayEnPassantDeath glides there)
-        /// as well as after (SendToGraveyard teleports there once a stomp has already finished on
-        /// the board). The slot is reserved the instant this is called, so nothing else can be sent
-        /// to the same place while a victim is still on its way.
+        /// Claims the next open place in the victim's own side's death pile and says where that
+        /// is. Nothing is moved or drawn here, which is what lets every capture claim its place at
+        /// the moment the move is applied and leave the travelling until afterwards — a glide for
+        /// en passant, a crush and then a placement for everything else.
+        ///
+        /// Claiming and joining the pile are the same step on purpose. A takeback reads the pile
+        /// to decide what to put back, so a piece still on its way has to already be in it, and
+        /// nothing else may be given the same place while it travels.
         /// </summary>
         private GraveyardSlot ReserveGraveyardSlot(ChessPiece victim) => _graveyard.Push(victim.team, victim);
 
         /// <summary>
-        /// Places an already-vanished victim at its team's death pile: turns off its
-        /// collider/glow, reserves the next open graveyard slot, and snaps position/facing/scale
-        /// there instantly. Used once a capture "stamp" (PlayStompedDeath) has already finished
-        /// collapsing the piece on the board — the graveyard placement itself is still a teleport,
-        /// but it happens AFTER the crush animation, not instead of it. En passant's death instead
-        /// travels to its slot directly (see AnimateMove/PlayEnPassantDeath) since there's no
-        /// on-board crush to finish first.
+        /// Stands an already-crushed victim in the place its side's pile has been holding for it,
+        /// and snaps its size and facing to match the rest of the pile.
+        ///
+        /// The place itself was claimed when the move was applied, not here: this runs from the
+        /// end of the crush, which is most of a second later, and a takeback arriving in between
+        /// has to find the pile already describing what was taken. Only where the piece stands
+        /// waits for the animation; what the pile holds does not.
         /// </summary>
-        private void SendToGraveyard(ChessPiece victim)
+        private void PlaceInGraveyard(ChessPiece victim, GraveyardSlot slot)
         {
+            // The whole match can end while a crush is still playing, and this is what the end of
+            // it calls back into.
+            if (victim == null) return;
+
             victim.DisableCollider();
             victim.SetBetrayerGlow(false);
-
-            GraveyardSlot slot = ReserveGraveyardSlot(victim);
 
             // The stomp already shrank the victim to VanishedScale on the board; restore its
             // death-pile size here so it reads as a normal (if small) captured piece in the
@@ -2007,7 +2073,7 @@ namespace ChessTheBetrayal.View.Board
         /// </summary>
         public void SnapPieceBack(Vector2Int gridPos)
         {
-            if (_piecesByPosition.TryGetValue(gridPos, out ChessPiece piece))
+            if (_occupancy.TryGet(gridPos, out ChessPiece piece))
             {
                 Vector3 worldPos = GetTileCenter(gridPos.x, gridPos.y);
                 worldPos.y += pieceYOffset;
@@ -2023,7 +2089,7 @@ namespace ChessTheBetrayal.View.Board
         /// </summary>
         public void LiftPieceAt(Vector2Int gridPos)
         {
-            if (_piecesByPosition.TryGetValue(gridPos, out ChessPiece piece))
+            if (_occupancy.TryGet(gridPos, out ChessPiece piece))
             {
                 piece.LiftSelect();
             }
@@ -2041,7 +2107,7 @@ namespace ChessTheBetrayal.View.Board
         /// </summary>
         public void LowerPieceAt(Vector2Int gridPos)
         {
-            if (_piecesByPosition.TryGetValue(gridPos, out ChessPiece piece))
+            if (_occupancy.TryGet(gridPos, out ChessPiece piece))
             {
                 piece.LowerDeselect();
             }
@@ -2077,7 +2143,7 @@ namespace ChessTheBetrayal.View.Board
         /// </summary>
         public void HandleSelectionRejected(ChessTheBetrayal.Events.Payloads.SelectionRejectedPayload payload)
         {
-            if (_piecesByPosition.TryGetValue(payload.Position, out ChessPiece piece))
+            if (_occupancy.TryGet(payload.Position, out ChessPiece piece))
             {
                 piece.Shake();
             }
@@ -2094,7 +2160,7 @@ namespace ChessTheBetrayal.View.Board
         /// MoveExecutedPayload finally arrived and AnimateMove ran the actual capture, the victim
         /// would vanish and the promotion swap would play — reading as a glitchy "snap back."
         ///
-        /// The pawn is intentionally left keyed at FromPosition in _piecesByPosition (only its
+        /// The pawn is intentionally left keyed at FromPosition on the board (only its
         /// Transform moves here) rather than re-keyed to ToPosition. AnimateMove's promotion branch
         /// already looks the mover up by move.StartPosition and expects to find it there; leaving
         /// the keying alone means AnimateMove needs no special-casing to avoid redoing this glide —
@@ -2103,13 +2169,12 @@ namespace ChessTheBetrayal.View.Board
         /// </summary>
         public void HandlePromotionOptimisticGlide(ChessTheBetrayal.Events.Payloads.PromotionRequiredPayload payload)
         {
-            if (payload.IsCapture && _piecesByPosition.TryGetValue(payload.ToPosition, out ChessPiece victim))
+            if (payload.IsCapture && _occupancy.TryTake(payload.ToPosition, out ChessPiece victim))
             {
-                _piecesByPosition.Remove(payload.ToPosition);
                 AnimateDeath(victim);
             }
 
-            if (_piecesByPosition.TryGetValue(payload.FromPosition, out ChessPiece pawn))
+            if (_occupancy.TryGet(payload.FromPosition, out ChessPiece pawn))
             {
                 Vector3 glidePos = GetTileCenter(payload.ToPosition.x, payload.ToPosition.y);
                 glidePos.y += pieceYOffset;
@@ -2150,7 +2215,7 @@ namespace ChessTheBetrayal.View.Board
                     // The Betrayer's glow (when it happens at all) is applied by AnimateMove
                     // instead: this phase is raised by MatchDriver before the corresponding
                     // MoveExecutedPayload, so the piece is still keyed at its start square in
-                    // _piecesByPosition at this point.
+                    // the board's occupancy at this point.
                     break;
 
                 case ChessTheBetrayal.Events.Payloads.BetrayalPhase.Resolved:
@@ -2202,7 +2267,7 @@ namespace ChessTheBetrayal.View.Board
         /// </summary>
         private void SwapPieceTeam(Vector2Int pos)
         {
-            if (!_piecesByPosition.TryGetValue(pos, out ChessPiece piece)) return;
+            if (!_occupancy.TryGet(pos, out ChessPiece piece)) return;
 
             if (_pendingStampVictimByAttacker.ContainsKey(piece))
             {
@@ -2218,6 +2283,15 @@ namespace ChessTheBetrayal.View.Board
         /// can invoke it directly once a queued Defection's capture animation has finished (see
         /// _pendingDefectionByAttacker's doc comment) without re-running the "is this piece mid-stamp"
         /// check that already applies here.
+        ///
+        /// Goes through PlaySwapBack, which is also what a takeback uses to turn a defector back
+        /// into what it was. That matters for more than tidiness. This used to destroy the old
+        /// piece and only spawn its replacement from the spin's completion callback, which left the
+        /// square belonging to nobody for the length of the spin — and a move arriving in that
+        /// window found no piece to move, animated nothing, and reported nothing, while the game
+        /// itself carried on correctly. PlaySwapBack claims the square for the incoming piece
+        /// immediately and keeps it invisible until the outgoing one has finished leaving, so the
+        /// same swap plays out on screen with nothing ever standing on an unclaimed square.
         /// </summary>
         private void SwapPieceTeamNow(ChessPiece piece, Vector2Int pos)
         {
@@ -2230,36 +2304,20 @@ namespace ChessTheBetrayal.View.Board
                 hasMoved: true
             );
 
-            _piecesByPosition.Remove(pos);
-
-            piece.PlayTransitionOut(PieceTransitionStyle.Spin, () =>
-            {
-                // Guards the same "destroyed while the transition was mid-flight" case documented
-                // in AnimateMove's promotion branch above (e.g. a game reset during the spin).
-                if (piece == null) return;
-                Destroy(piece.gameObject);
-                ChessPiece defected = SpawnSinglePiece(flipped, pos);
-                defected?.PlayTransitionIn(PieceTransitionStyle.Spin);
-            });
+            PlaySwapBack(pos, PieceTransitionStyle.Spin, flipped, pos, pos, onRevealed: null);
         }
 
         /// <summary>
         /// Flashes the given team's king red twice — the "Defensive Override" cue that tells the
         /// player why they're being forced into a Save move: their own defected piece just put
-        /// their king in check. Silently no-ops if the king can't be found (defense-in-depth; see
-        /// the ForcedSaveActive case above for why that can theoretically race).
+        /// their king in check. Does nothing when the king cannot be found — see the
+        /// ForcedSaveActive case above for the moment where that can genuinely happen.
         /// </summary>
         private void ThreatPulseOwnKing(Team team)
         {
-            foreach (var kv in _piecesByPosition)
-            {
-                ChessPiece piece = kv.Value;
-                if (piece.team == team && piece.type == ChessPieceType.King)
-                {
-                    piece.FlashGlow(Color.red, KingThreatFlashIntensity, KingThreatFlashDuration, KingThreatFlashCycles);
-                    return;
-                }
-            }
+            if (!TryFindKing(team, out Vector2Int _, out ChessPiece king)) return;
+
+            king.FlashGlow(Color.red, KingThreatFlashIntensity, KingThreatFlashDuration, KingThreatFlashCycles);
         }
 
         #endregion
@@ -2293,7 +2351,7 @@ namespace ChessTheBetrayal.View.Board
         /// </summary>
         public Transform GetPieceTransformAt(Vector2Int gridPos)
         {
-            if (_piecesByPosition.TryGetValue(gridPos, out ChessPiece piece))
+            if (_occupancy.TryGet(gridPos, out ChessPiece piece))
             {
                 return piece.transform;
             }

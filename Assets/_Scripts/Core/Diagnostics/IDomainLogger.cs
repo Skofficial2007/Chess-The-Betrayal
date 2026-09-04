@@ -72,6 +72,7 @@ namespace ChessTheBetrayal.Core.Diagnostics
         Betrayal_ForcedSaveRequired     = 3006,
         Betrayal_ForcedSaveInvariantViolated = 3007,
         Betrayal_RetributionSkipped     = 3008,
+        Betrayal_ForcedSaveImpossible   = 3009,
 
         // ── AI Search ─────────────────────────────────────────────────────────
         AI_TranspositionHashCollision   = 4001,

@@ -185,6 +185,9 @@ namespace ChessTheBetrayal.Tests.EditMode.View.Input
 
         private sealed class FakePointerDevice : IPointerDevice
         {
+            /// <summary>Nothing to decide: every value below is written straight in by the test.</summary>
+            public void ReadThisFrame() { }
+
             public bool ReportsPositionWhileIdle { get; set; }
             public bool IsPressed { get; private set; }
             public bool WasPressed { get; private set; }

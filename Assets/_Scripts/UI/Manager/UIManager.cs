@@ -229,42 +229,49 @@ namespace ChessTheBetrayal.UI.Manager
 
         #region State Checks
 
-        public bool IsUIBlocking() =>
-            BoardInputBlocking.BlocksTheBoard(APanelIsCoveringTheBoard(), _confirmations);
+        public bool IsUIBlocking() => DescribeBlocking() != null;
 
-        private bool APanelIsCoveringTheBoard()
+        public string DescribeBlocking() =>
+            BoardInputBlocking.WhatBlocksTheBoard(WhichPanelCoversTheBoard(), _confirmations);
+
+        /// <summary>
+        /// Which panel is over the board, named, or null when none of them is. The names are
+        /// what a player would call them, because the only thing that reads them is somebody
+        /// working out why a board stopped taking taps.
+        /// </summary>
+        private string WhichPanelCoversTheBoard()
         {
             if (gameModeSelectionUI != null && gameModeSelectionUI.gameObject.activeSelf)
             {
-                return true;
+                return "the game mode panel";
             }
 
             if (aiMatchSettingsUI != null && aiMatchSettingsUI.gameObject.activeSelf)
             {
-                return true;
+                return "the AI match settings panel";
             }
 
             if (teamSelectionUI != null && teamSelectionUI.gameObject.activeSelf)
             {
-                return true;
+                return "the team selection panel";
             }
 
             if (promotionUI != null && promotionUI.gameObject.activeSelf)
             {
-                return true;
+                return "the promotion panel";
             }
 
             if (gameOverUI != null && gameOverUI.gameObject.activeSelf)
             {
-                return true;
+                return "the game over panel";
             }
 
             if (mainMenuUI != null && mainMenuUI.gameObject.activeSelf)
             {
-                return true;
+                return "the main menu";
             }
 
-            return false;
+            return null;
         }
 
         #endregion

@@ -42,6 +42,11 @@ namespace ChessTheBetrayal.View.Input
         private IPointerDevice _pointer;
         private PointerTapRecognizer _recognizer;
 
+        // What was last reported as swallowing taps, so only the changes reach the log. Ignoring
+        // taps is the ordinary state while a panel is up, and a line per frame would bury the one
+        // moment worth reading.
+        private string _lastReportedGate;
+
         private void Awake()
         {
             mainCamera = UnityEngine.Camera.main;
@@ -63,9 +68,31 @@ namespace ChessTheBetrayal.View.Input
 
         private void Update()
         {
-            if (mainCamera == null) return;
-            if (_uiBlockingState.IsUIBlocking()) return;
-            if (!_gameManager.IsGameActive) return;
+            // Before the gates below, not after: the pointer decides which finger it is following
+            // from what happened this frame, and a frame it never saw is a press or a lift it will
+            // be missing the other half of once the board is live again.
+            _pointer.ReadThisFrame();
+
+            if (mainCamera == null)
+            {
+                ReportInputGate("there is no main camera");
+                return;
+            }
+
+            string blocking = _uiBlockingState.DescribeBlocking();
+            if (blocking != null)
+            {
+                ReportInputGate(blocking);
+                return;
+            }
+
+            if (!_gameManager.IsGameActive)
+            {
+                ReportInputGate("the match is over");
+                return;
+            }
+
+            ReportInputGate(null);
 
             if (!PointerTapRecognizer.HasUsablePosition(_pointer.ReportsPositionWhileIdle, _pointer.IsPressed, _pointer.WasReleased))
             {
@@ -81,6 +108,29 @@ namespace ChessTheBetrayal.View.Input
             {
                 OnTileActivated?.Invoke(tile);
             }
+        }
+
+        /// <summary>
+        /// Records the moment the board stops reading taps, and the moment it starts again.
+        ///
+        /// Three separate things can hold the board still and a player cannot tell them apart: all
+        /// three look like a board that has stopped responding while the buttons around it still
+        /// work. Naming the one in force turns a report of "it froze" into a line that says which,
+        /// which matters most in the case where nothing is drawn to explain it.
+        ///
+        /// Deliberately not behind an editor-only guard: the freeze this answers was hit on a
+        /// release build on a phone, which is exactly where a guarded version would say nothing.
+        /// The message is built only when it changes, so a blocked frame costs a reference compare.
+        /// </summary>
+        private void ReportInputGate(string reason)
+        {
+            if (reason == _lastReportedGate) return;
+
+            _lastReportedGate = reason;
+
+            Debug.Log(reason == null
+                ? "[PointerSelectionInput] board taps are being read again"
+                : $"[PointerSelectionInput] board taps ignored: {reason}");
         }
 
         /// <summary>

@@ -688,6 +688,13 @@ namespace ChessTheBetrayal.AI.Search
 
                         UndoMoveAndTurn(board, move);
 
+                        // A cancellation during this child leaves its score partial, so the depth is
+                        // abandoned rather than kept — the same rule the rescore pass below applies.
+                        // The check at the top of the loop doesn't cover the last child, which has no
+                        // next iteration to catch it: the scan reached its bound still marked complete
+                        // and committed a score the search never finished producing.
+                        if (ct.IsCancellationRequested) { completed = false; break; }
+
                         // Every candidate's score is recorded here (not just the running best) — this
                         // scratch write is unconditional so MoveSelectionPolicy can later rank/bias
                         // among ALL root moves, not only the single winner. Committed into the

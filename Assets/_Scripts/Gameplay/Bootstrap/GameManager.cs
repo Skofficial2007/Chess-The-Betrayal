@@ -306,6 +306,11 @@ namespace ChessTheBetrayal.App
             // moment a piece changed armies.
             _matchDriver.OnDefectionResolved += _aiCoordinator.RecordDefection;
 
+            // A Defection adds a piece swap to the board that the Act's own estimate knew nothing
+            // about, because whether an Act defects is only settled while it is being applied.
+            // Without this the next move is released while the Betrayer is still turning.
+            _matchDriver.OnDefectionResolved += HoldTheBoardForTheDefectionSwap;
+
             // The AI hands its move to the pacing gate, which may hold it back until the previous
             // animation has played, so only the driver knows which ply it eventually became.
             _matchDriver.OnPlyApplied += _aiCoordinator.NotePlyApplied;
@@ -408,6 +413,8 @@ namespace ChessTheBetrayal.App
                     _matchDriver.OnDefectionResolved -= _aiCoordinator.RecordDefection;
                     _matchDriver.OnPlyApplied -= _aiCoordinator.NotePlyApplied;
                 }
+
+                _matchDriver.OnDefectionResolved -= HoldTheBoardForTheDefectionSwap;
             }
 
             if (_uiManager != null)
@@ -700,6 +707,17 @@ namespace ChessTheBetrayal.App
         /// to the human, so no team argument needs to be threaded through here.
         /// </summary>
         private void OnBetrayalMoveRequiredForAI(Team owedBy) => _aiCoordinator.TryRequestMove(IsGameActive);
+
+        /// <summary>
+        /// Keeps the board to itself while a Betrayer turns into the other side's piece.
+        ///
+        /// The swap is a real animation with nothing budgeting for it: it is not a move anybody
+        /// plays, so it never reaches the pacing gate on its own, and the Act it follows was priced
+        /// before anyone knew a Defection was coming. The ply and the count are what the event
+        /// carries; neither changes how long the board needs.
+        /// </summary>
+        private void HoldTheBoardForTheDefectionSwap(MoveCommand defection, int plyNumber) =>
+            _moveVisualPacingGate?.HoldFor(ChessTheBetrayal.Core.Match.MoveVisualDurationEstimator.DefectionSwapSeconds);
 
         #endregion
 
