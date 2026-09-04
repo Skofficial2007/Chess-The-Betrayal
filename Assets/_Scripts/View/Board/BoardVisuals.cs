@@ -1371,6 +1371,7 @@ namespace ChessTheBetrayal.View.Board
             // because the attacker never ends up standing on it as itself — see CaptureFate.
             CapturedPieceFate victimFate = CaptureFate.Of(move);
             ChessPiece stampVictim = null;
+            GraveyardSlot stampVictimSlot = default;
 
             if (victimFate != CapturedPieceFate.NothingCaptured)
             {
@@ -1385,7 +1386,16 @@ namespace ChessTheBetrayal.View.Board
                         // Deferred to the attacker's onImpact below (see step 2) so the victim's
                         // squash lands on the exact same frame the attacker's lunge does, rather
                         // than starting immediately and running out of sync with the stomp.
+                        //
+                        // The place in the pile, though, is claimed right here with the move, and
+                        // not when the crush finishes playing. A takeback puts a capture back by
+                        // taking the last piece off that side's pile and trusting it to be the one
+                        // the move records, and the crush runs for most of a second: claim the
+                        // place at the end of it and an undo pressed in the meantime finds a pile
+                        // this victim has not joined, hands back whoever is beneath it, and leaves
+                        // two pieces wearing each other's identities.
                         stampVictim = deadPiece;
+                        stampVictimSlot = ReserveGraveyardSlot(deadPiece);
                     }
                     else
                     {
@@ -1473,6 +1483,7 @@ namespace ChessTheBetrayal.View.Board
                     // bury it. Handing it over clears the local, so the sweep below can tell a
                     // victim somebody is dealing with from one nobody is.
                     ChessPiece victimForClosure = stampVictim;
+                    GraveyardSlot slotForClosure = stampVictimSlot;
                     ChessPiece attackerForClosure = movingPiece;
                     stampVictim = null;
 
@@ -1509,7 +1520,7 @@ namespace ChessTheBetrayal.View.Board
                         onDescentStart: () =>
                         {
                             if (victimForClosure == null) return;
-                            victimForClosure.PlayStompedDeath(() => SendToGraveyard(victimForClosure));
+                            victimForClosure.PlayStompedDeath(() => PlaceInGraveyard(victimForClosure, slotForClosure));
                         },
                         onImpact: () => ShakeCamera(victimHeft),
                         onSettled: () =>
@@ -1589,7 +1600,7 @@ namespace ChessTheBetrayal.View.Board
             // plain death is the honest answer: there is no landing to crush against.
             if (stampVictim != null)
             {
-                AnimateDeath(stampVictim);
+                AnimateDeathTo(stampVictim, stampVictimSlot);
             }
 
             // 3. Handle Castling (move the Rook) — starts CastleRookStartDelay seconds after the
@@ -1812,6 +1823,25 @@ namespace ChessTheBetrayal.View.Board
                 return;
             }
 
+            // The pile hands back whoever is on the end of it, and the move says who that ought to
+            // be. Nothing used to compare the two, so a pile that had fallen out of step with the
+            // game put the wrong piece on the square wearing the right one's identity — a queen
+            // moving like a queen while a pawn's model stood in its place — with no error anywhere
+            // and no way to tell from the board that anything had gone wrong.
+            //
+            // Putting the recorded piece back instead keeps the board honest, and saying so is the
+            // point: this is the only moment the two records can be seen to disagree.
+            if (victim.team != captured.Team || victim.type != captured.Type)
+            {
+                Debug.LogError($"[BoardVisuals] Taking back {move} wanted {captured.Team} {captured.Type} " +
+                               $"off the death pile and was handed {victim.team} {victim.type}. " +
+                               "Putting the recorded piece back instead.");
+
+                Destroy(victim.gameObject);
+                SpawnSinglePiece(captured, capturePos);
+                return;
+            }
+
             // Turned to face its own side's direction before it sets off, so it travels home facing
             // the way it will stand rather than spinning round on arrival.
             ApplyRestingRotation(victim.transform, captured.Team, captured.Type, captured.MoveDirection);
@@ -1975,16 +2005,22 @@ namespace ChessTheBetrayal.View.Board
         /// Animates a captured piece moving to the death pile. Used for en passant (and the
         /// defensive fallback below) — the attacker never visually lands on this victim's square,
         /// so there's no impact beat to crush against. Instead the victim plays its own hop-and-
-        /// shrink glide (PlayEnPassantDeath) straight to its reserved graveyard slot, then snaps to
-        /// death-pile scale/facing on arrival. Direct captures use PlayStompedDeath -> SendToGraveyard
-        /// instead (see AnimateMove), which crushes the piece flat in place first.
+        /// shrink glide (PlayEnPassantDeath) straight to its place in the pile, then snaps to
+        /// death-pile scale/facing on arrival. Direct captures use PlayStompedDeath followed by
+        /// PlaceInGraveyard instead (see AnimateMove), crushing the piece flat where it stood
+        /// first.
         /// </summary>
-        private void AnimateDeath(ChessPiece victim)
+        private void AnimateDeath(ChessPiece victim) => AnimateDeathTo(victim, ReserveGraveyardSlot(victim));
+
+        /// <summary>
+        /// The same death, for a victim whose place in the pile has already been claimed — the
+        /// stamp claims it when the move is applied and only crushes the piece afterwards, so by
+        /// the time anything here runs the pile already knows where this one belongs.
+        /// </summary>
+        private void AnimateDeathTo(ChessPiece victim, GraveyardSlot slot)
         {
             victim.DisableCollider();
             victim.SetBetrayerGlow(false);
-
-            GraveyardSlot slot = ReserveGraveyardSlot(victim);
 
             victim.PlayEnPassantDeath(slot.Position, TilesBetween(victim.transform.position, slot.Position), onArrived: () =>
             {
@@ -1995,30 +2031,34 @@ namespace ChessTheBetrayal.View.Board
         }
 
         /// <summary>
-        /// Claims the next open slot in the victim's own side's death pile and returns where it
-        /// stands. Pure bookkeeping — no visual mutation — so callers can find out where a piece is
-        /// headed before it starts animating toward the graveyard (PlayEnPassantDeath glides there)
-        /// as well as after (SendToGraveyard teleports there once a stomp has already finished on
-        /// the board). The slot is reserved the instant this is called, so nothing else can be sent
-        /// to the same place while a victim is still on its way.
+        /// Claims the next open place in the victim's own side's death pile and says where that
+        /// is. Nothing is moved or drawn here, which is what lets every capture claim its place at
+        /// the moment the move is applied and leave the travelling until afterwards — a glide for
+        /// en passant, a crush and then a placement for everything else.
+        ///
+        /// Claiming and joining the pile are the same step on purpose. A takeback reads the pile
+        /// to decide what to put back, so a piece still on its way has to already be in it, and
+        /// nothing else may be given the same place while it travels.
         /// </summary>
         private GraveyardSlot ReserveGraveyardSlot(ChessPiece victim) => _graveyard.Push(victim.team, victim);
 
         /// <summary>
-        /// Places an already-vanished victim at its team's death pile: turns off its
-        /// collider/glow, reserves the next open graveyard slot, and snaps position/facing/scale
-        /// there instantly. Used once a capture "stamp" (PlayStompedDeath) has already finished
-        /// collapsing the piece on the board — the graveyard placement itself is still a teleport,
-        /// but it happens AFTER the crush animation, not instead of it. En passant's death instead
-        /// travels to its slot directly (see AnimateMove/PlayEnPassantDeath) since there's no
-        /// on-board crush to finish first.
+        /// Stands an already-crushed victim in the place its side's pile has been holding for it,
+        /// and snaps its size and facing to match the rest of the pile.
+        ///
+        /// The place itself was claimed when the move was applied, not here: this runs from the
+        /// end of the crush, which is most of a second later, and a takeback arriving in between
+        /// has to find the pile already describing what was taken. Only where the piece stands
+        /// waits for the animation; what the pile holds does not.
         /// </summary>
-        private void SendToGraveyard(ChessPiece victim)
+        private void PlaceInGraveyard(ChessPiece victim, GraveyardSlot slot)
         {
+            // The whole match can end while a crush is still playing, and this is what the end of
+            // it calls back into.
+            if (victim == null) return;
+
             victim.DisableCollider();
             victim.SetBetrayerGlow(false);
-
-            GraveyardSlot slot = ReserveGraveyardSlot(victim);
 
             // The stomp already shrank the victim to VanishedScale on the board; restore its
             // death-pile size here so it reads as a normal (if small) captured piece in the
