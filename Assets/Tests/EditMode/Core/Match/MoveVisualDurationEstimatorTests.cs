@@ -22,6 +22,10 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Match
         // settle bob.
         private const float MeasuredStrikeSeconds = 0.89f;
 
+        // Measured off the animator's two spin transitions, which are what a Defection plays: 0.15
+        // turning away from the camera, the swap at edge-on, and 0.20 turning back.
+        private const float MeasuredDefectionSwapSeconds = 0.35f;
+
         private static PieceData Pawn() => new PieceData(Team.White, ChessPieceType.Pawn, moveDirection: 1, startRow: 1, hasMoved: true);
         private static PieceData Piece(ChessPieceType type) => new PieceData(Team.White, type, moveDirection: 1, startRow: 0, hasMoved: true);
         private static PieceData Enemy() => new PieceData(Team.Black, ChessPieceType.Pawn, moveDirection: -1, startRow: 6, hasMoved: true);
@@ -33,6 +37,20 @@ namespace ChessTheBetrayal.Tests.EditMode.Core.Match
 
         private static MoveCommand Capture(Vector2Int from, Vector2Int to, ChessPieceType type)
             => MoveCommand.CreateStandardMove(from, to, Piece(type), Enemy());
+
+        /// <summary>
+        /// The Defection swap is the one piece of animation no estimate can be asked for, because
+        /// whether an Act ends in one is settled while it is being applied and not by anything the
+        /// move says. So it is published as a figure of its own, and the thing worth pinning is
+        /// that the figure actually covers the animation it is named after - the same slip that
+        /// left the capture estimate a quarter-second short of the strike.
+        /// </summary>
+        [Test]
+        public void TheDefectionSwapIsBudgetedForBothHalvesOfTheSpin()
+        {
+            Assert.That(MoveVisualDurationEstimator.DefectionSwapSeconds,
+                Is.GreaterThanOrEqualTo(MeasuredDefectionSwapSeconds));
+        }
 
         #region Captures
 

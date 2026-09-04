@@ -62,6 +62,18 @@ namespace ChessTheBetrayal.Gameplay.Manager
             }
         }
 
+        /// <summary>
+        /// Adds to what the board is still owed, for an animation it picked up after the current
+        /// item's time was already budgeted. Holds even when nothing is draining, so work that
+        /// arrives on an idle queue is still waited out rather than ignored.
+        /// </summary>
+        public void ExtendHold(float extraSeconds)
+        {
+            if (extraSeconds <= 0f) return;
+
+            _remainingSeconds += extraSeconds;
+        }
+
         /// <summary>Abandons everything still waiting and reopens immediately.</summary>
         public void Clear()
         {

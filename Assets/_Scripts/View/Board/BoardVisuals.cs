@@ -1564,6 +1564,19 @@ namespace ChessTheBetrayal.View.Board
                     }
                 }
             }
+            else
+            {
+                // Nothing on the square the move says it came from. The domain has already applied
+                // the move, so the board on screen is now a piece behind the game and no later
+                // event puts it right — every branch above is reached only through this lookup.
+                //
+                // Said out loud rather than recovered from. Rebuilding the position from here would
+                // destroy the pieces the rest of this method is still animating, and the one cause
+                // this ever had is fixed above; what is left is a tripwire, and a tripwire that
+                // stays quiet is the reason this cost a session on a phone to find.
+                Debug.LogError($"[BoardVisuals] No piece on {move.StartPosition} to play {move} with. " +
+                               "The board is now behind the game.");
+            }
 
             // A victim nobody claimed still has to be buried. It has already been taken off the
             // board, so if nothing animates it away it belongs to no collection at all — not the
@@ -2230,6 +2243,15 @@ namespace ChessTheBetrayal.View.Board
         /// can invoke it directly once a queued Defection's capture animation has finished (see
         /// _pendingDefectionByAttacker's doc comment) without re-running the "is this piece mid-stamp"
         /// check that already applies here.
+        ///
+        /// Goes through PlaySwapBack, which is also what a takeback uses to turn a defector back
+        /// into what it was. That matters for more than tidiness. This used to destroy the old
+        /// piece and only spawn its replacement from the spin's completion callback, which left the
+        /// square belonging to nobody for the length of the spin — and a move arriving in that
+        /// window found no piece to move, animated nothing, and reported nothing, while the game
+        /// itself carried on correctly. PlaySwapBack claims the square for the incoming piece
+        /// immediately and keeps it invisible until the outgoing one has finished leaving, so the
+        /// same swap plays out on screen with nothing ever standing on an unclaimed square.
         /// </summary>
         private void SwapPieceTeamNow(ChessPiece piece, Vector2Int pos)
         {
@@ -2242,17 +2264,7 @@ namespace ChessTheBetrayal.View.Board
                 hasMoved: true
             );
 
-            _occupancy.Remove(pos);
-
-            piece.PlayTransitionOut(PieceTransitionStyle.Spin, () =>
-            {
-                // Guards the same "destroyed while the transition was mid-flight" case documented
-                // in AnimateMove's promotion branch above (e.g. a game reset during the spin).
-                if (piece == null) return;
-                Destroy(piece.gameObject);
-                ChessPiece defected = SpawnSinglePiece(flipped, pos);
-                defected?.PlayTransitionIn(PieceTransitionStyle.Spin);
-            });
+            PlaySwapBack(pos, PieceTransitionStyle.Spin, flipped, pos, pos, onRevealed: null);
         }
 
         /// <summary>

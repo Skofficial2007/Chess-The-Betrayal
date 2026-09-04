@@ -54,6 +54,19 @@ namespace ChessTheBetrayal.Core.Match
         private const float CastlingSeconds = 0.45f;
 
         /// <summary>
+        /// Turning a Betrayer into the other side's piece: a quarter-turn away, the swap at
+        /// edge-on, and a quarter-turn back, plus a beat.
+        ///
+        /// Not part of EstimateSeconds, because no move command can say whether the Act it
+        /// describes will end in a Defection - only the driver applying it finds that out. It is
+        /// published here so whoever does know can hold the board for it, and so the figure lives
+        /// with the rest of the animation budget rather than being guessed at again at the call
+        /// site. Without it the next move was released while the piece was still turning, onto a
+        /// square that had nobody standing on it yet.
+        /// </summary>
+        public const float DefectionSwapSeconds = 0.4f;
+
+        /// <summary>
         /// A move can match more than one shape (e.g. a capturing promotion) — callers only ever
         /// need to wait out the longest one, so this returns the max across every shape the move
         /// actually has, not a sum.
