@@ -92,7 +92,8 @@ under **How long a move takes**.
 
 One consequence worth knowing before tuning anything: on a middlegame position at three seconds, the
 four deep tiers can all bottom out at the same depth, in which case what separates them is their
-personality dials rather than their search. `Assets/_Scripts/AI/Profiles/AIProfileTable.cs`.
+personality dials rather than their search. `difficulty.md` covers those dials and what each one is
+allowed to do; `Assets/_Scripts/AI/Profiles/AIProfileTable.cs` is where the six tiers are declared.
 
 ## What makes it fast
 
@@ -297,13 +298,41 @@ next section for why.
 
 ## Reading the search from outside
 
-Plain counters: how many nodes were visited, how often the table was probed and hit, how often each
-pruning mechanism fired, how often a forced defection had to be resolved. Without them, "the search
-got faster" is an anecdote, and there is no way to tell a technique that is working from one that is
-silently disabled.
+The search reports on itself in two ways, and the difference between them matters more than it
+looks.
 
-Every increment sits behind an editor or development-build guard, so a release build pays nothing for
-the counting — not even a branch. `Assets/_Scripts/AI/Search/SearchStats.cs`.
+**Counters, compiled out of a release build.** How many nodes were visited, how often the table was
+probed and hit, how often each pruning mechanism fired, how often a forced defection had to be
+resolved. Without them, "the search got faster" is an anecdote, and there is no way to tell a
+technique that is working from one that is silently disabled. Every increment sits behind
+`#if UNITY_EDITOR || DEVELOPMENT_BUILD`, so a release build pays nothing for the counting — not even
+a branch. They live in `SearchStats`, on the transposition table.
+
+**Results, available on every build.** A handful of properties on `AlphaBetaSearch` itself are
+deliberately outside that guard, because a device report is written *by* a release build and would
+otherwise have nothing to say:
+
+| Property | What it answers |
+|---|---|
+| `LastCompletedDepth` | the deepest depth the search actually finished |
+| `StopReason` | why it stopped — its ceiling, the clock, a settled root, or a mate |
+| `ElapsedMsAfterDepth(depth)` | how long the climb to each completed depth took |
+| `RootScores`, `BestRootIndex` | what every root move scored, for the difficulty dials |
+| `RootScoresExactCount`, `RootScoresExactForSelection` | how far the rescore pass got before the clock stopped it |
+
+**The line between the two is not a style choice, and crossing it has broken a build.** A value was
+once moved out from behind the guard while still being written into `SearchStats` — so the write was
+unguarded and the thing it wrote to did not exist in a release build. Every test passed, because the
+editor defines both symbols, and the Android build failed with five errors. If you add something a
+report needs, it goes on the search as a plain field with a plain reader, the way the five above do;
+`SearchStats` may keep a copy, taken after the search returns.
+
+`SingleSourceOfTruthTests` now checks the storage, the reader, the write and the reset for the
+per-depth clock, because an earlier version checked only that the write was outside a guard — which
+was true, and not enough. See **Editor tests do not prove a player build compiles** in
+`CONTRIBUTING.md` for how to check this before you push.
+
+`Assets/_Scripts/AI/Search/SearchStats.cs`, `AlphaBetaSearch.cs`.
 
 ## What is verified, and what is not
 
@@ -327,6 +356,8 @@ Verified automatically, all in seconds:
 | Quiescence skips a capture that loses material on the recapture, so the search really is consulting static exchange evaluation | `SearchGuardTelemetryTests` |
 | Null move, reduction and narrow-window activity all register | `SearchTelemetryTests` |
 | The search allocates nothing | `SearchTelemetryTests` |
+| A depth whose last root move was cancelled is discarded, not committed | `RootDepthCancellationTests` |
+| Reaching a ceiling and being stopped short of it report as different outcomes | `SearchStopReasonTests` |
 | Every tier arrives inside its hard budget and reaches a depth floor | `AIProfileSearchBenchmarkTests` |
 
 One more check exists and is worth treating separately. `AIProfileStrengthGateTests` plays a handful
@@ -339,7 +370,12 @@ If you go looking for that fixture, it lives inside `AIProfileStrengthOrderingTe
 full statistical suite, which is marked explicit and does not run in an ordinary pass. Naming the file
 is not the same as naming the class, and a command-line filter selects classes.
 
-Two further things are **not** settled, and are worth knowing before you trust anything above:
+Three further things are **not** settled, and are worth knowing before you trust anything above:
+
+**Two of the difficulty dials have no test that fails when they stop working.** Delete the tie-break
+window, or the Betrayal aggression weighting, and all 1,414 tests in the fast half still pass —
+measured, not assumed. The blunder roll is covered; these two are not. `difficulty.md` explains the
+shape of the test that would close it, and why it has not been written yet.
 
 **Aspiration windows have never been measured on this engine.** They are implemented, tested for
 correctness, and switched off. The literature is genuinely mixed — there is a documented case of a
