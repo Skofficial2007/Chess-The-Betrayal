@@ -6,6 +6,19 @@ today, in present tense, so it can be checked against the code rather than taken
 This is not a changelog. Why a thing changed lives in the pull request that changed it; what it does
 now lives here.
 
+## Where to start
+
+| If you want to | Read |
+|---|---|
+| understand how the opponent thinks | `AI/search.md` |
+| change a difficulty tier, or add one | `AI/difficulty.md` |
+| add a file, or grant an assembly a reference | `Architecture/assemblies.md` |
+| change how the game looks on one platform only | `Rendering/pipeline-assets.md` |
+| work out why a phone is slow | `Benchmarks/mobile-device-benchmark.md` |
+| know whether a strength number can be trusted | `Benchmarks/README.md`, then `Benchmarks/baseline.md` |
+| change what the AI plays out of the book | `AI/opening-book.md` |
+| build networked play | `Multiplayer/move-and-clock-authority.md` |
+
 ## AI
 
 How the chess engine and its opponent work — the search and the techniques that make it fast, the

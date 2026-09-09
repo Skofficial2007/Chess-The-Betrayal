@@ -6,6 +6,19 @@ the slowest phone that still runs the game — not the desktop mean. This page i
 the on-device instrument (`Assets/_Scripts/AI/DeviceBenchmark/`) actually measures, what it
 deliberately does not, and the numbers gathered so far.
 
+## What is on this page
+
+- **Running it on a phone** — *Running it, and getting the report back*. The searching is bounded
+  at 2m 20s on any device, and the app says so before it starts.
+- **Reading a report somebody sent you** — *What it measures*, then *What a report deliberately
+  does not say*.
+- **Deciding whether a number here applies to your device** — *What it does not measure*, and
+  *Build config this was measured under*.
+- **Comparing against a desktop figure** — *Desktop reference*. The two instruments answer
+  different questions and their numbers do not transfer.
+- **The results so far** — *Per-device results*.
+- **Doing this in a project of your own** — *Using this on your own project*.
+
 ## How long it takes, and why that number is trustworthy
 
 **The tester run's searching is bounded at 2m 20s on any device**, and the app shows that bound on
