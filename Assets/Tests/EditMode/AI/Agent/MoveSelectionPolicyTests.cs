@@ -47,6 +47,19 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Agent
             public float NextFloat() => throw new System.InvalidOperationException("Unexpected RNG call.");
         }
 
+        /// <summary>Returns the same value from NextFloat every time, so a weighted pick lands on a
+        /// candidate the test can name rather than one it has to accept.</summary>
+        private sealed class FixedFloatRandomSource : IRandomSource
+        {
+            private readonly float _value;
+
+            public FixedFloatRandomSource(float value) => _value = value;
+
+            public bool NextBool() => false;
+            public int NextInt(int maxExclusive) => 0;
+            public float NextFloat() => _value;
+        }
+
         [Test]
         public void SelectFinalMove_FixedSeed_ProducesBitIdenticalResultsAcrossRuns()
         {
@@ -157,6 +170,77 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Agent
                 Assert.That(result.EndPosition, Is.Not.EqualTo(rootMoves[2].EndPosition),
                     "Betrayal-aggression reweights WITHIN the tie-break window only — it must never pull in a move outside it.");
             }
+        }
+
+        [Test]
+        public void SelectFinalMove_TieBreakWindow_MakesANonBestMoveReachable()
+        {
+            // Deleting the window outright left every test in this file green, because each one
+            // either expects the best move back or only rules out one specific worse move — and a
+            // deleted window returns the best move in both cases. This names the move the window is
+            // supposed to make reachable, so removing the window has somewhere to fail.
+            //
+            // Two candidates weigh the same, so the draw splits the range down the middle: 0.75 of a
+            // total weight of 2 is 1.5, which is past the first candidate's share and inside the
+            // second's.
+            var rootMoves = new List<MoveCommand>
+            {
+                Move(0, 1, 0, 2), // best, score 100
+                Move(1, 1, 1, 3), // score 90 - inside a 20cp window, alone outside a 0cp one
+            };
+            int[] rootScores = { 100, 90 };
+            var rng = new FixedFloatRandomSource(0.75f);
+
+            MoveCommand withWindow = new MoveSelectionPolicy().SelectFinalMove(
+                rootMoves, rootScores, rootMoves.Count, 0, ProfileWith(tieBreakWindowCp: 20), rng);
+
+            Assert.That(withWindow.EndPosition, Is.EqualTo(rootMoves[1].EndPosition),
+                "A move 10cp behind the best sits inside a 20cp window and has to be reachable. The best "
+                + "move coming back here means the window is not widening the candidate set at all.");
+
+            // The control carries as much weight as the case. Same moves, same scores, same draw,
+            // so the only thing that can explain a different answer is the dial itself.
+            MoveCommand withoutWindow = new MoveSelectionPolicy().SelectFinalMove(
+                rootMoves, rootScores, rootMoves.Count, 0, ProfileWith(tieBreakWindowCp: 0), rng);
+
+            Assert.That(withoutWindow.EndPosition, Is.EqualTo(rootMoves[0].EndPosition),
+                "A zero-width window leaves exactly one candidate, so the same draw must return the best move.");
+        }
+
+        [Test]
+        public void SelectFinalMove_BetrayalAggression_ShiftsTheSameDrawOntoTheAct()
+        {
+            // Deleting the aggression weighting also left this file green. The test above it only
+            // rules out a move from OUTSIDE the window, which a flat weighting satisfies just as
+            // well, so nothing here noticed the dial going away. This pins what it is for: the same
+            // draw has to land somewhere else once an Act is weighted more heavily than a quiet move.
+            //
+            // An Act at 1 + 1.0 against a quiet move at 1 makes the window weigh 3, and a draw of
+            // 0.4 lands at 1.2 - past the quiet move's share, inside the Act's. Level the weights
+            // and the same draw is 0.8 of a total of 2, which lands on the quiet move instead.
+            var rootMoves = new List<MoveCommand>
+            {
+                Move(0, 1, 0, 2),                    // best, quiet, score 100
+                Move(1, 1, 1, 3, BetrayalStage.Act), // score 90, inside the window
+            };
+            int[] rootScores = { 100, 90 };
+            var rng = new FixedFloatRandomSource(0.4f);
+
+            MoveCommand aggressive = new MoveSelectionPolicy().SelectFinalMove(
+                rootMoves, rootScores, rootMoves.Count, 0,
+                ProfileWith(betrayalAggression: 1f, tieBreakWindowCp: 20), rng);
+
+            Assert.That(aggressive.Stage, Is.EqualTo(BetrayalStage.Act),
+                "An Act weighted at double a quiet move has to win this draw. A quiet move coming back "
+                + "means the weighting is flat and the dial is doing nothing.");
+
+            MoveCommand neutral = new MoveSelectionPolicy().SelectFinalMove(
+                rootMoves, rootScores, rootMoves.Count, 0,
+                ProfileWith(betrayalAggression: 0f, tieBreakWindowCp: 20), rng);
+
+            Assert.That(neutral.Stage, Is.EqualTo(BetrayalStage.None),
+                "Without aggression the same draw must land on the quiet move — which is what proves the "
+                + "case above came from the dial rather than from the draw or the position.");
         }
 
         [Test]
