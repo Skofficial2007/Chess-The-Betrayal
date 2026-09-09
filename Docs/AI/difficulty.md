@@ -211,34 +211,32 @@ Verified automatically:
 | A zero-dial profile takes the search's best move with no random calls | `MoveSelectionPolicyTests` |
 | The blunder roll stays within its margin and never returns the best move | `MoveSelectionPolicyTests` |
 | Aggression never pulls in a move from outside the tie-break window | `MoveSelectionPolicyTests` |
+| A move inside the tie-break window is reachable, and is not reachable without it | `MoveSelectionPolicyTests` |
+| Aggression moves the same draw off a quiet move and onto an Act | `MoveSelectionPolicyTests` |
+| A tier whose only dial is the window still reaches the selection policy | `AsyncAgentTests` |
 | Bias and aggression are clamped below the depth threshold | `AIProfileGuardrailTests` |
 | A tier stops consulting the book once its allowance is spent | `AsyncAgentTests` |
 | Every tier arrives inside its hard budget and reaches a depth floor | `AIProfileSearchBenchmarkTests` |
 | No stronger tier loses to a weaker one | `AIProfileStrengthGateTests` (`Slow`) |
 
-And one gap, which is the important half of this section.
+The last three rows are recent, and how they came about is worth knowing.
 
-**Two dials have no test that fails when they stop working.** Measured on `main`: replace the
-tie-break window's threshold with the best score alone — deleting the window outright — and all
-1,414 tests in the fast half still pass. Replace the aggression weighting with a constant, deleting
-the dial, and the same 1,414 still pass. Either dial can be removed from a build and nothing in this
-repository notices.
+Until they existed, the tie-break window and the Betrayal aggression weighting could each be deleted
+outright with every test in the fast half still passing, and so could the clause in `AsyncAIAgent`
+that decides whether a tier reaches the selection policy at all. That third one mattered most.
+`extreme` is the only shipped tier with no blunder rate and a real window, so that clause was the
+whole of its personality: drop it and `extreme` plays the search's plain best move for the rest of
+the match, in silence.
 
-The blunder roll *is* covered. Disable it and exactly three tests go red —
-`SelectFinalMove_BlunderRoll_AlwaysWithinBlunderMarginCp_OfBest`,
-`SelectFinalMove_BlunderRoll_NeverPicksBestIndexItself` and
-`SelectFinalMove_BlunderRollFires_ReportsTrueViaOutParam`. So the gap is specific rather than
-general, and the difference between the two cases is instructive: the roll has an observable
-*consequence* a test can name, while the other two dials only change which of several acceptable
-moves comes back.
+Every assertion in place at the time was either "the result is the best move" or "the result is not
+this one specific worse move" — and a dead dial returns the best move, which satisfies both. What
+closed it is the shape the book allowance already used: a case and a control that differ only in the
+dial, so a difference between them cannot have come from anywhere else.
 
-The reason it is hard is that both dials are randomisers, and a test that asserts "sometimes a
-different move comes back" is either flaky or vacuous. The shape that works is already used
-elsewhere in this repository, for the book allowance: **run the same position twice with a seeded
-generator, changing only the dial, and assert the two runs differ.** A control that does not vary the
-dial proves the difference came from the dial rather than from the position. Until that exists,
-treat "the tiers feel different" as something observed in play rather than something the suite is
-holding for you.
+What is still **not** verified is whether the six tiers feel like six different opponents. The suite
+now holds the mechanism — the dials are read, they change the answer, and a real match reaches them
+— but how often a tier's answer actually differs, and whether that reads as character or as noise,
+is a question for `Docs/Playtests/README.md` rather than for a fixture.
 
 ## What difficulty is worth: measured
 

@@ -73,7 +73,7 @@ they cannot open, rewrite it so it stands on its own.
 Open Window → General → Test Runner and switch to EditMode. The category dropdown in its toolbar is
 what decides how long you wait:
 
-- **Uncategorized** — everything that decides something in memory. 1,414 tests, and they finish in
+- **Uncategorized** — everything that decides something in memory. 1,417 tests, and they finish in
   about forty-five seconds. This is the one to run while you are working.
 - **Slow** — 111 tests that play real chess or run a real search against a real clock. Around eleven
   minutes. Run these before opening a pull request, because they are the only things that catch a

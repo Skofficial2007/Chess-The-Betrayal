@@ -409,12 +409,7 @@ If you go looking for that fixture, it lives inside `AIProfileStrengthOrderingTe
 full statistical suite, which is marked explicit and does not run in an ordinary pass. Naming the file
 is not the same as naming the class, and a command-line filter selects classes.
 
-Three further things are **not** settled, and are worth knowing before you trust anything above:
-
-**Two of the difficulty dials have no test that fails when they stop working.** Delete the tie-break
-window, or the Betrayal aggression weighting, and all 1,414 tests in the fast half still pass —
-measured, not assumed. The blunder roll is covered; these two are not. `difficulty.md` explains the
-shape of the test that would close it, and why it has not been written yet.
+Two further things are **not** settled, and are worth knowing before you trust anything above:
 
 **Aspiration windows have never been measured on this engine.** They are implemented, tested for
 correctness, and switched off. The literature is genuinely mixed — there is a documented case of a
