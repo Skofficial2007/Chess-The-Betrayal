@@ -14,8 +14,8 @@ work; if you are about to change the AI, read `Docs/AI/search.md` first.
 2. **Make the change, and add a test for it.** Nearly everything here is testable without opening a
    scene, and that is deliberate — see below.
 3. **Run the quick half of the suite while you work, and all of it before you open the pull
-   request.** Window → General → Test Runner, and see "Running the tests" below — thirteen hundred
-   tests finish in well under a minute, and the hundred or so that play real chess take about ten
+   request.** Window → General → Test Runner, and see "Running the tests" below — fourteen hundred
+   tests finish in under a minute, and the hundred or so that play real chess take about eleven
    more.
 4. **Update the docs if you changed what they describe.** `Docs/` says how things work now, in
    present tense. If your change makes one of those documents wrong, fix it in the same branch. A
@@ -23,8 +23,8 @@ work; if you are about to change the AI, read `Docs/AI/search.md` first.
 5. **Open a pull request against `main`.** The template will ask you what changed, why, and how you
    tested it. Filling it in properly is most of what makes a change easy to accept. A short set of
    checks runs on it automatically — see "What runs automatically" below.
-6. A maintainer reviews it. Nobody can push to `main` directly, so every change — including the
-   maintainer's own — arrives through a pull request.
+6. A maintainer reviews it. The pull request is where the reasoning gets written down, and that
+   record is most of what makes this repository navigable a year later.
 
 Small, focused pull requests get reviewed quickly. A branch that fixes one bug is easy to say yes
 to; a branch that fixes one bug and reformats four files is not.
@@ -73,10 +73,10 @@ they cannot open, rewrite it so it stands on its own.
 Open Window → General → Test Runner and switch to EditMode. The category dropdown in its toolbar is
 what decides how long you wait:
 
-- **Uncategorized** — everything that decides something in memory. About thirteen hundred tests, and
-  they finish in well under a minute. This is the one to run while you are working.
-- **Slow** — the hundred or so that play real chess or run a real search against a real clock. Around
-  ten minutes. Run these before opening a pull request, because they are the only things that catch a
+- **Uncategorized** — everything that decides something in memory. 1,414 tests, and they finish in
+  about forty-five seconds. This is the one to run while you are working.
+- **Slow** — 111 tests that play real chess or run a real search against a real clock. Around eleven
+  minutes. Run these before opening a pull request, because they are the only things that catch a
   difficulty tier playing worse than the one below it, or two search threads corrupting each other.
 - **OnDemand** — recording harnesses and long measurement runs. These never start on their own: they
   are all marked `[Explicit]`, so Run All skips them and only naming them starts one. Some are
@@ -87,7 +87,10 @@ right thing before a pull request.
 
 From the command line it is the same three names:
 
-    Unity.exe -runTests -batchmode -projectPath <project> -testPlatform EditMode               -testCategory "Uncategorized" -testResults results.xml -logFile run.log -nographics
+    Unity.exe -runTests -batchmode -nographics       -projectPath <project> -testPlatform EditMode       -testCategory "Uncategorized"       -testResults results.xml -logFile run.log
+
+Close the Editor first. With the project already open, the run exits without writing a results file,
+which looks like a failure and is not one.
 
 A new test needs no category. Add `[Category(TestCategories.Slow)]` only if it plays games or waits
 on a real clock — and never to something already `[Explicit]`, which would start it.

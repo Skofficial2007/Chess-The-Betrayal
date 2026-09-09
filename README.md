@@ -99,16 +99,17 @@ and move-ordering machinery, taught to understand that an Act and its Retributio
 one turn instead of two ordinary moves. Six difficulty tiers share that one engine and differ by
 dials: depth ceilings run from three plies up to nine, alongside how long it may think, how often it
 throws a move away on purpose, and how much it likes the idea of betraying its own pieces. Only two
-of the six have any appetite for that at all.
+of the six have any appetite for that at all. [Docs/AI/difficulty.md](Docs/AI/difficulty.md) has the
+whole table and what each dial does.
 
 There is an opening book, kept for variety and not for strength. It was measured over 640 games and
 made no difference to the result, which is written down in the docs instead of quietly forgotten.
 
 ## Tests
 
-About fourteen hundred, and they run without the art or a scene, because almost nothing here needs
-an engine to be tested. Window → General → Test Runner → EditMode. Thirteen hundred of them finish in
-under a minute; the hundred or so that play real chess take about ten more, and
+About fifteen hundred, and they run without the art or a scene, because almost nothing here needs
+an engine to be tested. Window → General → Test Runner → EditMode. Fourteen hundred of them finish in
+under a minute; the hundred or so that play real chess take about eleven more, and
 [CONTRIBUTING.md](CONTRIBUTING.md) explains when to run which.
 
 Pull requests also get a short set of checks that need no Unity licence, so they run on a fork's
