@@ -97,10 +97,16 @@ on a real clock — and never to something already `[Explicit]`, which would sta
 
 ## Editor tests do not prove a player build compiles
 
+> [!IMPORTANT]
+> A green suite is not evidence that the game builds. If your change goes anywhere near an
+> `#if UNITY_EDITOR || DEVELOPMENT_BUILD` guard, compile without those symbols before you open the
+> pull request. This has already shipped an Android build that would not compile, with every test
+> passing.
+
 `UNITY_EDITOR` is always defined in the editor, so code behind `#if UNITY_EDITOR ||
 DEVELOPMENT_BUILD` compiles and passes its tests even where a release build rejects it. `dotnet
 build` on the generated csproj has the same blind spot, because Unity writes those with the
-editor's own symbols. This has broken an Android build before.
+editor's own symbols.
 
 If you change anything near one of those guards, compile the assembly without them. Copy its
 generated `.csproj`, delete `UNITY_EDITOR` and `DEVELOPMENT_BUILD` from `<DefineConstants>`, and
