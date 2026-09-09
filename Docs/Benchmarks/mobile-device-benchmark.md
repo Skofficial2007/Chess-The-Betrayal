@@ -6,6 +6,19 @@ the slowest phone that still runs the game — not the desktop mean. This page i
 the on-device instrument (`Assets/_Scripts/AI/DeviceBenchmark/`) actually measures, what it
 deliberately does not, and the numbers gathered so far.
 
+## What is on this page
+
+- **Running it on a phone** — *Running it, and getting the report back*. The searching is bounded
+  at 2m 20s on any device, and the app says so before it starts.
+- **Reading a report somebody sent you** — *What it measures*, then *What a report deliberately
+  does not say*.
+- **Deciding whether a number here applies to your device** — *What it does not measure*, and
+  *Build config this was measured under*.
+- **Comparing against a desktop figure** — *Desktop reference*. The two instruments answer
+  different questions and their numbers do not transfer.
+- **The results so far** — *Per-device results*.
+- **Doing this in a project of your own** — *Using this on your own project*.
+
 ## How long it takes, and why that number is trustworthy
 
 **The tester run's searching is bounded at 2m 20s on any device**, and the app shows that bound on
@@ -167,10 +180,34 @@ it was missing. Every tier heavy enough to be worth a sustained run finishes on 
 time, so the mean elapsed is pinned by construction; depth changes only in whole plies. A 200-cell
 run came back as eleven identical lines, which is not a flat curve so much as a section that had
 nothing to say. The climb is continuous and moves first: a phone slows by a few percent long before
-it loses a ply, and that is the part worth seeing coming. A curve that falls says the AI is quietly getting weaker as the game goes on, in a way
-the tester plan's short searches could never reveal. This section is populated for any plan, tester
-included, but is only informative on a run long and repetitive enough to show a trend — see the
-desktop reference below.
+it loses a ply, and that is the part worth seeing coming. A curve that falls says the AI is quietly
+getting weaker as the game goes on, in a way the tester plan's short searches could never reveal.
+This section is populated for any plan, tester included, but is only informative on a run long and
+repetitive enough to show a trend — see the desktop reference below.
+
+**The climb follows one depth, picked once for the whole run.** This is the part to understand
+before reading a curve, because getting it wrong produced a confident false alarm. Reaching one more
+ply costs several times what the ply below it cost, so a mean taken across searches that reached
+different depths tracks the *mixture* rather than the device: change how many samples squeezed out an
+extra ply and the figure moves while the phone does identical work. On a real ten-minute run where
+eleven searches out of two hundred reached depth 7, the averaged curve showed a twenty per cent hump
+in the middle and read as a phone falling behind — while the hundred and eighty-nine samples at the
+depth it actually held were flat from the first minute to the last.
+
+So the depth is chosen once for the series, not per minute: a figure that silently changes which
+depth it describes is the same problem moved somewhere harder to see. A line reads
+
+    climbed to depth 7 in worst 1.12s mean 0.94s over 18 of 20
+
+where the last pair says how many of that minute's samples the mean is over — if those two numbers
+drift apart down the page, the phone is starting to miss the depth rather than slowing down at it.
+A minute that never reached the tracked depth at all says `nothing reached depth 7` rather than
+falling silent, because a run dropping a ply is the reading, not a gap to pass over.
+
+None of this shows up on a phone fast enough that every sample reaches the same depth. It only
+appears on a device close enough to the edge to vary — which is exactly the device this curve is for.
+The per-tier summary further up the report still averages *across* depths and should: it sweeps
+several positions deliberately, so there is no single depth for it to speak for.
 
 Because every tier's hard budget is already at or under three seconds, the number worth reading is
 never the raw mean time — it's **overshoot past that tier's own budget**, and **depth reached**.

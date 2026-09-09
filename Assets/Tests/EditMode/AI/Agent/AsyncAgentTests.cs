@@ -9,6 +9,7 @@ using ChessTheBetrayal.AI.Agent;
 using ChessTheBetrayal.AI.OpeningBook;
 using ChessTheBetrayal.Core.Data;
 using ChessTheBetrayal.Core.Engine;
+using ChessTheBetrayal.Core.Randomness;
 using ChessTheBetrayal.EditorTools.OpeningBook;
 using ChessTheBetrayal.Gameplay.Manager;
 using ChessTheBetrayal.Tooling;
@@ -458,6 +459,94 @@ namespace ChessTheBetrayal.Tests.EditMode.AI.Agent
                     tieBreakWindowCp: 0, useOpeningBook: true, openingBookDepthPlies: allowancePlies),
                 new SystemRandomSource(seed: 31),
                 book);
+
+        [Test]
+        public void ATierWhoseOnlyDialIsTheTieBreakWindowStillReachesTheSelectionPolicy()
+        {
+            // The agent decides for itself whether personality applies at all, with its own
+            // condition rather than by asking the policy. Dropping the tie-break clause out of that
+            // condition left every one of the 1,414 fast tests green, while `extreme` - the one
+            // shipped tier with no blunder rate and a real window - quietly played the search's
+            // plain best move for the rest of the match.
+            //
+            // The random source is the probe. A zero blunder rate short-circuits before the roll is
+            // ever drawn, and an agent with no book takes no other draw, so a draw here can only
+            // have come from the policy's weighted pick.
+            var windowed = new CountingRandomSource();
+            var flat = new CountingRandomSource();
+
+            AsyncAIAgent windowedAgent = SearchOnlyAgent(TieBreakOnlyProfile(), windowed);
+            AsyncAIAgent flatAgent = SearchOnlyAgent(NoDialsProfile(), flat);
+
+            try
+            {
+                RequestOneMove(windowedAgent);
+                RequestOneMove(flatAgent);
+
+                // The control first. Without it the case below proves nothing, because any draw
+                // from anywhere in the agent would satisfy it.
+                Assert.That(flat.Draws, Is.Zero,
+                    "A profile with every dial at zero has nothing to choose, so the agent must not "
+                    + "reach the selection policy at all.");
+
+                Assert.That(windowed.Draws, Is.GreaterThan(0),
+                    "A tier whose only dial is the tie-break window never asked the policy for anything, "
+                    + "so both its window and its Betrayal aggression are dead in a real match.");
+            }
+            finally
+            {
+                windowedAgent.Dispose();
+                flatAgent.Dispose();
+            }
+        }
+
+        /// <summary>Counts every draw the agent takes. What it returns does not matter - only
+        /// whether anything asked it for a number.</summary>
+        private sealed class CountingRandomSource : IRandomSource
+        {
+            public int Draws { get; private set; }
+
+            public bool NextBool() { Draws++; return false; }
+            public int NextInt(int maxExclusive) { Draws++; return 0; }
+            public float NextFloat() { Draws++; return 0.5f; }
+        }
+
+        /// <summary>`extreme`'s shape - no blunder rate, a real tie-break window. The window is set
+        /// far wider than that tier's own 10cp so every settled root move is a candidate whatever
+        /// the opening position happens to score.</summary>
+        private static AIProfile TieBreakOnlyProfile() => new AIProfile(
+            "window-only-test", maxDepth: 1, timeBudget: new AITimeBudget(5000, 5000), blunderRate: 0f,
+            blunderMarginCp: 0, betrayalAggression: 0f, attackDefenseBias: 1f, tieBreakWindowCp: 10000,
+            useOpeningBook: false, openingBookDepthPlies: 0);
+
+        /// <summary>The control: nothing for a dial to decide.</summary>
+        private static AIProfile NoDialsProfile() => new AIProfile(
+            "no-dials-test", maxDepth: 1, timeBudget: new AITimeBudget(5000, 5000), blunderRate: 0f,
+            blunderMarginCp: 0, betrayalAggression: 0f, attackDefenseBias: 1f, tieBreakWindowCp: 0,
+            useOpeningBook: false, openingBookDepthPlies: 0);
+
+        /// <summary>An agent with no book at all, so the selection policy is the only thing left
+        /// that can draw from the random source.</summary>
+        private static AsyncAIAgent SearchOnlyAgent(AIProfile profile, IRandomSource rng) =>
+            new AsyncAIAgent(
+                new ChessEngineAdapter(),
+                new BetrayalAwareEvaluator(),
+                new AISearchSettings(maxDepth: 1, new AITimeBudget(5000, 5000), BetrayalUsage.Full),
+                profile,
+                rng);
+
+        private static void RequestOneMove(AsyncAIAgent agent)
+        {
+            BoardState board = OpeningBookCompiler.CreateStandardStartingPosition();
+
+            bool answered = false;
+            agent.OnMoveDecided += _ => answered = true;
+
+            agent.RequestBestMove(board, Team.White);
+            PumpUntil(agent, () => answered);
+
+            Assert.That(answered, Is.True, "The agent never produced a move at all.");
+        }
 
         /// <summary>
         /// Pins the contract that a book move reports depth 0 / StopReason.Unset. On a freshly

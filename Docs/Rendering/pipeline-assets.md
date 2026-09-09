@@ -21,6 +21,40 @@ Everything lives in `Assets/Settings&Actions/Settings/`.
 Each platform has its own renderer. They began as identical copies, so a difference between them is
 deliberate rather than inherited.
 
+```mermaid
+flowchart TD
+    android("<b>Android build</b>")
+    windows("<b>Windows build</b>")
+    qm("Quality level: Mobile<br/>excludes Standalone")
+    qp("Quality level: PC<br/>excludes Android and iPhone")
+    mp("Mobile_PipelineAsset<br/>shadows, HDR, render scale")
+    pp("PC_PipelineAsset<br/>shadows, HDR, render scale")
+    mr("Mobile_Renderer")
+    pr("PC_Renderer")
+    mv("Mobile_VolumeProfile<br/>bloom off, and nothing else")
+    dv("<b>DefaultVolumeProfile</b><br/>tonemapping, vignette, bloom")
+    gs("Global settings<br/>the profile every build starts from")
+
+    android ==> qm ==> mp
+    windows ==> qp ==> pp
+    mp --> mr
+    mp --> mv
+    pp --> pr
+    pp --> dv
+    android -.-> gs
+    windows -.-> gs
+    gs --> dv
+
+    style dv stroke-width: 2px
+```
+
+Which files a build actually reads. The solid route is the one the quality level picks, and it is
+cleanly split: nothing on the Android side is shared with Windows.
+
+The dotted arrows are the second way into a volume profile, and they are why `DefaultVolumeProfile`
+carries the outline. It is the profile the global settings name, so it reaches an Android build as
+well as a Windows one, underneath whatever `Mobile_VolumeProfile` overrides.
+
 ## How Unity picks one
 
 `ProjectSettings/QualitySettings.asset` defines two levels, `Mobile` and `PC`. Each names a pipeline
@@ -62,9 +96,12 @@ profile is empty it changes nothing.
 - A **post-processing effect** for Android only: add an override to `Mobile_VolumeProfile`.
 - A post-processing effect **for both**: edit `DefaultVolumeProfile`.
 
-The trap is the last two. `DefaultVolumeProfile` is named in the global settings *and* in
-`PC_PipelineAsset`, so editing it changes Windows and, for anything `Mobile_VolumeProfile` does not
-override, Android too.
+The trap is the last two.
+
+> [!WARNING]
+> `DefaultVolumeProfile` is named in the global settings *and* in `PC_PipelineAsset`, so editing it
+> changes Windows and, for anything `Mobile_VolumeProfile` does not override, Android too. An edit
+> meant for one platform lands on both.
 
 ## Why bloom is off on Android
 

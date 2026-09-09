@@ -6,6 +6,45 @@ has and has not been measured.
 Written for someone who knows chess but has never worked on an engine. Every section ends with the
 file to read next.
 
+## What is on this page
+
+- **New to engines** — read straight through. Each section ends with the file to read next.
+- **Wondering where the time goes** — *What makes it fast*, then *How long a move takes*.
+- **Changing a difficulty tier** — *How deep each tier searches*, then `difficulty.md`.
+- **Writing something that reads the search** — *Reading the search from outside*, which carries the
+  one rule here that has already cost a build.
+- **Deciding whether to trust a number on this page** — *What is verified, and what is not*.
+
+## One move, end to end
+
+```mermaid
+flowchart TD
+    start("The AI is asked for a move")
+    deepen("<b>Search one depth</b><br/>Keep its best move only if that depth<br/>ran to completion.")
+    again{"Go deeper?"}
+    stopped("<b>The depth loop ends</b><br/>Its ceiling reached, a mate found, a settled root past<br/>the soft budget, or the hard budget. StopReason<br/>records which of the four it was.")
+    rescore("<b>The candidate rescore pass</b><br/>Re-search every root move within the tier's margin at<br/>a full window, until the hard budget stops it.")
+    select("<b>Selection</b><br/>The difficulty dials choose among the moves<br/>the pass managed to settle.")
+    play("The move is played")
+
+    start ==> deepen ==> again
+    again -->|"yes"| deepen
+    again -->|"no"| stopped
+    stopped ==> rescore ==> select ==> play
+
+    style rescore stroke-width: 2px
+```
+
+Everything between the player's move and the AI's. The sections below take it a piece at a time.
+
+**Reaching the ceiling ends the depth loop, not the move.** A tier carrying a rescore margin goes on
+to the pass in the outlined box and returns only when the hard clock stops it, so a search can finish
+every depth it was allowed and still spend its whole budget. One real match had depth-7 moves that
+stopped for the same reason at 36 ms and at 3001 ms. Read `StopReason` as how the depth loop ended,
+never as how long the player waited.
+
+The dials in the last box are the subject of `difficulty.md` rather than this page.
+
 ## How it works
 
 Play every legal move in your head, then every reply, then every reply to that, as deep as time
@@ -92,7 +131,8 @@ under **How long a move takes**.
 
 One consequence worth knowing before tuning anything: on a middlegame position at three seconds, the
 four deep tiers can all bottom out at the same depth, in which case what separates them is their
-personality dials rather than their search. `Assets/_Scripts/AI/Profiles/AIProfileTable.cs`.
+personality dials rather than their search. `difficulty.md` covers those dials and what each one is
+allowed to do; `Assets/_Scripts/AI/Profiles/AIProfileTable.cs` is where the six tiers are declared.
 
 ## What makes it fast
 
@@ -297,13 +337,41 @@ next section for why.
 
 ## Reading the search from outside
 
-Plain counters: how many nodes were visited, how often the table was probed and hit, how often each
-pruning mechanism fired, how often a forced defection had to be resolved. Without them, "the search
-got faster" is an anecdote, and there is no way to tell a technique that is working from one that is
-silently disabled.
+The search reports on itself in two ways, and the difference between them matters more than it
+looks.
 
-Every increment sits behind an editor or development-build guard, so a release build pays nothing for
-the counting — not even a branch. `Assets/_Scripts/AI/Search/SearchStats.cs`.
+**Counters, compiled out of a release build.** How many nodes were visited, how often the table was
+probed and hit, how often each pruning mechanism fired, how often a forced defection had to be
+resolved. Without them, "the search got faster" is an anecdote, and there is no way to tell a
+technique that is working from one that is silently disabled. Every increment sits behind
+`#if UNITY_EDITOR || DEVELOPMENT_BUILD`, so a release build pays nothing for the counting — not even
+a branch. They live in `SearchStats`, on the transposition table.
+
+**Results, available on every build.** A handful of properties on `AlphaBetaSearch` itself are
+deliberately outside that guard, because a device report is written *by* a release build and would
+otherwise have nothing to say:
+
+| Property | What it answers |
+|---|---|
+| `LastCompletedDepth` | the deepest depth the search actually finished |
+| `StopReason` | why it stopped — its ceiling, the clock, a settled root, or a mate |
+| `ElapsedMsAfterDepth(depth)` | how long the climb to each completed depth took |
+| `RootScores`, `BestRootIndex` | what every root move scored, for the difficulty dials |
+| `RootScoresExactCount`, `RootScoresExactForSelection` | how far the rescore pass got before the clock stopped it |
+
+**The line between the two is not a style choice, and crossing it has broken a build.** A value was
+once moved out from behind the guard while still being written into `SearchStats` — so the write was
+unguarded and the thing it wrote to did not exist in a release build. Every test passed, because the
+editor defines both symbols, and the Android build failed with five errors. If you add something a
+report needs, it goes on the search as a plain field with a plain reader, the way the five above do;
+`SearchStats` may keep a copy, taken after the search returns.
+
+`SingleSourceOfTruthTests` now checks the storage, the reader, the write and the reset for the
+per-depth clock, because an earlier version checked only that the write was outside a guard — which
+was true, and not enough. See **Editor tests do not prove a player build compiles** in
+`CONTRIBUTING.md` for how to check this before you push.
+
+`Assets/_Scripts/AI/Search/SearchStats.cs`, `AlphaBetaSearch.cs`.
 
 ## What is verified, and what is not
 
@@ -327,6 +395,8 @@ Verified automatically, all in seconds:
 | Quiescence skips a capture that loses material on the recapture, so the search really is consulting static exchange evaluation | `SearchGuardTelemetryTests` |
 | Null move, reduction and narrow-window activity all register | `SearchTelemetryTests` |
 | The search allocates nothing | `SearchTelemetryTests` |
+| A depth whose last root move was cancelled is discarded, not committed | `RootDepthCancellationTests` |
+| Reaching a ceiling and being stopped short of it report as different outcomes | `SearchStopReasonTests` |
 | Every tier arrives inside its hard budget and reaches a depth floor | `AIProfileSearchBenchmarkTests` |
 
 One more check exists and is worth treating separately. `AIProfileStrengthGateTests` plays a handful
