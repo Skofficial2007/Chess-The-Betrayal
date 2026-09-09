@@ -1,6 +1,8 @@
 # Chess: The Betrayal
 
 [![Checks](https://github.com/Skofficial2007/Chess-The-Betrayal/actions/workflows/checks.yml/badge.svg)](https://github.com/Skofficial2007/Chess-The-Betrayal/actions/workflows/checks.yml)
+[![Unity 6000.3.10f1](https://img.shields.io/badge/Unity-6000.3.10f1-black?logo=unity)](SETUP.md)
+[![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue)](LICENSE)
 
 Chess, with one extra rule: once a game, somebody gets to take their own piece.
 
@@ -52,6 +54,36 @@ whatever you were trying to protect.
 
 If the piece checks your own king the moment it changes sides, you get one forced move to deal with
 that before the turn passes.
+
+## The sequence, start to finish
+
+```mermaid
+flowchart TD
+    act("<b>The Act</b><br/>You capture one of your own pieces.<br/>The piece that made the capture is your Betrayer.")
+    turn("<b>Your turn does not pass</b><br/>It comes straight back to you: the Betrayer<br/>is your problem, not your opponent's.")
+    owe("<b>You owe the Retribution</b><br/>Capture your own Betrayer<br/>with another of your own pieces.")
+    executed("Your Betrayer is captured.<br/>Turn passes to your opponent.")
+    defect("<b>Defection</b><br/>Your Betrayer changes colour where it<br/>stands and joins your opponent.")
+    check{"Does it now check<br/>your own king?"}
+    save("You make one forced Save move,<br/>then the turn passes.")
+    handover("Turn passes to your opponent.")
+
+    act ==> turn ==> owe
+    owe -->|"you pay it"| executed
+    owe -->|"refused, or impossible"| defect
+    defect --> check
+    check -->|"yes"| save
+    check -->|"no"| handover
+
+    style owe stroke-width: 2px
+```
+
+Every path a Betrayal can take, from the Act to the turn finally passing. The box with the heavier
+outline is the one to hold on to: the Act is yours, the Betrayer is yours, and the Retribution is
+yours to pay. Your opponent is never asked for anything.
+
+Refusing and being unable look identical from there on. The only difference is that in the first case
+the game asks and you decline, and in the second it never asks.
 
 ## The rest of the rules
 
