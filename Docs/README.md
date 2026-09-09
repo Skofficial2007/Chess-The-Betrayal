@@ -10,12 +10,21 @@ now lives here.
 
 How the chess engine and its opponent work — the search and the techniques that make it fast, the
 opening book, and the difficulty model. Start with `AI/search.md` if you are looking at the engine
-for the first time; everything else assumes the vocabulary it defines.
+for the first time; everything else assumes the vocabulary it defines. `AI/difficulty.md` is the one
+to read before changing a tier, because most of what separates the six is decided after the search
+returns rather than inside it.
 
 Each document ends its sections with the file to read next, and carries a section on what has been
 verified and what has not. That second part is the useful one. A technique with tests proving it is
 correct is not the same as a technique with tests proving the engine still uses it, and the documents
 say which is which.
+
+## Architecture
+
+`Architecture/assemblies.md` — what the fifteen assemblies are for, what each is allowed to
+reference, and where a new file goes. Worth reading before you add a file to a folder you have not
+worked in, because the layering is enforced by tests that read every `.asmdef` as data: adding a
+reference fails them, and so does removing one.
 
 ## Benchmarks
 
