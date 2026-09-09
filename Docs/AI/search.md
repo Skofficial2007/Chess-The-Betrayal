@@ -6,6 +6,45 @@ has and has not been measured.
 Written for someone who knows chess but has never worked on an engine. Every section ends with the
 file to read next.
 
+## What is on this page
+
+- **New to engines** — read straight through. Each section ends with the file to read next.
+- **Wondering where the time goes** — *What makes it fast*, then *How long a move takes*.
+- **Changing a difficulty tier** — *How deep each tier searches*, then `difficulty.md`.
+- **Writing something that reads the search** — *Reading the search from outside*, which carries the
+  one rule here that has already cost a build.
+- **Deciding whether to trust a number on this page** — *What is verified, and what is not*.
+
+## One move, end to end
+
+```mermaid
+flowchart TD
+    start("The AI is asked for a move")
+    deepen("<b>Search one depth</b><br/>Keep its best move only if that depth<br/>ran to completion.")
+    again{"Go deeper?"}
+    stopped("<b>The depth loop ends</b><br/>Its ceiling reached, a mate found, a settled root past<br/>the soft budget, or the hard budget. StopReason<br/>records which of the four it was.")
+    rescore("<b>The candidate rescore pass</b><br/>Re-search every root move within the tier's margin at<br/>a full window, until the hard budget stops it.")
+    select("<b>Selection</b><br/>The difficulty dials choose among the moves<br/>the pass managed to settle.")
+    play("The move is played")
+
+    start ==> deepen ==> again
+    again -->|"yes"| deepen
+    again -->|"no"| stopped
+    stopped ==> rescore ==> select ==> play
+
+    style rescore stroke-width: 2px
+```
+
+Everything between the player's move and the AI's. The sections below take it a piece at a time.
+
+**Reaching the ceiling ends the depth loop, not the move.** A tier carrying a rescore margin goes on
+to the pass in the outlined box and returns only when the hard clock stops it, so a search can finish
+every depth it was allowed and still spend its whole budget. One real match had depth-7 moves that
+stopped for the same reason at 36 ms and at 3001 ms. Read `StopReason` as how the depth loop ended,
+never as how long the player waited.
+
+The dials in the last box are the subject of `difficulty.md` rather than this page.
+
 ## How it works
 
 Play every legal move in your head, then every reply, then every reply to that, as deep as time
